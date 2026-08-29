@@ -1,0 +1,591 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   INSTRUMENT — Meridian IT-PMO design system, v5.1
+   ─────────────────────────────────────────────────────────────────────
+   The aesthetic thesis, in one line:
+
+       THE ONLY SATURATED COLOUR ON THE SCREEN MEANS SOMETHING.
+
+   This is an instrument, not a document. The people using it read
+   indices, variances and dates all day, so the chrome recedes into cool
+   graphite hairlines and every number is set in mono so columns align on
+   the glyph. Red, amber and green are reserved — they never decorate.
+
+   Replaces the v4 "modernist" system, which paired warm paper with a
+   coral accent (a recognisable AI-house palette), set everything in one
+   family at weight 800, drew 35 two-pixel black slabs, and used zero
+   radius as a statement. See docs/07-design-review.md.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+:root{
+  /* ── ground ──────────────────────────────────────────────────────
+     Cool, near-neutral, faintly blue. Warm greys make dense numeric
+     tables look muddy; cool ones fall behind the data. */
+  --color-bg:#fbfcfd;
+  --color-surface:#f2f5f8;
+  --color-surface-2:#e8edf2;
+  --color-text:#0f1620;
+
+  /* Hairlines. One pixel, low alpha — density comes from restraint,
+     not from drawing heavier lines. */
+  --rule-1:rgba(15,22,32,.09);
+  --rule-2:rgba(15,22,32,.16);
+  --color-divider:var(--rule-2);
+  --muted:rgba(15,22,32,.58);
+  --muted-2:rgba(15,22,32,.38);
+
+  /* Cool slate ramp. */
+  --color-neutral-100:#f7f9fb; --color-neutral-200:#eef2f6; --color-neutral-300:#dde4ec;
+  --color-neutral-400:#bcc7d4; --color-neutral-500:#93a1b2; --color-neutral-600:#6b7a8d;
+  --color-neutral-700:#4c5a6b; --color-neutral-800:#33404e; --color-neutral-900:#1d2733;
+
+  /* ── accent: interaction only ────────────────────────────────────
+     Institutional blue. It marks what you can act on — links, focus,
+     the selected row, the primary button. It never reports status. */
+  --color-accent:#1b4f8f;
+  --color-accent-100:#eef4fb; --color-accent-200:#d8e6f6; --color-accent-300:#b3cdea;
+  --color-accent-400:#7ba5d4; --color-accent-500:#3f79b8; --color-accent-600:#1b4f8f;
+  --color-accent-700:#143c6e; --color-accent-800:#0f2c51; --color-accent-900:#0a1d36;
+
+  /* ── signal: status only ─────────────────────────────────────────
+     The only saturated colour in content. Chosen to clear 4.5:1 on the
+     page ground, and always paired with a label or a position so the
+     hue is never the sole channel. */
+  --sig-red:#b42318;      --sig-red-soft:#fef3f2;   --sig-red-line:#fda29b;
+  --sig-amber:#b54708;    --sig-amber-soft:#fffaeb; --sig-amber-line:#fec84b;
+  --sig-green:#067647;    --sig-green-soft:#ecfdf3; --sig-green-line:#75e0a7;
+  --on-solid:#ffffff;
+
+  /* ── type ────────────────────────────────────────────────────────
+     IBM Plex Sans for language, IBM Plex Mono for every number, code
+     and identifier. The mono is the differentiation anchor: a portfolio
+     screen where SPI, CPI, currency and dates all align on the glyph
+     reads as a readout rather than a report. */
+  --font-ui:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+  --font-heading:var(--font-ui);
+  --font-body:var(--font-ui);
+  --font-mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
+
+  --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-6:24px; --space-8:32px;
+
+  /* Small radii. Zero is a statement; eight is a consumer app. Three is
+     a tool. */
+  --r-sm:2px; --r:3px; --r-lg:4px;
+  --radius-md:var(--r);
+
+  /* Shadows are cool-tinted and tight, and only ever mean elevation —
+     overlays, dragged objects, sticky headers. Never decoration. */
+  --shadow-sm:0 1px 2px rgba(15,22,32,.06),0 1px 1px rgba(15,22,32,.04);
+  --shadow-md:0 4px 12px rgba(15,22,32,.10),0 1px 3px rgba(15,22,32,.06);
+  --shadow-lg:0 18px 44px rgba(15,22,32,.20),0 2px 8px rgba(15,22,32,.10);
+
+  --sidebar:238px;
+  --hdr:72px;
+}
+
+/* ── dark: the control room at night ───────────────────────────────
+   Not an inversion. The ground goes to deep slate, the hairlines gain
+   alpha to survive it, and the signal colours lift so they stay legible
+   without glowing. */
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --color-bg:#0e131a;
+    --color-surface:#161d27;
+    --color-surface-2:#1d2733;
+    --color-text:#e3e9f0;
+
+    --rule-1:rgba(227,233,240,.10);
+    --rule-2:rgba(227,233,240,.20);
+    --muted:rgba(227,233,240,.60);
+    --muted-2:rgba(227,233,240,.36);
+
+    --color-neutral-100:#141a23; --color-neutral-200:#1b2430; --color-neutral-300:#26313f;
+    --color-neutral-400:#3a4757; --color-neutral-500:#5b6b7e; --color-neutral-600:#8494a6;
+    --color-neutral-700:#a9b6c5; --color-neutral-800:#c9d3de; --color-neutral-900:#e3e9f0;
+
+    --color-accent:#5b9dff;
+    --color-accent-100:#141d2b; --color-accent-200:#18263a; --color-accent-300:#1f3554;
+    --color-accent-400:#2e5285; --color-accent-500:#4179c4; --color-accent-600:#5b9dff;
+    --color-accent-700:#8dbaff; --color-accent-800:#b5d3ff; --color-accent-900:#dbe9ff;
+
+    --sig-red:#ff8a7a;    --sig-red-soft:#2a1512;   --sig-red-line:#7d2b20;
+    --sig-amber:#f5b544;  --sig-amber-soft:#2a1f0d; --sig-amber-line:#7d5312;
+    --sig-green:#5fd39a;  --sig-green-soft:#0d2419; --sig-green-line:#1c6244;
+    --on-solid:#08101a;
+
+    --shadow-sm:0 1px 2px rgba(0,0,0,.40);
+    --shadow-md:0 4px 14px rgba(0,0,0,.50);
+    --shadow-lg:0 18px 48px rgba(0,0,0,.62);
+  }
+}
+:root[data-theme="dark"]{
+  --color-bg:#0e131a; --color-surface:#161d27; --color-surface-2:#1d2733; --color-text:#e3e9f0;
+  --rule-1:rgba(227,233,240,.10); --rule-2:rgba(227,233,240,.20);
+  --muted:rgba(227,233,240,.60); --muted-2:rgba(227,233,240,.36);
+  --color-neutral-100:#141a23; --color-neutral-200:#1b2430; --color-neutral-300:#26313f;
+  --color-neutral-400:#3a4757; --color-neutral-500:#5b6b7e; --color-neutral-600:#8494a6;
+  --color-neutral-700:#a9b6c5; --color-neutral-800:#c9d3de; --color-neutral-900:#e3e9f0;
+  --color-accent:#5b9dff;
+  --color-accent-100:#141d2b; --color-accent-200:#18263a; --color-accent-300:#1f3554;
+  --color-accent-400:#2e5285; --color-accent-500:#4179c4; --color-accent-600:#5b9dff;
+  --color-accent-700:#8dbaff; --color-accent-800:#b5d3ff; --color-accent-900:#dbe9ff;
+  --sig-red:#ff8a7a; --sig-red-soft:#2a1512; --sig-red-line:#7d2b20;
+  --sig-amber:#f5b544; --sig-amber-soft:#2a1f0d; --sig-amber-line:#7d5312;
+  --sig-green:#5fd39a; --sig-green-soft:#0d2419; --sig-green-line:#1c6244;
+  --on-solid:#08101a;
+  --shadow-sm:0 1px 2px rgba(0,0,0,.40);
+  --shadow-md:0 4px 14px rgba(0,0,0,.50);
+  --shadow-lg:0 18px 48px rgba(0,0,0,.62);
+}
+
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{
+  background:var(--color-bg); color:var(--color-text);
+  font-family:var(--font-ui); font-size:13.5px; line-height:1.5; font-weight:400;
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility; overflow:hidden;
+  font-variant-numeric:tabular-nums;
+}
+h1,h2,h3,h4,h5{font-family:var(--font-ui);font-weight:600;line-height:1.2;letter-spacing:-.014em;margin:0}
+h2{font-size:22px;letter-spacing:-.02em} h3{font-size:17px} h4{font-size:14.5px} h5{font-size:12.5px}
+a{color:var(--color-accent);text-decoration:none}
+a:hover{text-decoration:underline;text-underline-offset:2px}
+::selection{background:var(--color-accent-200);color:var(--color-text)}
+:focus-visible{outline:2px solid var(--color-accent);outline-offset:2px;border-radius:var(--r-sm)}
+::-webkit-scrollbar{width:11px;height:11px}
+::-webkit-scrollbar-thumb{background:var(--color-neutral-400);border-radius:6px;border:3px solid var(--color-bg)}
+::-webkit-scrollbar-thumb:hover{background:var(--color-neutral-500)}
+::-webkit-scrollbar-track{background:transparent}
+
+/* ── typographic utilities ──────────────────────────────────────────
+   `.kicker` was an editorial magazine device at .14em tracking. Here it
+   is a field label: mono, small, tight, quiet. It names a value; it does
+   not announce a section. */
+.kicker{font-family:var(--font-mono);font-size:10px;letter-spacing:.02em;text-transform:uppercase;
+  color:var(--muted);font-weight:500}
+.kicker-lg{font-family:var(--font-mono);font-size:10.5px;letter-spacing:.02em;text-transform:uppercase;font-weight:500}
+.mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+.num{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-weight:600;letter-spacing:-.02em}
+.muted{color:var(--muted)}
+.small{font-size:12px}
+.xs{font-size:11px}
+/* .acc marks something you can act on. .bad/.warn/.good report state.
+   Keeping them apart is the whole design thesis. */
+.acc{color:var(--color-accent)}
+.bad{color:var(--sig-red)}
+.warn{color:var(--sig-amber)}
+.good{color:var(--sig-green)}
+.mark-bad{background:var(--sig-red)}
+.mark-warn{background:var(--sig-amber)}
+.banner-warn{background:var(--sig-amber-soft);border-left:2px solid var(--sig-amber)}
+.banner-bad{background:var(--sig-red-soft);border-left:2px solid var(--sig-red)}
+.strong{font-weight:600}
+.hr{border:0;border-top:1px solid var(--rule-1);margin:0}
+.truncate{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.flush{text-align:left}
+
+/* ── app shell ──────────────────────────────────────────────────────
+   The rail is a shade darker than the working surface, which is how
+   every serious tool separates chrome from content. */
+.app{display:flex;height:100vh;overflow:hidden}
+.sidebar{
+  width:var(--sidebar);flex:none;border-right:1px solid var(--rule-2);
+  display:flex;flex-direction:column;background:var(--color-surface);
+}
+.brand{padding:16px 18px 14px;border-bottom:1px solid var(--rule-1)}
+.brand-row{display:flex;align-items:center;gap:9px}
+/* The mark is the one place the accent appears without an action behind
+   it — a signal lamp, lit. */
+.brand-mark{width:9px;height:9px;background:var(--color-accent);display:block;flex:none;border-radius:1px;
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--color-accent) 18%,transparent)}
+.brand-name{font-weight:600;font-size:15.5px;letter-spacing:.02em;font-family:var(--font-ui)}
+.nav{flex:1;overflow-y:auto;padding:4px 0 12px}
+.nav-group{padding:14px 18px 4px;font-family:var(--font-mono);font-size:9.5px;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--muted-2);font-weight:500}
+.nav-item{
+  all:unset;box-sizing:border-box;display:flex;align-items:center;gap:8px;width:100%;
+  padding:6px 18px;cursor:pointer;font-size:13px;border-left:2px solid transparent;color:var(--muted);
+  transition:color .1s ease,background .1s ease;
+}
+.nav-item:hover{background:var(--color-surface-2);color:var(--color-text)}
+.nav-item:focus-visible{outline:2px solid var(--color-accent);outline-offset:-2px}
+.nav-item.on{background:var(--color-bg);color:var(--color-text);font-weight:600;border-left-color:var(--color-accent)}
+.nav-item .lbl{flex:1}
+.nav-badge{font-family:var(--font-mono);font-size:10.5px;color:var(--muted);font-weight:500;
+  background:var(--color-surface-2);padding:1px 5px;border-radius:8px}
+.nav-item.on .nav-badge{background:var(--color-accent-200);color:var(--color-accent-700)}
+.who{border-top:1px solid var(--rule-1);padding:11px 14px;display:flex;align-items:center;gap:10px}
+.avatar{width:26px;height:26px;background:var(--color-neutral-700);color:var(--color-bg);display:flex;
+  align-items:center;justify-content:center;font-weight:600;font-size:10.5px;flex:none;
+  font-family:var(--font-mono);border-radius:50%;letter-spacing:-.02em}
+.avatar.sm{width:21px;height:21px;font-size:9px}
+.avatar.ghost{background:var(--color-neutral-300);color:var(--color-neutral-700)}
+
+.main{flex:1;display:flex;flex-direction:column;min-width:0;background:var(--color-bg)}
+.hdr{flex:none;border-bottom:1px solid var(--rule-2);padding:13px 24px;display:flex;align-items:flex-end;
+  gap:14px;flex-wrap:wrap;background:var(--color-bg)}
+.hdr-title{flex:1;min-width:200px}
+.hdr-title h1,.hdr-title h2{margin:2px 0 0;font-size:21px}
+.hdr-actions{display:flex;align-items:flex-end;gap:7px;flex-wrap:wrap}
+.scroll{flex:1;overflow-y:auto;padding-bottom:56px;scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){
+  .scroll{scroll-behavior:auto}
+  *{animation-duration:.001ms!important;transition-duration:.001ms!important}
+}
+
+/* ── layout primitives ────────────────────────────────────────────── */
+.sec{padding:20px 24px}
+.sec-tight{padding:14px 24px}
+.sec-hd{display:flex;align-items:baseline;gap:12px;margin-bottom:11px;flex-wrap:wrap}
+.sec-hd h4{margin:0}
+.sec-hd .sp{flex:1}
+.split{display:grid;grid-template-columns:1fr 340px}
+.split > .l{border-right:1px solid var(--rule-1);min-width:0}
+.split-2{display:grid;grid-template-columns:1fr 1fr}
+.split-2 > *:first-child{border-right:1px solid var(--rule-1)}
+.split-3{display:grid;grid-template-columns:repeat(3,1fr)}
+.split-3 > *{border-right:1px solid var(--rule-1)}
+.split-3 > *:last-child{border-right:0}
+.band{border-bottom:1px solid var(--rule-2);background:var(--color-surface)}
+.band-1{border-bottom:1px solid var(--rule-1)}
+.stack > * + *{margin-top:14px}
+.pane{min-width:0}
+
+/* ── KPI strip — the readout ──────────────────────────────────────── */
+.kpis{display:grid;border-bottom:1px solid var(--rule-2);background:var(--color-surface)}
+.kpi{padding:14px 20px;border-right:1px solid var(--rule-1);min-width:0}
+.kpi:last-child{border-right:0}
+.kpi-v{font-family:var(--font-mono);font-weight:600;font-size:24px;line-height:1.1;margin-top:5px;
+  font-variant-numeric:tabular-nums;letter-spacing:-.03em;white-space:nowrap}
+.kpi .kicker{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kpi-n{font-size:11px;color:var(--muted);margin-top:2px}
+
+/* ── buttons ────────────────────────────────────────────────────────
+   The v4 build drew every button as a heavy black box, which is what
+   made a working tool look like a poster. Default is now a quiet
+   surface with a hairline; weight is spent only on the primary. */
+.btn{
+  font-family:var(--font-ui);font-size:12.5px;font-weight:500;line-height:1;
+  padding:7px 11px;border:1px solid var(--rule-2);background:var(--color-bg);color:var(--color-text);
+  cursor:pointer;text-align:left;display:inline-flex;align-items:center;justify-content:center;gap:6px;border-radius:var(--r);
+  box-shadow:var(--shadow-sm);
+  /* R-05 — no control under the WCAG 2.2 pointer-target floor, whatever
+     its variant. The visual density of tables is kept by the paddings
+     below; the FLOOR is kept here, once. */
+  min-height:24px;min-width:24px;
+  transition:background .12s ease,border-color .12s ease,box-shadow .12s ease;
+}
+.btn:hover{background:var(--color-surface);border-color:var(--color-neutral-400)}
+.btn:active{background:var(--color-surface-2);box-shadow:none}
+.btn-primary{background:var(--color-accent);border-color:var(--color-accent);color:var(--on-solid);font-weight:600}
+.btn-primary:hover{background:var(--color-accent-500);border-color:var(--color-accent-500);color:var(--on-solid)}
+.btn-primary:active{background:var(--color-accent-700);border-color:var(--color-accent-700)}
+.btn-ghost{border-color:transparent;background:transparent;box-shadow:none;padding:6px 8px;color:var(--muted)}
+.btn-ghost:hover{background:var(--color-surface-2);border-color:transparent;color:var(--color-text)}
+.btn-sm{font-size:11.5px;padding:5px 9px}
+.btn-xs{font-size:11px;padding:3px 7px;box-shadow:none}
+.btn-danger{border-color:var(--sig-red-line);color:var(--sig-red);background:var(--color-bg)}
+.btn-danger:hover{background:var(--sig-red);border-color:var(--sig-red);color:var(--on-solid)}
+.btn[disabled]{opacity:.42;cursor:not-allowed;box-shadow:none}
+.btn[disabled]:hover{background:var(--color-bg);border-color:var(--rule-2)}
+.btn-primary[disabled]:hover{background:var(--color-accent);border-color:var(--color-accent)}
+.btn-row{display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+
+/* ── tags & status ──────────────────────────────────────────────────
+   A status dot is round and filled, the way every instrument panel
+   since the 1960s has drawn one. */
+.tag{display:inline-flex;align-items:center;gap:5px;font-family:var(--font-mono);font-size:10px;
+  font-weight:500;letter-spacing:.01em;text-transform:uppercase;padding:2px 6px;
+  background:var(--color-surface-2);color:var(--muted);white-space:nowrap;border-radius:var(--r-sm)}
+.tag-accent{background:var(--color-accent);color:var(--on-solid)}
+.tag-soft{background:var(--color-accent-200);color:var(--color-accent-700)}
+.tag-ink{background:var(--color-neutral-800);color:var(--color-bg)}
+.tag-out{background:transparent;box-shadow:inset 0 0 0 1px var(--rule-2)}
+.tag-red{background:var(--sig-red-soft);color:var(--sig-red);box-shadow:inset 0 0 0 1px var(--sig-red-line)}
+.tag-amber{background:var(--sig-amber-soft);color:var(--sig-amber);box-shadow:inset 0 0 0 1px var(--sig-amber-line)}
+.tag-green{background:var(--sig-green-soft);color:var(--sig-green);box-shadow:inset 0 0 0 1px var(--sig-green-line)}
+.dot{width:9px;height:9px;display:block;border-radius:50%;flex:none;
+  box-shadow:inset 0 0 0 1px rgba(15,22,32,.22)}
+
+/* ── forms ────────────────────────────────────────────────────────── */
+.field{display:flex;flex-direction:column;gap:4px}
+.field > label,.field > span{font-family:var(--font-mono);font-size:9.5px;letter-spacing:.03em;
+  text-transform:uppercase;color:var(--muted);font-weight:500}
+/* A <label> wrapping its own control still needs the stack. */
+label.field{cursor:pointer}
+.input{
+  font-family:var(--font-ui);font-size:12.5px;padding:7px 9px;border:1px solid var(--rule-2);
+  background:var(--color-bg);color:var(--color-text);border-radius:var(--r);width:100%;line-height:1.35;
+  transition:border-color .12s ease,box-shadow .12s ease;
+}
+.input:hover{border-color:var(--color-neutral-400)}
+.input:focus{outline:none;border-color:var(--color-accent);
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--color-accent) 16%,transparent)}
+/* Dates, amounts and identifiers are typed as data, so they are set as
+   data. */
+input[type="date"].input,input[type="number"].input{font-family:var(--font-mono);font-size:12px}
+select.input{appearance:none;
+  background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);
+  background-position:calc(100% - 14px) 50%,calc(100% - 9.5px) 50%;background-size:4.5px 4.5px,4.5px 4.5px;
+  background-repeat:no-repeat;padding-right:28px}
+textarea.input{resize:vertical;min-height:70px;line-height:1.55}
+.input-sm{font-size:12px;padding:4px 8px}
+.err{color:var(--sig-red);font-size:11px;font-weight:500}
+.input.invalid{border-color:var(--sig-red);box-shadow:0 0 0 3px color-mix(in srgb,var(--sig-red) 14%,transparent)}
+.checkline{display:flex;align-items:flex-start;gap:9px;cursor:pointer;padding:5px 0}
+.check{width:15px;height:15px;border:1px solid var(--rule-2);flex:none;margin-top:2px;display:flex;
+  align-items:center;justify-content:center;background:var(--color-bg);border-radius:var(--r-sm)}
+.check.on{background:var(--color-accent);border-color:var(--color-accent)}
+.check.on::after{content:"";width:6.5px;height:3px;border-left:1.6px solid var(--on-solid);
+  border-bottom:1.6px solid var(--on-solid);transform:rotate(-45deg);margin-top:-2px}
+.switch{width:34px;height:19px;border:1px solid var(--rule-2);display:flex;align-items:center;padding:2px;
+  cursor:pointer;flex:none;justify-content:flex-start;background:var(--color-surface-2);border-radius:10px;
+  transition:background .15s ease,border-color .15s ease}
+.switch.on{background:var(--color-accent);border-color:var(--color-accent);justify-content:flex-end}
+.knob{width:13px;height:13px;background:var(--color-bg);display:block;border-radius:50%;box-shadow:var(--shadow-sm)}
+.switch.on .knob{background:var(--on-solid)}
+.seg{display:inline-flex;border:1px solid var(--rule-2);border-radius:var(--r);overflow:hidden;background:var(--color-bg)}
+.seg-opt{font-size:11.5px;font-weight:500;padding:5px 10px;cursor:pointer;border:0;
+  border-right:1px solid var(--rule-1);background:transparent;color:var(--muted);
+  font-family:var(--font-ui);line-height:1.2}
+.seg-opt:last-child{border-right:0}
+.seg-opt:hover{background:var(--color-surface);color:var(--color-text)}
+.seg-opt.on{background:var(--color-accent);color:var(--on-solid);font-weight:600}
+.search{display:flex;align-items:center;gap:7px;border:1px solid var(--rule-2);padding:0 9px;
+  background:var(--color-bg);border-radius:var(--r)}
+.search:focus-within{border-color:var(--color-accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--color-accent) 16%,transparent)}
+.search input{all:unset;font-family:var(--font-ui);font-size:12.5px;padding:6px 0;width:100%}
+.search svg{flex:none;opacity:.5}
+
+/* ── tables — where this application actually lives ───────────────── */
+.table{width:100%;border-collapse:collapse;font-size:12.5px}
+.table thead tr{border-bottom:1px solid var(--rule-2);text-align:left}
+.table th{padding:6px 8px;font-family:var(--font-mono);font-size:9.5px;letter-spacing:.03em;
+  text-transform:uppercase;font-weight:500;color:var(--muted);white-space:nowrap;vertical-align:bottom}
+.table th:first-child,.table td:first-child{padding-left:0}
+.table th:last-child,.table td:last-child{padding-right:0}
+.table td{padding:8px;border-bottom:1px solid var(--rule-1);vertical-align:top}
+.table tbody tr.click{cursor:pointer}
+.table tbody tr.click:hover{background:var(--color-surface)}
+.table tbody tr.sel{background:var(--color-accent-100);box-shadow:inset 2px 0 0 var(--color-accent)}
+/* Right-aligned columns are numeric by definition, so they get the mono. */
+.table .r{text-align:right;font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.table .c{text-align:center}
+.table th.sortable{cursor:pointer;user-select:none}
+.table th.sortable:hover{color:var(--color-accent)}
+.table th .car{font-size:8px;margin-left:3px}
+.table tfoot td{border-top:1px solid var(--rule-2);border-bottom:0;font-weight:600;padding-top:9px;
+  font-family:var(--font-mono)}
+.tbl-wrap{overflow-x:auto}
+.empty{padding:30px 8px;text-align:left;color:var(--muted);font-size:12.5px;border-bottom:1px solid var(--rule-1)}
+.empty strong{display:block;font-size:14px;color:var(--color-text);margin-bottom:4px;font-weight:600}
+
+/* ── bars & meters ────────────────────────────────────────────────── */
+.meter{height:6px;background:var(--color-surface-2);position:relative;overflow:hidden;border-radius:3px}
+.meter > i{display:block;height:100%;background:var(--color-neutral-600);border-radius:3px}
+.meter.thin{height:4px}
+.bar-lbl{display:flex;justify-content:space-between;font-size:10.5px;margin-bottom:3px;color:var(--muted);
+  font-family:var(--font-mono)}
+.mix{display:flex;height:7px;background:var(--color-surface-2);border-radius:3px;overflow:hidden}
+.mix > i{display:block;height:100%}
+
+/* ── cards ────────────────────────────────────────────────────────── */
+.card{background:var(--color-surface);padding:12px 13px;border:1px solid var(--rule-1);border-radius:var(--r)}
+.card-kicker{font-family:var(--font-mono);font-size:9.5px;letter-spacing:.03em;text-transform:uppercase;
+  color:var(--muted);font-weight:500}
+.card-title{font-family:var(--font-ui);font-weight:600;font-size:13px;line-height:1.3;margin:4px 0 3px}
+.list-row{display:flex;gap:11px;padding:10px 0;border-bottom:1px solid var(--rule-1)}
+.list-row:last-child{border-bottom:0}
+/* The status spine: a 2px rule down the left of anything whose health
+   matters. It is the fastest scan on the screen. */
+.mark{width:2px;flex:none;background:var(--color-neutral-400);border-radius:1px}
+.mark-acc{background:var(--color-accent)}
+
+/* ── gantt ────────────────────────────────────────────────────────── */
+.gantt{border:0;min-width:820px}
+.gantt-hd{display:flex;border-bottom:1px solid var(--rule-2);position:sticky;top:0;background:var(--color-bg);z-index:3}
+.gantt-name{width:250px;flex:none;padding:7px 10px 7px 0;border-right:1px solid var(--rule-1)}
+.gantt-axis{flex:1;display:flex;position:relative}
+.gantt-tick{flex:1;padding:7px 5px;font-family:var(--font-mono);font-size:9.5px;letter-spacing:.02em;
+  text-transform:uppercase;color:var(--muted);border-left:1px solid var(--rule-1);font-weight:500}
+.gantt-row{display:flex;border-bottom:1px solid var(--rule-1);min-height:38px}
+.gantt-row:hover{background:var(--color-surface)}
+.gantt-row.sel{background:var(--color-accent-100)}
+.gantt-track{position:relative;flex:1;min-height:38px}
+.gbar{position:absolute;top:9px;height:20px;display:flex;align-items:center;padding:0 6px;
+  font-family:var(--font-mono);font-size:10px;font-weight:500;color:var(--on-solid);
+  background:var(--color-neutral-700);cursor:grab;user-select:none;white-space:nowrap;overflow:hidden;
+  border-radius:var(--r-sm)}
+.gbar.crit{box-shadow:inset 0 -2px 0 var(--sig-red)}
+.gbar.behind{background:var(--sig-red)}
+.gbar.plan{background:var(--color-neutral-300);color:var(--color-text)}
+.gbar.plan.crit{box-shadow:inset 0 -2px 0 var(--sig-red-line)}
+.gbar.done{background:var(--color-neutral-600)}
+.gbar.dragging{opacity:.8;cursor:grabbing;box-shadow:var(--shadow-md);z-index:5}
+.gbar .grip{position:absolute;top:0;bottom:0;width:7px;cursor:ew-resize}
+.gbar .grip.l{left:0} .gbar .grip.r{right:0}
+.gbar .prog{position:absolute;left:0;top:0;bottom:0;background:rgba(255,255,255,.26);pointer-events:none}
+.gbase{position:absolute;top:31px;height:2px;background:var(--color-neutral-400);border-radius:1px}
+.gmile{position:absolute;top:8px;width:12px;height:12px;background:var(--color-bg);
+  border:1.5px solid var(--color-neutral-600);transform:rotate(45deg)}
+.gmile.late{background:var(--sig-red);border-color:var(--sig-red)}
+.gtoday{position:absolute;top:0;bottom:0;width:1.5px;background:var(--color-accent);z-index:2;pointer-events:none}
+.ggate{position:absolute;top:0;bottom:0;width:0;border-left:1px dashed var(--muted-2);z-index:1;pointer-events:none}
+.ggate span{position:absolute;top:2px;left:3px;font-family:var(--font-mono);font-size:9px;font-weight:500;
+  color:var(--muted);letter-spacing:.02em}
+.gdep{position:absolute;inset:0;pointer-events:none;z-index:4;overflow:visible}
+
+/* ── kanban ───────────────────────────────────────────────────────── */
+.board{display:flex;gap:0;align-items:flex-start;overflow-x:auto;padding:0 24px 24px}
+.col{flex:1;min-width:214px;border-right:1px solid var(--rule-1);padding:0 12px}
+.col:first-child{padding-left:0}
+.col:last-child{border-right:0;padding-right:0}
+.col-hd{display:flex;align-items:baseline;gap:8px;padding:11px 0 8px;border-bottom:1px solid var(--rule-2);
+  margin-bottom:10px;position:sticky;top:0;background:var(--color-bg);z-index:2}
+.col-hd .n{flex:1;font-size:12px;font-weight:600;letter-spacing:-.01em}
+.col.over{background:var(--color-accent-100)}
+.kcard{background:var(--color-surface);padding:9px 11px;margin-bottom:7px;cursor:grab;
+  border:1px solid var(--rule-1);border-left:2px solid var(--color-neutral-400);
+  position:relative;border-radius:var(--r);transition:box-shadow .12s ease,transform .12s ease}
+.kcard:hover{box-shadow:var(--shadow-md);transform:translateY(-1px)}
+.kcard.p1{border-left-color:var(--sig-red)}
+.kcard.p3{border-left-color:var(--color-neutral-300)}
+.kcard.drag{opacity:.4}
+.kcard-t{font-size:12.5px;font-weight:500;line-height:1.35;margin-bottom:6px}
+.kcard-m{display:flex;align-items:center;gap:7px;font-size:10.5px;color:var(--muted);font-family:var(--font-mono)}
+.kcard-m .sp{flex:1}
+.wip-over{color:var(--sig-red);font-weight:600}
+
+/* ── matrix / heatmap ─────────────────────────────────────────────── */
+.grid-cell{display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:11px;
+  font-weight:500;aspect-ratio:1;border:1px solid var(--color-bg);cursor:pointer;font-variant-numeric:tabular-nums}
+.grid-cell.head{background:transparent!important;color:var(--muted);cursor:default;font-weight:500;font-size:10px}
+.grid-cell:not(.head):hover{outline:2px solid var(--color-accent);outline-offset:-2px;z-index:1}
+.heat{border-collapse:collapse;width:100%;font-size:11px}
+.heat th{font-family:var(--font-mono);font-size:9.5px;letter-spacing:.02em;text-transform:uppercase;
+  color:var(--muted);padding:5px 4px;font-weight:500;text-align:center}
+.heat th.n{text-align:left;width:170px}
+.heat td{padding:0;border:1px solid var(--color-bg)}
+.heat td.n{padding:5px 8px 5px 0;border:0;border-bottom:1px solid var(--rule-1);white-space:nowrap}
+.heat-c{padding:6px 2px;text-align:center;font-family:var(--font-mono);font-weight:500;
+  font-variant-numeric:tabular-nums;cursor:pointer}
+.heat-c:hover{outline:2px solid var(--color-accent);outline-offset:-2px}
+
+/* ── steps / workflow ─────────────────────────────────────────────── */
+.step{display:flex;gap:11px;padding:10px 0;border-bottom:1px solid var(--rule-1)}
+.step-i{width:19px;height:19px;flex:none;border:1px solid var(--rule-2);display:flex;align-items:center;
+  justify-content:center;font-family:var(--font-mono);font-size:9.5px;font-weight:600;border-radius:50%}
+.step-i.ok{background:var(--sig-green);border-color:var(--sig-green);color:var(--on-solid)}
+.step-i.no{background:var(--sig-red);border-color:var(--sig-red);color:var(--on-solid)}
+.step-i.wait{color:var(--muted);border-color:var(--rule-2);background:var(--color-bg)}
+
+/* ── modal ────────────────────────────────────────────────────────── */
+.backdrop{position:fixed;inset:0;background:color-mix(in srgb,var(--color-neutral-900) 55%,transparent);
+  backdrop-filter:blur(2px);display:flex;align-items:flex-start;justify-content:center;
+  padding:6vh 20px 20px;z-index:60;overflow-y:auto}
+.dialog{background:var(--color-bg);width:100%;max-width:620px;box-shadow:var(--shadow-lg);
+  border:1px solid var(--rule-2);border-radius:var(--r-lg);animation:din .16s ease}
+.dialog.wide{max-width:900px}
+.dialog-hd{padding:15px 20px;border-bottom:1px solid var(--rule-1);display:flex;align-items:flex-start;gap:12px}
+.dialog-hd .sp{flex:1;min-width:0}
+.dialog-bd{padding:17px 20px;max-height:64vh;overflow-y:auto}
+.dialog-ft{padding:12px 20px;border-top:1px solid var(--rule-1);display:flex;gap:8px;align-items:center;
+  background:var(--color-surface);border-radius:0 0 var(--r-lg) var(--r-lg)}
+.dialog-ft .sp{flex:1}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:13px}
+.form-grid .full{grid-column:1/-1}
+@keyframes din{from{transform:translateY(-6px);opacity:0}to{transform:none;opacity:1}}
+
+/* ── toast ────────────────────────────────────────────────────────── */
+.toasts{position:fixed;right:20px;bottom:20px;z-index:80;display:flex;flex-direction:column;gap:8px;max-width:380px}
+.toast{background:var(--color-neutral-900);color:var(--color-bg);padding:10px 13px;font-size:12.5px;
+  box-shadow:var(--shadow-md);display:flex;gap:10px;align-items:flex-start;animation:tin .18s ease;
+  border-radius:var(--r);border-left:2px solid var(--color-accent)}
+.toast.warn{border-left-color:var(--sig-amber)}
+.toast b{font-weight:600}
+@keyframes tin{from{transform:translateY(6px);opacity:0}to{transform:none;opacity:1}}
+
+/* ── command palette ──────────────────────────────────────────────── */
+.cmd{background:var(--color-bg);width:100%;max-width:580px;border:1px solid var(--rule-2);
+  box-shadow:var(--shadow-lg);border-radius:var(--r-lg);overflow:hidden;animation:din .16s ease}
+.cmd-in{all:unset;display:block;width:100%;padding:14px 18px;font-family:var(--font-ui);font-size:17px;
+  font-weight:400;border-bottom:1px solid var(--rule-1);box-sizing:border-box}
+.cmd-list{max-height:52vh;overflow-y:auto}
+.cmd-item{display:flex;gap:11px;align-items:center;padding:9px 18px;cursor:pointer;
+  border-bottom:1px solid var(--rule-1)}
+.cmd-item .kicker{width:74px;flex:none}
+.cmd-item.on{background:var(--color-accent-100);box-shadow:inset 2px 0 0 var(--color-accent)}
+.cmd-item .sp{flex:1;min-width:0}
+
+/* ── misc ─────────────────────────────────────────────────────────── */
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;padding:3px 9px;
+  border:1px solid var(--rule-2);cursor:pointer;background:var(--color-bg);font-family:var(--font-ui);
+  border-radius:11px;color:var(--muted)}
+.chip:hover{border-color:var(--color-neutral-400);background:var(--color-surface);color:var(--color-text)}
+.chip.on{background:var(--color-accent);border-color:var(--color-accent);color:var(--on-solid);font-weight:500}
+.chips{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+/* The one full-bleed block in the system, used where the portfolio is
+   asking a person to decide something. */
+.poster{background:var(--color-accent-800);color:#fff;padding:24px;border-radius:var(--r-lg);
+  border-left:3px solid var(--color-accent-400)}
+.poster h3{font-size:21px;letter-spacing:-.02em;color:#fff}
+.audit{font-size:11.5px;display:flex;gap:10px;padding:6px 0;border-bottom:1px solid var(--rule-1)}
+.audit time{color:var(--muted);white-space:nowrap;font-family:var(--font-mono);
+  font-variant-numeric:tabular-nums;width:112px;flex:none}
+.clock{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-weight:500}
+.sparkline{display:block}
+.drop-hint{border:1px dashed var(--rule-2);padding:13px;text-align:left;color:var(--muted);font-size:11.5px;
+  border-radius:var(--r);background:var(--color-surface)}
+.linkish{cursor:pointer}
+.linkish .strong,.linkish>a{text-decoration:underline;text-underline-offset:2px;text-decoration-thickness:1px}
+.linkish:hover{background:var(--color-surface)}
+.linkish:hover .strong{color:var(--color-accent)}
+.bare{all:unset;cursor:pointer;min-height:24px;min-width:24px;display:inline-flex;align-items:center;justify-content:center}
+/* R-07 — folds: quarterly reading collapsed behind a legible summary. */
+.fold{border-top:1px solid var(--rule-1);padding:10px 0 6px;margin-top:8px}
+.fold-hd{cursor:pointer;display:flex;align-items:baseline;min-height:24px;padding:4px 0;list-style-position:inside}
+.fold-hd::marker{color:var(--muted)}
+.fold[open] .fold-hd{margin-bottom:4px}
+.bare:focus-visible{outline:2px solid var(--color-accent);outline-offset:2px}
+.pill-n{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.scrollx{overflow-x:auto}
+.nowrap{white-space:nowrap}
+
+/* ── print (status report) ────────────────────────────────────────── */
+@media print{
+  :root{--color-bg:#fff;--color-surface:#fff;--color-text:#000;--rule-1:#ccc;--rule-2:#999}
+  body{overflow:visible}
+  .sidebar,.hdr,.no-print{display:none!important}
+  .app,.main,.scroll{display:block;height:auto;overflow:visible}
+  .print-only{display:block!important}
+  .btn,.poster{box-shadow:none}
+}
+.print-only{display:none}
+
+/* ── responsive ───────────────────────────────────────────────────── */
+@media (max-width:1180px){
+  .split{grid-template-columns:1fr}
+  .split > .l{border-right:0;border-bottom:1px solid var(--rule-2)}
+}
+@media (max-width:900px){
+  :root{--sidebar:0px}
+  .sidebar{position:fixed;left:0;top:0;bottom:0;width:238px;z-index:50;transform:translateX(-100%);
+    transition:transform .18s ease;box-shadow:var(--shadow-lg)}
+  .sidebar.open{transform:none}
+  .menu-btn{display:inline-flex!important}
+  .split-2,.split-3{grid-template-columns:1fr}
+  .split-2 > *:first-child,.split-3 > *{border-right:0;border-bottom:1px solid var(--rule-1)}
+  .sec{padding:16px}
+  .board{padding:0 16px 16px}
+}
+@media (max-width:760px){
+  .kpis{grid-template-columns:1fr 1fr!important}
+  .kpi{border-bottom:1px solid var(--rule-1)}
+  .kpi .v{font-size:22px}
+  .hdr{flex-wrap:wrap;row-gap:12px}
+  .hdr-title{width:100%;order:-1}
+  .hdr-actions{width:100%;flex-wrap:wrap}
+  .hdr-actions .field{flex:1 1 42%;min-width:0}
+  .hdr-actions .search{flex:1 1 100%}
+  .rail{min-width:0}
+}
+.menu-btn{display:none}

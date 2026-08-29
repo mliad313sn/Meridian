@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "meridian",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["server/src/index.js"],
+      "port": 4173,
+      "env": { "PGLITE_DIR": "./server/.data/pgdata" }
+    }
+  ]
+}

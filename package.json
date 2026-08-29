@@ -1,0 +1,35 @@
+{
+  "name": "meridian-itpmo",
+  "version": "5.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Meridian group IT-PMO — multi-site project portfolio management",
+  "scripts": {
+    "dev": "node server/src/index.js",
+    "dev:web": "vite --config web/vite.config.js",
+    "build": "vite build --config web/vite.config.js",
+    "start": "NODE_ENV=production node server/src/index.js",
+    "migrate": "node server/src/migrate.js",
+    "seed": "node server/src/seed.js",
+    "reset-book": "node server/src/reset-book.js",
+    "test": "node --test \"server/test/**/*.test.js\"",
+    "test:watch": "node --test --watch \"server/test/**/*.test.js\"",
+    "audit": "node scripts/audit/route-match.mjs && node scripts/audit/crud-audit.mjs && node scripts/audit/version-audit.mjs && node scripts/audit/control-audit.mjs && node scripts/audit/i18n-audit.mjs",
+    "verify": "npm test && npm run build && npm run audit",
+    "sweep": "node scripts/audit/usecase-sweep.mjs",
+    "package": "node scripts/package/build-exe.mjs",
+    "package:installer": "npm run package && node scripts/package/build-installer.mjs"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.2.17",
+    "cookie-parser": "^1.4.7",
+    "express": "^5.2.1",
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "node-windows": "^1.0.0-beta.8",
+    "postject": "^1.0.0-alpha.6",
+    "vite": "^6.0.7"
+  }
+}
