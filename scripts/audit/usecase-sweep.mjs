@@ -198,7 +198,11 @@ async function runRole(role) {
       uri: `https://docs.meridian.example/evidence/sweep-${role}.pdf` }));
   const docId = doc?.body?.id;
   if (docId) {
-    await uc(role, call, "Documents", "approuver sa propre preuve", A(role === "group" || role === "admin"),
+    /* S-06 — depuis la campagne de sécurité, déposer une preuve vous en
+       rend propriétaire, et le propriétaire ne l'approuve pas. Seul
+       l'administrateur passe encore, par l'exemption de séparation des
+       tâches qu'il porte partout (S-13 au registre). */
+    await uc(role, call, "Documents", "approuver sa propre preuve", A(role === "admin"),
       (c) => c("PATCH", `/api/documents/${docId}`, { status: "Approved", version: 1 }));
     await uc(role, call, "Documents", "nouvelle révision", A(writes), (c) => c("POST", `/api/documents/${docId}/revise`, {}));
   }

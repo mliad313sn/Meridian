@@ -431,7 +431,7 @@ export const FR = {
   "rotation": "rotation",
   "leave": "congé",
   "training": "formation",
-  "sick": "maladie",
+  "unavailable": "indisponible",
   "Reason": "Motif",
   "Notification preferences": "Préférences de notification",
   "Language of my emails": "Langue de mes courriels",
@@ -790,4 +790,8 @@ export const FR = {
   "what the portfolio promised, and what has been measured":
     "ce que le portefeuille a promis, et ce qui a été mesuré",
   "with the reason on the record": "avec la raison au dossier",
+
+  // ── campagne de sécurité (S-01)
+  "unsafe link": "lien non sûr",
+  "unavailable": "indisponible",
 };

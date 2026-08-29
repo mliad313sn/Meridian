@@ -63,11 +63,56 @@ export function buildApp() {
   });
 
   /* A few headers that cost nothing and close the obvious doors. The app
-     loads one font stylesheet and nothing else off-origin. */
+     loads one font stylesheet and nothing else off-origin.
+
+     The policy is the second lock on the evidence link (S-01): the client
+     validates the scheme before it renders an href, and this refuses to
+     execute anything that slips past. `script-src 'self'` alone would not
+     stop a javascript: URI — `navigate-to` is not implemented anywhere —
+     so the client-side check is the primary control and this is depth.
+     Style needs 'unsafe-inline' because the kit sets style attributes;
+     scripts never are, so the script directive stays strict. */
+  const CSP = [
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com",
+    "img-src 'self' data:",
+    "connect-src 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "object-src 'none'",
+  ].join("; ");
+  const secure = process.env.MERIDIAN_SECURE_COOKIES === "1";
   app.use((_req, res, next) => {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Referrer-Policy", "same-origin");
     res.setHeader("X-Frame-Options", "SAMEORIGIN");
+    res.setHeader("Content-Security-Policy", CSP);
+    res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=()");
+    /* Only when the deployment says it is behind TLS — announcing HSTS
+       from a plain-HTTP install would lock users out of their own tool. */
+    if (secure) res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+    next();
+  });
+
+  /* S-02 — cross-site request forgery, in depth. The session cookie is
+     SameSite=Lax, which already refuses to ride along on a cross-site
+     POST; this refuses the request even if that ever fails (an old
+     browser, a proxy that rewrites the cookie, a future same-site
+     subdomain). Same-origin and origin-less requests (curl, the service
+     itself, native clients) pass; a stated foreign origin does not. */
+  app.use("/api", (req, res, next) => {
+    if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") return next();
+    const stated = req.headers.origin ?? (req.headers.referer ? new URL(req.headers.referer).origin : null);
+    if (!stated) return next();
+    const host = req.headers.host;
+    let origin = null;
+    try { origin = new URL(stated); } catch { return next(new HttpError(403, "Malformed origin")); }
+    if (origin.host !== host) {
+      return next(new HttpError(403, "Cross-site write refused — open Meridian directly"));
+    }
     next();
   });
 
@@ -167,8 +212,31 @@ export async function start({ port = process.env.PORT || 4173 } = {}) {
   await connect();
   await migrate({ silent: true });
   const app = buildApp();
-  const server = app.listen(port, () => {
-    console.log(`Meridian IT-PMO listening on http://localhost:${port}  (${engine()})`);
+  /* S-08 — listen where the operator said, and say where that is.
+     app.listen(port) binds every interface, while the startup line said
+     "localhost" — so an install that reads as a desktop tool was in fact
+     answering the whole LAN over plain HTTP, session cookie included.
+     The default is now the loopback; reaching it from other machines is
+     a deliberate choice (MERIDIAN_BIND=0.0.0.0), and that choice should
+     come with TLS in front and MERIDIAN_SECURE_COOKIES=1. */
+  const host = process.env.MERIDIAN_BIND || "127.0.0.1";
+  const server = app.listen(port, host, () => {
+    const where = host === "127.0.0.1" ? `http://localhost:${port}` : `http://${host}:${port}`;
+    console.log(`Meridian IT-PMO listening on ${where}  (${engine()})`);
+    if (host !== "127.0.0.1" && process.env.MERIDIAN_SECURE_COOKIES !== "1") {
+      console.log("  ! reachable beyond this machine over plain HTTP — put TLS in front " +
+                  "and set MERIDIAN_SECURE_COOKIES=1, or the session cookie travels in clear");
+    }
+    /* S-11 — say it out loud, every start, until somebody fixes it. The
+       packaged config ships postgres:postgres because an installer cannot
+       invent a password; that default is the most-guessed credential
+       there is, and it is superuser on the whole cluster, not just this
+       database. A silent default is one nobody ever changes. */
+    const dsn = process.env.DATABASE_URL || "";
+    if (/:\/\/postgres:postgres@/.test(dsn)) {
+      console.log("  ! the database is reached with the default postgres/postgres credentials — " +
+                  "give PostgreSQL a real password and update DATABASE_URL (meridian.config.json)");
+    }
   });
 
   const sweeper = setInterval(() => sweepSessions().catch(() => {}), 15 * 60 * 1000);

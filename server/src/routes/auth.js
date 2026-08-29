@@ -94,8 +94,17 @@ r.get("/me", async (req, res, next) => {
   }
 });
 
-/** The sign-in screen lists the seeded demo accounts so the system is
-    usable on first run. Never returns a password or a hash. */
+/** The sign-in screen lists the seeded DEMONSTRATION accounts so the
+    system is usable on first run. Never returns a password or a hash.
+
+    S-03 — and never returns anything else. This runs before the session
+    wall by necessity (it feeds the sign-in screen), so the filter belongs
+    in the SQL, not in the caller: on a real book it answers with an empty
+    list, because publishing "who works here, with which role, over which
+    sites" to anyone who can reach the port is a free target list for
+    phishing and password spraying — and it undoes the deliberate work
+    login() does to keep account existence unknowable. */
+const DEMO_DOMAIN = "@meridian.example";
 r.get("/accounts", async (_req, res, next) => {
   try {
     const rows = await many(
@@ -103,15 +112,16 @@ r.get("/accounts", async (_req, res, next) => {
               coalesce(string_agg(coalesce(g.programme_id, g.site_id), ', ' ORDER BY 1), '') AS scope
          FROM app_user u
          LEFT JOIN access_grant g ON g.user_id = u.id
-        WHERE u.active
+        WHERE u.active AND u.email LIKE $1
         GROUP BY u.id, u.email, u.display_name, u.role
-        ORDER BY CASE u.role WHEN 'admin' THEN 0 WHEN 'group' THEN 1 WHEN 'site' THEN 2 ELSE 3 END, u.display_name`
+        ORDER BY CASE u.role WHEN 'admin' THEN 0 WHEN 'group' THEN 1 WHEN 'site' THEN 2 ELSE 3 END, u.display_name`,
+      ["%" + DEMO_DOMAIN]
     );
     res.json({
       /* Production-safe login screen (adoption committee I4): the README
          sentence about seed passwords must render only where seed
          accounts actually exist. */
-      seeded: rows.some((x) => String(x.email).endsWith("@meridian.example")),
+      seeded: rows.length > 0,
       accounts: rows.map((x) => ({
         email: x.email, name: x.display_name, role: x.role, scope: x.scope,
       })),

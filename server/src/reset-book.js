@@ -60,6 +60,15 @@ export async function resetBook() {
         WHERE active AND NOT (lower(email) = ANY($1))`, [KEEP]);
     await t.query(`DELETE FROM session WHERE user_id IN
                      (SELECT id FROM app_user WHERE NOT active)`);
+    /* S-10 — the account that survives the reset survives with whatever
+       password it had, and on a seeded instance that password is printed
+       in the README. Clearing the book is the moment production begins,
+       so the surviving holder proves the password is theirs before they
+       may write. Existing sessions go too: a reset is a fresh start. */
+    await t.query(
+      `UPDATE app_user SET must_change_password = true, row_version = row_version + 1
+        WHERE active AND lower(email) = ANY($1)`, [KEEP]);
+    await t.query(`DELETE FROM session`);
     await record(t, null, {
       action: "Book reset for production",
       entity: "system", entityId: "reset-book",

@@ -37,11 +37,31 @@ function s(tag, props, ...kids) {
   add(el, kids);
   return el;
 }
+/**
+ * S-01 — a URL attribute holds a location, never code.
+ *
+ * `javascript:` and `data:` in an href are script that runs on click, in
+ * this origin, as the person who clicked. The application stores links
+ * people type (a document's artefact), so the rule lives HERE rather than
+ * in each caller: one place decides what may become an href, the same way
+ * one place decides authority. Relative and same-document links stay
+ * legal; anything with a scheme must be http or https.
+ */
+const URL_ATTR = new Set(["href", "src", "action", "formaction", "xlink:href", "poster"]);
+export function safeHref(v) {
+  const s = String(v ?? "").trim();
+  if (!s) return false;
+  // eslint-disable-next-line no-control-regex
+  const scheme = s.replace(/[\u0000-\u0020]/g, "").match(/^([a-z][a-z0-9+.-]*):/i);
+  if (!scheme) return true;                       // relative, #fragment, ?query
+  return /^https?$/i.test(scheme[1]);
+}
 function apply(el, props, isSvg) {
   if (!props) return;
   for (const k in props) {
     const v = props[k];
     if (v === null || v === undefined || v === false) continue;
+    if (URL_ATTR.has(k.toLowerCase()) && !safeHref(v)) continue;
     if (k === "class" || k === "className") {
       if (isSvg) el.setAttribute("class", v); else el.className = v;
     } else if (k === "style") {

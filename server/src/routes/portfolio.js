@@ -65,7 +65,17 @@ function assertLocalOrigin(row, what) {
       `This ${what} is synchronised from the SDP roadmap — it is edited there, not in Meridian`);
   }
 }
-const num = (v, fallback = 0) => (v === undefined || v === null || v === "" ? fallback : Number(v));
+/* S-05 — a number, or the refusal to pretend one was given. NaN and
+   Infinity are valid `numeric` literals in PostgreSQL, and NaN compares
+   GREATER than everything, so `CHECK (budget >= 0)` waves it straight
+   through — after which every derived figure on that project (SPI, CPI,
+   EAC, the RAG, the published period) is NaN, silently and for good. */
+const num = (v, fallback = 0) => {
+  if (v === undefined || v === null || v === "") return fallback;
+  const n = Number(v);
+  if (!Number.isFinite(n)) bad("That is not a number");
+  return n;
+};
 /* Identifiers are allocated by allocateId() inside the writing
    transaction. The read-then-compute helper that used to live here was a
    race behind any connection pool — see migration 004. */
@@ -815,7 +825,11 @@ r.post("/change", async (req, res, next) => {
              (id, project_id, title, description, raised_by, raised_on, cost_delta,
               weeks_delta, funding, risk_delta, status)
            VALUES ($1,$2,$3,$4,$5,CURRENT_DATE,$6,$7,$8,$9,'Pending')`,
-          [id, p.id, b.title, b.desc ?? "", b.raisedBy ?? req.user.personId,
+          /* S-07 — who raised it is recorded, never claimed. Accepting
+             b.raisedBy let a caller erase or alias the identity that the
+             independence check compares against; the foreign key caught
+             it, but a control should not lean on a constraint. */
+          [id, p.id, b.title, b.desc ?? "", req.user.personId,
            fromM(num(b.cost)), Math.round(num(b.weeks)), b.funding ?? "Contingency",
            b.riskDelta ?? "0"]);
         for (let i = 0; i < CR_STEPS.length; i++) {
@@ -1212,7 +1226,9 @@ r.post("/absences", async (req, res, next) => {
     if (!b.from || !b.to) bad("An absence has a start and an end");
     if (D(b.to) < D(b.from)) bad("An absence cannot end before it starts");
     if (b.deputy && b.deputy === b.person) bad("Nobody deputises for themselves");
-    const reason = ["rotation", "leave", "training", "sick"].includes(b.reason) ? b.reason : "rotation";
+    /* G-03 — pas de motif médical : « unavailable » dit ce dont la
+       suppléance a besoin, et rien qui relève de l'article 9. */
+    const reason = ["rotation", "leave", "training", "unavailable"].includes(b.reason) ? b.reason : "rotation";
 
     let id = null;
     await audited(req.user,
@@ -1239,7 +1255,7 @@ r.patch("/absences/:id", async (req, res, next) => {
     const patch = {};
     if (b.from !== undefined) patch.starts_on = b.from;
     if (b.to !== undefined) patch.ends_on = b.to;
-    if (b.reason !== undefined) patch.reason = ["rotation", "leave", "training", "sick"].includes(b.reason) ? b.reason : "rotation";
+    if (b.reason !== undefined) patch.reason = ["rotation", "leave", "training", "unavailable"].includes(b.reason) ? b.reason : "rotation";
     if (b.deputy !== undefined) {
       if (b.deputy && b.deputy === a.person_id) bad("Nobody deputises for themselves");
       patch.deputy_id = b.deputy || null;
@@ -1260,8 +1276,12 @@ r.delete("/absences/:id", async (req, res, next) => {
     if (!a) throw new HttpError(404, "No such absence");
     gate(req.user, "absence.write", { site_id: await personSite(a.person_id) });
     await audited(req.user,
+      /* G-03 — l'image garde de quoi restaurer l'absence, pas la note
+         libre qui l'accompagnait : la piste est ineffaçable, donc tout ce
+         qu'on y écrit l'est aussi. Une note d'organisation n'a pas à être
+         conservée à perpétuité et lisible au niveau groupe. */
       { action: "Absence withdrawn", entity: "person_absence", entityId: a.id,
-        detail: a.person_id, before: { ...a } },
+        detail: a.person_id, before: { ...a, note: "" } },
       async (t) => t.query(`DELETE FROM person_absence WHERE id = $1`, [a.id]));
     res.json({ ok: true });
   } catch (e) { next(e); }
@@ -1830,6 +1850,31 @@ function assertEvidenceUri(uri, settings) {
 }
 const uriHash = (uri) => crypto.createHash("sha256").update(String(uri)).digest("hex");
 
+/**
+ * S-01 — the scheme check, applied the moment a link is STORED rather
+ * than when it is approved.
+ *
+ * The trusted-host rule above is a governance control and belongs at
+ * approval: a draft may legitimately point anywhere while the work is in
+ * flight. But `javascript:` is not a location, it is code, and a draft
+ * link is rendered as an href in the document library long before anyone
+ * approves it. So the two checks separate: this one refuses anything that
+ * is not http(s) at write time, for everybody, always; the host allow-list
+ * still gates approval. An empty link stays legal — a document may be
+ * filed before its artefact exists.
+ */
+function assertStorableUri(uri) {
+  const raw = String(uri ?? "").trim();
+  if (!raw) return "";
+  let u;
+  try { u = new URL(raw); } catch { bad("That link is not a valid URL"); }
+  if (u.protocol !== "https:" && u.protocol !== "http:") {
+    bad("A link points somewhere — only http and https addresses are stored");
+  }
+  if (raw.length > 2048) bad("That link is too long to be an address");
+  return raw;
+}
+
 r.post("/documents", async (req, res, next) => {
   try {
     const b = req.body ?? {};
@@ -1859,8 +1904,15 @@ r.post("/documents", async (req, res, next) => {
           `INSERT INTO document (id, project_id, name, doc_type, gate, owner_id, revision, status, updated_on, uri)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,CURRENT_DATE,$9)`,
           [id, b.project || null, b.name, b.type ?? "Assurance", num(b.gate, 0),
-           b.owner ?? null, b.rev ?? "0.1", b.status ?? "Draft",
-           String(b.uri ?? "").trim()]);
+           /* S-06 — the author is recorded, not requested. An evidence
+              document filed with no owner used to approve itself: the
+              independence check compares the approver to the owner, and
+              an absent owner matches nobody, so the same person wrote and
+              accepted the evidence. Whoever files it owns it unless they
+              name somebody else. */
+           b.owner || req.user.personId || null,
+           b.rev ?? "0.1", b.status ?? "Draft",
+           assertStorableUri(b.uri)]);
       });
     res.status(201).json({ id });
   } catch (e) { next(e); }
@@ -1877,6 +1929,22 @@ r.patch("/documents/:id", async (req, res, next) => {
          through document.approve — owner never signs their own work,
          and gate evidence on a site project needs group-level eyes. */
       if (b0.status === "Approved") {
+        /* S-06 — an ownerless document is not approvable. The independence
+           check compares the approver against the owner; with no owner
+           there is nobody to be independent OF, and it used to fail open.
+           Filing now stamps the filer, so this only catches a document
+           whose owner was cleared afterwards.
+
+           The administrator is outside it, as they are outside every
+           separation-of-duties rule (a deliberate exemption, S-13): an
+           administration account is not tied to a person, so it can never
+           satisfy this and would simply be locked out of approving
+           anything. That exemption is the reason S-13 says the real fix is
+           named accounts for the real roles, not more code here. */
+        if (!d.owner_id && req.user.role !== "admin") {
+          bad("This document names no owner, so nobody can be a second pair of eyes on it — " +
+              "name the person accountable for it, then approve");
+        }
         gate(req.user, "document.approve", { project: p, owner_id: d.owner_id, gate: d.gate });
         /* Approval is a pure act. Handing the document to someone else in
            the same breath is how an owner signs their own work in two
@@ -1906,7 +1974,7 @@ r.patch("/documents/:id", async (req, res, next) => {
     if (b.owner !== undefined) patch.owner_id = b.owner || null;
     if (b.rev !== undefined) patch.revision = b.rev;
     if (b.status !== undefined) patch.status = b.status;
-    if (b.uri !== undefined) patch.uri = String(b.uri ?? "").trim();
+    if (b.uri !== undefined) patch.uri = assertStorableUri(b.uri);
 
     /* R-01 — approving names the artefact and freezes its address. */
     let uriChangedOnApproved = false;
@@ -2427,7 +2495,16 @@ r.get("/export/dataset", async (req, res, next) => {
       const cols = rows.length ? Object.keys(rows[0]) : [];
       /* Quote everything and double interior quotes — a project named
          "Ity, phase 2" must not become two columns in Excel. */
-      const cell = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+      /* S-04 — and neutralise formulas. A project may legitimately be
+         named "=Ity phase 2"; a spreadsheet reads a leading =, +, - or @
+         as code and will happily run it against the reader's own machine.
+         A leading apostrophe makes the cell text again, which is what it
+         always was — the export is data, never instructions. */
+      const cell = (v) => {
+        const s = String(v ?? "");
+        const safe = /^[=+\-@\t\r]/.test(s) ? "'" + s : s;
+        return `"${safe.replace(/"/g, '""')}"`;
+      };
       const csv = [cols.join(","), ...rows.map((r) => cols.map((c) => cell(r[c])).join(","))].join("\r\n");
       res.setHeader("Content-Type", "text/csv; charset=utf-8");
       res.setHeader("Content-Disposition", `attachment; filename="meridian-portfolio-${db.statusDate}.csv"`);

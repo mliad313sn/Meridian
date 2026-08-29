@@ -87,9 +87,11 @@ export const ACCOUNTS = {
   viewerGRU:  ["q.mbeki@meridian.example", "viewer-gru-2026"],
 };
 
+/** `as(null)` gives a client that never signed in — the sign-in screen's
+    own view of the application, which some controls have to serve. */
 export async function as(who) {
   const c = client();
-  await c.login(...ACCOUNTS[who]);
+  if (who !== null) await c.login(...ACCOUNTS[who]);
   return c;
 }
 

@@ -13,7 +13,7 @@ import {
   h, s, frag, clear, $, icon, dialog, confirmDialog, form, formDialog,
   table, sortRows, sortableTable, ragDot, meter, kpiStrip, sectionHead,
   tag, chip, statusTag, avatar, searchBox, selectField, emptyState,
-  sparkline, curveChart, legend, fold,
+  sparkline, curveChart, legend, fold, safeHref,
 } from "../ui/kit.js";
 import { App, go, toast, reportError } from "../lib/state.js";
 import { api, saveText, download } from "../lib/api.js";
@@ -2664,7 +2664,7 @@ function declareAbsence(db, sid) {
         options: people.map(p => ({ value: p.id, label: p.name })) },
       { key: "reason", label: t("Reason"), type: "select", value: "rotation",
         options: [{ value: "rotation", label: t("rotation") }, { value: "leave", label: t("leave") },
-          { value: "training", label: t("training") }, { value: "sick", label: t("sick") }] },
+          { value: "training", label: t("training") }, { value: "unavailable", label: t("unavailable") }] },
       { key: "from", label: t("From"), type: "date", required: true, value: db.statusDate },
       { key: "to", label: t("To"), type: "date", required: true, value: db.statusDate,
         validate: (v, st) => D(v) < D(st.from) ? t("An absence cannot end before it starts") : "" },
@@ -3648,9 +3648,15 @@ Views.documents = (db) => {
         d.supersedes ? h("div", { class: "xs muted", title: t("Replaces ") + d.supersedes }, "↤ " + d.supersedes) : null) },
     /* R-01 — the artefact is a column, because a document without one is
        a label, and the screen should read that way too. */
+    /* S-01 — a stored link is data until proven to be a location. Anything
+       that is not http(s) is shown as text, never as an href: the server
+       refuses to store other schemes, and this refuses to render one that
+       ever got past it. */
     { key: "uri", label: t("Artefact"), align: "c", width: "84px", sort: d => (d.uri ? 1 : 0), get: d => d.uri
-        ? h("a", { href: d.uri, target: "_blank", rel: "noopener", class: "small linkish",
-            title: d.uri, onClick: (e) => e.stopPropagation() }, t("open"))
+        ? (safeHref(d.uri)
+          ? h("a", { href: d.uri, target: "_blank", rel: "noopener noreferrer", class: "small linkish",
+              title: d.uri, onClick: (e) => e.stopPropagation() }, t("open"))
+          : h("span", { class: "xs", style: "color:var(--sig-amber)", title: d.uri }, t("unsafe link")))
         : h("span", { class: "xs", style: "color:var(--sig-amber)", title: t("No artefact — an approval will be refused") }, "—") },
     { key: "updated", label: "Updated", align: "r", sort: d => d.updated, get: d => h("span", { class: "mono small" }, fmtDate(d.updated)) },
     { key: "status", label: "Status", align: "c", sort: d => d.status, width: "96px", get: d => statusTag(d.status) },

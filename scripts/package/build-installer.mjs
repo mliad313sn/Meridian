@@ -114,6 +114,15 @@ rem This wrapper opens its log file without creating the directory first,
 rem and a missing one stops the service before it reaches the app.
 if not exist "%TARGET%\\logs" mkdir "%TARGET%\\logs"
 
+rem S-09 — the service runs as LocalSystem, so whoever can write into this
+rem directory owns the machine at the next restart. C:\\Apps inherits from
+rem the drive root, which grants Authenticated Users Modify: a standard
+rem user could replace Meridian.exe. Break inheritance and grant only
+rem Administrators and SYSTEM full control; everyone else may read.
+echo   restricting who may write here...
+icacls "%TARGET%" /inheritance:r /grant:r "*S-1-5-32-544:(OI)(CI)F" "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-545:(OI)(CI)RX" >nul
+if %errorlevel% neq 0 echo   ! could not restrict the directory — check its permissions by hand
+
 echo   pointing the service at %TARGET%...
 powershell -NoProfile -ExecutionPolicy Bypass -Command "(Get-Content '%TARGET%\\MeridianService.template.xml' -Raw).Replace('__HOME__','%TARGET%') | Set-Content -Encoding UTF8 '%TARGET%\\MeridianService.xml'"
 if %errorlevel% neq 0 goto :failed
