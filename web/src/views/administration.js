@@ -258,7 +258,7 @@ export function accessPanel(db) {
           ],
           rows: shown,
           rowClass: (u) => (u.active ? "" : "muted"),
-          empty: "No accounts match that filter.",
+          empty: t("No accounts match that filter."),
         }));
 }
 
@@ -300,7 +300,7 @@ function userFields(db, u) {
     { key: "personId", label: "Directory entry", type: "select", value: u?.personId ?? "",
       options: [{ value: "", label: "Not linked" }]
         .concat(db.people.map((p) => ({ value: p.id, label: p.name + " — " + p.role }))),
-      hint: "Links the account to a person so their actions and allocations line up." },
+      hint: t("Links the account to a person so their actions and allocations line up.") },
   ];
 }
 
@@ -311,12 +311,12 @@ function newUser(db) {
       ...userFields(db, null),
       { key: "password", label: "Initial password", type: "password", required: true, span: 2,
         validate: (v) => (String(v).length < 8 ? "At least 8 characters" : ""),
-        hint: "The account holder should change this at first sign-in." },
+        hint: t("The account holder should change this at first sign-in.") },
       { key: "grant", label: "First grant", type: "select", span: 2, value: "",
         options: [{ value: "", label: "None — add grants after creating" }]
           .concat(db.programmes.map((p) => ({ value: "programme:" + p.id, label: "Programme · " + p.name })))
           .concat(db.sites.map((s) => ({ value: "site:" + s.id, label: "Site · " + s.city }))),
-        hint: "A group or site account with no grants can see nothing. One is required." },
+        hint: t("A group or site account with no grants can see nothing. One is required.") },
     ],
     saveLabel: "Create account",
     onSave: (v) => {
@@ -340,7 +340,7 @@ function editUser(db, u) {
     fields: [
       ...userFields(db, u),
       { key: "active", label: "Account is active", type: "checkbox", span: 2, value: u.active,
-        hint: "Deactivating ends every live session for this account immediately." },
+        hint: t("Deactivating ends every live session for this account immediately.") },
     ],
     saveLabel: "Save account",
     onSave: (v) => write("Account updated", (a) => a.patch("/admin/users/" + u.id, {
@@ -502,7 +502,7 @@ export function directoryPanel(db) {
             : null },
       ],
       rows: db.people,
-      empty: "The directory is empty.",
+      empty: t("The directory is empty."),
     }));
 }
 
@@ -510,7 +510,7 @@ function personFields(db, p) {
   return [
     { key: "name", label: "Name", required: true, span: 2, value: p ? p.name : "" },
     { key: "role", label: "Job role", required: true, span: 2, value: p ? p.role : "",
-      hint: "Free text — this is the directory description, not an access level." },
+      hint: t("Free text — this is the directory description, not an access level.") },
     { key: "site", label: "Site", type: "select", value: p ? p.site : db.sites[0]?.id,
       options: db.sites.map((s) => ({ value: s.id, label: s.city + " · " + s.region })) },
     { key: "rate", label: "Day rate", type: "number", min: 0, step: 10, value: p ? p.rate : 0 },
@@ -533,7 +533,7 @@ function editPerson(db, p) {
     fields: [
       ...personFields(db, p),
       { key: "active", label: "Still with the group", type: "checkbox", span: 2, value: true,
-        hint: "Clearing this marks a leaver. The system checks first for live projects, open actions and open RAID items." },
+        hint: t("Clearing this marks a leaver. The system checks first for live projects, open actions and open RAID items.") },
     ],
     saveLabel: "Save person",
     onSave: (v) => write("Person updated", async (a) => {
@@ -608,7 +608,7 @@ function siteDialog(db, s) {
     title: s ? "Edit site" : "Add site", kicker: s ? s.id : "Reference data", wide: true,
     fields: [
       ...(s ? [] : [{ key: "id", label: "Code", required: true, value: "",
-        hint: "Three letters, e.g. the airport code.",
+        hint: t("Three letters, e.g. the airport code."),
         validate: (v) => (/^[A-Za-z]{2,5}$/.test(v) ? "" : "Two to five letters") }]),
       { key: "city", label: "City", required: true, value: s ? s.city : "" },
       { key: "region", label: "Region", value: s ? s.region : "" },

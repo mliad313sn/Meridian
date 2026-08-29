@@ -144,28 +144,31 @@ const weekDigest = () => liveFetch("digest", () => api.get("/digest"), (r) => r.
    An empty book must read as "the rollout has begun", never as a broken
    product — and never advise widening filters there is nothing behind. */
 function emptyBookPanel(db) {
+  /* A-04 — the very first screen anybody sees was in English while its
+     French had already been written and never called. The translations
+     were there; the calls were not. */
   if (App.me.role !== "admin") {
     return h("section", { class: "sec", style: "max-width:60ch;margin:40px auto" },
-      h("div", { class: "kicker" }, "Being set up"),
-      h("h3", null, "This portfolio has no projects yet"),
+      h("div", { class: "kicker" }, t("Being set up")),
+      h("h3", null, t("This portfolio has no projects yet")),
       h("p", { class: "small muted" },
-        "Your administrator is building the book — sites, programmes and accounts come first. " +
-        "You will see your slate here the moment something is granted to you. " +
-        "If you expected access already, any account marked ADMIN on the sign-in directory can grant it."));
+        t("Your administrator is building the book — sites, programmes and accounts come first. " +
+          "You will see your slate here the moment something is granted to you. " +
+          "If you expected access already, any account marked ADMIN on the sign-in directory can grant it.")));
   }
   const steps = [
-    { done: db.sites.length > 0, label: "Add your first site", hint: "Administration → Sites", go: () => go("#/admin") },
-    { done: db.programmes.length > 0, label: "Add a programme", hint: "Administration → Programmes", go: () => go("#/admin") },
-    { done: db.people.length > 0, label: "Add people", hint: "Administration → Directory", go: () => go("#/admin") },
-    { done: false, label: "Create accounts & grants", hint: "Administration → Accounts — a group/site account needs a grant to see anything", go: () => go("#/admin") },
-    { done: db.projects.length > 0, label: "Create the first project", hint: "The New project button appears here once a site and a programme exist", go: () => go("#/portfolio") },
+    { done: db.sites.length > 0, label: t("Add your first site"), hint: t("Administration → Sites"), go: () => go("#/admin") },
+    { done: db.programmes.length > 0, label: t("Add a programme"), hint: t("Administration → Programmes"), go: () => go("#/admin") },
+    { done: db.people.length > 0, label: t("Add people"), hint: t("Administration → Directory"), go: () => go("#/admin") },
+    { done: false, label: t("Create accounts & grants"), hint: t("Administration → Accounts — a group/site account needs a grant to see anything"), go: () => go("#/admin") },
+    { done: db.projects.length > 0, label: t("Create the first project"), hint: t("The New project button appears here once a site and a programme exist"), go: () => go("#/portfolio") },
   ];
   return h("section", { class: "sec", style: "max-width:64ch;margin:40px auto" },
-    h("div", { class: "kicker" }, "First run"),
-    h("h3", null, "Set up the portfolio"),
+    h("div", { class: "kicker" }, t("First run")),
+    h("h3", null, t("Set up the portfolio")),
     h("p", { class: "small muted", style: "margin-bottom:14px" },
-      "The book is empty — this is the setup order. Each step ticks itself as the data arrives. " +
-      "Connected to an SDP dashboard? Its sync fills sites, people and the ops-strategy programme for you."),
+      t("The book is empty — this is the setup order. Each step ticks itself as the data arrives. " +
+        "Connected to an SDP dashboard? Its sync fills sites, people and the ops-strategy programme for you.")),
     ...steps.map((s, i) => h("div", { class: "list-row linkish", onClick: s.go, tabindex: 0,
         onKeydown: (e) => e.key === "Enter" && s.go() },
       h("span", { class: "num", style: "width:26px;flex:none;color:" + (s.done ? "var(--sig-green, #2c7)" : "var(--muted)") },
@@ -450,7 +453,7 @@ Views.programmes = (db) => {
     ? db.programmes
     : db.programmes.filter(pr => App.me.grants.programmes.includes(pr.id));
   if (!mine.length) {
-    return emptyState("No programmes granted to this account",
+    return emptyState(t("No programmes granted to this account"),
       "A group account governs the programmes named in its grants — ask an administrator.");
   }
   return h("div", null, ...mine.map(pr => {
@@ -508,7 +511,7 @@ Views.programmes = (db) => {
 Views.mysite = (db) => {
   const siteIds = App.me.grants.sites;
   if (!siteIds.length) {
-    return emptyState("No site granted to this account",
+    return emptyState(t("No site granted to this account"),
       "A site account governs the sites named in its grants — ask an administrator.");
   }
   return h("div", null, ...siteIds.map(sid => {
@@ -633,7 +636,7 @@ function projectFields(db, p) {
     { key: "governanceLevel", label: "Governance", type: "select",
       value: p ? p.governanceLevel : (App.me.role === "site" ? "site" : "group"),
       options: governanceOptions(p),
-      hint: "A group project is run by the group and is read-only to a site. A site project belongs to its site." },
+      hint: t("A group project is run by the group and is read-only to a site. A site project belongs to its site.") },
     { key: "pm", label: "Project manager", type: "select", value: p ? p.pm : db.people[0].id,
       options: db.people.map(x => ({ value: x.id, label: x.name + " — " + x.role })) },
     { key: "method", label: "Delivery method", type: "select", value: p ? p.method : "Hybrid", options: ["Waterfall", "Agile", "Hybrid"] },
@@ -686,7 +689,7 @@ function editProject(db, p) {
 /* ── Project ──────────────────────────────────────────────────────── */
 Views.project = (db) => {
   const p = Engine.project(db, App.ui.project) || db.projects[0];
-  if (!p) return emptyState("No projects in the book", "Create one from the portfolio view.");
+  if (!p) return emptyState(t("No projects in the book"), "Create one from the portfolio view.");
   const m = Engine.metrics(db, p.id);
   const gate = Engine.currentGate(db, p.id);
   const advance = Engine.canAdvance(db, p.id);
@@ -1209,9 +1212,9 @@ function rebaseline(db, p, m) {
         validate: (v) => (D(v) < D(p.start) ? "The baseline cannot precede the start" : "") },
       { key: "rebaseActivities", label: "Re-baseline every stage to its current plan",
         type: "checkbox", span: 2,
-        hint: "Sets each stage's baseline window to where it sits today. Schedule variance resets to zero." },
+        hint: t("Sets each stage's baseline window to where it sits today. Schedule variance resets to zero.") },
       { key: "why", label: "Why the baseline is moving", type: "textarea", rows: 3, span: 2, required: true,
-        hint: "This is the record steering reads when it asks why the variance disappeared." },
+        hint: t("This is the record steering reads when it asks why the variance disappeared.") },
     ],
     extra: h("div", { class: "banner-warn", style: "padding:11px 13px;border-radius:var(--r)" },
       h("div", { class: "strong small warn" }, "Current variance will be erased"),
@@ -1242,7 +1245,7 @@ function addActivity(db, p, acts) {
         value: p.finish,
         validate: (v, st) => (D(v) < D(st.start) ? "The end must follow the start" : "") },
       { key: "weight", label: "Share of budget (%)", type: "number", min: 1, max: 90, value: 5,
-        hint: "Taken proportionally from the existing stages, so the shares still sum to 100%." },
+        hint: t("Taken proportionally from the existing stages, so the shares still sum to 100%.") },
       { key: "owner", label: "Owner", type: "select", value: p.pm,
         options: db.people.map((x) => ({ value: x.id, label: x.name })) },
     ],
@@ -1313,7 +1316,7 @@ function reverseCost(db, line) {
     fields: [
       { key: "reason", label: "Why it is being reversed", required: true, span: 2, rows: 2,
         type: "textarea",
-        hint: "Both the original and the reversal stay visible; this is what explains the pair." },
+        hint: t("Both the original and the reversal stay visible; this is what explains the pair.") },
     ],
     extra: h("div", { class: "drop-hint" },
       h("div", { class: "small strong" }, cash(line.amount) +
@@ -1453,7 +1456,7 @@ Views.schedule = (db) => {
   const scoped = App.scopedProjects();
   const shown = App.ui.ganttProject === "all" ? scoped : scoped.filter(p => p.id === App.ui.ganttProject);
   if (!shown.length) return h("div", { class: "sec" },
-    emptyState("Nothing in this scope", "No project matches the current programme, site or health filter."));
+    emptyState(t("Nothing in this scope"), "No project matches the current programme, site or health filter."));
 
   const min = shown.reduce((a, p) => D(p.start) < D(a) ? p.start : a, shown[0].start);
   const max = shown.reduce((a, p) => D(p.finish) > D(a) ? p.finish : a, shown[0].finish);
@@ -3212,7 +3215,7 @@ function bookCost(db, p) {
       { key: "period", label: "Period", type: "month", value: monthKey(db.statusDate), required: true },
       { key: "amount", label: "Amount ($M)", type: "number", step: 0.01, required: true, value: 0.1 },
       { key: "contingency", label: "Draw from contingency", type: "checkbox", span: 2,
-        hint: "Contingency draws are reported separately from the approved envelope." },
+        hint: t("Contingency draws are reported separately from the approved envelope.") },
       { key: "note", label: "Note", span: 2, value: "" },
     ],
     saveLabel: "Book cost",
@@ -3403,7 +3406,7 @@ function crFields(db, c) {
     { key: "weeks", label: "Schedule impact (weeks)", type: "number", step: 1, value: c ? c.weeks : 0 },
     { key: "funding", label: "Funding source", type: "select", value: c ? c.funding : "Project",
       options: ["Project", "Programme", "Contingency", "Run budget", "n/a"] },
-    { key: "riskDelta", label: "Risk delta", value: c ? c.riskDelta : "0", hint: "e.g. −1 High" },
+    { key: "riskDelta", label: "Risk delta", value: c ? c.riskDelta : "0", hint: t("e.g. −1 High") },
     { key: "desc", label: "Why", type: "textarea", span: 2, rows: 3, value: c ? c.desc : "" },
   ];
 }
@@ -3598,7 +3601,7 @@ function personDetail(db, person, cell) {
               h("button", { class: "btn btn-xs", onClick: () => editAllocation(db, a) }, "Edit"),
               h("button", { class: "btn btn-xs btn-ghost", onClick: () => App.write("Assignment removed", (x) => x.del("/allocations/" + a.id), { detail: person.name + " off " + a.project }) }, icon("x", 11))) },
         ], rows: allocs,
-      }) : emptyState("No allocations", person.name + " is not on any project."),
+      }) : emptyState(t("No allocations"), person.name + " is not on any project."),
       h("div", { class: "small muted", style: "margin-top:14px" }, "Day rate " + person.rate.toLocaleString() + " · " + person.role)),
   });
 }
@@ -4147,7 +4150,7 @@ function siteDetail(db, r) {
           { key: "h", label: "Health", align: "c", get: p => ragDot(Engine.metrics(db, p.id).health.rag) },
           { key: "b", label: "Budget", align: "r", get: p => h("span", { class: "mono small" }, money(p.budget)) },
         ], rows: r.projects, onRow: p => { $(".backdrop") && $(".backdrop").remove(); go("#/project/" + p.id); },
-      }) : emptyState("No projects led here", r.site.city + " contributes people to projects led elsewhere."),
+      }) : emptyState(t("No projects led here"), r.site.city + " contributes people to projects led elsewhere."),
       h("div", { style: "height:18px" }),
       sectionHead("Directory", people.length + " people"),
       h("div", { style: "display:grid;grid-template-columns:1fr 1fr;gap:8px" }, ...people.map(p =>

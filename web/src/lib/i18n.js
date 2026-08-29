@@ -794,4 +794,105 @@ export const FR = {
   // ── campagne de sécurité (S-01)
   "unsafe link": "lien non sûr",
   "unavailable": "indisponible",
+
+  // ── A-02 / A-04 · la couche qui enseigne, dans la langue du lecteur.
+  //    Page d'aide, orientation, aides au champ, états vides et écran de
+  //    première mise en route — la porte F5 refuse désormais la build si
+  //    l'une d'elles repart en anglais.
+  "How Meridian works": "Comment fonctionne Meridian",
+  "Keyboard & direct manipulation": "Clavier & manipulation directe",
+  "Health (RAG)": "Santé (RAG)",
+  "Green/Amber/Red is derived from schedule and cost indices — hover any dot to read WHY. A manual override always carries a written reason.":
+    "Vert/Ambre/Rouge se déduit des indices de délai et de coût — survolez une pastille pour lire POURQUOI. Un forçage manuel porte toujours une raison écrite.",
+  "Gates": "Jalons",
+  "A project advances phase only when the next gate's evidence documents are approved. Overriding a gate is a recorded governance exception.":
+    "Un projet ne change de phase que lorsque les preuves du jalon suivant sont approuvées. Passer outre un jalon est une exception de gouvernance, consignée.",
+  "Your scope": "Votre périmètre",
+  "You see and edit what your grants name. A group programme delivered at your site is readable, never editable — raise a CONCERN on it instead.":
+    "Vous voyez et modifiez ce que vos habilitations nomment. Un programme groupe livré sur votre site est lisible, jamais modifiable — ouvrez plutôt une PRÉOCCUPATION.",
+  "Decisions & referrals": "Décisions & renvois",
+  "A site meeting refers what is above its authority; the group agenda picks it up automatically and its decision retires the referral.":
+    "Un comité de site renvoie ce qui dépasse son autorité ; l'ordre du jour groupe le reprend automatiquement, et sa décision solde le renvoi.",
+  "Prioritisation score": "Score de priorisation",
+  "Fit, value and risk pull a project up the queue; effort pulls it down. The score only ranks — it never decides. A hand-placed rank overrules it, for when the room does.":
+    "L'adéquation, la valeur et le risque font monter un projet dans la file ; l'effort le fait descendre. Le score classe, il ne décide jamais. Un rang placé à la main l'emporte — pour quand la salle tranche.",
+  "Search everything — projects, people, risks, changes, documents":
+    "Tout rechercher — projets, personnes, risques, changements, documents",
+  "This list": "Cette liste",
+  "Close a dialog": "Fermer une boîte de dialogue",
+  "Drag a Gantt bar": "Faire glisser une barre de Gantt",
+  "Move a stage; drag its edge to change the length": "Déplacer une étape ; tirer son bord pour changer la durée",
+  "On a Gantt bar, nudge a day; with shift, a week": "Sur une barre de Gantt, décaler d'un jour ; avec Maj, d'une semaine",
+  "On a board card, move it between columns": "Sur une carte du kanban, la déplacer d'une colonne à l'autre",
+  "Double-click": "Double-clic",
+  "Edit a Gantt stage or a board card": "Modifier une étape de Gantt ou une carte du kanban",
+  "Need access or a grant changed? Any account marked ADMIN on the sign-in screen's directory can help.":
+    "Besoin d'un accès ou d'une habilitation ? Tout compte marqué ADMIN dans l'annuaire de l'écran de connexion peut vous aider.",
+  "Start here — what this account is for": "Par où commencer — à quoi sert ce compte",
+  "Reopen the orientation for your role, at any time": "Rouvrir l'orientation de votre rôle, à tout moment",
+  "You can reopen this page at any time from Help.": "Vous pouvez rouvrir cette page à tout moment depuis l'Aide.",
+  "Orientation": "Orientation",
+  "Health, gates, scope, referrals": "Santé, jalons, périmètre, renvois",
+
+  // première mise en route
+  "Administration → Sites": "Administration → Sites",
+  "Administration → Programmes": "Administration → Programmes",
+  "Administration → Directory": "Administration → Annuaire",
+  "Administration → Accounts — a group/site account needs a grant to see anything":
+    "Administration → Comptes — un compte groupe ou site ne voit rien sans habilitation",
+  "The New project button appears here once a site and a programme exist":
+    "Le bouton Nouveau projet apparaît ici dès qu'un site et un programme existent",
+
+  // aides au champ — administration
+  "Links the account to a person so their actions and allocations line up.":
+    "Rattache le compte à une personne, pour que ses actions et ses affectations se recoupent.",
+  "The account holder should change this at first sign-in.":
+    "Le titulaire du compte doit le changer à la première connexion.",
+  "A group or site account with no grants can see nothing. One is required.":
+    "Un compte groupe ou site sans habilitation ne voit rien. Il en faut une.",
+  "Deactivating ends every live session for this account immediately.":
+    "Désactiver met fin immédiatement à toutes les sessions de ce compte.",
+  "Free text — this is the directory description, not an access level.":
+    "Texte libre — c'est la description de l'annuaire, pas un niveau d'accès.",
+  "Clearing this marks a leaver. The system checks first for live projects, open actions and open RAID items.":
+    "Vider ce champ marque un départ. Le système vérifie d'abord les projets en cours, les actions et les éléments RAID ouverts.",
+  "Three letters, e.g. the airport code.": "Trois lettres, par exemple le code aéroport.",
+
+  // aides au champ — projet, planning, argent
+  "A group project is run by the group and is read-only to a site. A site project belongs to its site.":
+    "Un projet groupe est conduit par le groupe et reste en lecture seule pour un site. Un projet site appartient à son site.",
+  "Sets each stage's baseline window to where it sits today. Schedule variance resets to zero.":
+    "Cale la fenêtre de référence de chaque étape sur sa position d'aujourd'hui. L'écart de délai repart à zéro.",
+  "This is the record steering reads when it asks why the variance disappeared.":
+    "C'est le texte que lira le comité de pilotage lorsqu'il demandera où est passé l'écart.",
+  "Taken proportionally from the existing stages, so the shares still sum to 100%.":
+    "Pris proportionnellement sur les étapes existantes, pour que les parts fassent toujours 100 %.",
+  "Both the original and the reversal stay visible; this is what explains the pair.":
+    "L'écriture d'origine et son annulation restent visibles ; c'est ceci qui explique la paire.",
+  "Contingency draws are reported separately from the approved envelope.":
+    "Les puisements dans la provision sont rapportés à part de l'enveloppe approuvée.",
+  "e.g. −1 High": "par ex. −1 Élevé",
+
+  // aides au champ — comités
+  "A referral headlines the broader room's next agenda until its decision answers it.":
+    "Un renvoi ouvre l'ordre du jour de la salle supérieure jusqu'à ce que sa décision y réponde.",
+  "Naming the referral retires it from future agendas.":
+    "Nommer le renvoi le retire des ordres du jour suivants.",
+  "Scope decides both what the agenda covers and who may run it.":
+    "Le périmètre décide à la fois de ce que couvre l'ordre du jour et de qui peut l'animer.",
+  "The agenda is divided across its sections in proportion to weight; anything that will not fit is marked “if time allows”.":
+    "L'ordre du jour se répartit entre ses sections au prorata du poids ; ce qui ne tient pas est marqué « si le temps le permet ».",
+
+  // états vides
+  "No programmes granted to this account": "Aucun programme confié à ce compte",
+  "No site granted to this account": "Aucun site confié à ce compte",
+  "No projects in the book": "Aucun projet au portefeuille",
+  "Nothing in this scope": "Rien dans ce périmètre",
+  "No projects led here": "Aucun projet conduit ici",
+  "No allocations": "Aucune affectation",
+  "No meeting series in your scope": "Aucun comité dans votre périmètre",
+  "Nothing scheduled yet.": "Rien de programmé pour l'instant.",
+  "Register is clear.": "Le registre est vide.",
+  "No accounts match that filter.": "Aucun compte ne correspond à ce filtre.",
+  "The directory is empty.": "L'annuaire est vide.",
 };

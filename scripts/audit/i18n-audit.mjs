@@ -95,7 +95,34 @@ for (const f of walk("web/src", [])) {
 }
 if (!missing) console.log("  · chaque libellé t() du client a son entrée FR");
 
-/* ── 4 · le dictionnaire reste sain ────────────────────────────────── */
+/* ── 4 · la couche qui ENSEIGNE ne reste pas en anglais (A-04) ──────
+   Le comité d'adoption a mesuré que la porte précédente ne regardait ni
+   les aides au champ, ni les états vides, ni l'écran de première mise en
+   route : la partie du produit qui apprend aux gens à s'en servir était
+   précisément celle qui échappait au contrôle. Une aide anglaise dans un
+   formulaire français n'est pas une coquille — c'est la phrase que
+   quelqu'un lit au moment exact où il ne sait pas quoi faire. */
+const TEACHING = [
+  [/\bhint:\s*("(?:[^"\\]|\\.)*")/g, "une aide au champ"],
+  [/\bemptyState\(\s*("(?:[^"\\]|\\.)*")/g, "un état vide"],
+  [/\bempty:\s*("(?:[^"\\]|\\.)*")/g, "un message de tableau vide"],
+];
+let nue = 0;
+for (const f of walk("web/src", [])) {
+  if (f.endsWith("lib/i18n.js")) continue;
+  const src = fs.readFileSync(f, "utf8");
+  for (const [re, what] of TEACHING) {
+    for (const m of src.matchAll(re)) {
+      const lit = JSON.parse(m[1]);
+      if (!/[A-Za-z]{3}/.test(lit)) continue;
+      console.log(`  ✖ ${f}: ${what} en anglais nu — ${JSON.stringify(lit.slice(0, 46))}… — passer par t()`);
+      problems++; nue++;
+    }
+  }
+}
+if (!nue) console.log("  · aides au champ, états vides et messages de tableau passent tous par t()");
+
+/* ── 5 · le dictionnaire reste sain ────────────────────────────────── */
 const dupes = new Set();
 const seen = new Set();
 for (const k of Object.keys(FR)) {

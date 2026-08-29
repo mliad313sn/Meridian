@@ -1,4 +1,4 @@
-# Comité d'adoption et d'ergonomie — rapport complet
+﻿# Comité d'adoption et d'ergonomie — rapport complet
 
 Date : 29 août 2026 · Comité convoqué après la recette AMDEC
 ([18-amdec-recette.md](18-amdec-recette.md)), sur un mandat que les trois
@@ -115,7 +115,18 @@ lecteur), chronomètre au départ. Réserve levée à 3/3 par rôle.
 
 ---
 
-### A-02 · La seule page qui explique le produit n'existe qu'en anglais
+### A-02 · La page qui explique le produit — **LEVÉE le 30/08/2026**
+
+**Fait.** Les vingt chaînes de la page d'aide passent par `t()` et sont
+traduites : concepts, raccourcis, phrase de recours. Un cinquième concept
+a été ajouté au passage — le score de priorisation (acompte sur A-06),
+parce que c'est le nombre qui trace la ligne de flottaison budgétaire et
+qu'il n'était expliqué nulle part. **Mesure : page d'aide ouverte en
+français, 0 mot anglais sur 10 aiguilles cherchées ; porte F5 étendue à
+`main.js`, la construction échoue si un littéral pédagogique repart en
+anglais.**
+
+*Constat d'origine :*
 
 **Constat.** Le bouton « ? » de l'en-tête ouvre la seule surface qui
 explique ce que veulent dire la santé RAG, les jalons, le périmètre et
@@ -158,7 +169,19 @@ page d'aide en français, **zéro mot anglais**.
 
 ## Réserves — majeures
 
-### A-03 · L'orientation par rôle est un ticket à usage unique, irrécupérable
+### A-03 · L'orientation par rôle — **LEVÉE le 30/08/2026**
+
+**Fait.** La case « Ne plus afficher » n'est plus cochée par défaut —
+fermer une boîte qu'on n'a pas lue ne vaut plus renoncement. « Par où
+commencer » se rouvre par **deux chemins** : un bouton dans la page
+d'aide et une commande de la palette (Ctrl-K). Et le souvenir porte
+désormais le RÔLE lu, pas seulement le compte : une promotion au niveau
+groupe ramène l'orientation écrite pour ce rôle, une fois, sans qu'on la
+demande. **Mesure : orientation atteignable en deux actions depuis
+n'importe quelle vue, case décochée, réouverture vérifiée par les deux
+chemins.**
+
+*Constat d'origine :*
 
 **Constat.** Le seul contenu du produit adapté au métier de celui qui se
 connecte s'affiche une fois, se referme, et ne revient jamais.
@@ -193,7 +216,18 @@ réaffichage à la connexion suivante.
 
 ---
 
-### A-04 · La couche pédagogique échappe à la porte de langue
+### A-04 · La couche pédagogique et la porte de langue — **LEVÉE le 30/08/2026**
+
+**Fait.** Les 29 chaînes pédagogiques nues — 20 aides au champ, 7 états
+vides, 2 messages de tableau — passent par `t()` et sont traduites ; les
+13 chaînes de l'écran de première mise en route appellent enfin les
+traductions qui étaient écrites depuis le début. Surtout, la porte F5
+regarde maintenant `hint:`, `emptyState(` et `empty:` : **une aide
+au champ en anglais nu fait échouer la construction**. Dictionnaire :
+587 → **648 entrées**. **Mesure : 0 chaîne pédagogique nue (29 avant),
+10/10 chaînes de première mise en route traduites, porte verte.**
+
+*Constat d'origine :*
 
 **Constat.** La campagne précédente a posé une porte automatique qui fait
 échouer la construction quand un libellé français manque (R-15, porte F5,

@@ -92,7 +92,7 @@ export function meetingsView(db) {
       h("h3", null, "Loading the calendar…"));
   }
   if (!cache.series.length) {
-    return emptyState("No meeting series in your scope",
+    return emptyState(t("No meeting series in your scope"),
       "A group or site administrator sets up the weekly delivery call and the monthly steering committee.");
   }
 
@@ -202,7 +202,7 @@ function seriesDialog(db, existing) {
           options: [{ value: "group", label: "Group — the whole portfolio" }]
             .concat(db.programmes.map((p) => ({ value: "programme:" + p.id, label: "Programme · " + p.name })))
             .concat(db.sites.map((s) => ({ value: "site:" + s.id, label: "Site · " + s.city }))),
-          hint: "Scope decides both what the agenda covers and who may run it." },
+          hint: t("Scope decides both what the agenda covers and who may run it.") },
       ] : []),
       { key: "chairId", label: "Chair", type: "select", value: existing?.chairId ?? App.me.personId ?? "",
         options: [{ value: "", label: "Unassigned" }]
@@ -212,7 +212,7 @@ function seriesDialog(db, existing) {
       { key: "startTime", label: "Start", value: existing?.startTime ?? "09:00" },
       { key: "timeboxMin", label: "Timebox (minutes)", type: "number", min: 5, max: 240,
         value: existing?.timeboxMin ?? 25,
-        hint: "The agenda is divided across its sections in proportion to weight; anything that will not fit is marked “if time allows”." },
+        hint: t("The agenda is divided across its sections in proportion to weight; anything that will not fit is marked “if time allows”.") },
       ...(isNew ? [] : [
         { key: "active", label: "Series is running", type: "checkbox", span: 2, value: existing.active !== false },
       ]),
@@ -368,7 +368,7 @@ function historyDialog(series, occurrences) {
       ],
       rows: occurrences,
       onRow: (o) => { const b = document.querySelector(".backdrop"); if (b) b.remove(); go("#/meetings/" + o.id); },
-      empty: "Nothing scheduled yet.",
+      empty: t("Nothing scheduled yet."),
     }),
   });
 }
@@ -496,7 +496,7 @@ function actionsSection(db, d) {
                 : null },
           ],
           rows: openActions,
-          empty: "Register is clear.",
+          empty: t("Register is clear."),
         })
       : h("p", { class: "small muted" }, "Nothing outstanding. The register is clear."));
 }
@@ -590,12 +590,12 @@ function recordDecision(db, d) {
           { value: "group", label: t("Refer to the group steering committee") },
           ...(isSite ? [{ value: "programme", label: t("Refer to the programme board") }] : []),
         ],
-        hint: "A referral headlines the broader room's next agenda until its decision answers it.",
+        hint: t("A referral headlines the broader room's next agenda until its decision answers it."),
       }] : []),
       ...(referralItems.length ? [{
         key: "answers", label: t("Answers a referral"), type: "select", value: "",
         options: [{ value: "", label: t("None") }].concat(referralItems),
-        hint: "Naming the referral retires it from future agendas.",
+        hint: t("Naming the referral retires it from future agendas."),
       }] : []),
     ],
     saveLabel: t("Record decision"),

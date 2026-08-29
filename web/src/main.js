@@ -284,7 +284,13 @@ function palette() {
     kind: "Document", label: d.name, meta: (d.project || "Portfolio") + " · " + d.status,
     run: () => go("#/documents"),
   }));
-  entries.push({ kind: "Action", label: "Sign out", meta: "Session", run: signOut });
+  /* A-03 — the two teaching surfaces are commands like any other, so
+     Ctrl-K is a second way back to them from anywhere in the product. */
+  entries.push({ kind: t("Help"), label: t("Start here — what this account is for"),
+    meta: t("Orientation"), run: () => startHere(true) });
+  entries.push({ kind: t("Help"), label: t("How Meridian works"),
+    meta: t("Health, gates, scope, referrals"), run: helpDialog });
+  entries.push({ kind: "Action", label: t("Sign out"), meta: "Session", run: signOut });
 
   let sel = 0;
   let shown = entries.slice(0, 40);
@@ -339,37 +345,52 @@ function palette() {
   setTimeout(() => input.focus(), 20);
 }
 
+/**
+ * A-02 — la page qui explique le produit, dans la langue de qui la lit.
+ *
+ * Elle était intégralement en anglais, et le dialogue d'accueil — lui
+ * traduit — y envoyait le lecteur francophone. Quelqu'un qui suit en
+ * français le conseil que l'outil vient de lui donner ne doit pas tomber
+ * sur une page qu'il ne lira pas : il ne redemande jamais deux fois.
+ *
+ * A-03 — et elle donne accès à « Par où commencer », qui ne s'ouvrait
+ * qu'une fois dans la vie d'un compte et devenait irrécupérable.
+ */
 function helpDialog() {
   const rows = [
-    ["Ctrl-K / ⌘K", "Search everything — projects, people, risks, changes, documents"],
-    ["?", "This list"],
-    ["Esc", "Close a dialog"],
-    ["Drag a Gantt bar", "Move a stage; drag its edge to change the length"],
-    ["← →", "On a Gantt bar, nudge a day; with shift, a week"],
-    ["← →", "On a board card, move it between columns"],
-    ["Double-click", "Edit a Gantt stage or a board card"],
+    ["Ctrl-K / ⌘K", t("Search everything — projects, people, risks, changes, documents")],
+    ["?", t("This list")],
+    ["Esc", t("Close a dialog")],
+    [t("Drag a Gantt bar"), t("Move a stage; drag its edge to change the length")],
+    ["← →", t("On a Gantt bar, nudge a day; with shift, a week")],
+    ["← →", t("On a board card, move it between columns")],
+    [t("Double-click"), t("Edit a Gantt stage or a board card")],
   ];
   const HOW = [
-    ["Health (RAG)", "Green/Amber/Red is derived from schedule and cost indices — hover any dot to read WHY. A manual override always carries a written reason."],
-    ["Gates", "A project advances phase only when the next gate's evidence documents are approved. Overriding a gate is a recorded governance exception."],
-    ["Your scope", "You see and edit what your grants name. A group programme delivered at your site is readable, never editable — raise a CONCERN on it instead."],
-    ["Decisions & referrals", "A site meeting refers what is above its authority; the group agenda picks it up automatically and its decision retires the referral."],
+    [t("Health (RAG)"), t("Green/Amber/Red is derived from schedule and cost indices — hover any dot to read WHY. A manual override always carries a written reason.")],
+    [t("Gates"), t("A project advances phase only when the next gate's evidence documents are approved. Overriding a gate is a recorded governance exception.")],
+    [t("Your scope"), t("You see and edit what your grants name. A group programme delivered at your site is readable, never editable — raise a CONCERN on it instead.")],
+    [t("Decisions & referrals"), t("A site meeting refers what is above its authority; the group agenda picks it up automatically and its decision retires the referral.")],
+    [t("Prioritisation score"), t("Fit, value and risk pull a project up the queue; effort pulls it down. The score only ranks — it never decides. A hand-placed rank overrules it, for when the room does.")],
   ];
+  const line = ([k, v]) =>
+    h("div", { style: "display:flex;gap:14px;padding:8px 0;border-bottom:1px solid var(--rule-1)" },
+      h("span", { class: "tag tag-out", style: "min-width:130px;justify-content:flex-start" }, k),
+      h("span", { class: "small" }, v));
   const body = h("div", null,
-    h("div", { class: "kicker" }, "How Meridian works"),
-    ...HOW.map(([k, v]) =>
-      h("div", { style: "display:flex;gap:14px;padding:8px 0;border-bottom:1px solid var(--rule-1)" },
-        h("span", { class: "tag tag-out", style: "min-width:130px;justify-content:flex-start" }, k),
-        h("span", { class: "small" }, v))),
+    h("div", { class: "kicker" }, t("How Meridian works")),
+    ...HOW.map(line),
     h("div", { style: "height:14px" }),
-    h("div", { class: "kicker" }, "Keyboard & direct manipulation"),
-    ...rows.map(([k, v]) =>
-      h("div", { style: "display:flex;gap:14px;padding:8px 0;border-bottom:1px solid var(--rule-1)" },
-        h("span", { class: "tag tag-out", style: "min-width:130px;justify-content:flex-start" }, k),
-        h("span", { class: "small" }, v))),
+    h("div", { class: "kicker" }, t("Keyboard & direct manipulation")),
+    ...rows.map(line),
+    h("div", { style: "height:14px" }),
+    h("div", { style: "display:flex;gap:10px;align-items:center;flex-wrap:wrap" },
+      h("button", { class: "btn btn-sm", onClick: () => { App.emit("close-dialogs"); startHere(true); } },
+        t("Start here — what this account is for")),
+      h("span", { class: "xs muted" }, t("Reopen the orientation for your role, at any time"))),
     h("p", { class: "xs muted", style: "margin-top:14px" },
-      "Need access or a grant changed? Any account marked ADMIN on the sign-in screen's directory can help."));
-  dialog({ title: "Help", kicker: "Meridian IT-PMO", body });
+      t("Need access or a grant changed? Any account marked ADMIN on the sign-in screen's directory can help.")));
+  dialog({ title: t("Help"), kicker: "Meridian IT-PMO", body });
 }
 
 /* ── render ───────────────────────────────────────────────────────── */
@@ -436,7 +457,7 @@ async function onSignedIn() {
     readRoute();
     render();
     if (App.me.mustChangePassword) forcePasswordChange();
-    else maybeStartHere();
+    else startHere();
   } catch (e) {
     reportError(e, "Could not load the portfolio");
   }
@@ -496,12 +517,25 @@ function prefsDialog() {
   });
 }
 
-/* One-time, role-aware orientation (adoption committee I2). */
+/**
+ * Role-aware orientation (adoption committee I2, reworked for A-03).
+ *
+ * It used to be a one-time ticket: shown once at first sign-in, its
+ * "don't show again" box ticked BY DEFAULT, reachable from nowhere else.
+ * Closing it by reflex lost it for good — and a promotion to another role
+ * never showed the three lines written for that role, because the account
+ * was already on the seen list.
+ *
+ * Now: the box starts unticked, the page can be reopened from Help or the
+ * command palette at any time, and the memory records the ROLE it was
+ * read for — so a change of role brings it back once, unasked.
+ */
 const START_KEY = "meridian-started";
-function maybeStartHere() {
+function startHere(forced = false) {
   let seen;
   try { seen = JSON.parse(localStorage.getItem(START_KEY) || "[]"); } catch { seen = []; }
-  if (seen.includes(App.me.id)) return;
+  const mark = App.me.id + ":" + App.me.role;
+  if (!forced && seen.includes(mark)) return;
   const BY_ROLE = {
     admin: "You hold the whole system: accounts, grants, sites and programmes live under Administration. If this book is empty, the Portfolio view shows you the setup path.",
     group: "You govern programmes: start at Programmes for your slate's health and decisions owed, and chair your series under Meetings. Money and baselines are yours alone.",
@@ -512,19 +546,23 @@ function maybeStartHere() {
      the checkbox up by id after the dialog had already removed itself
      from the document, so the answer was never recorded and the dialog
      greeted the same person at every sign-in. */
-  const remember = h("input", { type: "checkbox", checked: true });
+  /* Unticked: dismissing a box you have not read should not be the same
+     act as saying you no longer need it. */
+  const remember = h("input", { type: "checkbox" });
   dialog({
     title: t("Start here"), kicker: t("Welcome to Meridian"),
     body: h("div", null,
       h("p", { class: "small", style: "max-width:52ch" }, t(BY_ROLE[App.me.role] || BY_ROLE.viewer)),
       h("p", { class: "small muted", style: "max-width:52ch" },
         t("Ctrl-K searches everything; the ? button in the header explains how health, gates and scope work.")),
+      h("p", { class: "xs muted", style: "max-width:52ch" },
+        t("You can reopen this page at any time from Help.")),
       h("label", { class: "small", style: "display:flex;gap:8px;align-items:center;margin-top:10px" },
         remember,
         t("Don't show this again"))),
     onClose: () => {
       if (!remember.checked) return;
-      try { localStorage.setItem(START_KEY, JSON.stringify(seen.concat(App.me.id))); } catch { /* private window */ }
+      try { localStorage.setItem(START_KEY, JSON.stringify(seen.concat(mark))); } catch { /* private window */ }
     },
   });
 }
