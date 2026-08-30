@@ -188,10 +188,12 @@ l'avaient pas vu. La raison est nette et vaut plus que le défaut :
 > l'outillage, ne dessinait une vue.**
 
 Une porte qui mesure ce qu'on sait déjà mesurer laisse exactement ce
-genre de trou. La septième porte, `npm run audit` → **F7**, prend les
-noms exportés par `kit.js` — ceux dont l'oubli casse un écran entier — et
-vérifie que tout fichier qui les appelle les a nommés dans son import.
-Étroite, mécanique, et elle ferme la classe entière.
+genre de trou. La septième porte, `npm run audit` → **F7**, prend les noms exportés par
+les six modules partagés du client — `kit.js`, `api.js`, `i18n.js`,
+`state.js`, `permissions.js`, `engine.js` — soit 89 noms, et vérifie que
+tout fichier qui en appelle un l'a nommé dans son import. Le même oubli
+sur `fmtDate` ou sur `t` casse un écran exactement de la même manière ;
+une porte qui ne regarderait que `kit.js` ne l'aurait pas vu.
 
 Elle a été éprouvée dans les deux sens : le défaut remis en place, elle
 le nomme avec sa ligne ; retiré, elle se tait.
