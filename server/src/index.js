@@ -128,7 +128,10 @@ export function buildApp() {
      dit « dev ». */
   const VERSION = process.env.MERIDIAN_VERSION || "dev";
   app.get("/api/health", async (_req, res) => {
-    res.json({ ok: true, version: VERSION, engine: engine(), at: new Date().toISOString() });
+    res.json({ ok: true, version: VERSION, engine: engine(),
+      /* A-11 — un terrain d'apprentissage se reconnaît de loin. */
+      training: process.env.MERIDIAN_TRAINING === "1" || undefined,
+      at: new Date().toISOString() });
   });
 
   app.use("/api/auth", authRoutes);

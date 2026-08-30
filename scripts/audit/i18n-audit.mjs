@@ -122,7 +122,31 @@ for (const f of walk("web/src", [])) {
 }
 if (!nue) console.log("  · aides au champ, états vides et messages de tableau passent tous par t()");
 
-/* ── 5 · le dictionnaire reste sain ────────────────────────────────── */
+/* ── 5 · le manuel et les premiers pas (A-01 / A-10) ────────────────
+   Ces textes sont rendus par `t(s.label)` et `t(s.why)` — une variable,
+   donc la section 3 ne peut pas les voir. Ils sont pourtant la surface
+   la plus lue par quelqu'un qui apprend, et la première à ne servir à
+   rien si elle reste en anglais. On les extrait de leur structure et on
+   vérifie une par une. */
+const guidePath = "web/src/ui/guide.js";
+let guideMissing = 0;
+if (fs.existsSync(guidePath)) {
+  const g = fs.readFileSync(guidePath, "utf8");
+  const FIELDS = /\b(label|why|q|a|section):\s*("(?:[^"\\]|\\.)*")/g;
+  const seenLit = new Set();
+  for (const m of g.matchAll(FIELDS)) {
+    const lit = JSON.parse(m[2]);
+    if (!lit || !/[A-Za-z]{3}/.test(lit) || seenLit.has(lit)) continue;
+    seenLit.add(lit);
+    if (!(lit in FR)) {
+      console.log(`  ✖ ${guidePath}: ${JSON.stringify(lit.slice(0, 52))}… sans entrée FR`);
+      problems++; guideMissing++;
+    }
+  }
+  if (!guideMissing) console.log(`  · manuel et premiers pas : ${seenLit.size} textes, tous traduits`);
+}
+
+/* ── 6 · le dictionnaire reste sain ────────────────────────────────── */
 const dupes = new Set();
 const seen = new Set();
 for (const k of Object.keys(FR)) {

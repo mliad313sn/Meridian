@@ -447,6 +447,9 @@ r.patch("/sites/:id", async (req, res, next) => {
     if (b.headcount !== undefined) patch.headcount = Number(b.headcount);
     if (b.fte !== undefined) patch.fte = Number(b.fte);
     if (b.charter !== undefined) patch.charter = b.charter;
+    /* A-12 — le référent du site : quelqu'un de l'annuaire, nommé, que
+       l'aide affiche avant de proposer le groupe. */
+    if (b.champion !== undefined) patch.champion_id = b.champion || null;
     if (b.active !== undefined) patch.active = !!b.active;
     /* V-07 — a site is a link and a state of readiness, not only a clock.
        These are what a rollout plan actually depends on. */

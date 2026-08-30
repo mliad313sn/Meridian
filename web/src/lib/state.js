@@ -71,6 +71,11 @@ export const App = {
     /* R-07 — one nav group open at a time besides the active view's own. */
     navOpen: null,
     sidebarOpen: false,
+    /* A-10 — les écrans réellement ouverts par cette personne, pour que
+       les premiers pas se cochent sur un fait plutôt que sur une case.
+       De session, pas de compte : ce n'est pas une donnée de gestion,
+       et personne d'autre n'a à savoir ce que quelqu'un a regardé. */
+    seenViews: new Set(),
   },
 
   listeners: [],
@@ -376,6 +381,7 @@ export function readRoute() {
   let v = ROUTES.includes(view) ? view : "portfolio";
   if (!routeAllowed(v, App.me)) v = "portfolio";
   App.ui.view = v;
+  App.ui.seenViews.add(v);
   App.ui.param = param ? decodeURIComponent(param) : null;
   if (v === "project" && param) App.ui.project = param;
   if (v === "change" && param) App.ui.cr = param;

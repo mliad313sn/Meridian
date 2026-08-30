@@ -354,7 +354,8 @@ function resetPassword(u) {
   formDialog({
     title: "Reset password", kicker: u.displayName,
     fields: [
-      { key: "password", label: "New password", type: "password", required: true, span: 2,
+      { hint: t("The holder is asked to change it at their next sign-in: an admin-set password is one two people know."),
+        key: "password", label: "New password", type: "password", required: true, span: 2,
         validate: (v) => (String(v).length < 8 ? "At least 8 characters" : "") },
       { key: "endSessions", label: "Sign this account out everywhere", type: "checkbox", span: 2, value: true },
     ],

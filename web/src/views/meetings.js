@@ -248,7 +248,8 @@ function scheduleOccurrence(d) {
   formDialog({
     title: "Schedule a meeting", kicker: d.series.name,
     fields: [
-      { key: "meetsOn", label: "Date", type: "date", required: true,
+      { hint: t("The occurrence rebuilds its agenda from the book when it opens, so a date moved is not an agenda lost."),
+        key: "meetsOn", label: "Date", type: "date", required: true,
         value: iso(addDays(new Date(), 7)) },
     ],
     saveLabel: "Schedule",
@@ -268,6 +269,16 @@ function occurrencePane(db, d) {
   const stateTag = closed
     ? tag("Closed", "tag-out")
     : open ? tag("In session", "tag-red") : tag("Scheduled", "tag-out");
+
+  /* A-09 — le protocole du comité vivait dans un fichier hors du produit,
+     que personne n'ouvre en présidant. Il tient en trois états et deux
+     phrases : il est donc ici, à l'endroit et au moment où il sert.
+     La ligne dit ce qu'il faut faire MAINTENANT, pas ce que l'écran est. */
+  const conduct = closed
+    ? t("Closed. The pack is frozen: it reads today exactly as it read in the room, and it can be produced again.")
+    : open
+      ? t("In session. Record each decision as it is taken and each action with an owner and a date. Refer anything above this room's authority — the broader agenda picks it up by itself. Close the meeting when you are done: closing is what freezes the record.")
+      : t("Scheduled. The agenda below is built from the book as it stands now, and rebuilds when you open the meeting. Open it when the room is ready.");
 
   const controls = h("div", { class: "btn-row" },
     canWrite && !closed && !open
@@ -322,6 +333,10 @@ function occurrencePane(db, d) {
             closed
               ? "Frozen — this is the record"
               : open ? "Decisions are being recorded" : "Agenda updates as the portfolio moves"))),
+      /* A-09 — la conduite de séance, au moment où elle sert. Elle vivait
+         dans un fichier que personne n'ouvre en présidant. */
+      h("div", { class: "small", style: "margin-top:10px;padding:10px 12px;max-width:74ch;" +
+          "background:var(--surface-2, rgba(127,127,127,.07));border-radius:4px" }, conduct),
       h("div", { style: "height:12px" }),
       controls,
       !canWrite
@@ -572,8 +587,10 @@ function recordDecision(db, d) {
   formDialog({
     title: "Record a decision", kicker: d.series.name, wide: true,
     fields: [
-      { key: "headline", label: "The decision", required: true, span: 2 },
-      { key: "rationale", label: "Why — the committee has to be able to read this back", type: "textarea", rows: 3, span: 2 },
+      { hint: t("One sentence somebody can act on. « Discussed » is not a decision."),
+        key: "headline", label: "The decision", required: true, span: 2 },
+      { hint: t("Why, in the room's own words — this is what makes the decision defensible six months from now."),
+        key: "rationale", label: "Why — the committee has to be able to read this back", type: "textarea", rows: 3, span: 2 },
       { key: "projectId", label: "Project", type: "select", value: "",
         options: [{ value: "", label: "Not project-specific" }]
           .concat(scoped.map((p) => ({ value: p.id, label: p.id + " · " + p.name }))) },
@@ -614,7 +631,8 @@ function raiseAction(db, d) {
     title: "Raise an action", kicker: d.series.name, wide: true,
     fields: [
       { key: "title", label: "Action", required: true, span: 2 },
-      { key: "detail", label: "Detail", type: "textarea", rows: 2, span: 2 },
+      { hint: t("What the owner needs in order to start, without coming back to ask."),
+        key: "detail", label: "Detail", type: "textarea", rows: 2, span: 2 },
       { key: "ownerId", label: "Owner", type: "select", required: true,
         value: d.series.chairId ?? (db.people[0] || {}).id,
         options: db.people.map((p) => ({ value: p.id, label: p.name + " — " + p.role })) },

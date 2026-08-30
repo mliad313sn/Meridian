@@ -913,6 +913,216 @@ export const FR = {
   "Closed by default: with none named, nothing is posted outward.":
     "Fermé par défaut : sans hôte nommé, rien n'est envoyé vers l'extérieur.",
 
+  // ── A-05 · l'aide au champ, là où un AUTRE lira la valeur.
+  //    Chacune dit ce dont le lecteur futur aura besoin, jamais ce que
+  //    le champ contient : « Note » n'apprend rien à personne.
+  "Read months later by somebody who was not on the call — say what was decided, not that a call happened.":
+    "Relu des mois plus tard par quelqu'un qui n'était pas à l'appel — dites ce qui a été décidé, pas qu'un appel a eu lieu.",
+  "What somebody picking this up would need to know before starting.":
+    "Ce que devrait savoir quelqu'un qui reprend ceci, avant de commencer.",
+  "The one or two lines a reader needs to judge this without asking you.":
+    "Les une ou deux lignes qu'il faut à un lecteur pour en juger sans vous appeler.",
+  "Enough for the person who decides to decide without calling you back.":
+    "Assez pour que celui qui décide décide sans vous rappeler.",
+  "The person who asked will read this. A refusal without a reason reads as a refusal of them.":
+    "La personne qui a demandé lira ceci. Un refus sans raison se lit comme un refus d'elle.",
+  "For whoever reads this queue next week, not for you today.":
+    "Pour celui qui lira cette file la semaine prochaine, pas pour vous aujourd'hui.",
+  "What a reader would need to understand the number beside it.":
+    "Ce qu'il faudrait à un lecteur pour comprendre le chiffre d'à côté.",
+  "Name the source and the unit, so the person who measures it later measures the same thing.":
+    "Nommez la source et l'unité, pour que celui qui mesurera plus tard mesure la même chose.",
+  "The committee reads this back when it asks why the figure moved.":
+    "Le comité relit ceci quand il demande pourquoi le chiffre a bougé.",
+  "One sentence somebody can act on. « Discussed » is not a decision.":
+    "Une phrase sur laquelle quelqu'un peut agir. « Discuté » n'est pas une décision.",
+  "Why, in the room's own words — this is what makes the decision defensible six months from now.":
+    "Pourquoi, dans les mots de la salle — c'est ce qui rendra la décision défendable dans six mois.",
+  "What the owner needs in order to start, without coming back to ask.":
+    "Ce qu'il faut au responsable pour démarrer, sans revenir vous demander.",
+  "The share of the work actually done — every schedule index is computed from this one number.":
+    "La part du travail réellement faite — tous les indices de délai se calculent sur ce seul nombre.",
+  "What the second project is waiting for, in the words the two teams would use.":
+    "Ce que le second projet attend, dans les mots qu'emploieraient les deux équipes.",
+  "Share of a full week. Above the ceiling, this person shows as over-allocated to their own site lead.":
+    "Part d'une semaine pleine. Au-dessus du plafond, cette personne apparaît sur-affectée à son propre responsable de site.",
+  "Share of a full week over the whole period, not the effort of one busy day.":
+    "Part d'une semaine pleine sur toute la période, pas l'effort d'une journée chargée.",
+  "The stage this work belongs to — it is how the board and the schedule stay the same story.":
+    "L'étape à laquelle ce travail appartient — c'est ce qui fait que le kanban et le planning racontent la même histoire.",
+  "The name the portfolio will carry. The request stays linked, so the thread from ask to project survives.":
+    "Le nom que portera le portefeuille. La demande reste liée : le fil qui va de la demande au projet survit.",
+  "The occurrence rebuilds its agenda from the book when it opens, so a date moved is not an agenda lost.":
+    "L'occurrence reconstruit son ordre du jour sur le livre à son ouverture : une date déplacée n'est pas un ordre du jour perdu.",
+  "The holder is asked to change it at their next sign-in: an admin-set password is one two people know.":
+    "Le titulaire devra le changer à sa prochaine connexion : un mot de passe posé par un administrateur est un mot de passe que deux personnes connaissent.",
+
+  // ── A-01 / A-10 / A-11 / A-12 · le manuel, les premiers pas,
+  //    le terrain d'apprentissage et le référent du site.
+  //    C'est la surface la plus lue par quelqu'un qui apprend : la porte
+  //    F5 vérifie chacun de ces textes un par un.
+  "Using Meridian": "Utiliser Meridian",
+  "First steps and answers": "Premiers pas et réponses",
+  "Using Meridian — first steps and answers": "Utiliser Meridian — premiers pas et réponses",
+  "First steps": "Premiers pas",
+  "How do I…": "Comment fait-on…",
+  "Manual": "Manuel",
+  "done": "faits",
+  "answers": "réponses",
+  "Show me": "Montrez-moi",
+  "These tick themselves as the work gets done — nothing here is a box you check by hand.":
+    "Elles se cochent d'elles-mêmes à mesure que le travail se fait — rien ici n'est une case à cocher à la main.",
+  "Answers to what people actually ask, in the order they ask them. Each one says where the thing is done.":
+    "Les réponses aux questions que les gens posent vraiment, dans l'ordre où ils les posent. Chacune dit où le geste s'accomplit.",
+
+  // premiers pas — communs
+  "Choose your own password": "Choisissez votre propre mot de passe",
+  "Until you do, the trail cannot say an action was really yours.":
+    "Tant que ce n'est pas fait, la piste ne peut pas attester qu'une action était bien la vôtre.",
+  "Find your own week": "Trouvez votre propre semaine",
+  "My week gathers what is owed by you, and only by you.":
+    "Ma semaine rassemble ce qui vous est dû à vous, et à vous seul.",
+
+  // premiers pas — site
+  "Update a stage on one of your projects": "Mettez à jour une étape sur un de vos projets",
+  "Open the project, then Stage plan. The percentage you set is what the indices are computed from.":
+    "Ouvrez le projet, puis Plan d'étapes. Le pourcentage que vous posez est ce à partir de quoi tous les indices se calculent.",
+  "Raise a risk or an issue": "Ouvrez un risque ou un problème",
+  "Anything that could cost time or money belongs on the register — before it does.":
+    "Tout ce qui pourrait coûter du temps ou de l'argent a sa place au registre — avant que cela n'arrive.",
+  "Know how to speak about a group project": "Sachez comment parler d'un projet groupe",
+  "A group project landing on your site is read-only. Raise a CONCERN on it; your programme office sees it on their agenda.":
+    "Un projet groupe qui atterrit sur votre site est en lecture seule. Ouvrez-y une PRÉOCCUPATION : votre bureau de programme la voit à son ordre du jour.",
+  "Find a decision your site meeting took": "Retrouvez une décision de votre comité de site",
+  "Meetings keep their minutes. A decision taken is a decision anybody can read back.":
+    "Les comités gardent leurs minutes. Une décision prise est une décision que chacun peut relire.",
+  "Record a week of real effort": "Consignez une semaine d'effort réel",
+  "Four fields, once a week. It sits beside the plan — the gap is the point.":
+    "Quatre champs, une fois par semaine. Cela se place à côté du plan — c'est l'écart qui compte.",
+
+  // premiers pas — groupe
+  "Read your programme's slate": "Lisez le tableau de votre programme",
+  "Programmes shows the health of everything you govern, and what is owed to you.":
+    "Programmes montre la santé de tout ce que vous gouvernez, et ce qui vous est dû.",
+  "Decide a change request somebody else raised": "Décidez une demande de changement émise par un autre",
+  "You never decide your own — a second pair of eyes is the control, not a formality.":
+    "Vous ne décidez jamais la vôtre — la seconde paire d'yeux est le contrôle, pas une formalité.",
+  "Approve a gate evidence document": "Approuvez une preuve de jalon",
+  "It must point at a real artefact on a trusted host, and you cannot approve one you own.":
+    "Elle doit pointer vers une pièce réelle sur un hôte de confiance, et vous ne pouvez pas approuver celle dont vous êtes propriétaire.",
+  "Close a reporting period": "Clôturez une période de reporting",
+  "Closing freezes what was reported, so the number you quote can be produced again.":
+    "Clore fige ce qui a été rapporté, pour que le chiffre que vous citez puisse être reproduit.",
+  "Score the demand queue": "Notez la file des demandes",
+  "Fit and value pull up; risk and effort pull down. The score ranks — it never decides.":
+    "L'adéquation et la valeur font monter ; le risque et l'effort font descendre. Le score classe — il ne décide jamais.",
+
+  // premiers pas — administration
+  "Add the sites and programmes": "Ajoutez les sites et les programmes",
+  "Everything else hangs off them: a project needs both to exist.":
+    "Tout le reste en dépend : un projet a besoin des deux pour exister.",
+  "Add the people": "Ajoutez les personnes",
+  "An account is linked to a person, so their actions and allocations line up.":
+    "Un compte est rattaché à une personne, pour que ses actions et ses affectations se recoupent.",
+  "Create the named accounts and their grants": "Créez les comptes nominatifs et leurs habilitations",
+  "A group or site account with no grant sees nothing. And named accounts are what makes segregation of duties real.":
+    "Un compte groupe ou site sans habilitation ne voit rien. Et ce sont les comptes nominatifs qui rendent la séparation des tâches réelle.",
+  "Name the trusted document hosts": "Nommez les hôtes documentaires de confiance",
+  "Until you do, no gate evidence can be approved — the control is closed, deliberately.":
+    "Tant que ce n'est pas fait, aucune preuve de jalon ne peut être approuvée — le contrôle est fermé, délibérément.",
+  "Decide how long notifications are kept": "Décidez combien de temps les notifications sont conservées",
+  "Without a duration nothing is purged: how long a record of who was told what is kept is your decision, not the tool's.":
+    "Sans durée, rien n'est purgé : combien de temps on garde la trace de ce qu'on a dit à qui est votre décision, pas celle de l'outil.",
+
+  // premiers pas — lecteur
+  "Read the portfolio headline": "Lisez le titre du portefeuille",
+  "One line per project: health, gate, money, and why the colour is what it is.":
+    "Une ligne par projet : santé, jalon, argent, et pourquoi la couleur est ce qu'elle est.",
+  "Read a published period": "Lisez une période publiée",
+  "A closed period is frozen: it reads today exactly as it read then.":
+    "Une période close est figée : elle se lit aujourd'hui exactement comme elle se lisait alors.",
+  "Understand where a number comes from": "Comprenez d'où vient un chiffre",
+  "Hover any health dot: it says why. Nothing in Meridian asks to be taken on trust.":
+    "Survolez une pastille de santé : elle dit pourquoi. Rien dans Meridian ne demande à être cru sur parole.",
+
+  // manuel — sections
+  "Getting started": "Pour commencer",
+  "Keeping a project honest": "Tenir un projet honnête",
+  "Gates and evidence": "Jalons et preuves",
+  "Meetings and decisions": "Comités et décisions",
+  "Your week, your absences": "Votre semaine, vos absences",
+
+  // manuel — questions et réponses
+  "How do I sign in for the first time?": "Comment se connecter la première fois ?",
+  "Use the address and the temporary password you were given. Meridian will ask you to choose your own before it lets you record anything: until you do, the trail cannot say an action was really yours.":
+    "Utilisez l'adresse et le mot de passe provisoire qu'on vous a remis. Meridian vous demandera de choisir le vôtre avant de vous laisser consigner quoi que ce soit : sans cela, la piste ne peut pas attester qu'une action était bien la vôtre.",
+  "Where do I find what is owed by me?": "Où trouver ce qui m'incombe ?",
+  "My week. It gathers the actions, the risks and the decisions that carry your name — and nothing that carries somebody else's.":
+    "Ma semaine. Elle rassemble les actions, les risques et les décisions qui portent votre nom — et rien de ce qui porte celui d'un autre.",
+  "Why can I see a project but not change it?": "Pourquoi puis-je voir un projet sans pouvoir le modifier ?",
+  "Your grants name what you may write. A group programme delivered at your site is readable, never editable — that is deliberate. Raise a concern on it instead, and your programme office sees it on their agenda.":
+    "Vos habilitations nomment ce que vous pouvez écrire. Un programme groupe livré sur votre site est lisible, jamais modifiable — c'est délibéré. Ouvrez-y plutôt une préoccupation : votre bureau de programme la voit à son ordre du jour.",
+  "How do I update progress?": "Comment mettre à jour l'avancement ?",
+  "Open the project, then Stage plan, and set the percentage complete on the stage. Every index — schedule, cost, forecast — is computed from that number, so it is the one thing worth keeping true.":
+    "Ouvrez le projet, puis Plan d'étapes, et posez le pourcentage d'avancement de l'étape. Chaque indice — délai, coût, prévision — se calcule à partir de ce nombre : c'est la seule chose qu'il vaille vraiment la peine de tenir juste.",
+  "What does the colour mean?": "Que veut dire la couleur ?",
+  "Green, amber and red are derived from the schedule and cost indices. Hover the dot and it tells you why. If you disagree, override it — but an override always carries a written reason, because the committee reads it back.":
+    "Vert, ambre et rouge se déduisent des indices de délai et de coût. Survolez la pastille : elle vous dit pourquoi. Si vous n'êtes pas d'accord, forcez-la — mais un forçage porte toujours une raison écrite, parce que le comité la relit.",
+  "How do I raise a risk or an issue?": "Comment ouvrir un risque ou un problème ?",
+  "Risks & issues, then the button. Probability times impact decides who hears about it: high enough and it appears on the steering agenda by itself.":
+    "Risques & problèmes, puis le bouton. Probabilité multipliée par impact décide qui en entend parler : assez haut, et cela paraît de soi-même à l'ordre du jour du comité de pilotage.",
+  "Something changed the cost or the dates. What do I do?": "Le coût ou les dates ont changé. Que faire ?",
+  "Raise a change request. Above the threshold it goes to your programme office; below it, a colleague decides. You never decide your own — that is the control, not a formality.":
+    "Émettez une demande de changement. Au-dessus du seuil elle part au bureau de programme ; en dessous, un collègue décide. Vous ne décidez jamais la vôtre — c'est le contrôle, pas une formalité.",
+  "Why will the gate not let my project advance?": "Pourquoi le jalon refuse-t-il de laisser passer mon projet ?",
+  "A gate needs its evidence documents approved. A document is approved evidence only when it points at a real artefact on a trusted host — a document with no link is a label, and Meridian refuses to count it.":
+    "Un jalon exige que ses preuves soient approuvées. Un document ne vaut preuve approuvée que s'il pointe vers une pièce réelle sur un hôte de confiance — un document sans lien est une étiquette, et Meridian refuse de le compter.",
+  "Why can I not approve my own document?": "Pourquoi ne puis-je pas approuver mon propre document ?",
+  "Whoever owns a piece of evidence never approves it. Hand it to a colleague or to your programme office: an approval means somebody else looked.":
+    "Celui qui possède une preuve ne l'approuve jamais. Confiez-la à un collègue ou à votre bureau de programme : une approbation veut dire que quelqu'un d'autre a regardé.",
+  "The link in an approved document is dead. What happens?": "Le lien d'un document approuvé est mort. Que se passe-t-il ?",
+  "Meridian checks periodically and shows it in the library — but it never withdraws the approval on its own. Somebody who knows where the piece lives confirms it. A dropped link is not a governance decision.":
+    "Meridian vérifie périodiquement et l'affiche en bibliothèque — mais il ne retire jamais l'approbation de lui-même. Quelqu'un qui sait où vit la pièce le confirme. Une liaison tombée n'est pas une décision de gouvernance.",
+  "How do I run a meeting?": "Comment animer un comité ?",
+  "Open the occurrence: the agenda is already built from the book. Open it, record decisions and actions as you go, then close it. Closing freezes the pack, so what was discussed can be produced again.":
+    "Ouvrez l'occurrence : l'ordre du jour est déjà construit sur le livre. Ouvrez la séance, consignez décisions et actions au fil de l'eau, puis clôturez. Clore fige le dossier, pour que ce qui a été discuté puisse être reproduit.",
+  "Something is above my authority. How do I escalate?": "Quelque chose dépasse mon autorité. Comment le faire remonter ?",
+  "Refer it from the meeting. The broader room picks it up on their next agenda automatically, and their decision retires the referral — you do not chase it.":
+    "Renvoyez-le depuis le comité. La salle supérieure le reprend automatiquement à son ordre du jour suivant, et sa décision solde le renvoi — vous n'avez pas à le relancer.",
+  "Where do I find a decision taken months ago?": "Où retrouver une décision prise il y a des mois ?",
+  "Meetings & decisions keeps every minute. The trail is append-only, so a decision reads today exactly as it read then.":
+    "Réunions & décisions garde toutes les minutes. La piste est en ajout seul : une décision se lit aujourd'hui exactement comme elle se lisait alors.",
+  "How do I record real effort?": "Comment consigner l'effort réel ?",
+  "Resources, then Record effort. Four fields, once a week. It sits beside the plan rather than inside it — the gap between the two is the point.":
+    "Ressources, puis Consigner l'effort. Quatre champs, une fois par semaine. Cela se place à côté du plan et non dedans — c'est l'écart entre les deux qui compte.",
+  "I am going on rotation. Who covers me?": "Je pars en rotation. Qui me couvre ?",
+  "Declare the absence on My site and name a deputy. They take your authority for that period — never more than yours — and the trail names you both. When you come back, your digest widens to cover the days you missed.":
+    "Déclarez l'absence sur Mon site et nommez un suppléant. Il prend votre autorité pour cette période — jamais plus que la vôtre — et la piste vous nomme tous les deux. À votre retour, votre digest s'élargit pour couvrir les jours manqués.",
+  "How do I stop being told things at night?": "Comment ne plus être prévenu la nuit ?",
+  "Notification preferences, next to your name. Choose the cadence and the quiet hours; urgent messages still come through, because a silence you cannot pierce is a silence people switch off.":
+    "Préférences de notification, à côté de votre nom. Choisissez la cadence et les heures de silence ; les messages urgents passent quand même, parce qu'un silence qu'on ne peut pas percer est un silence qu'on désactive.",
+
+  // A-12 · le référent du site
+  "Stuck? Ask ": "Bloqué ? Demandez à ",
+  ", the Meridian referent for ": ", le référent Meridian de ",
+  " — before the group, because they are on your site and know your work.":
+    " — avant le groupe, parce qu'il est sur votre site et connaît votre travail.",
+  "No referent is named for your site yet. An administrator can name one in Administration → Sites — and until they do, questions go to the group, which is slower.":
+    "Aucun référent n'est encore nommé pour votre site. Un administrateur peut en désigner un dans Administration → Sites — et tant que ce n'est pas fait, les questions partent au groupe, ce qui est plus lent.",
+
+  // A-11 · le terrain d'apprentissage
+  "Training ground": "Terrain d'apprentissage",
+  "Nothing here touches the real book. Break things on purpose — that is what it is for.":
+    "Rien ici ne touche au livre réel. Cassez des choses exprès — c'est fait pour.",
+
+  // A-09 · la conduite de séance, au moment où elle sert
+  "Closed. The pack is frozen: it reads today exactly as it read in the room, and it can be produced again.":
+    "Close. Le dossier est figé : il se lit aujourd'hui exactement comme il se lisait dans la salle, et il peut être reproduit.",
+  "In session. Record each decision as it is taken and each action with an owner and a date. Refer anything above this room's authority — the broader agenda picks it up by itself. Close the meeting when you are done: closing is what freezes the record.":
+    "En séance. Consignez chaque décision au moment où elle est prise, et chaque action avec un responsable et une date. Renvoyez ce qui dépasse l'autorité de cette salle — l'ordre du jour supérieur le reprend de lui-même. Clôturez quand vous avez fini : c'est la clôture qui fige le compte rendu.",
+  "Scheduled. The agenda below is built from the book as it stands now, and rebuilds when you open the meeting. Open it when the room is ready.":
+    "Programmée. L'ordre du jour ci-dessous est construit sur le livre tel qu'il est maintenant, et se reconstruit à l'ouverture de la séance. Ouvrez-la quand la salle est prête.",
+
   // ── A-08 · la mesure de l'adoption
   "Adoption": "Adoption",
   "How the tool is used": "Comment l'outil est utilisé",

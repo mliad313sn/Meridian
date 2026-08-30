@@ -100,6 +100,9 @@ r.get("/bootstrap", async (req, res, next) => {
         actingForPersonId: req.user.actingForPersonId ?? null,
         locale: req.user.locale ?? "", notifyPref: req.user.notifyPref ?? "immediate",
         unread: unread[0]?.n ?? 0,
+        /* A-11 — le client dessine un bandeau permanent quand ceci est
+           vrai : personne ne doit confondre un exercice avec le livre. */
+        training: process.env.MERIDIAN_TRAINING === "1" || undefined,
         grants: {
           programmes: [...req.user.grants.programmes],
           sites: [...req.user.grants.sites],

@@ -178,6 +178,8 @@ export async function loadPortfolio(user) {
       linkMbps: s.link_mbps === null ? null : Number(s.link_mbps),
       linkKind: s.link_kind ?? "", readiness: s.readiness ?? "Unknown",
       readinessNote: s.readiness_note ?? "",
+      /* A-12 — la personne du site qu'on appelle en premier. */
+      champion: s.champion_id ?? null,
       version: s.row_version,
     })),
 

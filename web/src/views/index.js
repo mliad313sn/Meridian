@@ -1120,7 +1120,8 @@ function repinSdpLink(db, p, l) {
   formDialog({
     title: "Pin into a stage", kicker: l.extId,
     fields: [
-      { key: "activity", label: "Stage", type: "select", value: l.activity ?? "",
+      { hint: t("The stage this work belongs to — it is how the board and the schedule stay the same story."),
+        key: "activity", label: "Stage", type: "select", value: l.activity ?? "",
         options: [{ value: "", label: "Project level" }]
           .concat(acts.map((a) => ({ value: a.id, label: a.name }))) },
     ],
@@ -1275,7 +1276,8 @@ function setHealth(db, p) {
         options: [{ value: "auto", label: "Derived from SPI and CPI" }, { value: "manual", label: "Set by the project manager" }] },
       { key: "rag", label: "Manual status", type: "select", value: p.healthOverride || m.health.rag,
         options: [{ value: "G", label: "Green" }, { value: "A", label: "Amber" }, { value: "R", label: "Red" }] },
-      { key: "note", label: "Reason for the call", type: "textarea", span: 2, rows: 2, value: "" },
+      { hint: t("Read months later by somebody who was not on the call — say what was decided, not that a call happened."),
+        key: "note", label: "Reason for the call", type: "textarea", span: 2, rows: 2, value: "" },
     ],
     extra: h("div", { class: "small muted" }, "Derived status right now: " + RAG_LABEL[m.health.rag] + " — " + m.health.why),
     saveLabel: "Set status",
@@ -1324,7 +1326,8 @@ function editActivity(db, a) {
       { key: "start", label: "Start", type: "date", required: true, value: a.start },
       { key: "end", label: "End", type: "date", required: true, value: a.end,
         validate: (v, st) => D(v) <= D(st.start) ? "End must fall after the start" : "" },
-      { key: "pct", label: "Progress (%)", type: "number", min: 0, max: 100, value: a.pct },
+      { hint: t("The share of the work actually done — every schedule index is computed from this one number."),
+        key: "pct", label: "Progress (%)", type: "number", min: 0, max: 100, value: a.pct },
       { key: "owner", label: "Owner", type: "select", value: a.owner, options: db.people.map(x => ({ value: x.id, label: x.name })) },
     ],
     saveLabel: "Save stage",
@@ -1537,7 +1540,8 @@ function newCrossDep(db, writable, stageOptions) {
         options: writable.map((p) => ({ value: p.id, label: p.id + " · " + p.name })) },
       { key: "toStage", label: "Needed by stage", type: "select", value: "0",
         options: stageOptions(second.id) },
-      { key: "label", label: "What passes between them", span: 2,
+      { hint: t("What the second project is waiting for, in the words the two teams would use."),
+        key: "label", label: "What passes between them", span: 2,
         placeholder: "e.g. Fraud scoring API" },
     ],
     saveLabel: "Create link",
@@ -1561,7 +1565,8 @@ function assignPerson(db, projectId) {
     fields: [
       { key: "person", label: "Person", type: "select", span: 2, value: free[0].id,
         options: free.map(x => ({ value: x.id, label: x.name + " — " + x.role + " · " + (Engine.site(db, x.site) || {}).city })) },
-      { key: "pct", label: "Allocation (%)", type: "number", min: 5, max: 100, step: 5, value: 50, required: true },
+      { hint: t("Share of a full week. Above the ceiling, this person shows as over-allocated to their own site lead."),
+        key: "pct", label: "Allocation (%)", type: "number", min: 5, max: 100, step: 5, value: 50, required: true },
       { key: "from", label: "From", type: "date", value: p.start },
       { key: "to", label: "To", type: "date", value: p.finish, span: 2 },
     ],
@@ -2155,7 +2160,8 @@ function raidFields(db, r, projectId) {
     { key: "i", label: "Impact (1–5)", type: "number", min: 1, max: 5, required: true, value: r ? r.i : 3 },
     /* R-07 — the standing-up path is type, project, title, P×I. The rest
        folds; defaults are sensible, and an edit re-opens what is filled. */
-    { key: "detail", label: "Detail", type: "textarea", span: 2, rows: 3, value: r ? r.detail : "", advanced: true },
+    { hint: t("What somebody picking this up would need to know before starting."),
+      key: "detail", label: "Detail", type: "textarea", span: 2, rows: 3, value: r ? r.detail : "", advanced: true },
     { key: "response", label: "Response", type: "select", value: r ? r.response : "Mitigate", options: RESPONSES, advanced: true },
     { key: "owner", label: "Owner", type: "select", value: r ? r.owner : db.currentUser, options: db.people.map(p => ({ value: p.id, label: p.name })), advanced: true },
     { key: "review", label: "Next review", type: "date", value: r ? r.review : iso(addDays(db.statusDate, 14)), span: 2, advanced: true },
@@ -2536,7 +2542,8 @@ function demandFields(db, d, deciding) {
       options: [{ value: "", label: "—" }, ...db.sites.map(x => ({ value: x.id, label: x.city }))] },
     { key: "benefitNote", label: t("What the business gets"), type: "textarea", rows: 2, span: 2,
       value: d?.benefitNote ?? "", hint: t("In production, availability, cost or compliance terms") },
-    { key: "detail", label: t("Detail"), type: "textarea", rows: 3, span: 2, value: d?.detail ?? "" },
+    { hint: t("The one or two lines a reader needs to judge this without asking you."),
+      key: "detail", label: t("Detail"), type: "textarea", rows: 3, span: 2, value: d?.detail ?? "" },
   ];
   if (!deciding) return base;
   const s = (k, label) => ({ key: k, label, type: "select", value: String(d?.[k] ?? ""),
@@ -2585,7 +2592,8 @@ function convertDemand(db, d) {
   formDialog({
     title: t("Make it a project"), kicker: d.id, wide: true,
     fields: [
-      { key: "name", label: t("Project name"), required: true, span: 2, value: d.title },
+      { hint: t("The name the portfolio will carry. The request stays linked, so the thread from ask to project survives."),
+        key: "name", label: t("Project name"), required: true, span: 2, value: d.title },
       { key: "programme", label: t("Programme"), type: "select", required: true, value: d.programme ?? "",
         options: db.programmes.map(x => ({ value: x.id, label: x.name })) },
       { key: "site", label: t("Site"), type: "select", required: true, value: d.site ?? "",
@@ -2777,7 +2785,8 @@ function addWindow(db, mySites) {
       { key: "from", label: t("From"), type: "date", required: true, value: db.statusDate },
       { key: "to", label: t("To"), type: "date", required: true, value: db.statusDate,
         validate: (v, st) => D(v) < D(st.from) ? t("A window cannot end before it starts") : "" },
-      { key: "detail", label: t("Detail"), type: "textarea", rows: 2, span: 2 },
+      { hint: t("Enough for the person who decides to decide without calling you back."),
+        key: "detail", label: t("Detail"), type: "textarea", rows: 2, span: 2 },
     ],
     saveLabel: "Declare",
     onSave: (v) => App.write(t("Window declared"), (a) => a.post("/windows", {
@@ -2814,7 +2823,8 @@ function declareAbsence(db, sid) {
     fields: [
       { key: "person", label: t("Who is away"), type: "select", required: true, value: people[0]?.id ?? "",
         options: people.map(p => ({ value: p.id, label: p.name })) },
-      { key: "reason", label: t("Reason"), type: "select", value: "rotation",
+      { hint: t("The person who asked will read this. A refusal without a reason reads as a refusal of them."),
+        key: "reason", label: t("Reason"), type: "select", value: "rotation",
         options: [{ value: "rotation", label: t("rotation") }, { value: "leave", label: t("leave") },
           { value: "training", label: t("training") }, { value: "unavailable", label: t("unavailable") }] },
       { key: "from", label: t("From"), type: "date", required: true, value: db.statusDate },
@@ -2824,7 +2834,8 @@ function declareAbsence(db, sid) {
         options: [{ value: "", label: t("Nobody — decisions wait") },
           ...db.people.map(p => ({ value: p.id, label: p.name }))],
         hint: t("The deputy acts with the absent person's authority — never more — and the record names both.") },
-      { key: "note", label: t("Note"), span: 2, value: "" },
+      { hint: t("For whoever reads this queue next week, not for you today."),
+        key: "note", label: t("Note"), span: 2, value: "" },
     ],
     saveLabel: "Declare absence",
     onSave: (v) => App.write(t("Absence declared"), (a) => a.post("/absences", {
@@ -2873,7 +2884,8 @@ function waveFields(db, p, w) {
     { key: "plannedOn", label: t("Planned"), type: "date", value: w?.plannedOn ?? "" },
     { key: "actualOn", label: t("Went live"), type: "date", value: w?.actualOn ?? "" },
     { key: "status", label: t("Status"), type: "select", value: w?.status ?? "Planned", options: WAVE_STATES },
-    { key: "note", label: t("Note"), span: 2, value: w?.note ?? "" },
+    { hint: t("What a reader would need to understand the number beside it."),
+      key: "note", label: t("Note"), span: 2, value: w?.note ?? "" },
   ];
 }
 
@@ -3109,7 +3121,8 @@ function benefitFields(db, b) {
       hint: t("Leave blank until it has been measured"), advanced: true },
     { key: "realiseOn", label: t("Realised by"), type: "date", value: b?.realiseOn ?? "", advanced: true },
     { key: "measuredOn", label: t("Measured on"), type: "date", value: b?.measuredOn ?? "", advanced: true },
-    { key: "detail", label: t("How it will be measured"), type: "textarea", rows: 2, span: 2,
+    { hint: t("Name the source and the unit, so the person who measures it later measures the same thing."),
+      key: "detail", label: t("How it will be measured"), type: "textarea", rows: 2, span: 2,
       value: b?.detail ?? "", advanced: true },
   ];
 }
@@ -3365,7 +3378,8 @@ function bookCost(db, p) {
       { key: "amount", label: "Amount ($M)", type: "number", step: 0.01, required: true, value: 0.1 },
       { key: "contingency", label: "Draw from contingency", type: "checkbox", span: 2,
         hint: t("Contingency draws are reported separately from the approved envelope.") },
-      { key: "note", label: "Note", span: 2, value: "" },
+      { hint: t("The committee reads this back when it asks why the figure moved."),
+        key: "note", label: "Note", span: 2, value: "" },
     ],
     saveLabel: "Book cost",
     onSave: (v) => App.write("Cost booked", (a) => a.post("/cost", {
@@ -3759,7 +3773,8 @@ function editAllocation(db, a) {
   formDialog({
     title: "Edit allocation", kicker: Engine.personName(db, a.person) + " · " + a.project,
     fields: [
-      { key: "pct", label: "Allocation (%)", type: "number", min: 5, max: 100, step: 5, required: true, value: a.pct },
+      { hint: t("Share of a full week over the whole period, not the effort of one busy day."),
+        key: "pct", label: "Allocation (%)", type: "number", min: 5, max: 100, step: 5, required: true, value: a.pct },
       { key: "from", label: "From", type: "date", value: a.from },
       { key: "to", label: "To", type: "date", value: a.to, span: 2 },
     ],

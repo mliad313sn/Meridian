@@ -14,6 +14,7 @@ import { t, getLang, setLang } from "./lib/i18n.js";
 import { api, setUnauthenticatedHandler } from "./lib/api.js";
 import { Engine } from "../../shared/engine.js";
 import { VIEWS, HEADER_ACTIONS, initials } from "./views/index.js";
+import { guideDialog } from "./ui/guide.js";
 
 bindEngine(Engine);
 
@@ -296,6 +297,8 @@ function palette() {
      Ctrl-K is a second way back to them from anywhere in the product. */
   entries.push({ kind: t("Help"), label: t("Start here — what this account is for"),
     meta: t("Orientation"), run: () => startHere(true) });
+  entries.push({ kind: t("Help"), label: t("Using Meridian — first steps and answers"),
+    meta: t("Manual"), run: () => guideDialog(App.db) });
   entries.push({ kind: t("Help"), label: t("How Meridian works"),
     meta: t("Health, gates, scope, referrals"), run: helpDialog });
   entries.push({ kind: "Action", label: t("Sign out"), meta: "Session", run: signOut });
@@ -395,6 +398,11 @@ function helpDialog() {
     h("div", { style: "display:flex;gap:10px;align-items:center;flex-wrap:wrap" },
       h("button", { class: "btn btn-sm", onClick: () => { App.emit("close-dialogs"); startHere(true); } },
         t("Start here — what this account is for")),
+      /* A-01 / A-10 — le manuel et les premiers pas, atteignables depuis
+         l'aide comme le comité l'a demandé : dans le produit, pas à
+         côté. */
+      h("button", { class: "btn btn-sm btn-primary", onClick: () => { App.emit("close-dialogs"); guideDialog(App.db); } },
+        t("Using Meridian — first steps and answers")),
       h("span", { class: "xs muted" }, t("Reopen the orientation for your role, at any time"))),
     h("p", { class: "xs muted", style: "margin-top:14px" },
       t("Need access or a grant changed? Any account marked ADMIN on the sign-in screen's directory can help.")));
@@ -432,6 +440,18 @@ function render() {
     sidebar(db),
     h("main", { class: "main" },
       header(db),
+      /* A-11 — un terrain d'apprentissage se dit, en permanence. Quelqu'un
+         qui s'exerce doit pouvoir se tromper sans crainte ; quelqu'un qui
+         croit s'exercer sur le livre réel n'ose rien, et quelqu'un qui
+         croit le contraire ose trop. */
+      App.me?.training
+        ? h("div", { class: "banner", role: "status",
+            style: "display:flex;gap:10px;align-items:center;padding:8px 14px;" +
+                   "background:var(--sig-green-soft, #e7f4ec);border-bottom:1px solid var(--rule-2)" },
+            h("span", { class: "small strong" }, t("Training ground")),
+            h("span", { class: "xs muted", style: "flex:1" },
+              t("Nothing here touches the real book. Break things on purpose — that is what it is for.")))
+        : null,
       /* N-06 — quand ce qui est à l'écran vient de l'instantané, le dire,
          en permanence et avec l'heure. Un outil qui affiche des chiffres
          d'il y a deux heures sans le dire est pire qu'un écran vide : on
