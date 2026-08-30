@@ -265,3 +265,65 @@ test("N-05 — « hebdomadaire » ne reçoit pas comme « immédiat »", async (
 
   await pm.patch("/api/auth/preferences", { notifyPref: "immediate" });
 });
+
+/* ── G-08 / G-10 / G-17 · ce que le comité InfoSec attendait du produit ── */
+
+test("G-08 — un échec de connexion laisse un compte, et rien de plus", async () => {
+  const { many } = await import("../src/db.js");
+  const before = await many(
+    `SELECT coalesce(sum(n), 0)::int AS n FROM usage_daily WHERE kind = 'sign-in-failed'`);
+
+  const anon = await as(null);
+  const r = await anon.post("/api/auth/login",
+    { email: "g.silva@meridian.example", password: "ce-n-est-pas-le-bon" });
+  assert.equal(r.status, 401);
+
+  await new Promise((res) => setTimeout(res, 120));
+  const after = await many(
+    `SELECT coalesce(sum(n), 0)::int AS n FROM usage_daily WHERE kind = 'sign-in-failed'`);
+  assert.ok(after[0].n > before[0].n, "l'échec est compté");
+
+  /* Et le comptage ne peut pas dire QUI a échoué : le compteur en mémoire
+     limite le débit, la table raconte le volume, et aucune des deux ne
+     garde l'adresse essayée. */
+  const cols = await many(
+    `SELECT column_name FROM information_schema.columns WHERE table_name = 'usage_daily'`);
+  assert.deepEqual(cols.map((c) => c.column_name).sort(), ["day", "kind", "n"]);
+});
+
+test("G-10 — l'interrupteur termine toutes les sessions, y compris la sienne", async () => {
+  const { many } = await import("../src/db.js");
+  const admin = await as("admin");
+  await as("siteGRU");                      // une seconde session en vie
+  const before = await many(`SELECT count(*)::int AS n FROM session`);
+  assert.ok(before[0].n >= 2, "il y a bien plusieurs sessions ouvertes");
+
+  const r = await admin.post("/api/admin/sessions/revoke-all", {});
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.ok(r.body.ended >= 2);
+
+  assert.equal((await many(`SELECT count(*)::int AS n FROM session`))[0].n, 0,
+    "plus une seule — celui qui appuie se reconnecte aussi");
+
+  /* L'acte est sur la piste : couper les sessions de tout le monde n'est
+     pas une commodité, c'est une décision qu'on assume. */
+  const trail = await many(
+    `SELECT detail FROM audit_event WHERE action = 'All sessions revoked' ORDER BY id DESC LIMIT 1`);
+  assert.match(trail[0].detail, /session\(s\) ended/);
+});
+
+test("G-10 — un compte non administrateur n'a pas d'interrupteur", async () => {
+  const group = await as("groupDCH");
+  assert.equal((await group.post("/api/admin/sessions/revoke-all", {})).status, 403);
+});
+
+test("G-17 — ce qui sort dit ce que c'est, et à qui", async () => {
+  const admin = await as("admin");
+  const csv = await admin.get("/api/export/dataset?format=csv");
+  assert.match(csv.text, /^﻿?# INTERNAL/, "le fichier s'annonce");
+  assert.match(csv.text, /issued to /);
+
+  const pack = await admin.get("/api/projects/" + SITE_PROJECT_GRU + "/evidence");
+  assert.match(pack.body.markdown, /INTERNAL — governance evidence/,
+    "un dossier de preuve circule : il porte sa classification");
+});

@@ -649,6 +649,42 @@ pourquoi le point 2 compte plus que tous les autres.**
 
 ## 7 · Registre de risques
 
+### Ce qui a été fait depuis
+
+Sur les six constats dont une part relevait du produit, **cinq sont
+traités** au 30/08/2026 :
+
+- **G-03** (donnée de santé indélébile, bloquant) — le motif médical
+  est sorti du schéma (migration 017) et la note libre ne rejoint plus
+  la piste ineffaçable. Minimisation à la source plutôt que protection
+  d'une donnée de l'article 9.
+- **G-08** — les échecs de connexion sont comptés par jour, en agrégat
+  (`usage_daily`, migration 021). Le compteur en mémoire limitait le
+  débit sans rien raconter ; celui-ci raconte le volume sans jamais
+  pouvoir dire qui, faute de colonne pour le dire.
+- **G-10** — l'interrupteur existe : `POST /admin/sessions/revoke-all`,
+  réservé à l'administration, tracé, et il termine aussi la session de
+  celui qui appuie. La procédure d'incident reste à écrire, et c'est
+  une décision d'organisation.
+- **G-11** — `npm run verify` échoue désormais sur une vulnérabilité
+  de gravité haute (`audit:deps`). Le script nommé `audit` n'en
+  vérifiait aucune : le nom mentait, il ne ment plus. La cadence de
+  mise à jour reste une décision d'organisation.
+- **G-13** — la purge programmée existe pour les notifications, et
+  **refuse de s'exécuter** tant qu'aucune durée n'est écrite : combien
+  de temps on garde la trace de ce qu'on a dit à qui est une décision
+  du mandant, et le code ne la prendra pas à sa place.
+- **G-17** — un export CSV et un dossier de preuve portent maintenant,
+  sur eux, ce qu'ils sont et à qui ils ont été remis. Un export anonyme
+  se retrouve un jour sur une clé, et plus personne ne sait d'où il
+  vient.
+
+**Les onze autres constats relèvent de l'organisation** et n'ont pas
+bougé : ils attendent des décisions, pas du code. Les trois bloquants
+restants — la sauvegarde éprouvée (G-01) et la reprise du poste unique
+(G-02) — en font partie.
+
+
 | # | Constat | Gravité | Nature | Contrôle ISO 27001 | Fonction NIST CSF 2.0 |
 |---|---|---|---|---|---|
 | G-01 | Aucune sauvegarde ni test de restauration | **Bloquant** | Organisation | A.8.13, A.5.29, A.5.30 | Récupérer |
@@ -658,16 +694,16 @@ pourquoi le point 2 compte plus que tous les autres.**
 | G-05 | Cycle de vie des accès non défini | Majeur | Organisation | A.5.16, A.5.18, A.6.5 | Protéger |
 | G-06 | Pas de revue des habilitations ni des dormants | Majeur | Organisation | A.5.18 | Protéger / Identifier |
 | G-07 | Compte de rupture non scellé | Majeur | Organisation | A.5.16, A.8.2 | Protéger |
-| G-08 | Échecs de connexion non journalisés | Majeur | Produit | A.8.15, A.8.16 | Détecter |
+| G-08 | ~~Échecs de connexion non journalisés~~ **part produit FAITE 30/08** | Majeur | Produit | A.8.15, A.8.16 | Détecter |
 | G-09 | Ni SIEM, ni rétention, ni lecteur | Majeur | Organisation | A.8.15, A.5.33 | Détecter / Répondre |
-| G-10 | Réponse à incident inexistante, pas d'interrupteur | Majeur | Orga. + produit | A.5.24 – A.5.28 | Répondre / Récupérer |
-| G-11 | Vulnérabilités non suivies, `audit` trompeur | Majeur | Produit + orga. | A.8.8, A.8.19 | Identifier / Répondre |
+| G-10 | Interrupteur **FAIT 30/08** ; procédure d'incident : organisation | Majeur | Orga. + produit | A.5.24 – A.5.28 | Répondre / Récupérer |
+| G-11 | ~~`audit` trompeur~~ **part produit FAITE 30/08** ; cadence : organisation | Majeur | Produit + orga. | A.8.8, A.8.19 | Identifier / Répondre |
 | G-13 | Base légale, durées et information absentes | Majeur | Orga. + produit | A.5.34, A.5.12, A.5.31 | Gouverner |
 | G-12 | Aucune provenance des versions | Moyen | Organisation | A.8.25 – A.8.32 | Protéger / Identifier |
 | G-14 | Suivi du temps sans avis social | Moyen | Organisation | A.5.31, A.5.34 | Gouverner |
 | G-15 | Secrets sans dépositaire ni rotation | Moyen | Organisation | A.5.17, A.8.24 | Protéger |
 | G-16 | Tiers SMTP et Entra ID non évalués | Moyen | Organisation | A.5.19 – A.5.23 | Gouverner |
-| G-17 | Rien ne classe ce qui sort | Moyen | Produit + orga. | A.5.12, A.5.13, A.8.12 | Protéger |
+| G-17 | ~~Rien ne classe ce qui sort~~ **FAIT 30/08** | Moyen | Produit + orga. | A.5.12, A.5.13, A.8.12 | Protéger |
 
 **Répartition : 3 bloquants, 9 majeurs, 5 moyens.**
 

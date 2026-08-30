@@ -8,6 +8,7 @@ import {
   setPassword, verifyPassword, bridgeSession,
 } from "../auth.js";
 import { oidcEnabled, beginSignIn, completeSignIn } from "../oidc.js";
+import { countUsage } from "../adoption.js";
 
 const r = Router();
 
@@ -33,6 +34,13 @@ function recordFailure(key) {
   if (!a || Date.now() > a.until) ATTEMPTS.set(key, { n: 1, until: Date.now() + WINDOW_MS });
   else a.n++;
   if (ATTEMPTS.size > 10_000) ATTEMPTS.clear();   // bound the map, crudely and safely
+  /* G-08 — le compteur ci-dessus vit en mémoire et meurt au redémarrage :
+     il limite le débit, il ne raconte rien. Une tentative infructueuse
+     est pourtant le premier signal qu'un compte est attaqué, et le comité
+     InfoSec a relevé qu'il n'en restait aucune trace. Un comptage par
+     jour, agrégé — combien, jamais qui : la table n'a pas de colonne pour
+     le dire, et c'est délibéré. */
+  countUsage("sign-in-failed");
 }
 
 r.post("/login", async (req, res, next) => {

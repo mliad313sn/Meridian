@@ -121,6 +121,31 @@ r.patch("/users/:id", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+/**
+ * G-10 — l'interrupteur.
+ *
+ * Le comité InfoSec a relevé qu'il n'existait aucun geste de réponse à
+ * incident : rien pour couper court quand on soupçonne qu'une session
+ * traîne quelque part — un ordinateur portable perdu, un poste partagé
+ * laissé ouvert, un doute sur un mot de passe. Chacun peut déjà terminer
+ * SES autres sessions en changeant son mot de passe ; personne ne pouvait
+ * les terminer TOUTES.
+ *
+ * Un seul appel, réservé à l'administration, tracé comme tout le reste :
+ * tout le monde se reconnecte, y compris celui qui a appuyé. C'est ce qui
+ * en fait un geste qu'on assume plutôt qu'un bouton qu'on essaie.
+ */
+r.post("/sessions/revoke-all", async (req, res, next) => {
+  try {
+    const before = await one(`SELECT count(*)::int AS n FROM session`);
+    await audited(req.user,
+      { action: "All sessions revoked", entity: "system", entityId: "sessions",
+        detail: `${before?.n ?? 0} session(s) ended — everyone signs in again` },
+      async (t) => t.query(`DELETE FROM session`));
+    res.json({ ok: true, ended: before?.n ?? 0 });
+  } catch (e) { next(e); }
+});
+
 r.post("/users/:id/password", async (req, res, next) => {
   try {
     const u = await one(`SELECT id, display_name FROM app_user WHERE id = $1`, [req.params.id]);

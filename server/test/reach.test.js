@@ -126,7 +126,15 @@ test("the CSV quotes every field, so a comma in a project name stays one column"
   const r = await admin.get("/api/export/dataset?format=csv");
   assert.equal(r.status, 200);
   const text = String(r.text ?? r.body);
-  const lines = text.replace(/^﻿/, "").split("\r\n");
+  const all = text.replace(/^﻿/, "").split("\r\n");
+  /* G-17 — le fichier s'annonce d'abord : une ligne de commentaire qui
+     dit ce qu'il est et à qui il a été remis. Un export anonyme se
+     retrouve un jour sur une clé USB, et plus personne ne sait d'où il
+     vient. Les tableurs l'affichent comme du texte ; le reste du fichier
+     est inchangé, et le test qui suit le vérifie. */
+  assert.ok(all[0].startsWith("# INTERNAL"), "the file says what it is");
+  assert.match(all[0], /issued to /, "and to whom it was issued");
+  const lines = all.slice(1);
   assert.ok(lines[0].startsWith("project_id,"), "a header row");
   assert.ok(lines[1].startsWith('"'), "and quoted cells");
   const cols = lines[0].split(",").length;

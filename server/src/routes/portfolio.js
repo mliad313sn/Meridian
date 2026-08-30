@@ -2442,8 +2442,17 @@ r.get("/projects/:id/evidence", async (req, res, next) => {
       L.push(`| ${String(e.at).slice(0, 19).replace("T", " ")} | ${e.user_label} | ${e.action} | ${String(e.detail ?? "").replace(/\|/g, "/")} |`);
     }
     rule();
+    /* G-17 — ce qui sort du produit dit ce que c'est. Un dossier de
+       preuve quitte l'outil et circule ensuite par courriel, par clé, par
+       impression : il porte donc, sur lui, à qui il a été remis et ce
+       qu'on peut en faire. Rien de cryptographique — une phrase qu'un
+       lecteur comprend vaut mieux qu'un filigrane qu'il ignore. */
     L.push(`_Meridian IT-PMO · generated ${new Date().toISOString().slice(0, 19).replace("T", " ")} for ${req.user.displayName}. ` +
       `The audit trail is append-only; these rows cannot have been edited after the fact._`);
+    L.push("");
+    L.push("**INTERNAL — governance evidence.** This pack names people and " +
+      "decisions. Share it inside the group, or with an auditor who has asked " +
+      "for it; it is not a public document.");
 
     const markdown = L.join("\n");
     await noteConsultation(req.user, "Evidence pack", p.id);   // R-14
@@ -2515,7 +2524,15 @@ r.get("/export/dataset", async (req, res, next) => {
         const safe = /^[=+\-@\t\r]/.test(s) ? "'" + s : s;
         return `"${safe.replace(/"/g, '""')}"`;
       };
-      const csv = [cols.join(","), ...rows.map((r) => cols.map((c) => cell(r[c])).join(","))].join("\r\n");
+      /* G-17 — un fichier qui sort dit ce qu'il est. Une ligne d'en-tête
+         en commentaire plutôt qu'une colonne : elle voyage avec le
+         fichier sans gêner qui l'ouvre dans un tableur, et elle nomme la
+         personne à qui il a été remis. Un export anonyme se retrouve un
+         jour sur une clé, et plus personne ne sait d'où il vient. */
+      const stamp = `# INTERNAL — Meridian IT-PMO portfolio export · ` +
+        `${db.statusDate} · issued to ${req.user.displayName} · ` +
+        `${new Date().toISOString().slice(0, 10)} · share inside the group`;
+      const csv = [stamp, cols.join(","), ...rows.map((r) => cols.map((c) => cell(r[c])).join(","))].join("\r\n");
       res.setHeader("Content-Type", "text/csv; charset=utf-8");
       res.setHeader("Content-Disposition", `attachment; filename="meridian-portfolio-${db.statusDate}.csv"`);
       return res.send("﻿" + csv);   // BOM, so Excel reads the accents
