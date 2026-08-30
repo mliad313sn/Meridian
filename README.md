@@ -52,6 +52,7 @@ npm run verify        # tests + build + the eight gates + a dependency audit
 npm run sweep         # 286 use cases × 4 roles + 72 view renders, on a fresh instance
 npm run build         # build the client into web/dist
 npm run package:installer  # dist/MeridianSetup.exe — Windows service installer
+powershell -File scripts/deploy-local.ps1   # extract it, install it elevated, check /api/health
 npm run restore       # reload an exported archive into an empty instance (M-01)
 npm run training      # a separate practice instance on :4180 — never touches the real book
 npm run training -- --reset   # put it back to how it started

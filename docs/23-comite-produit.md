@@ -275,6 +275,40 @@ Effort : `½ j`, `1 j`, `3 j`, `1 sem`, `2 sem` d'ingénierie ; `orga` = à
 | 37 | **G-12** | Un commit par lot fonctionnel avec relecteur nommé. Le dépôt porte **quatre commits** pour la totalité du produit ; c'est le jour de la deuxième livraison que l'absence coûte | **C4** — dette croissante, dommage nul aujourd'hui | orga + discipline |
 | 38 | **S-18** | Retirer la ligne `.npmrc` qui désactive la vérification TLS du registre, dès que l'AC du proxy est installée. Le verrou de dépendances protège l'existant ; le risque porte sur les ajouts | **C5** — le plus bas de la table, et assumé comme tel | 1 h |
 
+### Relevé de clôture — 31/08/2026
+
+La charte (§1.2) dit qu'une correction livrée et non consignée n'est pas
+terminée ; la ligne 15 existe précisément parce que cela était arrivé. Le
+relevé est donc tenu ici, à la source, et pas seulement dans le rapport
+du lot ([`25`](25-reversibilite-et-la-porte-manquante.md)).
+
+| Ligne | Origine | État au 31/08/2026 |
+|--:|---|---|
+| 11 | **G-08** | **fermée** — comptage journalier agrégé des échecs de connexion |
+| 12 | **G-10** | **fermée** — route tracée, **et** le contrôle à l'écran (Administration → Continuité) |
+| 13 | **G-11** + P-03 | **fermée** — `audit:deps` dans `verify` |
+| 14 | **P-02** | **fermée** — la version dans `/api/health` |
+| 15 | **P-01** | **fermée** — A-06 et A-07 consignées « LEVÉE le 30/08/2026 » dans [`19`](19-comite-adoption.md) |
+| 10, 16–19, 23, 24, 33 | A-08, A-10, A-01, P-04, A-05, A-09, A-12, A-11 | **fermées** — lot d'adoption |
+| 20 | **G-13** produit | **fermée** — purge programmée et compteur consultable |
+| 21 | **S-14** | **fermée** — empreinte du jeton, migration 023 |
+| 22 | **G-17** | **fermée** — mention de confidentialité portée par les exports |
+| 34 | **S-17** | **fermée** — le périmètre de série est réellement rétréci |
+| 35 | **S-15** | **fermée** — trois compteurs, et C-06 enfin tenu par des tests |
+| — | **M-01**, ajoutée par [`24`](24-comite-marche.md) | **fermée** — archive du livre et de la piste, `npm run restore` |
+| — | **F7** et **F8**, constatées au passage | **fermées** — l'administration ne se dessinait pas depuis la première livraison |
+
+**Ce qui reste, et ce qui le bloque.** Tout le reste — lignes 1 à 9 hors
+celles ci-dessus, 25 à 32, 36, 37, 38 — n'attend pas d'ingénierie. Onze
+lignes ne se codent pas du tout, sept veulent une décision du sponsor,
+une (**S-18**) veut que l'AC du proxy soit installée, et le déploiement
+du binaire corrigé veut une élévation UAC — c'est-à-dire quelqu'un devant
+la machine.
+
+Le comité avait écrit au §3 : *« une équipe d'ingénierie qui travaillerait
+à plein temps sur ce carnet serait à l'arrêt au bout de deux semaines,
+faute de décisions »*. Elle l'est au bout d'une nuit.
+
 ### Ce que ce classement dit, et qu'aucun des six rapports ne pouvait dire
 
 - **Les cinq premières lignes ne livrent aucune fonction.** Trois sont des
