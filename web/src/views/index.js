@@ -332,6 +332,71 @@ Views.portfolio = (db) => {
    One screen answering "what must I do", assembled from data the
    bootstrap already carries plus one actions call. Every row deep-links;
    every list has an honest empty state. */
+/* ── A-08 · la mesure de l'adoption ───────────────────────────────────
+   « Au comité de pilotage du trimestre, le sponsor demande si le
+   déploiement a pris. La réponse disponible aujourd'hui est une
+   opinion. » Cet écran la remplace par six chiffres — et par le nom des
+   sites qui se sont tus, parce que le mode d'échec d'un outil de
+   gouvernance multi-sites est qu'un site reparte discrètement sur un
+   tableur et que rien ne le dise.
+
+   Rien ici n'est nominatif : des agrégats par site, jamais une personne.
+   Mesurer l'usage d'un outil n'est pas surveiller ceux qui s'en servent. */
+const adoptionData = () => liveFetch("adoption", () => api.get("/adoption?days=30"), (r) => [r]);
+
+Views.adoption = () => {
+  const [data] = adoptionData();
+  if (!data || !data.sites) {
+    return emptyState(t("Measuring…"), t("Reading how the tool is actually used, site by site."));
+  }
+  const sites = data.sites;
+  const quiet = sites.filter((s) => s.quiet);
+  const pctCell = (v) => v == null
+    ? h("span", { class: "xs muted" }, "—")
+    : h("span", { class: "mono small" + (v < 50 ? " strong" : ""),
+        style: v < 50 ? "color:var(--sig-amber)" : "" }, v + "%");
+
+  return h("div", null,
+    kpiStrip([
+      { label: t("Sites measured"), value: String(sites.length),
+        note: t("over the last ") + data.windowDays + t(" days") },
+      { label: t("Sites gone quiet"), value: String(quiet.length),
+        note: quiet.length ? quiet.map((s) => s.site).join(", ")
+                           : t("every site has updated something"),
+        accent: quiet.length > 0 },
+      { label: t("Refusals per active user"), value: data.refusals.perActiveUser ?? "—",
+        note: t("how often people meet a wall") },
+    ]),
+    sectionHead(t("Adoption by site"),
+      t("Six numbers, as at ") + data.asAt + t(". A site silent for ") + data.quietDays +
+      t(" days is named — nothing else in Meridian would say it.")),
+    sortableTable({ rows: sites, empty: t("No sites in the book yet."), cols: [
+      { key: "site", label: t("Site"), sort: (s) => s.site,
+        get: (s) => h("div", null,
+          h("div", { class: "strong small" }, s.city || s.site),
+          h("div", { class: "xs muted" }, s.site + " · " + s.people + " " + t("people"))) },
+      { key: "accounts", label: t("Accounts seen"), align: "c", sort: (s) => s.accountsPct ?? -1,
+        get: (s) => h("div", null, pctCell(s.accountsPct),
+          h("div", { class: "xs muted" }, s.accountsSeen + " / " + s.accountsOpened)) },
+      { key: "quiet", label: t("Last progress"), align: "c", sort: (s) => s.quietFor ?? 9999,
+        get: (s) => s.quietFor == null
+          ? h("span", { class: "xs", style: "color:var(--sig-red)" }, t("never"))
+          : h("span", { class: "mono small" + (s.quiet ? " strong" : ""),
+              style: s.quiet ? "color:var(--sig-red)" : "" }, s.quietFor + " " + t("d ago")) },
+      { key: "meetings", label: t("Meetings held"), align: "c", sort: (s) => s.meetingsPct ?? -1,
+        get: (s) => h("div", null, pctCell(s.meetingsPct),
+          h("div", { class: "xs muted" }, s.meetingsHeld + " / " + s.meetingsPlanned)) },
+      { key: "actions", label: t("Actions closed"), align: "c", sort: (s) => s.actionsPct ?? -1,
+        get: (s) => h("div", null, pctCell(s.actionsPct),
+          h("div", { class: "xs muted" }, s.actionsClosed + " / " + s.actionsRaised)) },
+      { key: "weeks", label: t("Weeks entered"), align: "c", sort: (s) => s.weeksPct ?? -1,
+        get: (s) => h("div", null, pctCell(s.weeksPct),
+          h("div", { class: "xs muted" }, s.weeksFilled + " / " + s.weeksExpected)) },
+    ] }),
+    h("p", { class: "xs muted", style: "margin-top:14px;max-width:70ch" },
+      t("These are counts by site, never by person. Refusals are counted for the whole portfolio because a refusal happens on a resource OUTSIDE somebody's scope — charging it to that resource's site would say the opposite of what it means.")));
+};
+
 /* ── N-05 · le centre de notification ─────────────────────────────────
    Trois choses seulement s'y font : voir ce qui m'attend, marquer lu, et
    suivre le lien vers l'objet. Agir sur l'objet passe par sa propre

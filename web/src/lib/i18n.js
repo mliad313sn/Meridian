@@ -497,6 +497,7 @@ export const FR = {
   "last 7 days": "7 derniers jours",
   "Project": "Projet",
   "Site": "Site",
+  "people": "personnes",
   "Phase": "Phase",
   "Health": "Santé",
   "Progress": "Avancement",
@@ -911,6 +912,36 @@ export const FR = {
   "Trusted webhook hosts": "Hôtes de destination autorisés",
   "Closed by default: with none named, nothing is posted outward.":
     "Fermé par défaut : sans hôte nommé, rien n'est envoyé vers l'extérieur.",
+
+  // ── A-08 · la mesure de l'adoption
+  "Adoption": "Adoption",
+  "How the tool is used": "Comment l'outil est utilisé",
+  "Measuring…": "Mesure en cours…",
+  "Reading how the tool is actually used, site by site.":
+    "Lecture de l'usage réel de l'outil, site par site.",
+  "Sites measured": "Sites mesurés",
+  "over the last ": "sur les ",
+  " days": " derniers jours",
+  "Sites gone quiet": "Sites devenus muets",
+  "every site has updated something": "chaque site a mis quelque chose à jour",
+  "Refusals per active user": "Refus par utilisateur actif",
+  "how often people meet a wall": "à quelle fréquence les gens se heurtent à un mur",
+  "Adoption by site": "Adoption par site",
+  "Six numbers, as at ": "Six chiffres, arrêtés au ",
+  ". A site silent for ": ". Un site silencieux depuis ",
+  " days is named — nothing else in Meridian would say it.":
+    " jours est nommé — rien d'autre dans Meridian ne le dirait.",
+  "Site": "Site",
+  "Accounts seen": "Comptes revus",
+  "Last progress": "Dernier avancement",
+  "never": "jamais",
+  "d ago": "j",
+  "Meetings held": "Comités tenus",
+  "Actions closed": "Actions closes",
+  "Weeks entered": "Semaines saisies",
+  "No sites in the book yet.": "Aucun site au portefeuille pour l'instant.",
+  "These are counts by site, never by person. Refusals are counted for the whole portfolio because a refusal happens on a resource OUTSIDE somebody's scope — charging it to that resource's site would say the opposite of what it means.":
+    "Ce sont des comptages par site, jamais par personne. Les refus valent pour tout le portefeuille : un refus survient sur une ressource HORS du périmètre de quelqu'un, et l'imputer au site de cette ressource dirait le contraire de ce qu'il signifie.",
 
   // ── N-07 · le contrôle de vie de la preuve
   "The last check did not reach this link. The approval is untouched.":

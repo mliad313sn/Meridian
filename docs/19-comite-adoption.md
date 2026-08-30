@@ -382,7 +382,45 @@ commande « Ouvrir une préoccupation » est présente sur l'écran du projet.
 
 ---
 
-### A-08 · L'adoption n'est mesurée par rien
+### A-08 · La mesure de l'adoption — **LEVÉE le 30/08/2026**
+
+**Fait.** Un écran *Adoption*, réservé au niveau groupe (même autorité
+que le registre des décisions), portant les **six indicateurs** que la
+réserve nomme, par site : comptes revus sur comptes ouverts ; jours
+depuis le dernier avancement consigné ; comités planifiés effectivement
+tenus ; actions closes sur actions ouvertes ; semaines saisies sur
+semaines attendues ; refus rencontrés par utilisateur actif. Un site
+silencieux depuis **30 jours** est **nommé**, en toutes lettres, dans la
+tuile qui le compte.
+
+Le comité avait raison sur le point décisif : la donnée existait déjà
+entièrement, et ce qui manquait était la lecture. Cinq indicateurs sur
+six ne demandent aucune collecte nouvelle — ils se lisent dans la piste,
+les comités, les actions et les semaines saisies.
+
+**Le sixième a demandé une décision.** Les refus d'autorité ne laissent
+aucune trace, et c'était juste : auditer chaque refus noierait le
+registre dont dépend le contrôle. Ils sont donc comptés à part
+(migration 021, `usage_daily`), **en agrégat par jour et par genre** —
+la table n'a que trois colonnes, `day`, `kind`, `n`. Elle **ne peut
+pas** dire qui, faute de colonne pour cela : mesurer l'usage d'un outil
+n'est pas surveiller ceux qui s'en servent, et la frontière est écrite
+dans le schéma plutôt que laissée au bon vouloir des lecteurs. Le même
+compteur répond par ailleurs au constat G-08 du comité InfoSec, qui
+relevait des échecs de connexion perdus au redémarrage.
+
+**Mesure de clôture, constatée à l'écran en français** : 8 sites sur 8
+mesurés, les 8 sites muets nommés (BER, BLR, GRU, KRK, LIS, LON, SIN,
+YYZ — le livre amorcé n'a aucune activité du jour, et la mesure le dit
+plutôt que de rassurer), 0 mot anglais, refus comptés et lisibles. Cinq
+tests (`server/test/adoption-measure.test.js`), dont celui qui tient la
+garantie : la table de comptage ne comporte aucune colonne nominative.
+
+**La ligne de base est datée** : la réponse porte son `asAt`, et la
+fenêtre se choisit (`?days=`). Le comité recommandait d'installer cette
+mesure **avant** les lots suivants ; elle l'a été.
+
+*Constat d'origine :*
 
 **Constat.** Trois mois après la mise en service, personne ne saura dire
 si l'outil est utilisé, par qui, ni où il a cessé de l'être.

@@ -346,7 +346,7 @@ export function reportError(e, context) {
 export const ROUTES = [
   "my", "inbox", "portfolio", "roadmap", "pipeline", "programmes", "mysite", "project",
   "schedule", "board", "risk", "budget", "change", "resources", "meetings",
-  "documents", "reports", "locations", "admin",
+  "documents", "reports", "locations", "adoption", "admin",
 ];
 
 /* Views an account has no use for are absent from the navigation (R7.3),
@@ -355,6 +355,9 @@ export const ROUTES = [
    server refuses the data either way; this keeps the screen honest. */
 export const ROUTE_ROLES = {
   programmes: ["admin", "group"],
+  /* A-08 — la mesure de l'adoption est une lecture de gouvernance :
+     même autorité que le registre des décisions. */
+  adoption: ["admin", "group"],
   mysite: ["site"],
   admin: ["admin"],
 };

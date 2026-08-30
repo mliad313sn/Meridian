@@ -15,6 +15,7 @@ import { can, canSeeProject } from "../../../shared/rbac.js";
 import { audited, readAudit, record } from "../audit.js";
 import { HttpError } from "../auth.js";
 import { loadPortfolio, projectFor, fromM, toM, loadSettings } from "../portfolio.js";
+import { adoptionBySite } from "../adoption.js";
 import { Engine, GATES, PHASES, iso, addDays, days, D } from "../../../shared/engine.js";
 import { scaffoldProject, reschedule, phaseFor } from "../wbs.js";
 
@@ -2672,6 +2673,19 @@ const REGISTER_ACTIONS = [
   "Project re-baselined", "Gate overridden", "Governance level changed",
   "Project moved", "Project status overridden",
 ];
+
+/* A-08 — la mesure de l'adoption, au niveau groupe.
+   `audit.read` la garde : c'est la même autorité que le registre des
+   décisions, et pour la même raison — ce sont des chiffres sur la façon
+   dont l'organisation se sert de l'outil, pas sur un projet. Ils sont
+   agrégés par site et ne nomment jamais personne. */
+r.get("/adoption", async (req, res, next) => {
+  try {
+    gate(req.user, "audit.read");
+    const out = await adoptionBySite({ windowDays: Number(req.query.days) || 30 });
+    res.json(out);
+  } catch (e) { next(e); }
+});
 
 r.get("/decisions/log", async (req, res, next) => {
   try {

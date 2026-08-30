@@ -17,6 +17,7 @@ import { existsSync } from "node:fs";
 import { connect, migrate, engine, close, many, query } from "./db.js";
 import { sweep as notifySweep, purge, escalate } from "./notify.js";
 import { probeEvidence } from "./probe.js";
+import { countUsage } from "./adoption.js";
 import { attachUser, requireUser, requirePasswordChanged, sweepSessions, HttpError } from "./auth.js";
 import authRoutes from "./routes/auth.js";
 import portfolioRoutes from "./routes/portfolio.js";
@@ -186,6 +187,14 @@ export function buildApp() {
        "Entra is not configured" is an operating state, not a fault, and
        logging a stack for it teaches operators to ignore the log. */
     if (status >= 500 && !(err instanceof HttpError)) console.error(err);
+    /* A-08 — le sixième indicateur du comité d'adoption : combien de
+       refus les gens rencontrent-ils. C'est le seul endroit qui les voit
+       tous, quel que soit le routeur qui a dit non. Un compte par jour et
+       rien d'autre — pas qui, pas sur quoi : mesurer l'usage d'un outil
+       n'est pas surveiller ceux qui s'en servent. Sans attente, et sans
+       conséquence en cas d'échec : compter ne doit jamais changer la
+       réponse qu'attend la personne. */
+    if (status === 403) countUsage("refusal");
     /* V-10 — the refusal is what the person reads, so it answers in their
        language. What was RECORDED stays in one language: an audit trail
        that changes with the reader's browser cannot be compared. */
