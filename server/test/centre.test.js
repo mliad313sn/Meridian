@@ -146,3 +146,77 @@ test("N-05 — les heures de silence se règlent, et se règlent entièrement", 
   assert.equal((await c.patch("/api/auth/quiet-hours", { from: null, to: null })).status, 200,
     "et se retire");
 });
+
+/* ── La file part vraiment ────────────────────────────────────────────
+   Le comité de positionnement a trouvé le défaut le plus embarrassant du
+   module : deliver() n'était appelé par aucun code de production, et la
+   table d'abonnements de la migration 019 n'était lue par personne. Deux
+   mécanismes complets dont personne n'actionnait le dernier maillon. */
+
+test("le transport sortant reste fermé tant que le mandant n'a rien nommé", async () => {
+  const { outboundTransport } = await import("../src/notify.js");
+  await query(`DELETE FROM app_setting WHERE key = 'notifyHosts'`);
+  assert.equal(await outboundTransport(), null, "aucun hôte nommé, aucun envoi");
+
+  await query(`INSERT INTO app_setting (key, value) VALUES ('notifyHosts', '"hooks.example.com"'::jsonb)
+               ON CONFLICT (key) DO UPDATE SET value = excluded.value`);
+  const was = process.env.MERIDIAN_NOTIFY_URL;
+
+  process.env.MERIDIAN_NOTIFY_URL = "https://ailleurs.example/hook";
+  assert.equal(await outboundTransport(), null, "un hôte hors de la liste ne reçoit rien");
+
+  process.env.MERIDIAN_NOTIFY_URL = "http://hooks.example.com/hook";
+  assert.equal(await outboundTransport(), null, "et rien ne part en clair");
+
+  process.env.MERIDIAN_NOTIFY_URL = "https://hooks.example.com/hook";
+  assert.equal(typeof await outboundTransport(), "function", "nommé et en https : le canal existe");
+
+  if (was === undefined) delete process.env.MERIDIAN_NOTIFY_URL;
+  else process.env.MERIDIAN_NOTIFY_URL = was;
+});
+
+test("un abonnement décide enfin de ce qui SORT — et de rien d'autre", async () => {
+  const { queue, deliver } = await import("../src/notify.js");
+  const { c, me } = await boxOf("siteGRU");
+  await query(`DELETE FROM notification WHERE user_id = $1`, [me.id]);
+  await query(`DELETE FROM notification_subscription WHERE user_id = $1`, [me.id]);
+  await c.patch("/api/auth/preferences", { notifyPref: "immediate" });
+  await c.patch("/api/auth/quiet-hours", { from: null, to: null });
+
+  /* Un abonnement qui ne veut que l'urgent. */
+  const made = await c.post("/api/auth/subscriptions",
+    { kind: "*", scopeKind: "portfolio", minSeverity: "urgent", cadence: "immediate" });
+  assert.equal(made.status, 201);
+
+  await queue({ userId: me.id, email: me.email, kind: "action-due",
+    subject: "Simple information", body: "x", dedupeKey: "sub-info", severity: "info" });
+  await queue({ userId: me.id, email: me.email, kind: "action-overdue",
+    subject: "Vraiment urgent", body: "x", dedupeKey: "sub-urgent", severity: "urgent" });
+
+  const sent = [];
+  await deliver(async ({ subject }) => { sent.push(subject); });
+  assert.deepEqual(sent, ["Vraiment urgent"], "seul ce qui atteint le seuil sort");
+
+  /* Mais le centre, lui, a tout reçu : un abonnement règle ce qui sort,
+     jamais ce qu'on peut venir chercher. */
+  const box = await c.get("/api/auth/notifications");
+  const subjects = box.body.items.map((i) => i.subject);
+  assert.ok(subjects.includes("Simple information"),
+    "ce qui n'est pas sorti reste consultable — sinon se désabonner rendrait aveugle");
+
+  await query(`DELETE FROM notification_subscription WHERE user_id = $1`, [me.id]);
+});
+
+test("sans aucun abonnement, la préférence globale gouverne comme avant", async () => {
+  const { queue, deliver } = await import("../src/notify.js");
+  const { me } = await boxOf("siteGRU");
+  await query(`DELETE FROM notification WHERE user_id = $1`, [me.id]);
+  await query(`DELETE FROM notification_subscription WHERE user_id = $1`, [me.id]);
+
+  await queue({ userId: me.id, email: me.email, kind: "action-due",
+    subject: "Sans abonnement", body: "x", dedupeKey: "sub-none", severity: "info" });
+  const sent = [];
+  await deliver(async ({ subject }) => { sent.push(subject); });
+  assert.ok(sent.includes("Sans abonnement"),
+    "la finesse s'ajoute, elle ne devient pas une obligation de configurer");
+});

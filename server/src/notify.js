@@ -204,6 +204,47 @@ export async function sweep({ today = new Date().toISOString().slice(0, 10), hor
 }
 
 /**
+ * Le transport sortant, et pourquoi il n'y en a qu'un.
+ *
+ * Le comité de positionnement a relevé le défaut le plus embarrassant de
+ * ce module : `deliver()` n'était appelé par AUCUN code de production.
+ * La file se remplissait, la cadence était honorée, le silence de nuit
+ * calculé — et rien ne partait jamais. Un mécanisme complet dont personne
+ * n'actionne le dernier maillon est un mécanisme qui n'existe pas.
+ *
+ * Le canal ici est le SORTANT HTTPS conçu par N-05 : un POST JSON vers
+ * une adresse que le mandant a nommée, dont un connecteur Teams est le
+ * premier consommateur. Il ne demande aucune dépendance nouvelle, et les
+ * hôtes autorisés sont fermés par défaut comme `documentHosts`.
+ *
+ * Le courriel attend toujours `MERIDIAN_SMTP_URL` ET un client SMTP que
+ * ce produit ne porte pas. C'est dit ici plutôt que sous-entendu : sans
+ * l'un des deux canaux, la file s'accumule et se lit dans le centre —
+ * ce qui reste honnête, mais n'est pas de la remise.
+ */
+export async function outboundTransport() {
+  const rows = await many(
+    `SELECT value #>> '{}' AS v FROM app_setting WHERE key = 'notifyHosts'`);
+  const hosts = String(rows[0]?.v ?? "")
+    .split(",").map((h) => h.trim().toLowerCase()).filter(Boolean);
+  const url = process.env.MERIDIAN_NOTIFY_URL || "";
+  if (!hosts.length || !url) return null;
+  let u;
+  try { u = new URL(url); } catch { return null; }
+  const host = u.hostname.toLowerCase();
+  if (u.protocol !== "https:") return null;
+  if (!hosts.some((h) => host === h || host.endsWith("." + h))) return null;
+  return async ({ to, subject, body }) => {
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ to, subject, text: body }),
+    });
+    if (!r.ok) throw new Error(`outbound ${r.status}`);
+  };
+}
+
+/**
  * Hand the queue to a transport. `send` is `async ({to, subject, body})`
  * and should throw to mark a message failed. With no transport the queue
  * is left alone — an unconfigured instance says "queued", never "sent".
@@ -259,6 +300,31 @@ export async function deliver(send, { limit = 50 } = {}) {
                       THEN q.hour >= q.quiet_from AND q.hour < q.quiet_to
                       ELSE q.hour >= q.quiet_from OR  q.hour < q.quiet_to
                  END
+        )
+        /* Les abonnements décident enfin de quelque chose.
+           La table de 019 était écrite par l'écran et lue par personne :
+           un réglage qu'on offre sans le tenir coûte plus cher que de ne
+           pas l'offrir. La règle est celle que le comité a posée — un
+           abonnement règle ce qui SORT, jamais ce qu'on peut venir
+           chercher — donc le centre continue de tout recevoir, et seule
+           la remise se laisse filtrer.
+
+           Sans aucun abonnement, la préférence globale du compte
+           gouverne, comme avant : la finesse s'ajoute, elle ne devient
+           pas une obligation de configurer. */
+        AND (
+          NOT EXISTS (SELECT 1 FROM notification_subscription s0
+                       WHERE s0.user_id = n.user_id AND s0.active)
+          OR EXISTS (
+            SELECT 1 FROM notification_subscription s
+             WHERE s.user_id = n.user_id AND s.active
+               AND (s.kind = '*' OR s.kind = n.kind)
+               AND CASE s.min_severity
+                     WHEN 'urgent'    THEN n.severity = 'urgent'
+                     WHEN 'attention' THEN n.severity IN ('attention', 'urgent')
+                     ELSE true
+                   END
+          )
         )
       ORDER BY n.at LIMIT $1`, [limit]);
   let sent = 0, failed = 0;

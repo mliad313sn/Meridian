@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 import { existsSync } from "node:fs";
 
 import { connect, migrate, engine, close, many, query } from "./db.js";
-import { sweep as notifySweep, purge, escalate } from "./notify.js";
+import { sweep as notifySweep, purge, escalate, deliver, outboundTransport } from "./notify.js";
 import { probeEvidence } from "./probe.js";
 import { countUsage } from "./adoption.js";
 import { attachUser, requireUser, requirePasswordChanged, sweepSessions, HttpError } from "./auth.js";
@@ -282,6 +282,13 @@ export async function start({ port = process.env.PORT || 4173 } = {}) {
       try {
         await escalate();
         await notifySweep();
+        /* Et la file part enfin. Elle se remplissait, la cadence était
+           honorée, le silence de nuit calculé — et aucun code de
+           production n'actionnait le dernier maillon : rien ne sortait
+           jamais. Sans transport configuré, deliver() répond « aucun
+           transport » et la file s'accumule, ce qui reste honnête
+           puisque le centre la montre. */
+        await deliver(await outboundTransport()).catch(() => {});
         /* N-07 — la sonde tourne avec le reste, par petits lots : un
            passage régulier couvre la bibliothèque sans jamais la
            parcourir d'un coup, et n'interroge que les hôtes déjà
