@@ -895,4 +895,11 @@ export const FR = {
   "Register is clear.": "Le registre est vide.",
   "No accounts match that filter.": "Aucun compte ne correspond à ce filtre.",
   "The directory is empty.": "L'annuaire est vide.",
+
+  // ── A-06 · le score se lit au point d'usage
+  "Fit": "Adéquation",
+  "Effort": "Effort",
+  "Risk and effort pull the score down": "Le risque et l'effort font BAISSER le score",
+  "Four notes are needed — fit, value, risk and effort. An unscored project sorts last, not worst.":
+    "Quatre notes sont nécessaires — adéquation, valeur, risque et effort. Un projet sans score se place en dernier, pas en pire.",
 };

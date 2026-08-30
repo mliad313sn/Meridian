@@ -209,12 +209,12 @@ export function selfMatch(user, personId) {
  * @returns { ok: boolean, why: string }
  */
 export function can(user, action, resource = {}) {
-  if (!user) return deny("not authenticated");
-  if (!user.active) return deny("account is disabled");
+  if (!user) return deny("not authenticated — sign in again, your session may have ended");
+  if (!user.active) return deny("account is disabled — an administrator can reactivate it from Administration");
   if (!ACTIONS.includes(action)) return deny(`unknown action "${action}"`);
 
   if (ADMIN_ONLY.has(action)) {
-    return user.role === "admin" ? allow() : deny("administrator only");
+    return user.role === "admin" ? allow() : deny("administrator only — ask an account marked ADMIN on the sign-in directory");
   }
 
   if (user.role === "admin") return allow();
@@ -222,24 +222,24 @@ export function can(user, action, resource = {}) {
   // ── reads ───────────────────────────────────────────────────────
   if (READ_ACTIONS.has(action)) {
     if (action === "audit.read") {
-      return user.role === "group" ? allow() : deny("audit is visible to group level and above");
+      return user.role === "group" ? allow() : deny("audit is visible to group level and above — ask your programme office for what you need from it");
     }
     if (action === "project.read") {
       return canSeeProject(user, resource.project)
         ? allow()
-        : deny("project is outside your scope");
+        : deny("project is outside your scope — ask an administrator for a grant on its site or programme");
     }
     if (action === "meeting.read") {
-      return canSeeScope(user, resource.scope) ? allow() : deny("meeting is outside your scope");
+      return canSeeScope(user, resource.scope) ? allow() : deny("meeting is outside your scope — its minutes are shared by whoever chairs it");
     }
     return allow(); // portfolio.read / data.export — narrowed by the query itself
   }
 
   // ── writes ──────────────────────────────────────────────────────
-  if (user.role === "viewer") return deny("read-only account"); // R1.5
+  if (user.role === "viewer") return deny("read-only account — ask an administrator to change the level if you are expected to record work here"); // R1.5
 
   if (GROUP_ONLY_WRITES.has(action) && user.role !== "group") {
-    return deny("requires group-level authority");
+    return deny("requires group-level authority — your programme office does this one");
   }
 
   switch (action) {
@@ -250,25 +250,25 @@ export function can(user, action, resource = {}) {
         const { programmes } = grantsOf(user);
         return programmes.has(resource.programme_id)
           ? allow()
-          : deny("programme is outside your grant");
+          : deny("programme is outside your grant — ask an administrator to add it");
       }
       if (user.role === "site") {
-        if (level === "group") return deny("site level cannot create a group project");
+        if (level === "group") return deny("site level cannot create a group project — create it at your site, or ask your programme office");
         const { sites } = grantsOf(user);
-        return sites.has(resource.site_id) ? allow() : deny("site is outside your grant");
+        return sites.has(resource.site_id) ? allow() : deny("site is outside your grant — ask an administrator to add it");
       }
-      return deny("insufficient authority");
+      return deny("insufficient authority — your programme office holds this one");
     }
 
     case "change.approve": {
       const p = resource.project;
-      if (!canWriteProject(user, p)) return deny("project is outside your authority");
+      if (!canWriteProject(user, p)) return deny("project is outside your authority — you can read it, and raise a concern on it if it lands on your site");
       /* Segregation of duties (governance committee, I1): the person who
          raised a request never decides it — level is not independence.
          Admin reaches this line only via the early-return above, so the
          break-glass exemption is structural and tested, not accidental. */
       if (selfMatch(user, resource.raised_by)) {
-        return deny("you raised this request — a second pair of eyes decides it");
+        return deny("you raised this request — a second pair of eyes decides it; ask a colleague with the same authority, or your programme office");
       }
       /* R4.5 — magnitude routes the decision, not the org chart alone.
          A MISSING threshold fails CLOSED (committee I4): un-parameterised
@@ -279,7 +279,7 @@ export function can(user, action, resource = {}) {
       const overCost = Math.abs(resource.cost_delta ?? 0) > (threshold.cost ?? 0);
       const overTime = Math.abs(resource.weeks_delta ?? 0) > (threshold.weeks ?? 0);
       if ((overCost || overTime) && user.role !== "group") {
-        return deny("above the change-control threshold — group authority required");
+        return deny("above the change-control threshold — group authority required; send it to your programme office to decide");
       }
       return allow();
     }
@@ -291,9 +291,9 @@ export function can(user, action, resource = {}) {
          otherwise one person authors the evidence, approves it, and
          walks the gate. */
       const p = resource.project;
-      if (!canWriteProject(user, p)) return deny("project is outside your authority");
+      if (!canWriteProject(user, p)) return deny("project is outside your authority — you can read it, and raise a concern on it if it lands on your site");
       if (selfMatch(user, resource.owner_id)) {
-        return deny("you own this evidence — an independent reviewer approves it");
+        return deny("you own this evidence — an independent reviewer approves it; hand it to a colleague or to your programme office");
       }
       if (resource.gate && p?.governance_level === "site" && user.role === "site") {
         return deny("gate evidence is approved at group level — ask your programme office");
@@ -306,13 +306,13 @@ export function can(user, action, resource = {}) {
          (site committee, G3): create-only; the concern then flows through
          the ordinary RAID exposure/escalation machinery to steering. */
       const p = resource.project;
-      if (!p) return deny("no project in scope");
-      if (user.role !== "site") return deny("concerns are the site channel — you hold ordinary RAID authority here");
-      if (p.governance_level !== "group") return deny("this is a site project — raise ordinary RAID on it");
+      if (!p) return deny("no project in scope — a concern is raised on a specific project");
+      if (user.role !== "site") return deny("concerns are the site channel — you hold ordinary RAID authority here, so raise a risk or an issue directly");
+      if (p.governance_level !== "group") return deny("this is a site project — raise an ordinary risk or issue on it instead");
       const { sites } = grantsOf(user);
       return sites.has(p.site_id)
         ? allow()
-        : deny("this programme does not land on a site granted to you");
+        : deny("this programme does not land on a site granted to you — concerns follow the work that reaches your site");
     }
 
     case "demand.raise":
@@ -326,7 +326,7 @@ export function can(user, action, resource = {}) {
       /* What the group will do, and in what order, against one envelope. */
       return user.role === "group"
         ? allow()
-        : deny("the portfolio is prioritised at group level");
+        : deny("the portfolio is prioritised at group level — your programme office scores and ranks");
 
     case "absence.write":
       /* Same shape as the shutdown calendar: the site keeps its own
@@ -341,25 +341,25 @@ export function can(user, action, resource = {}) {
         const { sites } = grantsOf(user);
         return sites.has(resource.site_id)
           ? allow()
-          : deny("that site is outside your grant");
+          : deny("that site is outside your grant — ask an administrator, or ask that site's lead to declare it");
       }
-      return deny("insufficient authority");
+      return deny("insufficient authority — your programme office holds this one");
     }
 
     case "wave.write":
       // A rollout wave belongs to its project.
       return canWriteProject(user, resource.project)
         ? allow()
-        : deny("project is outside your authority");
+        : deny("project is outside your authority — you can read it, and raise a concern on it if it lands on your site");
 
     case "moc.approve": {
       /* The signature that releases intrusive work on a plant or
          safety-related system. Group level only, and never the project
          manager's own — the same independence the change and gate
          controls already enforce, applied where it matters most. */
-      if (user.role !== "group") return deny("management of change is released at group level");
+      if (user.role !== "group") return deny("management of change is released at group level — ask your programme office to release it");
       if (selfMatch(user, resource.pm_id)) {
-        return deny("you manage this project — management of change needs a second pair of eyes");
+        return deny("you manage this project — management of change needs a second pair of eyes; ask your programme office");
       }
       return allow();
     }
@@ -380,7 +380,7 @@ export function can(user, action, resource = {}) {
     case "meeting.close":
       return canWriteScope(user, resource.scope)
         ? allow()
-        : deny("meeting scope is outside your authority");
+        : deny("meeting scope is outside your authority — whoever chairs that room runs it");
 
     case "allocation.write": {
       // A site lead allocates their own site's people (C1); a group lead
@@ -388,12 +388,12 @@ export function can(user, action, resource = {}) {
       if (user.role === "site") {
         const { sites } = grantsOf(user);
         if (resource.person && !sites.has(resource.person.site_id)) {
-          return deny("person belongs to another site");
+          return deny("person belongs to another site — their own site lead allocates them");
         }
       }
       return canWriteProject(user, resource.project)
         ? allow()
-        : deny("project is outside your authority");
+        : deny("project is outside your authority — you can read it, and raise a concern on it if it lands on your site");
     }
 
     default:
@@ -403,7 +403,7 @@ export function can(user, action, resource = {}) {
         : deny(
             resource.project
               ? resource.project.governance_level === "group" && user.role === "site"
-                ? "this is a group-governed project — site level is read-only here"
+                ? "this is a group-governed project — site level is read-only here; raise a concern on it and your programme office will see it"
                 : "project is outside your authority"
               : "no project in scope"
           );

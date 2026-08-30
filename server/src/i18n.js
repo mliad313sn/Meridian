@@ -20,46 +20,63 @@
 
 const FR = {
   // authority
-  "not authenticated": "non authentifié",
-  "account is disabled": "ce compte est désactivé",
-  "administrator only": "réservé à l'administrateur",
-  "read-only account": "compte en lecture seule",
-  "requires group-level authority": "nécessite une autorité de niveau groupe",
-  "project is outside your authority": "ce projet n'est pas dans votre périmètre d'autorité",
-  "project is outside your scope": "ce projet est hors de votre périmètre",
-  "programme is outside your grant": "ce programme n'est pas dans vos habilitations",
-  "site is outside your grant": "ce site n'est pas dans vos habilitations",
-  "that site is outside your grant": "ce site n'est pas dans vos habilitations",
-  "no project in scope": "aucun projet dans le périmètre",
-  "insufficient authority": "autorité insuffisante",
-  "meeting scope is outside your authority": "ce comité n'est pas dans votre périmètre d'autorité",
-  "site level cannot create a group project": "le niveau site ne peut pas créer un projet groupe",
-  "this is a group-governed project — site level is read-only here":
-    "ce projet est gouverné au niveau groupe — le niveau site y est en lecture seule",
-  "audit is visible to group level and above":
-    "la piste d'audit est visible à partir du niveau groupe",
-  "the portfolio is prioritised at group level":
-    "le portefeuille est priorisé au niveau groupe",
-  "management of change is released at group level":
-    "la maîtrise des modifications est levée au niveau groupe",
+  "not authenticated — sign in again, your session may have ended":
+    "non authentifié — reconnectez-vous, votre session a peut-être expiré",
+  "account is disabled — an administrator can reactivate it from Administration":
+    "ce compte est désactivé — un administrateur peut le réactiver depuis Administration",
+  "administrator only — ask an account marked ADMIN on the sign-in directory":
+    "réservé à l'administrateur — voyez un compte marqué ADMIN dans l'annuaire de connexion",
+  "read-only account — ask an administrator to change the level if you are expected to record work here":
+    "compte en lecture seule — demandez à un administrateur de changer le niveau si vous devez consigner ici",
+  "requires group-level authority — your programme office does this one":
+    "nécessite une autorité de niveau groupe — votre bureau de programme s'en charge",
+  "project is outside your authority — you can read it, and raise a concern on it if it lands on your site":
+    "ce projet n'est pas dans votre périmètre d'autorité — vous pouvez le lire, et y ouvrir une préoccupation s'il atterrit sur votre site",
+  "project is outside your scope — ask an administrator for a grant on its site or programme":
+    "ce projet est hors de votre périmètre — demandez à un administrateur une habilitation sur son site ou son programme",
+  "programme is outside your grant — ask an administrator to add it":
+    "ce programme n'est pas dans vos habilitations — demandez à un administrateur de l'ajouter",
+  "site is outside your grant — ask an administrator to add it":
+    "ce site n'est pas dans vos habilitations — demandez à un administrateur de l'ajouter",
+  "that site is outside your grant — ask an administrator, or ask that site's lead to declare it":
+    "ce site n'est pas dans vos habilitations — voyez un administrateur, ou le responsable de ce site pour qu'il le déclare",
+  "no project in scope — a concern is raised on a specific project":
+    "aucun projet dans le périmètre — une préoccupation s'ouvre sur un projet précis",
+  "insufficient authority — your programme office holds this one":
+    "autorité insuffisante — votre bureau de programme détient celle-ci",
+  "meeting scope is outside your authority — whoever chairs that room runs it":
+    "ce comité n'est pas dans votre périmètre d'autorité — celui qui préside cette salle l'anime",
+  "site level cannot create a group project — create it at your site, or ask your programme office":
+    "le niveau site ne peut pas créer un projet groupe — créez-le sur votre site, ou voyez votre bureau de programme",
+  "this is a group-governed project — site level is read-only here; raise a concern on it and your programme office will see it":
+    "ce projet est gouverné au niveau groupe — le niveau site y est en lecture seule ; ouvrez-y une préoccupation, votre bureau de programme la verra",
+  "audit is visible to group level and above — ask your programme office for what you need from it":
+    "la piste d'audit est visible à partir du niveau groupe — demandez à votre bureau de programme ce qu'il vous en faut",
+  "the portfolio is prioritised at group level — your programme office scores and ranks":
+    "le portefeuille est priorisé au niveau groupe — votre bureau de programme note et classe",
+  "management of change is released at group level — ask your programme office to release it":
+    "la maîtrise des modifications est levée au niveau groupe — demandez la levée à votre bureau de programme",
 
   // independence — the controls people meet most often
-  "you raised this request — a second pair of eyes decides it":
-    "vous avez émis cette demande — une seconde paire d'yeux la décide",
-  "you own this evidence — an independent reviewer approves it":
-    "cette preuve vous appartient — un relecteur indépendant l'approuve",
+  "you raised this request — a second pair of eyes decides it; ask a colleague with the same authority, or your programme office":
+    "vous avez émis cette demande — une seconde paire d'yeux la décide ; voyez un collègue de même autorité, ou votre bureau de programme",
+  "you own this evidence — an independent reviewer approves it; hand it to a colleague or to your programme office":
+    "cette preuve vous appartient — un relecteur indépendant l'approuve ; confiez-la à un collègue ou à votre bureau de programme",
   "gate evidence is approved at group level — ask your programme office":
     "les preuves de jalon sont approuvées au niveau groupe — voyez votre bureau de programme",
-  "you manage this project — management of change needs a second pair of eyes":
-    "vous pilotez ce projet — la maîtrise des modifications exige une seconde paire d'yeux",
-  "above the change-control threshold — group authority required":
-    "au-dessus du seuil de contrôle des modifications — autorité groupe requise",
-  "concerns are the site channel — you hold ordinary RAID authority here":
-    "les préoccupations sont le canal du site — vous disposez ici de l'autorité RAID ordinaire",
-  "this is a site project — raise ordinary RAID on it":
-    "ceci est un projet de site — ouvrez-y un élément RAID ordinaire",
-  "this programme does not land on a site granted to you":
-    "ce programme ne se déploie sur aucun site qui vous est habilité",
+  "you manage this project — management of change needs a second pair of eyes; ask your programme office":
+    "vous pilotez ce projet — la maîtrise des modifications exige une seconde paire d'yeux ; voyez votre bureau de programme",
+  "above the change-control threshold — group authority required; send it to your programme office to decide":
+    "au-dessus du seuil de contrôle des modifications — autorité groupe requise ; transmettez-la à votre bureau de programme",
+  "concerns are the site channel — you hold ordinary RAID authority here, so raise a risk or an issue directly":
+    "les préoccupations sont le canal du site — vous disposez ici de l'autorité RAID ordinaire : ouvrez directement un risque ou un problème",
+  "this is a site project — raise an ordinary risk or issue on it instead":
+    "ceci est un projet de site — ouvrez-y plutôt un risque ou un problème ordinaire",
+  "this programme does not land on a site granted to you — concerns follow the work that reaches your site":
+    "ce programme ne se déploie sur aucun site qui vous est habilité — une préoccupation suit le travail qui arrive chez vous",
+
+  "person belongs to another site — their own site lead allocates them":
+    "cette personne appartient à un autre site — son propre responsable de site l'affecte",
 
   // the things people are told they cannot do yet
   "Sign in to continue": "Connectez-vous pour continuer",

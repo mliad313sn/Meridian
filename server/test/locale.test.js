@@ -27,8 +27,12 @@ test("the locale comes from the app's own toggle first, then the browser", () =>
 });
 
 test("a missing translation degrades to English, never to a broken token", () => {
-  assert.equal(say("read-only account", "fr"), "compte en lecture seule");
-  assert.equal(say("read-only account", "en"), "read-only account");
+  /* A-07 — the refusal now names what is still open, so the key carries
+     that clause too; the guarantee under test is unchanged. */
+  const READ_ONLY = "read-only account — ask an administrator to change the level " +
+    "if you are expected to record work here";
+  assert.match(say(READ_ONLY, "fr"), /^compte en lecture seule — demandez/);
+  assert.equal(say(READ_ONLY, "en"), READ_ONLY);
   assert.equal(say("a string nobody has translated", "fr"), "a string nobody has translated");
   assert.equal(say(undefined, "fr"), undefined);
 });

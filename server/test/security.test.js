@@ -188,3 +188,41 @@ test("S-04 — une cellule qui commence par = sort neutralisée du CSV", async (
   assert.ok(!/,"=HYPERLINK/.test(csv.text), "la formule ne doit pas rester exécutable");
   assert.match(csv.text, /"'=HYPERLINK/, "elle est rendue au texte par une apostrophe");
 });
+
+/* ── A-07 · un refus dit ce qui reste ouvert ─────────────────────── */
+
+test("A-07 — chaque refus d'autorité nomme la suite à donner, dans les deux langues", async () => {
+  const { can } = await import("../../shared/rbac.js");
+  const { say } = await import("../src/i18n.js");
+  const site = { id: "U", active: true, role: "site", personId: "PE-19",
+    grants: { sites: new Set(["GRU"]), programmes: new Set() } };
+  const viewer = { id: "V", active: true, role: "viewer", personId: "PE-12",
+    grants: { sites: new Set(["LIS"]), programmes: new Set() } };
+
+  const cases = [
+    [site, "project.write", { project: { id: "P", governance_level: "group", site_id: "YYZ", programme_id: "X" } }],
+    [site, "priority.write", {}],
+    [site, "moc.approve", { project: { id: "P", governance_level: "site", site_id: "GRU", pm_id: "PE-19" } }],
+    [site, "audit.read", {}],
+    [viewer, "project.write", { project: { id: "P", governance_level: "site", site_id: "LIS" } }],
+    [site, "document.approve", { project: { id: "P", governance_level: "site", site_id: "GRU" }, owner_id: "PE-19", gate: 2 }],
+    [site, "period.close", {}],
+    [site, "data.import", {}],
+    [site, "concern.raise", { project: { id: "P", governance_level: "site", site_id: "GRU" } }],
+  ];
+
+  /* « Une suite » = un acteur qui prend le relais, ou une action qui
+     reste ouverte. Un refus qui ne dit que l'état laisse la personne
+     devant un mur : elle range le problème plutôt que de le porter. */
+  const NAMES_A_WAY_ON = /bureau de programme|administrateur|collègue|responsable de site|préoccupation|reconnectez|demandez|voyez|ouvrez|confiez|transmettez|créez/i;
+
+  const mute = [];
+  for (const [u, action, res] of cases) {
+    const v = can(u, action, res);
+    if (v.ok) continue;
+    const fr = say(v.why, "fr");
+    assert.notEqual(fr, v.why, `« ${v.why} » n'est pas traduit`);
+    if (!NAMES_A_WAY_ON.test(fr)) mute.push(action + " → " + fr);
+  }
+  assert.deepEqual(mute, [], "ces refus ne disent pas ce qui reste ouvert");
+});

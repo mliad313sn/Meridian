@@ -2283,11 +2283,20 @@ Views.pipeline = (db) => {
   const pri = Engine.prioritise(db, list, db.settings.capexEnvelope);
   const open = demand.filter(d => ["New", "Triaged"].includes(d.status));
 
+  /* A-06 — le nombre qui trace la ligne de flottaison budgétaire dit d'où
+     il vient. Un arbitrage qu'on ne sait pas expliquer dans la salle n'est
+     pas un arbitrage, c'est un verdict : la décomposition est donc lisible
+     sur CHAQUE ligne portant un score, sans quitter l'écran. */
   const scoreCell = (x) => {
     const s = Engine.priority(x);
-    return s == null
-      ? h("span", { class: "xs muted" }, t("unscored"))
-      : h("span", { class: "mono small strong" }, String(s));
+    if (s == null) {
+      return h("span", { class: "xs muted",
+        title: t("Four notes are needed — fit, value, risk and effort. An unscored project sorts last, not worst.") },
+        t("unscored"));
+    }
+    const why = `${t("Fit")} ${x.fit} + ${t("Value")} ${x.value} + (6 − ${t("Risk")} ${x.risk})`
+      + ` + (6 − ${t("Effort")} ${x.effort}) = ${s} · ${t("Risk and effort pull the score down")}`;
+    return h("span", { class: "mono small strong", style: "cursor:help", title: why }, String(s));
   };
 
   return h("div", null,
