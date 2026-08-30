@@ -39,6 +39,16 @@ const DEFAULT_SETTINGS = {
      nothing can be approved as evidence — the same rule the change
      thresholds follow. A link to anywhere is not a proof. */
   documentHosts: "",
+  /* N-05 / G-13 — le centre de notification et sa charge.
+     `notifyRetentionDays` à zéro veut dire QU'AUCUNE durée n'a été
+     décidée : la purge s'abstient alors et dit quel réglage manque,
+     plutôt que d'inventer combien de temps on garde la trace de ce qu'on
+     a dit à qui. `notifyHosts` est fermé par défaut, comme
+     `documentHosts` : sans hôte nommé, rien ne sort. */
+  notifyRetentionDays: 0,
+  notifyEscalateDays: 0,
+  notifyWeeklyCap: 10,
+  notifyHosts: "",
 };
 
 /* Both drivers already decode jsonb, but a plain JSON string round-trips

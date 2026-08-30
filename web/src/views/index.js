@@ -4335,6 +4335,28 @@ Views.admin = (db) => {
             ...["Weekly — Monday 09:00", "Weekly — Friday 16:00", "Fortnightly — Wednesday 10:00", "Monthly — first working day"]
               .map(o => h("option", { value: o, selected: o === st.cadence }, o))))),
 
+      /* N-05 / G-13 — les réglages que le produit EXIGE et qu'aucun écran
+         ne proposait. Sans durée de conservation, la purge s'abstient et
+         le dit : c'est une décision du mandant, pas de l'ingénierie, et
+         elle doit pouvoir se prendre ici plutôt que dans une base. */
+      h("div", { style: "height:22px" }), h("hr", { class: "hr" }), h("div", { style: "height:18px" }),
+      sectionHead(t("Notifications"), t("what leaves, how long it is kept, and when it climbs")),
+      h("div", { class: "form-grid" },
+        num("notifyRetentionDays", t("Keep notifications for (days)"),
+          t("0 = no retention decided, and the purge declines to run rather than choose for you"), 1, 0),
+        num("notifyEscalateDays", t("Escalate after (days)"),
+          t("an unread message climbs one step instead of being sent again; 0 turns it off"), 1, 0),
+        num("notifyWeeklyCap", t("Weekly cap per account"),
+          t("above this, the settings failed — not the reader"), 1, 0),
+        h("div", { class: "field full" }, h("label", null, t("Trusted webhook hosts")),
+          h("input", { class: "input input-sm", value: st.notifyHosts ?? "",
+            placeholder: "teams.example.com, hooks.example.com",
+            onChange: e => App.write("Notification hosts changed",
+              (a) => a.patch("/admin/settings", { notifyHosts: e.target.value }),
+              { detail: e.target.value || "(none)" }) }),
+          h("div", { class: "xs muted" },
+            t("Closed by default: with none named, nothing is posted outward.")))),
+
       h("div", { style: "height:22px" }), h("hr", { class: "hr" }), h("div", { style: "height:18px" }),
       sectionHead("Board columns", "work-in-progress limits"),
       h("div", null, db.columns.map(c => h("div", { class: "list-row", style: "align-items:center" },

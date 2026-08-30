@@ -896,6 +896,22 @@ export const FR = {
   "No accounts match that filter.": "Aucun compte ne correspond à ce filtre.",
   "The directory is empty.": "L'annuaire est vide.",
 
+  // ── N-05 · les réglages du centre, dans l'écran d'administration
+  "what leaves, how long it is kept, and when it climbs":
+    "ce qui sort, combien de temps on le garde, et quand cela monte d'un cran",
+  "Keep notifications for (days)": "Conserver les notifications (jours)",
+  "0 = no retention decided, and the purge declines to run rather than choose for you":
+    "0 = aucune durée décidée, et la purge s'abstient plutôt que de choisir à votre place",
+  "Escalate after (days)": "Faire monter d'un cran après (jours)",
+  "an unread message climbs one step instead of being sent again; 0 turns it off":
+    "un message non lu monte d'un cran au lieu d'être renvoyé ; 0 désactive",
+  "Weekly cap per account": "Plafond hebdomadaire par compte",
+  "above this, the settings failed — not the reader":
+    "au-delà, c'est le réglage qui a échoué, pas le lecteur",
+  "Trusted webhook hosts": "Hôtes de destination autorisés",
+  "Closed by default: with none named, nothing is posted outward.":
+    "Fermé par défaut : sans hôte nommé, rien n'est envoyé vers l'extérieur.",
+
   // ── N-07 · le contrôle de vie de la preuve
   "The last check did not reach this link. The approval is untouched.":
     "Le dernier contrôle n'a pas atteint ce lien. L'approbation reste intacte.",
