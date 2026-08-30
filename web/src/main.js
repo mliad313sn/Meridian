@@ -28,6 +28,7 @@ bindEngine(Engine);
 const NAV = [
   { label: "Deliver", items: [
     ["my", "My week"],
+    ["inbox", "Notifications"],
     ["portfolio", "Portfolio"],
     ["roadmap", "Roadmap"],
     ["pipeline", "Pipeline"],
@@ -46,6 +47,7 @@ const NAV = [
 
 const TITLES = {
   my: ["Deliver", "My week"],
+  inbox: ["Deliver", "Notification centre"],
   portfolio: ["Portfolio", "Executive portfolio view"],
   roadmap: ["Deliver", "Portfolio roadmap"],
   pipeline: ["Deliver", "Demand & prioritisation"],
@@ -81,6 +83,10 @@ function badges(db) {
     resources: db.settings.capacityAlerts ? Engine.overAllocated(db, 8).length : 0,
     board: db.items.filter((i) => i.column === "progress" && scoped.includes(i.project)).length,
     meetings: App.meetingBadge ?? 0,
+    /* N-05 — le seul badge qui ne se calcule pas sur le livre : ma boîte
+       est une boîte, pas une lecture du portefeuille. Le compte arrive
+       avec le bootstrap et se rafraîchit avec lui. */
+    inbox: App.me?.unread ?? 0,
   };
 }
 

@@ -896,6 +896,30 @@ export const FR = {
   "No accounts match that filter.": "Aucun compte ne correspond à ce filtre.",
   "The directory is empty.": "L'annuaire est vide.",
 
+  // ── N-05 · le centre de notification
+  "Notifications": "Notifications",
+  "Notification centre": "Centre de notification",
+  "What is waiting for you": "Ce qui vous attend",
+  "Unread": "Non lus",
+  "addressed to you": "qui vous sont adressés",
+  "Needs attention": "Demandent votre attention",
+  "attention or urgent": "attention ou urgent",
+  "In the box": "Dans la boîte",
+  "kept for the retention period": "conservés selon la durée décidée",
+  "Mark all read": "Tout marquer comme lu",
+  "Show what I have already read": "Afficher ce que j'ai déjà lu",
+  "Nothing unread — this is what a quiet week looks like.":
+    "Rien à lire — c'est à cela que ressemble une semaine calme.",
+  "Nothing here": "Rien ici",
+  "Messages arrive when something is due, blocked, or owed to you. Your subscriptions decide what also reaches you by email.":
+    "Un message arrive quand quelque chose vous est dû, vous attend ou vous bloque. Vos abonnements décident de ce qui vous parvient aussi par courriel.",
+  "not sent yet": "pas encore envoyé",
+  "on behalf of ": "au nom de ",
+  "new": "nouveau",
+  "info": "information",
+  "attention": "attention",
+  "urgent": "urgent",
+
   // ── A-06 · le score se lit au point d'usage
   "Fit": "Adéquation",
   "Effort": "Effort",

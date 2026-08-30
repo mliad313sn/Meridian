@@ -43,6 +43,18 @@ const asDate = (v) =>
 const asStamp = (v) => (v instanceof Date ? v.toISOString() : String(v));
 
 function normaliseDates(res) {
+  /* The two engines disagree on what to call "how many rows did that
+     touch": `pg` says rowCount, PGlite says affectedRows. A caller should
+     not have to know which one is underneath — that is this module's
+     whole job — so the missing name is filled in here. Without it every
+     `r.rowCount` in the codebase silently reads undefined on PGlite, and
+     a route answers 404 "no such row" about a row it has just updated:
+     a bug that appears only on the embedded engine, which is exactly
+     where the least experienced deployment runs. */
+  if (res && typeof res === "object" && res.rowCount === undefined
+      && typeof res.affectedRows === "number") {
+    res.rowCount = res.affectedRows;
+  }
   if (!res || !Array.isArray(res.rows) || !Array.isArray(res.fields)) return res;
   const dateCols = [];
   const stampCols = [];

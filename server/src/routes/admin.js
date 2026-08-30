@@ -255,11 +255,29 @@ const NUMERIC = new Set([
   "escalateExposure", "pmoExposure", "issueAgeDays", "capacityCeiling",
   // V-04 — the capital envelope the queue is ranked against, in millions
   "capexEnvelope",
+  /* G-13 — how many days a delivered notification is kept before the
+     sweep removes it. Zero means NO retention has been decided, and the
+     purge then refuses to run rather than inventing a duration: how long
+     a record of who was told what is kept is the sponsor's decision, and
+     the code will not make it for them. */
+  "notifyRetentionDays",
+  /* N-05 — the ceiling the committee set in advance: above this many
+     outbound messages per account per week, the settings failed, not the
+     reader. The sweep holds back rather than asking people to filter. */
+  "notifyWeeklyCap",
+  /* The escalator: an unread message climbs one severity step after this
+     many days instead of being sent again. Re-sending teaches people to
+     ignore it; climbing teaches them it counts. Zero disables it. */
+  "notifyEscalateDays",
 ]);
 const BOOLEAN = new Set(["autoRag", "gateLock", "ccb", "capacityAlerts", "benefitTrack"]);
 const TEXT = new Set(["cadence", "orgName", "statusDate",
   // R-01 — the hosts an evidence link may point at, comma-separated
-  "documentHosts"]);
+  "documentHosts",
+  /* N-05 — the hosts an outbound webhook may address. Closed by default,
+     exactly like documentHosts: an unconfigured control that waves things
+     through is the failure the committee blocked the product over. */
+  "notifyHosts"]);
 
 r.patch("/settings", async (req, res, next) => {
   try {

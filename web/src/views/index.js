@@ -139,6 +139,10 @@ const myOpenActions = () =>
        hands it every unowned action in the book. */
     .filter((a) => App.me.personId && a.ownerId === App.me.personId));
 const weekDigest = () => liveFetch("digest", () => api.get("/digest"), (r) => r.entries);
+/* N-05 — ma boîte. Elle ne lit pas le livre : le serveur filtre sur mon
+   compte et rien d'autre, et le client n'a donc rien à filtrer non plus. */
+const myInbox = () => liveFetch("inbox", () => api.get("/auth/notifications?limit=80"),
+  (r) => (r.items || []).map((n) => ({ ...n, unread: !n.readAt })));
 
 /* ── first-run: the empty production book (adoption committee I1) ─────
    An empty book must read as "the rollout has begun", never as a broken
@@ -328,6 +332,77 @@ Views.portfolio = (db) => {
    One screen answering "what must I do", assembled from data the
    bootstrap already carries plus one actions call. Every row deep-links;
    every list has an honest empty state. */
+/* ── N-05 · le centre de notification ─────────────────────────────────
+   Trois choses seulement s'y font : voir ce qui m'attend, marquer lu, et
+   suivre le lien vers l'objet. Agir sur l'objet passe par sa propre
+   route, avec son contrôle d'autorité et son audit — un centre qui
+   écrirait par un chemin parallèle serait un contournement de rbac.js
+   déguisé en commodité. */
+const SEV_TONE = { urgent: "tag-red", attention: "tag-amber", info: "tag-out" };
+
+Views.inbox = () => {
+  const items = myInbox();
+  const failed = items.failed;
+  const unread = items.filter((n) => n.unread);
+  const shown = App.ui.inboxAll ? items : unread;
+
+  const openIt = (n) => {
+    /* Marquer lu et aller voir : deux gestes que personne ne veut faire
+       séparément. La lecture ne change que MA ligne. */
+    if (n.unread) {
+      api.patch("/auth/notifications/" + n.id, {})
+        .then(() => { delete live.data.inbox; App.emit(); })
+        .catch(() => {});
+    }
+    const to = { meeting_action: "#/meetings", document: "#/documents",
+      change_request: "#/change", project: "#/project/" + n.entityId,
+      raid_item: "#/risk", milestone: "#/schedule" }[n.entity];
+    if (to) go(to);
+  };
+
+  return h("div", null,
+    kpiStrip([
+      { label: t("Unread"), value: String(unread.length),
+        note: failed ? t("could not be loaded") : t("addressed to you"), accent: unread.length > 0 },
+      { label: t("Needs attention"), value: String(unread.filter((n) => n.severity !== "info").length),
+        note: t("attention or urgent") },
+      { label: t("In the box"), value: String(items.length), note: t("kept for the retention period") },
+    ]),
+    sectionHead(t("What is waiting for you"),
+      unread.length ? null : t("Nothing unread — this is what a quiet week looks like."),
+      unread.length
+        ? h("button", { class: "btn btn-sm", onClick: () => {
+            /* La boîte n'est pas une collection du livre : elle vit dans
+               le cache `live`, qu'on vide pour la relire. */
+            api.post("/auth/notifications/read-all", {})
+              .then(() => { delete live.data.inbox; App.emit(); })
+              .catch(() => toast(t("That did not go through"), "", true));
+          } }, t("Mark all read"))
+        : null),
+    h("label", { class: "small", style: "display:flex;gap:8px;align-items:center;margin:6px 0 12px" },
+      h("input", { type: "checkbox", checked: !!App.ui.inboxAll,
+        onChange: (e) => App.set({ inboxAll: e.target.checked }) }),
+      t("Show what I have already read")),
+
+    shown.length === 0
+      ? emptyState(t("Nothing here"),
+          t("Messages arrive when something is due, blocked, or owed to you. Your subscriptions decide what also reaches you by email."))
+      : h("div", { class: "list" }, ...shown.map((n) => h("div", {
+          class: "list-row linkish", tabindex: 0,
+          onClick: () => openIt(n), onKeydown: (e) => e.key === "Enter" && openIt(n),
+          style: n.unread ? "font-weight:600" : "opacity:.72",
+        },
+        tag(t(n.severity), SEV_TONE[n.severity] ?? "tag-out"),
+        h("div", { style: "min-width:0;flex:1" },
+          h("div", { class: "small truncate" }, tData(n.subject)),
+          h("div", { class: "xs muted" },
+            fmtDate(String(n.at).slice(0, 10)),
+            n.onBehalfOf ? " · " + t("on behalf of ") + n.onBehalfOf : "",
+            n.state === "queued" ? " · " + t("not sent yet") : "")),
+        n.unread ? tag(t("new"), "tag-out") : null))),
+  );
+};
+
 Views.my = (db) => {
   const me = App.me.personId;
   /* An account with no person owns nothing. Comparing against a null

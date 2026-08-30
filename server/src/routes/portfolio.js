@@ -85,6 +85,11 @@ const num = (v, fallback = 0) => {
 r.get("/bootstrap", async (req, res, next) => {
   try {
     const db = await loadPortfolio(req.user);
+    /* N-05 — le compteur du centre. Une seule ligne, sur MA boîte : pas
+       une lecture du livre, et rien qui dépende d'un périmètre. */
+    const unread = await many(
+      `SELECT count(*)::int AS n FROM notification WHERE user_id = $1 AND read_at IS NULL`,
+      [req.user.id]);
     res.json({
       db,
       me: {
@@ -93,6 +98,7 @@ r.get("/bootstrap", async (req, res, next) => {
         actingFor: req.user.actingForUserId ?? null,
         actingForPersonId: req.user.actingForPersonId ?? null,
         locale: req.user.locale ?? "", notifyPref: req.user.notifyPref ?? "immediate",
+        unread: unread[0]?.n ?? 0,
         grants: {
           programmes: [...req.user.grants.programmes],
           sites: [...req.user.grants.sites],

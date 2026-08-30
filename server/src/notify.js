@@ -53,14 +53,72 @@ async function resolveRecipient(userRow) {
 const inLocale = (msg, locale) => say(msg, locale === "fr" ? "fr" : "en");
 
 /** Queue one message. Silently idempotent on the dedupe key. */
-export async function queue({ userId, email, kind, subject, body, entity, entityId, dedupeKey }) {
+export async function queue({ userId, email, kind, subject, body, entity, entityId, dedupeKey,
+                              severity = "info", groupKey = "", locale = "", onBehalfOf = null }) {
   if (!email) return false;
+  /* N-05 — the retention date is stamped at the moment the message is
+     written, from the setting the sponsor decided. No setting, no date,
+     and the purge later declines to guess. */
   const r = await query(
-    `INSERT INTO notification (user_id, email, kind, subject, body, entity, entity_id, dedupe_key)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+    `INSERT INTO notification (user_id, email, kind, subject, body, entity, entity_id,
+                               dedupe_key, severity, group_key, locale, on_behalf_of, expires_on)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,
+             (SELECT CASE WHEN coalesce(nullif(value #>> '{}', '')::int, 0) > 0
+                          THEN CURRENT_DATE + (value #>> '{}')::int
+                     END
+                FROM app_setting WHERE key = 'notifyRetentionDays'))
      ON CONFLICT (dedupe_key) DO NOTHING`,
-    [userId ?? null, email, kind, subject, body, entity ?? "", entityId ?? "", dedupeKey]);
+    [userId ?? null, email, kind, subject, body, entity ?? "", entityId ?? "", dedupeKey,
+     severity, groupKey, locale, onBehalfOf]);
   return (r.rowCount ?? 0) > 0;
+}
+
+/**
+ * G-13 — the purge, and its refusal to guess.
+ *
+ * The table keeps the recipient's address, the subject AND the body. A
+ * notification centre multiplies that volume by a factor nobody can bound
+ * in advance, so the committee refused to ship the centre without its
+ * broom. How long "who was told what" is kept is a sponsor decision: with
+ * no retention written down, this declines and says which setting is
+ * missing, on the pattern of documentHosts.
+ */
+export async function purge() {
+  /* `value` est du jsonb : #>> '{}' rend le scalaire en texte, quel que
+     soit qu'il ait été écrit comme nombre ou comme chaîne. */
+  const s = await many(`SELECT value #>> '{}' AS v FROM app_setting WHERE key = 'notifyRetentionDays'`);
+  const days = Number(s[0]?.v ?? 0);
+  if (!Number.isFinite(days) || days <= 0) {
+    return { removed: 0, skipped: "no retention decided — set notifyRetentionDays in Administration" };
+  }
+  /* Delivered messages only. Something still queued has not been said to
+     anybody yet, and deleting it would lose the telling rather than the
+     record of it. */
+  const r = await query(
+    `DELETE FROM notification
+      WHERE state IN ('sent', 'suppressed', 'failed')
+        AND expires_on IS NOT NULL AND expires_on < CURRENT_DATE`);
+  return { removed: r.rowCount ?? 0, retentionDays: days };
+}
+
+/**
+ * The escalator — the one mechanism in this lot that treats the cause.
+ *
+ * An unread message that is sent again teaches people to ignore it. One
+ * that climbs a severity step teaches them it counts. Nothing is re-sent
+ * here: only the standing of what is already in the box changes.
+ */
+export async function escalate() {
+  const s = await many(`SELECT value #>> '{}' AS v FROM app_setting WHERE key = 'notifyEscalateDays'`);
+  const days = Number(s[0]?.v ?? 0);
+  if (!Number.isFinite(days) || days <= 0) return { raised: 0 };
+  const r = await query(
+    `UPDATE notification
+        SET severity = CASE severity WHEN 'info' THEN 'attention' ELSE 'urgent' END
+      WHERE read_at IS NULL
+        AND severity <> 'urgent'
+        AND at < now() - ($1::int * interval '1 day')`, [days]);
+  return { raised: r.rowCount ?? 0, afterDays: days };
 }
 
 /**
@@ -166,11 +224,25 @@ export async function deliver(send, { limit = 50 } = {}) {
     `WITH last_sent AS (
        SELECT user_id, max(sent_at) AS at FROM notification
         WHERE state = 'sent' GROUP BY user_id
+     ),
+     /* N-05 — le silence de nuit, lu dans le fuseau du SITE de la
+        personne et non du serveur : une équipe de São Paulo ne dort pas
+        aux heures de Zurich. Un message émis pendant le silence n'est pas
+        supprimé, il attend le matin. « urgent » passe, parce qu'un
+        silence qu'on ne peut pas percer devient un silence qu'on
+        désactive. */
+     local AS (
+       SELECT u.id AS user_id, u.quiet_from, u.quiet_to,
+              extract(hour FROM (now() + (coalesce(s.tz_offset, 0) || ' hours')::interval))::int AS hour
+         FROM app_user u
+         LEFT JOIN person p ON p.id = u.person_id
+         LEFT JOIN site   s ON s.id = p.site_id
      )
      SELECT n.id, n.email, n.subject, n.body
        FROM notification n
        LEFT JOIN app_user u ON u.id = n.user_id
        LEFT JOIN last_sent l ON l.user_id = n.user_id
+       LEFT JOIN local q ON q.user_id = n.user_id
       WHERE n.state = 'queued'
         AND coalesce(u.notify_pref, 'immediate') <> 'off'
         AND (
@@ -178,6 +250,15 @@ export async function deliver(send, { limit = 50 } = {}) {
           OR l.at IS NULL
           OR (u.notify_pref = 'daily'  AND l.at < now() - interval '1 day')
           OR (u.notify_pref = 'weekly' AND l.at < now() - interval '7 days')
+        )
+        AND (
+          n.severity = 'urgent'
+          OR q.quiet_from IS NULL
+          /* la fenêtre peut enjamber minuit : 22 → 6 */
+          OR NOT CASE WHEN q.quiet_from <= q.quiet_to
+                      THEN q.hour >= q.quiet_from AND q.hour < q.quiet_to
+                      ELSE q.hour >= q.quiet_from OR  q.hour < q.quiet_to
+                 END
         )
       ORDER BY n.at LIMIT $1`, [limit]);
   let sent = 0, failed = 0;

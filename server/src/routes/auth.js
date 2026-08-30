@@ -276,4 +276,151 @@ r.get("/oidc/callback", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+/* ── le centre de notification (N-05) ──────────────────────────────────
+   Ma boîte. Elle vit ici, sur les routes du compte, et non sur celles de
+   l'administration — où la seule route de lecture existante était montée,
+   ce qui voulait dire que le destinataire ne pouvait pas lire ce qui lui
+   était adressé.
+
+   Ces routes filtrent sur `user_id = req.user.id`, un point. Jamais
+   `projectScopeSql`, jamais une jointure sur le livre : c'est ce qui rend
+   le centre structurellement incapable de fuir. Il ne lit pas le
+   portefeuille, il lit une boîte. La redirection vers le suppléant ayant
+   déjà eu lieu à la mise en file, le suppléant lit sa propre boîte et non
+   celle de l'absent — et `on_behalf_of` lui dit au nom de qui.
+
+   Le centre n'ouvre AUCUNE voie d'écriture nouvelle : on y marque lu, on
+   y suit un lien. Agir sur l'objet passe par sa route, avec son contrôle
+   d'autorité et son audit. Un centre qui écrirait par un chemin parallèle
+   serait un contournement de rbac.js déguisé en commodité. */
+
+r.get("/notifications", async (req, res, next) => {
+  try {
+    const unreadOnly = req.query.unread === "1";
+    const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 50));
+    const rows = await many(
+      `SELECT n.id, n.at, n.kind, n.subject, n.body, n.entity, n.entity_id,
+              n.severity, n.group_key, n.read_at, n.state, n.on_behalf_of,
+              p.name AS on_behalf_of_name
+         FROM notification n
+         LEFT JOIN person p ON p.id = n.on_behalf_of
+        WHERE n.user_id = $1 ${unreadOnly ? "AND n.read_at IS NULL" : ""}
+        ORDER BY n.at DESC
+        LIMIT $2`, [req.user.id, limit]);
+    const counts = await many(
+      `SELECT count(*) FILTER (WHERE read_at IS NULL)::int AS unread,
+              count(*) FILTER (WHERE read_at IS NULL AND severity = 'urgent')::int AS urgent,
+              count(*)::int AS total
+         FROM notification WHERE user_id = $1`, [req.user.id]);
+    res.json({
+      unread: counts[0]?.unread ?? 0,
+      urgent: counts[0]?.urgent ?? 0,
+      total: counts[0]?.total ?? 0,
+      items: rows.map((n) => ({
+        id: Number(n.id), at: n.at, kind: n.kind, subject: n.subject, body: n.body,
+        entity: n.entity, entityId: n.entity_id, severity: n.severity,
+        groupKey: n.group_key, readAt: n.read_at, state: n.state,
+        onBehalfOf: n.on_behalf_of_name ?? null,
+      })),
+    });
+  } catch (e) { next(e); }
+});
+
+/** Marquer lu — le mien seulement, et « lu » n'est pas « envoyé ». */
+r.patch("/notifications/:id", async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) throw new HttpError(400, "No such message");
+    const r0 = await query(
+      `UPDATE notification SET read_at = coalesce(read_at, now())
+        WHERE id = $1 AND user_id = $2`, [id, req.user.id]);
+    if (!r0.rowCount) throw new HttpError(404, "No such message");
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
+/** Tout marquer lu — le geste que tout le monde fait en revenant. */
+r.post("/notifications/read-all", async (req, res, next) => {
+  try {
+    const r0 = await query(
+      `UPDATE notification SET read_at = now()
+        WHERE user_id = $1 AND read_at IS NULL`, [req.user.id]);
+    res.json({ ok: true, marked: r0.rowCount ?? 0 });
+  } catch (e) { next(e); }
+});
+
+/* Les abonnements : ce qui SORT vers moi. Le centre lui-même n'est pas
+   abonnable — tout ce qui m'est adressé y arrive, toujours, sinon
+   quelqu'un qui se désabonne de tout ne pourrait plus constater ce qu'il
+   a manqué. */
+r.get("/subscriptions", async (req, res, next) => {
+  try {
+    const rows = await many(
+      `SELECT id, kind, scope_kind, scope_id, min_severity, channel, cadence, active, row_version
+         FROM notification_subscription WHERE user_id = $1 ORDER BY id`, [req.user.id]);
+    res.json({ subscriptions: rows.map((s) => ({
+      id: s.id, kind: s.kind, scopeKind: s.scope_kind, scopeId: s.scope_id,
+      minSeverity: s.min_severity, channel: s.channel, cadence: s.cadence,
+      active: s.active, version: s.row_version,
+    })) });
+  } catch (e) { next(e); }
+});
+
+r.post("/subscriptions", async (req, res, next) => {
+  try {
+    const b = req.body ?? {};
+    const kind = String(b.kind ?? "*");
+    const scopeKind = ["portfolio", "programme", "site", "project"].includes(b.scopeKind)
+      ? b.scopeKind : "portfolio";
+    const scopeId = scopeKind === "portfolio" ? "" : String(b.scopeId ?? "");
+    if (scopeKind !== "portfolio" && !scopeId) {
+      throw new HttpError(400, "A programme, site or project subscription needs to name one");
+    }
+    const minSeverity = ["info", "attention", "urgent"].includes(b.minSeverity) ? b.minSeverity : "info";
+    const channel = ["email", "outbound"].includes(b.channel) ? b.channel : "email";
+    const cadence = ["immediate", "daily", "weekly"].includes(b.cadence) ? b.cadence : "immediate";
+    const id = "SUB-" + req.user.id + "-" + Date.now().toString(36);
+    await query(
+      `INSERT INTO notification_subscription
+         (id, user_id, kind, scope_kind, scope_id, min_severity, channel, cadence)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       ON CONFLICT (user_id, kind, scope_kind, scope_id, channel)
+       DO UPDATE SET min_severity = EXCLUDED.min_severity, cadence = EXCLUDED.cadence,
+                     active = true, row_version = notification_subscription.row_version + 1`,
+      [id, req.user.id, kind, scopeKind, scopeId, minSeverity, channel, cadence]);
+    res.status(201).json({ ok: true });
+  } catch (e) { next(e); }
+});
+
+r.delete("/subscriptions/:id", async (req, res, next) => {
+  try {
+    const r0 = await query(
+      `DELETE FROM notification_subscription WHERE id = $1 AND user_id = $2`,
+      [req.params.id, req.user.id]);
+    if (!r0.rowCount) throw new HttpError(404, "No such subscription");
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
+/** Les heures pendant lesquelles je ne veux rien recevoir, sauf urgent. */
+r.patch("/quiet-hours", async (req, res, next) => {
+  try {
+    const b = req.body ?? {};
+    const hour = (v) => {
+      if (v === null || v === undefined || v === "") return null;
+      const n = Number(v);
+      if (!Number.isInteger(n) || n < 0 || n > 23) throw new HttpError(400, "An hour is 0 to 23");
+      return n;
+    };
+    const from = hour(b.from), to = hour(b.to);
+    if ((from === null) !== (to === null)) {
+      throw new HttpError(400, "Quiet hours need both a start and an end, or neither");
+    }
+    await query(
+      `UPDATE app_user SET quiet_from = $2, quiet_to = $3, row_version = row_version + 1
+        WHERE id = $1`, [req.user.id, from, to]);
+    res.json({ ok: true, from, to });
+  } catch (e) { next(e); }
+});
+
 export default r;

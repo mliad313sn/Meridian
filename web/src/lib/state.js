@@ -273,7 +273,7 @@ export function reportError(e, context) {
 /* ── routing ──────────────────────────────────────────────────────── */
 
 export const ROUTES = [
-  "my", "portfolio", "roadmap", "pipeline", "programmes", "mysite", "project",
+  "my", "inbox", "portfolio", "roadmap", "pipeline", "programmes", "mysite", "project",
   "schedule", "board", "risk", "budget", "change", "resources", "meetings",
   "documents", "reports", "locations", "admin",
 ];

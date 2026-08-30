@@ -51,6 +51,12 @@ for (const f of clientFiles) {
        limit are single-field switches whose last value is the intended
        one. They are excluded deliberately, not overlooked. */
     if (/\/admin\/(settings|columns)/.test(path)) continue;
+    /* Marquer un message lu, et régler ses heures de silence, ne sont pas
+       davantage des lectures-modifications-écritures : `notification`
+       n'est pas versionnée, marquer lu est idempotent — `coalesce(read_at,
+       now())` — et deux onglets qui le font en même temps veulent la même
+       chose. Exclus délibérément, comme au-dessus. */
+    if (/\/auth\/(notifications|quiet-hours)/.test(path)) continue;
     if (!/\bversion\b\s*:/.test(args)) {
       console.log(`  ✖ ${f.split("/").pop().padEnd(20)} ${path}`);
       problems++;

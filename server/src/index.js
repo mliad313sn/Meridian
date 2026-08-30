@@ -14,7 +14,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { existsSync } from "node:fs";
 
-import { connect, migrate, engine, close } from "./db.js";
+import { connect, migrate, engine, close, many, query } from "./db.js";
+import { sweep as notifySweep, purge, escalate } from "./notify.js";
 import { attachUser, requireUser, requirePasswordChanged, sweepSessions, HttpError } from "./auth.js";
 import authRoutes from "./routes/auth.js";
 import portfolioRoutes from "./routes/portfolio.js";
@@ -248,8 +249,37 @@ export async function start({ port = process.env.PORT || 4173 } = {}) {
   const sweeper = setInterval(() => sweepSessions().catch(() => {}), 15 * 60 * 1000);
   sweeper.unref?.();
 
+  /* N-05 — le balayage s'exécute enfin de lui-même. Il ne partait que si
+     un administrateur cliquait, ce qui veut dire que rien ne partait : on
+     ne demande pas à quelqu'un de se souvenir chaque heure de rappeler
+     aux autres ce qu'ils ont oublié.
+
+     Un verrou consultatif PostgreSQL garde le tour : deux instances
+     derrière un répartiteur ne doivent pas doubler les messages. PGlite
+     n'a qu'une connexion et n'en a pas besoin, mais l'appel y est sans
+     effet plutôt qu'en erreur.
+
+     L'ordre compte : escalader ce qui traîne, chercher ce qu'il faut
+     dire, puis balayer ce qui a fait son temps. */
+  const LOCK = 774_155_001;         // arbitraire, propre à ce tour
+  const hourly = setInterval(async () => {
+    try {
+      const got = await many(`SELECT pg_try_advisory_lock($1) AS ok`, [LOCK]).catch(() => [{ ok: true }]);
+      if (!got[0]?.ok) return;
+      try {
+        await escalate();
+        await notifySweep();
+        await purge();
+      } finally {
+        await query(`SELECT pg_advisory_unlock($1)`, [LOCK]).catch(() => {});
+      }
+    } catch { /* un tour manqué se rattrape au suivant */ }
+  }, 60 * 60 * 1000);
+  hourly.unref?.();
+
   const stop = async () => {
     clearInterval(sweeper);
+    clearInterval(hourly);
     await new Promise((r) => server.close(r));
     await close();
   };
