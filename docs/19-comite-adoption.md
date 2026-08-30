@@ -306,7 +306,18 @@ ci-dessus, publié à chaque construction.
 
 ---
 
-### A-06 · Le nombre qui décide de l'argent n'est expliqué nulle part
+### A-06 · Le nombre qui décide de l'argent — **LEVÉE le 30/08/2026**
+
+**Fait.** Chaque ligne portant un score montre sa décomposition au point
+d'usage : *adéquation + valeur + (6 − risque) + (6 − effort)*, avec les
+quatre notes de cette ligne, et la règle écrite en toutes lettres — *le
+risque et l'effort font BAISSER le score*. Une ligne sans score dit
+pourquoi, et rappelle qu'elle se place en dernier et non en pire. Le
+concept a par ailleurs rejoint la page d'aide (cinquième entrée, A-02),
+parce qu'un arbitrage budgétaire qu'on ne sait pas expliquer dans la
+salle n'est pas un arbitrage : c'est un verdict.
+
+*Constat d'origine :*
 
 **Constat.** L'écran de priorisation classe les projets par un score et
 trace une ligne de flottaison budgétaire. Le produit n'explique nulle
@@ -339,7 +350,22 @@ lecteurs non formés sur trois** reconstituent la formule à partir du seul
 
 ---
 
-### A-07 · Vingt-cinq refus sur vingt-huit ne disent pas quoi faire ensuite
+### A-07 · Les refus qui ne disaient pas quoi faire — **LEVÉE le 30/08/2026**
+
+**Fait.** Les vingt-huit motifs de refus de `shared/rbac.js` nomment
+désormais l'acteur qui prend le relais ou l'action qui reste ouverte, et
+leurs traductions portent la même suite. Les deux derniers — « ce projet
+n'est pas dans votre périmètre d'autorité » et « aucun projet dans le
+périmètre », c'est-à-dire les plus fréquents du produit — ont été traités
+en second temps, après que le comité produit les eut relevés (P-01).
+
+**Mesure de clôture** : un test (`server/test/security.test.js`) parcourt
+neuf refus représentatifs dans les deux langues et échoue si l'un d'eux
+ne nomme ni acteur ni action. Un chef de site à qui l'on dit seulement
+« lecture seule » range le problème ; à qui l'on dit « ouvrez-y une
+préoccupation, votre bureau de programme la verra » le porte.
+
+*Constat d'origine :*
 
 **Constat.** Le serveur refuse bien, et il refuse en français. Il dit
 presque toujours **ce qui est**, presque jamais **ce qui reste ouvert**.
