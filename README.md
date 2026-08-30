@@ -46,12 +46,15 @@ DATABASE_URL=postgres://user:pass@host:5432/meridian npm start
 Other commands:
 
 ```bash
-npm test              # 271 tests
-npm run audit         # fitness gates: routes, CRUD+audit, versions, controls, i18n
-npm run verify        # tests + build + the five audit gates
+npm test              # 315 tests
+npm run audit         # six gates: routes, CRUD+audit, versions, controls, language, field help
+npm run verify        # tests + build + the six gates + a dependency audit
 npm run sweep         # 286 use cases × 4 roles + 72 view renders, on a fresh instance
 npm run build         # build the client into web/dist
 npm run package:installer  # dist/MeridianSetup.exe — Windows service installer
+npm run training      # a separate practice instance on :4180 — never touches the real book
+npm run training -- --reset   # put it back to how it started
+npm run training -- --drop    # erase it
 npm run dev:web       # Vite dev server with HMR, proxying /api to :4173
 bash scripts/restart.sh   # restart the dev server *gracefully* — see the note below
 ```
@@ -103,13 +106,13 @@ server/          src/db.js         pg | PGlite, migrations, optimistic concurren
                  src/auth.js       scrypt, server-side sessions
                  src/audit.js      append-only, inside the mutation's transaction
                  src/portfolio.js  rows → the shape the engine reads
-                 src/routes/       auth · portfolio · meetings · admin
-                 migrations/       ordered SQL (001–016, applied at boot)
-                 test/             271 tests
+                 src/routes/       auth · portfolio · meetings · admin · import
+                 migrations/       ordered SQL (001–022, applied at boot)
+                 test/             315 tests
 
 web/             src/ui/kit.js     h() builder, dialogs, tables, charts (from v4)
                  src/lib/          api client, state, permission mirror
-                 src/views/        the 18 screens
+                 src/views/        the 20 screens
                  src/styles.css    the "Instrument" design system, light + dark
 ```
 
@@ -146,6 +149,11 @@ never a silent overwrite.
 | [`docs/16-comite-independant.md`](docs/16-comite-independant.md) | Independent committee (FR) — 15 réserves, toutes **levées** avec mesures datées, boucle de re-test |
 | [`docs/17-instructions-reserves.md`](docs/17-instructions-reserves.md) | The executable commands that addressed them |
 | [`docs/18-amdec-recette.md`](docs/18-amdec-recette.md) | Final AMDEC acceptance — **recette prononcée** 29/08/2026 |
+| [`docs/19-comite-adoption.md`](docs/19-comite-adoption.md) | Adoption & ergonomics (FR) — 12 réserves, **toutes levées** : manuel, premiers pas, terrain |
+| [`docs/20-comite-infosec-grc.md`](docs/20-comite-infosec-grc.md) | InfoSec & GRC (FR) — 17 constats, ISO 27001 / NIST CSF ; la part produit est faite |
+| [`docs/21-campagne-securite.md`](docs/21-campagne-securite.md) | Security campaign (FR) — 11 defects fixed, 6 on the register |
+| [`docs/22-comite-innovation.md`](docs/22-comite-innovation.md) | Innovation (FR) — AI under contract, notification centre, five ideas refused |
+| [`docs/23-comite-produit.md`](docs/23-comite-produit.md) | Product committee (FR) — the charter, the criteria, and every open item on one list |
 
 ---
 
