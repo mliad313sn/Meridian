@@ -63,26 +63,15 @@ if (wants("--drop")) {
  * le problème devant ses huit participants. On vérifie donc que le
  * terrain porte réellement ce qu'il faut pour s'en servir.
  */
+const STAMP = join(DIR, ".seeded");
+
 function looksInstalled() {
-  if (!existsSync(DIR)) return false;
-  /* PGlite écrit son PG_VERSION à la fin de l'initialisation, et le seed
-     laisse un fichier de données bien plus gros qu'une base vide. Un
-     terrain amorcé pèse quelques mégaoctets ; une base à moitié migrée,
-     beaucoup moins. */
-  try {
-    const base = join(DIR, "base");
-    if (!existsSync(join(DIR, "PG_VERSION")) && !existsSync(base)) return false;
-    let bytes = 0;
-    const walk = (d) => {
-      for (const e of fs.readdirSync(d, { withFileTypes: true })) {
-        const p = join(d, e.name);
-        if (e.isDirectory()) walk(p);
-        else bytes += fs.statSync(p).size;
-      }
-    };
-    walk(DIR);
-    return bytes > 8 * 1024 * 1024;
-  } catch { return false; }
+  /* Un témoin écrit APRÈS un seed réussi, et jamais avant. La première
+     version pesait le répertoire, en supposant qu'un terrain amorcé est
+     plus gros qu'une base vide : faux — une base migrée sans données pèse
+     déjà vingt-neuf mégaoctets. Deviner l'état d'une installation à sa
+     taille était une mauvaise idée ; il suffisait de l'écrire. */
+  return existsSync(STAMP);
 }
 
 if (wants("--reset") || !looksInstalled()) {
@@ -102,6 +91,9 @@ if (wants("--reset") || !looksInstalled()) {
   });
   seed.on("exit", (code) => {
     if (code !== 0) { console.error("  ! l'installation a échoué"); process.exit(code ?? 1); }
+    /* Le témoin, une fois le seed VRAIMENT terminé : c'est lui, et rien
+       d'autre, qui distingue un terrain utilisable d'un dossier. */
+    fs.writeFileSync(STAMP, new Date().toISOString(), "utf8");
     start();
   });
 } else {
