@@ -47,8 +47,8 @@ Other commands:
 
 ```bash
 npm test              # 334 tests
-npm run audit         # seven gates: routes, CRUD+audit, versions, controls, language, field help, kit imports
-npm run verify        # tests + build + the seven gates + a dependency audit
+npm run audit         # eight gates: routes, CRUD+audit, versions, controls, language, field help, kit imports, view render
+npm run verify        # tests + build + the eight gates + a dependency audit
 npm run sweep         # 286 use cases × 4 roles + 72 view renders, on a fresh instance
 npm run build         # build the client into web/dist
 npm run package:installer  # dist/MeridianSetup.exe — Windows service installer

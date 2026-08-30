@@ -15,7 +15,8 @@
     "restore": "node scripts/restore-archive.mjs",
     "test": "node --test \"server/test/**/*.test.js\"",
     "test:watch": "node --test --watch \"server/test/**/*.test.js\"",
-    "audit": "node scripts/audit/route-match.mjs && node scripts/audit/crud-audit.mjs && node scripts/audit/version-audit.mjs && node scripts/audit/control-audit.mjs && node scripts/audit/i18n-audit.mjs && node scripts/audit/help-coverage.mjs && node scripts/audit/kit-imports.mjs",
+    "audit": "node scripts/audit/route-match.mjs && node scripts/audit/crud-audit.mjs && node scripts/audit/version-audit.mjs && node scripts/audit/control-audit.mjs && node scripts/audit/i18n-audit.mjs && node scripts/audit/help-coverage.mjs && node scripts/audit/kit-imports.mjs && npm run audit:views",
+    "audit:views": "node scripts/audit/view-render.mjs",
     "verify": "npm test && npm run build && npm run audit && npm run audit:deps",
     "sweep": "node scripts/audit/usecase-sweep.mjs",
     "package": "node scripts/package/build-exe.mjs",
@@ -31,6 +32,7 @@
   },
   "devDependencies": {
     "esbuild": "^0.28.2",
+    "jsdom": "^29.1.1",
     "node-windows": "^1.0.0-beta.8",
     "postject": "^1.0.0-alpha.6",
     "vite": "^6.0.7"

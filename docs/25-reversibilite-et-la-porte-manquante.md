@@ -196,11 +196,37 @@ vérifie que tout fichier qui les appelle les a nommés dans son import.
 Elle a été éprouvée dans les deux sens : le défaut remis en place, elle
 le nomme avec sa ligne ; retiré, elle se tait.
 
-**Ce qui reste ouvert de ce constat.** F7 ferme les identifiants
-manquants venus de `kit.js`. Elle ne dessine toujours aucune vue. Un
-rendu réel de chaque écran, sous chaque rôle, reste à construire — c'est
-la ligne que ce lot ajoute au carnet plutôt que de la fermer en la
-déclarant fermée.
+## 6bis · F8 — et puis on a dessiné les écrans
+
+F7 ferme un cas particulier : les aides de `kit.js` employées sans
+import. Elle ne dessine toujours aucune vue, et la leçon de F7 était
+précisément qu'une porte qui mesure ce qu'on sait déjà mesurer laisse
+le trou ouvert. **F8 ferme la classe.**
+
+`npm run audit:views` démarre une instance, sème le livre, se connecte
+sous chacun des quatre rôles, et **appelle réellement chaque vue** avec
+le livre réel de ce rôle, dans un DOM réel (jsdom, en dépendance de
+développement), en insérant le nœud produit dans le document. Toute
+exception échoue la porte en nommant l'écran ET le rôle.
+
+```
+  · 20 écrans × 4 rôles
+  · 80 rendus, aucune exception
+```
+
+Éprouvée dans les deux sens, comme F7 : le défaut historique remis en
+place, elle rend quatre lignes — `admin · admin`, `admin · group`,
+`admin · site`, `admin · viewer` — et se tait dès qu'il est retiré.
+
+**Ce qu'elle ne fait pas, et qu'il ne faut pas lui prêter.** Elle ne
+clique rien et ne juge aucune apparence : une vue qui se dessine peut
+encore être fausse. Elle répond à une seule question — « cet écran
+s'ouvre-t-il ? » — à laquelle, jusqu'à cette nuit, personne ne
+répondait.
+
+Vérifié aussi à la main, dans un vrai navigateur, avant d'écrire la
+porte : les 80 rendus sous les quatre rôles. L'administration était le
+seul écran cassé.
 
 ---
 
@@ -208,7 +234,7 @@ déclarant fermée.
 
 ```
 tests      334 / 334
-portes     7  (routes · CRUD+audit · versions · contrôles · langue · aide · imports)
+portes     8  (routes · CRUD+audit · versions · contrôles · langue · aide · imports · rendu)
 migrations 023
 sweep      286 cas × 4 rôles
 audit deps 0 vulnérabilité
