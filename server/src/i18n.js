@@ -40,7 +40,7 @@ const FR = {
     "ce site n'est pas dans vos habilitations — demandez à un administrateur de l'ajouter",
   "that site is outside your grant — ask an administrator, or ask that site's lead to declare it":
     "ce site n'est pas dans vos habilitations — voyez un administrateur, ou le responsable de ce site pour qu'il le déclare",
-  "no project in scope — a concern is raised on a specific project":
+  "no project in scope — this act belongs to a project; open it from the portfolio first":
     "aucun projet dans le périmètre — une préoccupation s'ouvre sur un projet précis",
   "insufficient authority — your programme office holds this one":
     "autorité insuffisante — votre bureau de programme détient celle-ci",

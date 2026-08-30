@@ -98,6 +98,13 @@ step("copying the client, the migrations and the service wrapper");
 cpSync(join(ROOT, "web", "dist"), join(OUT, "web"), { recursive: true });
 cpSync(join(ROOT, "server", "migrations"), join(OUT, "migrations"), { recursive: true });
 
+/* The database prerequisite, handled by the installer rather than by a
+   page of instructions: find PostgreSQL, install it if it is missing and
+   the network allows, create the role and the book with a password nobody
+   had to choose — and fall back to the embedded engine rather than fail
+   half-way. See scripts/package/prepare-db.ps1. */
+copyFileSync(join(ROOT, "scripts", "package", "prepare-db.ps1"), join(OUT, "prepare-db.ps1"));
+
 const winsw = join(ROOT, "node_modules", "node-windows", "bin", "winsw", "winsw.exe");
 if (!existsSync(winsw)) throw new Error("winsw.exe not found — run npm install first");
 copyFileSync(winsw, join(OUT, "MeridianService.exe"));
@@ -121,8 +128,12 @@ writeFileSync(join(OUT, "MeridianService.template.xml"), `<service>
   <executable>__HOME__\\Meridian.exe</executable>
   <workingdirectory>__HOME__</workingdirectory>
   <startmode>Automatic</startmode>
-  <!-- PostgreSQL may still be starting when Windows starts us. -->
-  <depend>postgresql-x64-17</depend>
+  <!-- PostgreSQL may still be starting when Windows starts us — but only
+       if there IS one. The installer writes the service it actually found
+       (or removes the line entirely when the book runs on the embedded
+       engine): a dependency on a service that does not exist stops the
+       whole thing from starting, which is a strange way to fail. -->
+  __PGDEP__
   <logpath>__HOME__\\logs</logpath>
   <log mode="roll-by-size">
     <sizeThreshold>10240</sizeThreshold>
@@ -137,13 +148,19 @@ writeFileSync(join(OUT, "MeridianService.template.xml"), `<service>
 </service>
 `);
 
+/* No DATABASE_URL here on purpose (S-11). The package used to ship
+   postgres:postgres — the most-guessed credential there is, and superuser
+   over the whole cluster. prepare-db.ps1 writes the real connection at
+   install time, with a password nobody had to choose. */
 writeFileSync(join(OUT, "meridian.config.json"), JSON.stringify({
-  DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/meridian_standalone",
   PORT: 4173,
   /* "1" once this is served over HTTPS. Left off while it speaks plain
      HTTP, because a Secure cookie on http:// is dropped by the browser
      and every sign-in silently produces an anonymous session. */
   MERIDIAN_SECURE_COOKIES: "0",
+  /* P-02 — /api/health answers with this, so a report from a site can be
+     tied to a build instead of to a memory of one. */
+  MERIDIAN_VERSION: pkg.version,
 }, null, 2) + "\n");
 
 /* ── 5 · the two administrator commands ───────────────────────────── */
@@ -225,13 +242,21 @@ writeFileSync(join(OUT, "README-INSTALL.txt"), `Meridian IT-PMO ${pkg.version} �
 
 Before installing
 -----------------
-1. PostgreSQL 17 must be running and the database must exist:
-       createdb -U postgres meridian_standalone
-2. Open meridian.config.json and set DATABASE_URL (and PORT, if 4173 is
-   taken). That file is the whole configuration.
-   Set MERIDIAN_SECURE_COOKIES to "1" only once Meridian is served over
-   HTTPS — on plain HTTP a Secure cookie is dropped by the browser and
-   every sign-in quietly produces an anonymous session.
+Nothing. The installer handles its own prerequisites.
+
+  · Node.js is not required — Meridian.exe carries its own runtime.
+  · PostgreSQL is found if it is already there; installed from the
+    official binaries if it is not and the network allows; and if neither
+    is possible, the book runs on the embedded engine (PGlite — the same
+    PostgreSQL, compiled to WebAssembly). The installer says which of the
+    three it did.
+  · The database, its role and its password are created for you. Nobody
+    types a password, and none ships in this package.
+
+The one thing worth deciding afterwards: set MERIDIAN_SECURE_COOKIES to
+"1" once Meridian is served over HTTPS. On plain HTTP a Secure cookie is
+dropped by the browser and every sign-in quietly produces an anonymous
+session, so it stays off until TLS is really in front.
 
 Installing
 ----------
@@ -239,6 +264,18 @@ Right-click Install-Service.cmd and choose "Run as administrator".
 The service registers as "${SERVICE_NAME}", starts immediately, and comes
 back up with Windows. Migrations are applied automatically at every start,
 so an upgrade is: stop, replace the files, start.
+
+Installing without a network
+----------------------------
+   powershell -ExecutionPolicy Bypass -File prepare-db.ps1 -NoDownload
+then Install-Service.cmd. The book runs on the embedded engine, and
+DATABASE_URL can be filled in later — the service reads it at start.
+
+Where the configuration lives
+-----------------------------
+meridian.config.json, written by the installer and kept across upgrades.
+It holds the connection string with a generated password, so the folder
+is locked down to Administrators and SYSTEM at install time.
 
 Using it
 --------

@@ -226,3 +226,42 @@ test("A-07 — chaque refus d'autorité nomme la suite à donner, dans les deux 
   }
   assert.deepEqual(mute, [], "ces refus ne disent pas ce qui reste ouvert");
 });
+
+/* ── N-05 · une cadence offerte est une cadence tenue ────────────── */
+
+test("N-05 — « hebdomadaire » ne reçoit pas comme « immédiat »", async () => {
+  const { queue, deliver } = await import("../src/notify.js");
+  const { query, many } = await import("../src/db.js");
+
+  const pm = await as("siteGRU");
+  const me = (await pm.get("/api/auth/me")).body.user;
+  await pm.patch("/api/auth/preferences", { notifyPref: "weekly" });
+
+  /* Un envoi récent, puis deux messages en file : la personne a demandé un
+     lot par semaine, elle n'en reçoit pas deux dans la minute. */
+  await query(`DELETE FROM notification WHERE user_id = $1`, [me.id]);
+  await query(
+    `INSERT INTO notification (user_id, email, kind, subject, body, state, sent_at, dedupe_key)
+     VALUES ($1, $2, 'digest', 'lot précédent', '', 'sent', now() - interval '2 hours', 'n05-seed')`,
+    [me.id, me.email]);
+  await queue({ userId: me.id, email: me.email, kind: "digest",
+    subject: "Nouveau 1", body: "x", dedupeKey: "n05-a" });
+  await queue({ userId: me.id, email: me.email, kind: "digest",
+    subject: "Nouveau 2", body: "x", dedupeKey: "n05-b" });
+
+  const sentTo = [];
+  const out = await deliver(async ({ subject }) => { sentTo.push(subject); });
+  assert.equal(out.sent, 0, "rien ne part avant l'échéance de la cadence");
+
+  const still = await many(
+    `SELECT count(*)::int AS n FROM notification WHERE user_id = $1 AND state = 'queued'`, [me.id]);
+  assert.equal(still[0].n, 2, "et rien n'est perdu — les messages attendent");
+
+  /* Une fois la semaine écoulée, le lot part. */
+  await query(`UPDATE notification SET sent_at = now() - interval '8 days'
+                WHERE user_id = $1 AND state = 'sent'`, [me.id]);
+  const after = await deliver(async ({ subject }) => { sentTo.push(subject); });
+  assert.ok(after.sent >= 1, "à l'échéance, ce qui attendait part");
+
+  await pm.patch("/api/auth/preferences", { notifyPref: "immediate" });
+});

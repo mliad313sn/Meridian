@@ -11,7 +11,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { mkdirSync, rmSync, writeFileSync, existsSync, statSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync, readFileSync, existsSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -28,6 +28,8 @@ const SERVICE_ID = "MeridianITPMO";
 if (!existsSync(join(PKG, "Meridian.exe"))) {
   throw new Error("dist/Meridian/Meridian.exe is missing — run scripts/package/build-exe.mjs first");
 }
+
+const PKG_VERSION = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).version;
 
 const ps = (script) =>
   execFileSync("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
@@ -123,8 +125,24 @@ echo   restricting who may write here...
 icacls "%TARGET%" /inheritance:r /grant:r "*S-1-5-32-544:(OI)(CI)F" "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-545:(OI)(CI)RX" >nul
 if %errorlevel% neq 0 echo   ! could not restrict the directory — check its permissions by hand
 
+rem The database, before the service that needs it. This finds PostgreSQL,
+rem installs it when it is missing and the network allows, creates the role
+rem and the book with a generated password, and writes the connection into
+rem meridian.config.json — or falls back to the embedded engine and says
+rem so. Nothing here asks the operator to install anything by hand.
+echo.
+echo   preparing the database...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%TARGET%\\prepare-db.ps1" -Target "%TARGET%" -Version "${PKG_VERSION}"
+if %errorlevel% neq 0 echo   ! database preparation reported a problem — see the messages above
+
+rem The service depends on whatever PostgreSQL actually exists, if any.
+rem Declaring a dependency on a service that is not installed keeps the
+rem whole thing from ever starting.
+for /f "usebackq delims=" %%D in (\`powershell -NoProfile -ExecutionPolicy Bypass -Command "$s = Get-Service -Name 'MeridianPostgres','postgresql*' -EA SilentlyContinue | Select-Object -First 1; if ($s -and ((Get-Content '%TARGET%\\meridian.config.json' -Raw) -match 'DATABASE_URL')) { '<depend>' + $s.Name + '</depend>' } else { '<!-- no database service to wait for -->' }"\`) do set "PGDEP=%%D"
+if not defined PGDEP set "PGDEP=<!-- no database service to wait for -->"
+
 echo   pointing the service at %TARGET%...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "(Get-Content '%TARGET%\\MeridianService.template.xml' -Raw).Replace('__HOME__','%TARGET%') | Set-Content -Encoding UTF8 '%TARGET%\\MeridianService.xml'"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "(Get-Content '%TARGET%\\MeridianService.template.xml' -Raw).Replace('__HOME__','%TARGET%').Replace('__PGDEP__','%PGDEP%') | Set-Content -Encoding UTF8 '%TARGET%\\MeridianService.xml'"
 if %errorlevel% neq 0 goto :failed
 
 echo   registering the service...

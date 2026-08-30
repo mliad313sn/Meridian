@@ -118,8 +118,14 @@ export function buildApp() {
 
   app.use(attachUser());
 
+  /* P-02 — la santé dit QUI répond. Sans numéro de version, un constat de
+     terrain ne se rattache à aucun binaire : « c'était corrigé chez nous »
+     et « pas chez moi » ne se départagent qu'ici. La version vient du
+     paquet à la construction ; sur une exécution depuis les sources elle
+     dit « dev ». */
+  const VERSION = process.env.MERIDIAN_VERSION || "dev";
   app.get("/api/health", async (_req, res) => {
-    res.json({ ok: true, engine: engine(), at: new Date().toISOString() });
+    res.json({ ok: true, version: VERSION, engine: engine(), at: new Date().toISOString() });
   });
 
   app.use("/api/auth", authRoutes);

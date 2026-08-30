@@ -20,7 +20,12 @@ const CONFIG = join(BASE, "meridian.config.json");
 if (existsSync(CONFIG)) {
   let cfg;
   try {
-    cfg = JSON.parse(readFileSync(CONFIG, "utf8"));
+    /* Strip a byte-order mark before parsing. Every Windows tool that
+       might touch this file — PowerShell's Set-Content, Notepad, an
+       administrator's editor — writes one by default, and JSON.parse
+       refuses it. The installer avoids writing one; this makes sure a
+       later hand edit cannot silently cost the whole configuration. */
+    cfg = JSON.parse(readFileSync(CONFIG, "utf8").replace(/^﻿/, ""));
   } catch (e) {
     console.error(`meridian.config.json could not be read: ${e.message}`);
     process.exit(2);

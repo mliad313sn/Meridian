@@ -404,8 +404,10 @@ export function can(user, action, resource = {}) {
             resource.project
               ? resource.project.governance_level === "group" && user.role === "site"
                 ? "this is a group-governed project — site level is read-only here; raise a concern on it and your programme office will see it"
-                : "project is outside your authority"
-              : "no project in scope"
+                /* A-07 — les deux refus les plus fréquents du produit
+                   étaient les deux derniers à ne dire que l'état. */
+                : "project is outside your authority — you can read it, and raise a concern on it if it lands on your site"
+              : "no project in scope — this act belongs to a project; open it from the portfolio first"
           );
   }
 }

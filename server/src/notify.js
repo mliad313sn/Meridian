@@ -152,9 +152,34 @@ export async function sweep({ today = new Date().toISOString().slice(0, 10), hor
  */
 export async function deliver(send, { limit = 50 } = {}) {
   if (typeof send !== "function") return { sent: 0, failed: 0, skipped: "no transport configured" };
+  /* N-05 — la cadence choisie décide, et pas seulement « off ».
+     « quotidien » et « hebdomadaire » étaient offerts dans les préférences
+     et ne changeaient rien : tout partait à l'instant, y compris pour qui
+     avait demandé un envoi par semaine. Une préférence qu'on offre sans la
+     tenir coûte plus cher que de ne pas l'offrir — la personne cesse de
+     croire les réglages, puis les messages.
+
+     Un destinataire en cadence différée reçoit au plus un lot par période :
+     rien ne part tant que son dernier envoi n'a pas l'âge qu'il a demandé.
+     Les messages attendent en file, ils ne sont jamais perdus. */
   const rows = await many(
-    `SELECT id, email, subject, body FROM notification
-      WHERE state = 'queued' ORDER BY at LIMIT $1`, [limit]);
+    `WITH last_sent AS (
+       SELECT user_id, max(sent_at) AS at FROM notification
+        WHERE state = 'sent' GROUP BY user_id
+     )
+     SELECT n.id, n.email, n.subject, n.body
+       FROM notification n
+       LEFT JOIN app_user u ON u.id = n.user_id
+       LEFT JOIN last_sent l ON l.user_id = n.user_id
+      WHERE n.state = 'queued'
+        AND coalesce(u.notify_pref, 'immediate') <> 'off'
+        AND (
+          coalesce(u.notify_pref, 'immediate') = 'immediate'
+          OR l.at IS NULL
+          OR (u.notify_pref = 'daily'  AND l.at < now() - interval '1 day')
+          OR (u.notify_pref = 'weekly' AND l.at < now() - interval '7 days')
+        )
+      ORDER BY n.at LIMIT $1`, [limit]);
   let sent = 0, failed = 0;
   for (const m of rows) {
     try {
