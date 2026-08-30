@@ -68,7 +68,27 @@ faire que sur son application incomplète.
 
 ## Réserves — bloquantes
 
-### A-01 · Il n'existe aucun manuel d'utilisation, ni dedans ni à côté
+### A-01 · Le manuel d'utilisation — **LEVÉE le 30/08/2026**
+
+**Fait.** Un manuel qui **vit dans le produit** : atteignable depuis
+l'aide et depuis la palette, découpé **par tâche** et non par écran, dans
+les deux langues. Cinq sections — pour commencer, tenir un projet
+honnête, jalons et preuves, comités et décisions, votre semaine et vos
+absences — et dix-neuf réponses aux questions que les gens posent
+vraiment. Chacune porte un bouton *Montrez-moi* qui ouvre l'écran où le
+geste s'accomplit : une réponse qui n'emmène nulle part est un article,
+pas une aide.
+
+Le comité avait écrit ce qui ne lèverait PAS la réserve — « un fichier
+Markdown de plus dans `docs/` » — et c'est la raison pour laquelle rien
+n'a été ajouté à `docs/`.
+
+**Mesure constatée à l'écran, en français** : 5 sections, 15 boutons
+*Montrez-moi*, 0 mot anglais. Les 77 textes du manuel et des parcours
+sont vérifiés **un par un** par la porte F5 : la construction échoue si
+l'un d'eux repart en anglais.
+
+*Constat d'origine :*
 
 **Constat.** Personne ne peut apprendre Meridian autrement qu'en le
 manipulant ou en demandant à quelqu'un. Il n'existe pas de mode
@@ -272,7 +292,27 @@ première mise en route + la page d'aide entière).
 
 ---
 
-### A-05 · L'aide au champ couvre 38 % des formulaires
+### A-05 · L'aide au champ — **LEVÉE le 30/08/2026**
+
+**Fait.** **88 % des formulaires** portent au moins une aide (cible 80 %)
+et **100 % des champs dont un AUTRE lira la valeur** — motif de refus,
+note de décision, mesure de bénéfice, justification de re-ligne de base.
+Chacune dit ce dont le lecteur futur aura besoin, jamais ce que le champ
+contient : « Note » n'apprend rien à personne ; « le comité relit ceci
+quand il demande pourquoi le chiffre a bougé » change ce qu'on écrit.
+
+**Une correction de méthode avant toute correction de produit.** Le
+premier comptage donnait 41 %. Il était faux : il ne suivait pas les
+champs partagés entre un formulaire de création et son formulaire
+d'édition, où l'aide est écrite une fois dans la fonction commune. Le
+compteur corrigé donnait 73 % — c'est la mesure, pas le produit, qui
+était en cause. Huit aides ont ensuite suffi à dépasser la cible.
+
+**Le comptage est une porte** (`scripts/audit/help-coverage.mjs`, F6) :
+il tourne à chaque construction, et la construction échoue sous les
+cibles. Une mesure qu'on refait à la main ne se refait pas.
+
+*Constat d'origine :*
 
 **Constat.** Là où l'aide au champ existe, elle est excellente — « le
 responsable métier qui veut cela, pas la personne qui le construit »,
@@ -489,7 +529,21 @@ sont produits sur les huit sites et qu'une ligne de base est datée.
 
 ## Réserves — moyennes
 
-### A-09 · Le protocole du comité vit hors du produit
+### A-09 · Le protocole du comité — **LEVÉE le 30/08/2026**
+
+**Fait.** La conduite de séance est **dans l'écran du comité**, au moment
+où elle sert, et elle change avec l'état de l'occurrence : ce qu'il faut
+faire maintenant, jamais ce que l'écran est. Programmée — l'ordre du jour
+se reconstruit à l'ouverture, donc une date déplacée n'est pas un ordre
+du jour perdu. En séance — consigner au fil de l'eau, renvoyer ce qui
+dépasse l'autorité de la salle, et clore, parce que c'est la clôture qui
+fige. Close — le dossier se lit aujourd'hui comme il se lisait dans la
+salle.
+
+**Mesure : 0 clic vers un fichier hors du produit** pour présider une
+réunion. Constaté à l'écran, en français.
+
+*Constat d'origine :*
 
 **Constat.** `docs/05-meeting-animation.md` explique très bien ce qu'un
 président doit faire : ce que l'état `scheduled`, `open`, `closed`
@@ -519,7 +573,24 @@ clôturent une occurrence sans assistance, 3/3.
 
 ---
 
-### A-10 · Il n'existe pas de parcours d'apprentissage par rôle
+### A-10 · Les parcours par rôle — **LEVÉE le 30/08/2026**
+
+**Fait.** **Quatre listes, une par rôle**, atteignables à tout moment
+depuis l'aide — et qui **se cochent sur la donnée réelle**. Le comité
+avait vu juste : le produit possédait déjà exactement ce motif et ne
+l'offrait qu'à l'administrateur, sur un livre vide. Il est maintenant
+étendu, et chaque étape mène à l'écran où elle s'accomplit.
+
+Aucune case ne se coche parce que quelqu'un a cliqué : elles se cochent
+parce que le travail est fait. C'est ce qui les rend utiles à un
+responsable qui veut savoir où en est la prise en main de son équipe —
+une liste qu'on coche à la main ment le lendemain.
+
+**Mesure constatée** : compte de site, 7 étapes, 2 cochées (mot de passe
+choisi, semaine trouvée), 5 en attente — sur des faits, pas sur des
+déclarations. 4 listes sur 4 existent.
+
+*Constat d'origine :*
 
 **Constat.** Ce qui distingue l'apprentissage d'un chef de site de celui
 d'un contrôleur de gestion tient aujourd'hui en trois à quatre lignes de
@@ -548,7 +619,35 @@ neuf de chaque rôle atteint 100 % de sa liste sans assistance humaine.
 
 ---
 
-### A-11 · Il n'existe aucun terrain d'apprentissage
+### A-11 · Le terrain d'apprentissage — **LEVÉE le 30/08/2026**
+
+**Fait.** `npm run training` — une instance à part, sa propre base, son
+propre port, installée en une commande et effacée en une autre
+(`--reset`, `--drop`). Un bandeau permanent la nomme : « Terrain
+d'apprentissage — rien ici ne touche au livre réel. Cassez des choses
+exprès, c'est fait pour. » Quelqu'un qui s'exerce doit pouvoir se tromper
+sans crainte ; quelqu'un qui croit s'exercer sur le livre réel n'ose
+rien, et quelqu'un qui croit le contraire ose trop.
+
+**La mesure exigeait ZÉRO ligne d'audit ajoutée au livre réel.** Il n'y
+avait qu'une façon honnête de la tenir : ne pas écrire dedans. Pas de
+lignes marquées « formation » dans la production — ce serait salir le
+registre dont dépend le contrôle, et il faudrait ensuite les en retirer,
+ce que la piste refuse à juste titre.
+
+**Mesure constatée** : livre de production à **24 lignes d'audit avant**
+la session, **24 après**. Installation et remise à zéro en une commande,
+bien en deçà des dix minutes.
+
+**Deux défauts trouvés en l'essayant pour de vrai**, tous deux corrigés :
+le script tenait un répertoire existant pour une installation faite — une
+installation interrompue laissait un terrain sans comptes que le
+formateur aurait découvert devant ses participants ; et ma première
+vérification pesait le répertoire, en supposant qu'un terrain amorcé est
+plus gros qu'une base vide, ce qui est faux. Un témoin écrit après un
+amorçage réussi a remplacé la devinette.
+
+*Constat d'origine :*
 
 **Constat.** On ne peut apprendre Meridian que sur des données de
 démonstration entièrement fausses, ou sur le livre réel dont chaque
@@ -577,7 +676,25 @@ par comptage sur `audit_event` avant et après.
 
 ---
 
-### A-12 · Rien ne prépare ni ne désigne le référent local
+### A-12 · Le référent local — **LEVÉE le 30/08/2026**
+
+**Fait.** Un référent se nomme par site (migration 022), et l'aide
+affiche **celui du site du lecteur avant de proposer le groupe** :
+« Bloqué ? Demandez à X, le référent Meridian de Houndé — avant le
+groupe, parce qu'il est sur votre site et connaît votre travail. »
+
+Le produit renvoyait jusqu'ici vers « un administrateur », c'est-à-dire
+vers personne en particulier — et sur un site en rotation, vers personne
+du tout. La personne qu'on appelle quand on ne sait pas est la première
+infrastructure d'adoption d'un outil multi-sites, et elle n'existait
+nulle part dans le schéma.
+
+**Mesure constatée** : sans référent nommé, l'aide le dit franchement et
+indique où en désigner un, plutôt que de renvoyer en silence vers le
+groupe. **Le renseignement des huit sites reste un acte du mandant** —
+le produit offre le champ, il ne peut pas nommer les gens à sa place.
+
+*Constat d'origine :*
 
 **Constat.** Le comité indépendant avait déjà ouvert un siège
 « conduite du changement » dont la question — « que faut-il apprendre
