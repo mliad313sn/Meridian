@@ -69,6 +69,9 @@ export function client() {
       return r.body.user;
     },
     get cookie() { return cookie; },
+    /* Present a cookie this client never earned — how a stolen or guessed
+       session value is tested from the attacker's side. */
+    present(pair) { cookie = pair; },
     clear() { cookie = ""; },
   };
 }

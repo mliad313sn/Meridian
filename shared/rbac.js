@@ -168,10 +168,20 @@ export function canWriteScope(user, scope) {
       return user.role === "group" && programmes.has(scope.programme_id);
     case "site":
       if (user.role === "site") return sites.has(scope.site_id);
-      // A group user may run a site's series only where that site hosts a
-      // project in one of their programmes — checked by the route, which
-      // has the project list; here we allow and let the route narrow.
-      return user.role === "group";
+      /* S-17 — a group user may run a site's series only where that site
+         hosts a project in one of their programmes. This used to read
+         `return user.role === "group"`, on the promise that the route
+         would narrow it; no route ever did, so every group account could
+         chair every site's room. The fact the decision needs — which
+         programmes that site actually hosts — is carried on the scope by
+         whoever loaded the series (`hostProgrammesSql` in
+         routes/meetings.js), so the decision stays here.
+
+         A scope that arrives without the list is refused rather than
+         allowed: a caller that forgot to load it must fail closed. */
+      if (user.role !== "group") return false;
+      if (!Array.isArray(scope.host_programmes)) return false;
+      return scope.host_programmes.some((id) => programmes.has(id));
     default:
       return false;
   }

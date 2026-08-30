@@ -70,7 +70,7 @@ The legitimate reasons, and there are only these four:
 | Append-only by design; corrected by a **reversing entry** which must itself exist | `cost_line` |
 | Immutable once its parent closes (R5.5, R5.8) | `meeting_decision`, `agenda_item` |
 | Append-only history the application must not rewrite (R6.2) | `audit_event` |
-| Never leaves the server | `pw_hash`, `pw_salt`, `session.token` |
+| Never leaves the server | `pw_hash`, `pw_salt`, `session.token_hash` |
 
 **"Nobody has asked for it" is not on that list.** If an operator would
 hit it in a normal month, it is a gap.

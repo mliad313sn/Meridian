@@ -144,6 +144,20 @@ export async function setPassword(userId, password, { mustChange = false } = {})
 
 /* ── sessions ─────────────────────────────────────────────────────── */
 
+/**
+ * S-14 — the row keeps the fingerprint, the browser keeps the token.
+ *
+ * A session token opens the same doors as a password for twelve hours,
+ * and it was stored as it travels. Whoever reads the table — a mislaid
+ * backup, a diagnostic export, a `SELECT *` pasted into a ticket — holds
+ * usable sessions without ever having seen a password.
+ *
+ * Plain SHA-256, not scrypt: the input is 32 random bytes from the CSPRNG,
+ * so there is no dictionary to slow down, and this runs on every request.
+ */
+export const sessionKey = (token) =>
+  crypto.createHash("sha256").update(String(token ?? "")).digest("hex");
+
 export async function login(email, password, userAgent = "") {
   const row = await one(
     `SELECT id, email, display_name, person_id, role, active, pw_hash, pw_salt,
@@ -164,8 +178,8 @@ export async function login(email, password, userAgent = "") {
   const token = crypto.randomBytes(32).toString("base64url");
   const expires = new Date(Date.now() + SESSION_TTL_MS);
   await query(
-    `INSERT INTO session (token, user_id, expires_at, user_agent) VALUES ($1,$2,$3,$4)`,
-    [token, row.id, expires.toISOString(), String(userAgent).slice(0, 300)]
+    `INSERT INTO session (token_hash, user_id, expires_at, user_agent) VALUES ($1,$2,$3,$4)`,
+    [sessionKey(token), row.id, expires.toISOString(), String(userAgent).slice(0, 300)]
   );
   await query(`UPDATE app_user SET last_login_at = now() WHERE id = $1`, [row.id]);
 
@@ -195,8 +209,8 @@ export async function bridgeSession(email, userAgent = "sdp-bridge") {
   const token = crypto.randomBytes(32).toString("base64url");
   const expires = new Date(Date.now() + SESSION_TTL_MS);
   await query(
-    `INSERT INTO session (token, user_id, expires_at, user_agent) VALUES ($1,$2,$3,$4)`,
-    [token, row.id, expires.toISOString(), String(userAgent).slice(0, 300)]
+    `INSERT INTO session (token_hash, user_id, expires_at, user_agent) VALUES ($1,$2,$3,$4)`,
+    [sessionKey(token), row.id, expires.toISOString(), String(userAgent).slice(0, 300)]
   );
   await query(`UPDATE app_user SET last_login_at = now() WHERE id = $1`, [row.id]);
   const { audited } = await import("./audit.js");
@@ -210,7 +224,7 @@ export async function bridgeSession(email, userAgent = "sdp-bridge") {
 
 export async function logout(token) {
   if (!token) return;
-  await query(`DELETE FROM session WHERE token = $1`, [token]);
+  await query(`DELETE FROM session WHERE token_hash = $1`, [sessionKey(token)]);
 }
 
 /**
@@ -219,8 +233,8 @@ export async function logout(token) {
  * an answer that leaves the other sessions signed in is not one.
  */
 export async function logoutOthers(userId, keepToken) {
-  await query(`DELETE FROM session WHERE user_id = $1 AND token <> $2`,
-    [userId, keepToken ?? ""]);
+  await query(`DELETE FROM session WHERE user_id = $1 AND token_hash <> $2`,
+    [userId, sessionKey(keepToken ?? "")]);
 }
 
 export async function sweepSessions() {
@@ -236,8 +250,8 @@ export function attachUser() {
       const token = req.cookies?.[SESSION_COOKIE];
       if (!token) return next();
       const s = await one(
-        `SELECT user_id, acting_for FROM session WHERE token = $1 AND expires_at > now()`,
-        [token]
+        `SELECT user_id, acting_for FROM session WHERE token_hash = $1 AND expires_at > now()`,
+        [sessionKey(token)]
       );
       if (!s) return next();
       req.sessionToken = token;

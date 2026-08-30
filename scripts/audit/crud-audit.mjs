@@ -121,7 +121,7 @@ const ENTITIES = {
 
 /* Columns that must never reach a browser. */
 const SERVER_ONLY = new Set([
-  "pw_hash", "pw_salt", "token", "before_json", "after_json",
+  "pw_hash", "pw_salt", "token", "token_hash", "before_json", "after_json",
   // session internals: the browser holds the cookie, never the record
   "expires_at", "user_agent",
   // write-time bookkeeping the interface has no reason to render

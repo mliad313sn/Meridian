@@ -4,7 +4,7 @@ import { Router } from "express";
 import { many, query } from "../db.js";
 import { audited } from "../audit.js";
 import {
-  login, logout, logoutOthers, publicUser, cookieOptions, SESSION_COOKIE, HttpError,
+  login, logout, logoutOthers, publicUser, cookieOptions, SESSION_COOKIE, HttpError, sessionKey,
   setPassword, verifyPassword, bridgeSession,
 } from "../auth.js";
 import { oidcEnabled, beginSignIn, completeSignIn } from "../oidc.js";
@@ -19,21 +19,58 @@ const r = Router();
    forgiving the counters is acceptable, a table of attacker input is not. */
 const ATTEMPTS = new Map();               // key → { n, until }
 const WINDOW_MS = 15 * 60 * 1000;
-const LIMIT = 10;
-function attemptKey(req, email) {
-  return `${String(email ?? "").trim().toLowerCase()}|${req.ip ?? ""}`;
+
+/* S-15 — three counters, because one shape of attack slips past any pair.
+   The original counter was keyed on identity AND address together, which
+   is exactly the pair an attacker does not have to keep constant:
+
+   · spraying — one address, one guess against each of two hundred
+     addresses in the directory — never reaches 10 on any single pair;
+   · distributed guessing — one account, one attempt per address from a
+     rented pool — never reaches 10 either.
+
+   So the identity is counted alone, and the address is counted alone.
+
+   The per-address ceiling is deliberately high. Eight mining sites reach
+   this server through a handful of corporate gateways, and every person
+   at a site shares one address; a tight limit there would lock out a
+   shift, which is a denial of service an attacker would be glad to
+   trigger. Sixty failures from one address inside fifteen minutes is not
+   a bad Monday morning, and it still costs an attacker four guesses a
+   minute — against scrypt, that is not an attack, it is a hobby. */
+const PAIR_LIMIT = 10;        // this person, from this address
+const IDENTITY_LIMIT = 20;    // this person, from anywhere
+const ADDRESS_LIMIT = 60;     // anyone, from this address
+
+function attemptKeys(req, email) {
+  const id = String(email ?? "").trim().toLowerCase();
+  const ip = req.ip ?? "";
+  return [
+    { key: `pair|${id}|${ip}`, limit: PAIR_LIMIT },
+    { key: `id|${id}`, limit: IDENTITY_LIMIT },
+    { key: `ip|${ip}`, limit: ADDRESS_LIMIT },
+  ];
 }
-function tooMany(key) {
-  const a = ATTEMPTS.get(key);
-  if (!a) return 0;
-  if (Date.now() > a.until) { ATTEMPTS.delete(key); return 0; }
-  return a.n >= LIMIT ? Math.ceil((a.until - Date.now()) / 60000) : 0;
+
+/** Minutes to wait, taken from whichever counter is over — 0 if none is. */
+function tooMany(keys) {
+  let wait = 0;
+  for (const { key, limit } of keys) {
+    const a = ATTEMPTS.get(key);
+    if (!a) continue;
+    if (Date.now() > a.until) { ATTEMPTS.delete(key); continue; }
+    if (a.n >= limit) wait = Math.max(wait, Math.ceil((a.until - Date.now()) / 60000));
+  }
+  return wait;
 }
-function recordFailure(key) {
-  const a = ATTEMPTS.get(key);
-  if (!a || Date.now() > a.until) ATTEMPTS.set(key, { n: 1, until: Date.now() + WINDOW_MS });
-  else a.n++;
-  if (ATTEMPTS.size > 10_000) ATTEMPTS.clear();   // bound the map, crudely and safely
+
+function recordFailure(keys) {
+  for (const { key } of keys) {
+    const a = ATTEMPTS.get(key);
+    if (!a || Date.now() > a.until) ATTEMPTS.set(key, { n: 1, until: Date.now() + WINDOW_MS });
+    else a.n++;
+  }
+  if (ATTEMPTS.size > 30_000) ATTEMPTS.clear();   // bound the map, crudely and safely
   /* G-08 — le compteur ci-dessus vit en mémoire et meurt au redémarrage :
      il limite le débit, il ne raconte rien. Une tentative infructueuse
      est pourtant le premier signal qu'un compte est attaqué, et le comité
@@ -43,21 +80,38 @@ function recordFailure(key) {
   countUsage("sign-in-failed");
 }
 
+/** A successful sign-in clears this person's own counters, never the
+    address counter — otherwise one valid account on the same gateway
+    would wipe the evidence of everyone else's failures. */
+function clearOnSuccess(keys) {
+  for (const { key } of keys) if (!key.startsWith("ip|")) ATTEMPTS.delete(key);
+}
+
+/* The decision above is pure — three counters and a comparison — and it
+   was, until S-15, the only release blocker in the AMDEC with no test
+   against it at all. Exposed so it can be exercised directly, without
+   paying 60 scrypt passes to find out what a comparison does. */
+export const signInLimiter = {
+  keys: attemptKeys, tooMany, recordFailure, clearOnSuccess,
+  limits: { pair: PAIR_LIMIT, identity: IDENTITY_LIMIT, address: ADDRESS_LIMIT },
+  reset: () => ATTEMPTS.clear(),
+};
+
 r.post("/login", async (req, res, next) => {
   try {
     const { email, password } = req.body ?? {};
     if (!email || !password) throw new HttpError(400, "Email and password are required");
-    const key = attemptKey(req, email);
-    const wait = tooMany(key);
+    const keys = attemptKeys(req, email);
+    const wait = tooMany(keys);
     if (wait) throw new HttpError(429, `Too many sign-in attempts — try again in about ${wait} minute${wait === 1 ? "" : "s"}`);
     let token, user;
     try {
       ({ token, user } = await login(email, password, req.get("user-agent") ?? ""));
     } catch (e) {
-      if (e instanceof HttpError && e.status === 401) recordFailure(key);
+      if (e instanceof HttpError && e.status === 401) recordFailure(keys);
       throw e;
     }
-    ATTEMPTS.delete(key);
+    clearOnSuccess(keys);
     res.cookie(SESSION_COOKIE, token, cookieOptions());
     await audited(
       { id: user.id, displayName: user.displayName, role: user.role },
@@ -185,7 +239,8 @@ r.post("/actas", async (req, res, next) => {
     if (!justified.length) {
       throw new HttpError(403, "No current absence names you as this person's deputy");
     }
-    await query(`UPDATE session SET acting_for = $2 WHERE token = $1`, [req.sessionToken, target]);
+    await query(`UPDATE session SET acting_for = $2 WHERE token_hash = $1`,
+      [sessionKey(req.sessionToken), target]);
     await audited(req.user,
       { action: "Deputising started", entity: "app_user", entityId: target,
         detail: `${req.user.displayName} covers for ${target}` },
@@ -197,7 +252,8 @@ r.post("/actas", async (req, res, next) => {
 r.delete("/actas", async (req, res, next) => {
   try {
     if (!req.user) throw new HttpError(401, "Sign in to continue");
-    await query(`UPDATE session SET acting_for = NULL WHERE token = $1`, [req.sessionToken]);
+    await query(`UPDATE session SET acting_for = NULL WHERE token_hash = $1`,
+      [sessionKey(req.sessionToken)]);
     await audited(req.user,
       { action: "Deputising ended", entity: "app_user", entityId: req.user.id },
       async () => null);

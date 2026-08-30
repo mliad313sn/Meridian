@@ -255,3 +255,46 @@ describe("enforcement over HTTP (R1.4 — hiding a button is not enforcement)", 
     assert.equal(r.status, 403, "self-promotion is how a site grant would become a group grant");
   });
 });
+
+/* S-17 — a group grant is a grant over programmes, not over the map. The
+   seeded site rooms make the distinction testable: São Paulo hosts one
+   project, and it belongs to Digital Channels. The programme manager for
+   Data & Analytics has no work there and no business chairing it. */
+describe("S-17 · a group account does not chair every site's room", () => {
+  test("the unit decision refuses a site scope no grant of theirs hosts", () => {
+    const dai = mk("group", ["DAI"]);
+    const gru = { scope_kind: "site", site_id: "GRU", host_programmes: ["DCH"] };
+    const sin = { scope_kind: "site", site_id: "SIN", host_programmes: ["DAI", "EIT"] };
+    assert.equal(can(dai, "meeting.write", { scope: gru }).ok, false);
+    assert.equal(can(dai, "meeting.write", { scope: sin }).ok, true);
+  });
+
+  test("a scope loaded without the list fails closed, never open", () => {
+    /* The old code returned true for any group account here. If a future
+       query forgets the aggregate, the room must lock, not unlock. */
+    const dai = mk("group", ["DAI"]);
+    assert.equal(can(dai, "meeting.write", { scope: { scope_kind: "site", site_id: "GRU" } }).ok, false);
+  });
+
+  test("end to end · DAI cannot schedule São Paulo's call, DCH can", async () => {
+    const dai = await as("groupDAI");
+    const refused = await dai.post("/api/meetings/series/MS-GRU-W/occurrences",
+      { meetsOn: "2026-10-15" });
+    assert.equal(refused.status, 403, "MS-GRU-W is a DCH site — DAI has no work there");
+    assert.match(refused.body.error, /outside your authority/i);
+
+    const dch = await as("groupDCH");
+    const allowed = await dch.post("/api/meetings/series/MS-GRU-W/occurrences",
+      { meetsOn: "2026-10-15" });
+    assert.ok([200, 201].includes(allowed.status),
+      `DCH runs the project on that site and must still chair it (got ${allowed.status})`);
+  });
+
+  test("the room a group account may not write, it still reads", async () => {
+    const dai = await as("groupDAI");
+    const list = (await dai.get("/api/meetings/series")).body.series;
+    const gru = list.find((s) => s.id === "MS-GRU-W");
+    assert.ok(gru, "minutes are shared across the group by design");
+    assert.equal(gru.canWrite, false, "and the control is not drawn (R7.3)");
+  });
+});

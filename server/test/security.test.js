@@ -8,8 +8,9 @@
 
 import { test, before, after } from "node:test";
 import assert from "node:assert";
-import { boot, shutdown, as, SITE_PROJECT_GRU } from "./harness.js";
+import { boot, shutdown, as, client, SITE_PROJECT_GRU } from "./harness.js";
 import { safeHref } from "../../web/src/ui/kit.js";
+import { signInLimiter } from "../src/routes/auth.js";
 
 before(async () => { await boot(); });
 after(shutdown);
@@ -326,4 +327,76 @@ test("G-17 — ce qui sort dit ce que c'est, et à qui", async () => {
   const pack = await admin.get("/api/projects/" + SITE_PROJECT_GRU + "/evidence");
   assert.match(pack.body.markdown, /INTERNAL — governance evidence/,
     "un dossier de preuve circule : il porte sa classification");
+});
+
+/* ── S-15 · le compteur de connexion ──────────────────────────────────
+   C-06 était déclaré bloquant de livraison par le comité et n'avait,
+   jusqu'ici, AUCUN test. Les trois compteurs sont une décision pure : on
+   les exerce directement plutôt que d'acheter soixante passes scrypt
+   pour observer une comparaison. */
+
+test("S-15 — le balayage : une tentative sur chaque compte, depuis une seule adresse", () => {
+  signInLimiter.reset();
+  const req = { ip: "203.0.113.7" };
+  /* Deux cents adresses de l'annuaire, un essai chacune : aucune paire
+     identité+adresse n'atteint jamais 10. C'est exactement l'attaque que
+     le compteur d'origine ne voyait pas. */
+  let stopped = 0;
+  for (let i = 0; i < 200; i++) {
+    const keys = signInLimiter.keys(req, `personne${i}@meridian.example`);
+    if (signInLimiter.tooMany(keys)) { stopped = i; break; }
+    signInLimiter.recordFailure(keys);
+  }
+  assert.ok(stopped > 0, "le balayage doit finir par être arrêté");
+  assert.equal(stopped, signInLimiter.limits.address,
+    "et il l'est par le compteur d'adresse, au seuil annoncé");
+});
+
+test("S-15 — la devinette répartie : un compte, des adresses qui changent", () => {
+  signInLimiter.reset();
+  let stopped = 0;
+  for (let i = 0; i < 100; i++) {
+    /* Un parc d'adresses loué : la paire identité+adresse est neuve à
+       chaque essai, et ne compte donc jamais jusqu'à 10 non plus. */
+    const keys = signInLimiter.keys({ ip: `198.51.100.${i}` }, "r.kaur@meridian.example");
+    if (signInLimiter.tooMany(keys)) { stopped = i; break; }
+    signInLimiter.recordFailure(keys);
+  }
+  assert.equal(stopped, signInLimiter.limits.identity,
+    "le compteur d'identité arrête la devinette quelle que soit l'origine");
+});
+
+test("S-15 — une connexion réussie ne blanchit pas l'adresse des autres", () => {
+  signInLimiter.reset();
+  const ip = "192.0.2.44";
+  for (let i = 0; i < 30; i++) {
+    signInLimiter.recordFailure(signInLimiter.keys({ ip }, `cible${i}@meridian.example`));
+  }
+  /* Quelqu'un du même site se connecte normalement : ses propres
+     compteurs repartent à zéro, la trace de l'attaque en cours reste. */
+  const mine = signInLimiter.keys({ ip }, "g.silva@meridian.example");
+  signInLimiter.recordFailure(mine);
+  signInLimiter.clearOnSuccess(mine);
+  let more = 0;
+  for (let i = 0; i < 200; i++) {
+    const keys = signInLimiter.keys({ ip }, `suite${i}@meridian.example`);
+    if (signInLimiter.tooMany(keys)) break;
+    signInLimiter.recordFailure(keys);
+    more++;
+  }
+  assert.ok(more < signInLimiter.limits.address,
+    "sinon un seul compte valide derrière la même passerelle efface le compteur");
+});
+
+test("S-15 — bout en bout : le onzième essai sur le même compte est refusé", async () => {
+  signInLimiter.reset();
+  const c = client();
+  let last = null;
+  for (let i = 0; i < signInLimiter.limits.pair + 1; i++) {
+    last = await c.post("/api/auth/login",
+      { email: "r.kaur@meridian.example", password: "ce-n-est-pas-le-bon" });
+  }
+  assert.equal(last.status, 429, "C-06 : le débit est borné, et c'est enfin tenu par un test");
+  assert.match(last.body.error, /try again in about/i, "et la réponse dit combien de temps");
+  signInLimiter.reset();
 });

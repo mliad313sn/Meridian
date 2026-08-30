@@ -24,8 +24,20 @@ const r = Router();
 
 /* ── helpers ──────────────────────────────────────────────────────── */
 
+/* S-17 — a site-scoped series is chaired by its own site, or by a group
+   account whose programmes actually have work on that site. `rbac.js`
+   decides that, but it cannot query; so every load of a series carries
+   the list with it. Aggregated as text and split here rather than a SQL
+   array, because pg and PGlite do not map array columns identically and
+   an authority decision must not depend on which engine is underneath. */
+const hostProgrammesSql = `
+  COALESCE((SELECT string_agg(DISTINCT p.programme_id, ',')
+              FROM project p
+             WHERE p.site_id = meeting_series.site_id), '') AS host_programmes`;
+
 const scopeOf = (s) => ({
   scope_kind: s.scope_kind, programme_id: s.programme_id, site_id: s.site_id,
+  host_programmes: String(s.host_programmes ?? "").split(",").filter(Boolean),
 });
 const toSeries = (s) => ({
   id: s.id, name: s.name, cadence: s.cadence, scopeKind: s.scope_kind,
@@ -44,7 +56,9 @@ const toOccurrence = (o) => ({
 });
 
 async function series(id) {
-  const s = await one(`SELECT * FROM meeting_series WHERE id = $1`, [id]);
+  const s = await one(
+    `SELECT meeting_series.*, ${hostProgrammesSql}
+       FROM meeting_series WHERE id = $1`, [id]);
   if (!s) throw new HttpError(404, "No such meeting series");
   return s;
 }
@@ -220,7 +234,9 @@ async function agendaFor(user, s, o) {
 
 r.get("/series", async (req, res, next) => {
   try {
-    const rows = await many(`SELECT * FROM meeting_series WHERE active ORDER BY cadence, name`);
+    const rows = await many(
+      `SELECT meeting_series.*, ${hostProgrammesSql}
+         FROM meeting_series WHERE active ORDER BY cadence, name`);
     const visible = rows.filter((s) => can(req.user, "meeting.read", { scope: scopeOf(s) }).ok);
     const db = await loadPortfolio(req.user);
 
@@ -264,6 +280,11 @@ r.post("/series", async (req, res, next) => {
     };
     if (kind === "programme" && !scope.programme_id) throw new HttpError(400, "Name the programme");
     if (kind === "site" && !scope.site_id) throw new HttpError(400, "Name the site");
+    /* S-17 — the series does not exist yet, so the list rbac needs is
+       read from the site named in the request, not from the row. */
+    scope.host_programmes = kind !== "site" ? [] : (await many(
+      `SELECT DISTINCT programme_id FROM project WHERE site_id = $1`, [scope.site_id]
+    )).map((p) => p.programme_id);
     gate(req.user, "series.manage", { scope });
 
     const cadence = b.cadence === "monthly" ? "monthly" : "weekly";

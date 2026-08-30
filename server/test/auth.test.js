@@ -3,7 +3,7 @@
 import { test, before, after, describe } from "node:test";
 import assert from "node:assert/strict";
 import { boot, shutdown, client, as, ACCOUNTS } from "./harness.js";
-import { hashPassword, verifyPassword } from "../src/auth.js";
+import { hashPassword, verifyPassword, sessionKey } from "../src/auth.js";
 import { one } from "../src/db.js";
 
 before(async () => { await boot(); });
@@ -80,14 +80,34 @@ describe("authentication", () => {
 
     // Replaying the old cookie must not work either — the row is gone.
     const token = cookieBefore.split("=")[1];
-    const row = await one(`SELECT token FROM session WHERE token = $1`, [token]);
+    const row = await one(`SELECT token_hash FROM session WHERE token_hash = $1`,
+      [sessionKey(token)]);
     assert.equal(row, null, "the session row should be deleted, not just the cookie");
+  });
+
+  /* S-14 — what is in the row must not be usable as a cookie. */
+  test("S-14 · the session table holds a fingerprint, never the token", async () => {
+    const c = await as("pmo");
+    const token = c.cookie.split("=")[1];
+    const row = await one(
+      `SELECT token_hash FROM session WHERE token_hash = $1`, [sessionKey(token)]);
+    assert.ok(row, "the live session is found by the fingerprint of its token");
+    assert.notEqual(row.token_hash, token, "the stored value is not the cookie");
+    assert.match(row.token_hash, /^[0-9a-f]{64}$/, "it is a SHA-256 digest");
+
+    /* And the row's own contents, replayed as a cookie, open nothing —
+       which is the whole point of hashing it. */
+    const thief = client();
+    thief.present(`meridian_sid=${row.token_hash}`);
+    assert.equal((await thief.get("/api/bootstrap")).status, 401,
+      "someone holding the table must not be holding the sessions");
   });
 
   test("R1.8 · sessions carry an expiry", async () => {
     const c = await as("groupCBP");
     const token = c.cookie.split("=")[1];
-    const row = await one(`SELECT expires_at FROM session WHERE token = $1`, [token]);
+    const row = await one(`SELECT expires_at FROM session WHERE token_hash = $1`,
+      [sessionKey(token)]);
     assert.ok(row, "session row exists");
     assert.ok(new Date(row.expires_at) > new Date(), "expiry is in the future");
   });
