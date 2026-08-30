@@ -27,7 +27,7 @@
  * risque — c'est le livre réel qui ne doit jamais en porter.
  */
 
-import { rmSync, existsSync, mkdirSync } from "node:fs";
+import fs, { rmSync, existsSync, mkdirSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -53,8 +53,43 @@ if (wants("--drop")) {
   process.exit(0);
 }
 
-if (wants("--reset") || !existsSync(DIR)) {
+/**
+ * Un répertoire n'est pas un terrain.
+ *
+ * La première version considérait qu'un dossier existant valait
+ * installation faite. Une installation interrompue — une fenêtre fermée,
+ * un délai dépassé — laissait alors un terrain à moitié migré, sans
+ * comptes, que le script démarrait quand même : le formateur découvrait
+ * le problème devant ses huit participants. On vérifie donc que le
+ * terrain porte réellement ce qu'il faut pour s'en servir.
+ */
+function looksInstalled() {
+  if (!existsSync(DIR)) return false;
+  /* PGlite écrit son PG_VERSION à la fin de l'initialisation, et le seed
+     laisse un fichier de données bien plus gros qu'une base vide. Un
+     terrain amorcé pèse quelques mégaoctets ; une base à moitié migrée,
+     beaucoup moins. */
+  try {
+    const base = join(DIR, "base");
+    if (!existsSync(join(DIR, "PG_VERSION")) && !existsSync(base)) return false;
+    let bytes = 0;
+    const walk = (d) => {
+      for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+        const p = join(d, e.name);
+        if (e.isDirectory()) walk(p);
+        else bytes += fs.statSync(p).size;
+      }
+    };
+    walk(DIR);
+    return bytes > 8 * 1024 * 1024;
+  } catch { return false; }
+}
+
+if (wants("--reset") || !looksInstalled()) {
   const fresh = !existsSync(DIR);
+  if (!fresh && !wants("--reset")) {
+    say("le terrain précédent est incomplet — réinstallation");
+  }
   rmSync(DIR, { recursive: true, force: true });
   mkdirSync(DIR, { recursive: true });
   say(fresh ? "premier démarrage — installation du terrain" : "remise à zéro du terrain");
