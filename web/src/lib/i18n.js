@@ -123,6 +123,31 @@ export const FR = {
   "Reports": "Rapports",
   "Locations": "Sites",
   "Administration": "Administration",
+
+  /* M-01 · continuité — emporter le livre, ou fermer toutes les portes */
+  "Continuity": "Continuité",
+  "take the book with you, or close every door":
+    "emporter le livre, ou fermer toutes les portes",
+  "The archive holds the portfolio and the audit trail in one open file, which is loaded elsewhere with npm run restore. It carries no password, so it can be handed to a third party as it is. It is not a backup — a backup is taken at the database.":
+    "L'archive contient le portefeuille et la piste d'audit dans un seul fichier ouvert, " +
+    "qui se recharge ailleurs avec npm run restore. Elle ne porte aucun mot de passe : elle " +
+    "peut donc être remise telle quelle à un tiers. Ce n'est pas une sauvegarde — une " +
+    "sauvegarde se prend au niveau de la base.",
+  "Export the archive": "Exporter l'archive",
+  "Archive": "Archive",
+  "Archive exported": "Archive exportée",
+  "The book and the trail, in one file.": "Le livre et la piste, dans un seul fichier.",
+  "End every session?": "Terminer toutes les sessions ?",
+  "Everyone signs in again, including you, immediately.":
+    "Tout le monde se reconnecte, vous compris, immédiatement.",
+  "This is the answer to a workstation left open or a doubt about a password — not a button to try.":
+    "C'est la réponse à un poste laissé ouvert ou à un doute sur un mot de passe — " +
+    "pas un bouton qu'on essaie.",
+  "End every session": "Terminer toutes les sessions",
+  "Sessions": "Sessions",
+  "Sessions ended": "Sessions terminées",
+  "session(s) — sign in again.": "session(s) — reconnectez-vous.",
+
   "Deliver": "Livrer",
   "Control": "Piloter",
   "Govern": "Gouverner",

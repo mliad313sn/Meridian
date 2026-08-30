@@ -15,10 +15,11 @@
 
 import {
   h, clear, icon, dialog, confirmDialog, formDialog, table, sectionHead,
-  tag, avatar, searchBox, emptyState,
+  tag, avatar, searchBox, selectField, emptyState,
 } from "../ui/kit.js";
 import { App, toast, reportError } from "../lib/state.js";
-import { api } from "../lib/api.js";
+import { api, download } from "../lib/api.js";
+import { t } from "../lib/i18n.js";
 import { Engine, fmtDate, money, uniq } from "../../../shared/engine.js";
 
 /* Fetched on demand; invalidated by every write below. */
@@ -678,6 +679,54 @@ async function loadFed() {
     fed.loading = false;
     App.emit();
   }
+}
+
+/* ── continuité (M-01, G-10) ──────────────────────────────────────────
+   Deux gestes de gouvernance qui existaient côté serveur et n'avaient
+   aucun écran : emporter le livre entier, et couper toutes les sessions.
+   Une commande qu'on ne peut passer qu'en curl n'appartient pas au
+   produit ; elle appartient à celui qui connaît le curl. */
+
+export function continuityPanel() {
+  if (!App.isAdmin) return null;
+
+  return h("div", null,
+    sectionHead(t("Continuity"), t("take the book with you, or close every door")),
+
+    h("p", { class: "xs muted", style: "max-width:64ch;margin:0 0 12px" },
+      t("The archive holds the portfolio and the audit trail in one open file, which is " +
+        "loaded elsewhere with npm run restore. It carries no password, so it can be handed " +
+        "to a third party as it is. It is not a backup — a backup is taken at the database.")),
+
+    h("div", { class: "btn-row" },
+      h("button", {
+        class: "btn btn-sm",
+        onClick: async () => {
+          try {
+            const stamp = new Date().toISOString().slice(0, 10);
+            await download("/admin/archive", `meridian-archive-${stamp}.json`);
+            toast(t("Archive exported"), t("The book and the trail, in one file."));
+          } catch (e) { reportError(e, t("Archive")); }
+        },
+      }, icon("download", 12), t("Export the archive")),
+
+      h("button", {
+        class: "btn btn-sm btn-danger",
+        onClick: async () => {
+          const ok = await confirmDialog({
+            title: t("End every session?"),
+            message: t("Everyone signs in again, including you, immediately."),
+            detail: t("This is the answer to a workstation left open or a doubt about a " +
+                      "password — not a button to try."),
+            confirmLabel: t("End every session"), danger: true,
+          });
+          if (!ok) return;
+          try {
+            const out = await api.post("/admin/sessions/revoke-all", {});
+            toast(t("Sessions ended"), `${out.ended} ${t("session(s) — sign in again.")}`);
+          } catch (e) { reportError(e, t("Sessions")); }
+        },
+      }, icon("logout", 12), t("End every session"))));
 }
 
 export function federationPanel() {

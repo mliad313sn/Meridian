@@ -9,6 +9,7 @@ import { can } from "../../../shared/rbac.js";
 import { audited } from "../audit.js";
 import { HttpError, createUser, setPassword, publicUser } from "../auth.js";
 import { loadSettings } from "../portfolio.js";
+import { buildArchive } from "../archive.js";
 
 const r = Router();
 
@@ -143,6 +144,34 @@ r.post("/sessions/revoke-all", async (req, res, next) => {
         detail: `${before?.n ?? 0} session(s) ended — everyone signs in again` },
       async (t) => t.query(`DELETE FROM session`));
     res.json({ ok: true, ended: before?.n ?? 0 });
+  } catch (e) { next(e); }
+});
+
+/**
+ * M-01 — tout emporter, y compris la piste.
+ *
+ * « Et dans trois ans ? » est la question que le comité de marché a
+ * relevée et à laquelle aucun des vingt-trois rapports ne répondait. Un
+ * seul fichier ouvert : le livre entier ET la piste d'audit, dans un
+ * format qu'on relit avec `jq` et qu'on recharge avec
+ * `npm run restore -- <fichier>`.
+ *
+ * Il ne contient aucun secret (ni jeton, ni empreinte de mot de passe) :
+ * il peut donc être remis à un séquestre ou à un successeur sans
+ * arbitrage. Ce n'est pas une sauvegarde — voir l'en-tête de archive.js.
+ */
+r.get("/archive", async (req, res, next) => {
+  try {
+    const doc = await buildArchive({ issuedTo: req.user.displayName });
+    /* Sortir la totalité du livre et de la piste est un acte de
+       gouvernance : il laisse une ligne, comme tout le reste. */
+    await audited(req.user,
+      { action: "Archive exported", entity: "system", entityId: "archive",
+        detail: `${doc.totalRows} row(s) across ${doc.order.length} table(s)` },
+      async () => null);
+    res.setHeader("Content-Disposition",
+      `attachment; filename="meridian-archive-${doc.generatedAt.slice(0, 10)}.json"`);
+    res.json(doc);
   } catch (e) { next(e); }
 });
 

@@ -46,12 +46,13 @@ DATABASE_URL=postgres://user:pass@host:5432/meridian npm start
 Other commands:
 
 ```bash
-npm test              # 315 tests
-npm run audit         # six gates: routes, CRUD+audit, versions, controls, language, field help
-npm run verify        # tests + build + the six gates + a dependency audit
+npm test              # 334 tests
+npm run audit         # seven gates: routes, CRUD+audit, versions, controls, language, field help, kit imports
+npm run verify        # tests + build + the seven gates + a dependency audit
 npm run sweep         # 286 use cases × 4 roles + 72 view renders, on a fresh instance
 npm run build         # build the client into web/dist
 npm run package:installer  # dist/MeridianSetup.exe — Windows service installer
+npm run restore       # reload an exported archive into an empty instance (M-01)
 npm run training      # a separate practice instance on :4180 — never touches the real book
 npm run training -- --reset   # put it back to how it started
 npm run training -- --drop    # erase it
@@ -107,8 +108,8 @@ server/          src/db.js         pg | PGlite, migrations, optimistic concurren
                  src/audit.js      append-only, inside the mutation's transaction
                  src/portfolio.js  rows → the shape the engine reads
                  src/routes/       auth · portfolio · meetings · admin · import
-                 migrations/       ordered SQL (001–022, applied at boot)
-                 test/             315 tests
+                 migrations/       ordered SQL (001–023, applied at boot)
+                 test/             334 tests
 
 web/             src/ui/kit.js     h() builder, dialogs, tables, charts (from v4)
                  src/lib/          api client, state, permission mirror
@@ -154,6 +155,8 @@ never a silent overwrite.
 | [`docs/21-campagne-securite.md`](docs/21-campagne-securite.md) | Security campaign (FR) — 11 defects fixed, 6 on the register |
 | [`docs/22-comite-innovation.md`](docs/22-comite-innovation.md) | Innovation (FR) — AI under contract, notification centre, five ideas refused |
 | [`docs/23-comite-produit.md`](docs/23-comite-produit.md) | Product committee (FR) — the charter, the criteria, and every open item on one list |
+| [`docs/24-comite-marche.md`](docs/24-comite-marche.md) | Market committee (FR) — positioning, four business models, the competitor's best attack, and a dated verdict |
+| [`docs/25-reversibilite-et-la-porte-manquante.md`](docs/25-reversibilite-et-la-porte-manquante.md) | S-17 · S-14 · S-15 · M-01 (archive + restore), and the gate that found Administration had never drawn |
 
 ---
 
