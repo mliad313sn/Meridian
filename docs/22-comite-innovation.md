@@ -1,4 +1,4 @@
-# Comité d'innovation — Meridian IT-PMO
+﻿# Comité d'innovation — Meridian IT-PMO
 
 Date : 30 août 2026. Convoqué après la recette AMDEC
 ([18-amdec-recette.md](18-amdec-recette.md)), le comité d'adoption
@@ -400,7 +400,29 @@ un quart au deuxième mois, la capacité est retirée sans nouvelle séance.
 
 ---
 
-## 4 · N-05 — Le centre de notification
+## 4 · N-05 — Le centre de notification — **CONSTRUIT le 30/08/2026**
+
+> **Livré** (commit `acec6ba`, migrations 018 et 019). Ce que le comité
+> avait conçu tient, y compris ses refus : le centre lit `user_id =
+> req.user.id` et rien d'autre, il n'ouvre aucune voie d'écriture
+> nouvelle, la purge **refuse de deviner** une durée que personne n'a
+> écrite et ne touche jamais un message encore en file, l'escalier monte
+> d'un cran sans renvoyer, le silence de nuit se lit dans le fuseau du
+> site et « urgent » le perce. Le balayage s'exécute enfin de lui-même,
+> sous verrou consultatif. Neuf tests dans `server/test/centre.test.js` ;
+> mesuré à l'écran en français : 2 non lus → tout marquer → 0, état vide
+> traduit, case « afficher ce que j'ai déjà lu » qui les retrouve.
+>
+> **Un défaut de fond trouvé en construisant**, corrigé à la couche base :
+> PGlite renvoie `affectedRows` là où `pg` renvoie `rowCount`. Tout
+> `r.rowCount` du produit lisait donc `undefined` sur le moteur
+> embarqué — une route répondait « ligne introuvable » à propos d'une
+> ligne qu'elle venait de mettre à jour. C'est le déploiement le moins
+> outillé qui rencontrait ce défaut.
+>
+> **Reste à décider par le mandant** : `notifyRetentionDays` (sans elle,
+> la purge s'abstient et le dit), `notifyEscalateDays`, et
+> `notifyHosts` pour le canal sortant, fermé par défaut.
 
 ### 4.1 Constat
 
@@ -647,7 +669,36 @@ est déjà un des six indicateurs d'A-08 — son alerte devient un genre de
 N-05, pas une capacité de plus. Un comité qui reprend à son compte le
 travail d'un autre ne filtre rien : il gonfle.
 
-### N-06 — La survie hors ligne, en lecture seule
+### N-06 — La survie hors ligne — **CONSTRUIT le 30/08/2026, avec une correction de conception**
+
+> **Livré**, mais pas tel qu'écrit — et le comité doit savoir pourquoi.
+>
+> L'instantané a été construit comme conçu : écrit à chaque chargement
+> réussi sous une clé portant le compte, relu quand le serveur ne répond
+> plus, effacé à la déconnexion, aucune écriture mise en file, bandeau
+> permanent nommant l'heure, et `can()` qui rend faux hors ligne — donc
+> aucune commande d'écriture dessinée, sans code nouveau, par R7.3.
+>
+> **Ce que la construction a révélé** : ainsi conçue, la capacité ne
+> servait presque jamais. Une session déjà ouverte survit de toute façon,
+> le livre étant en mémoire ; et un rechargement échoue **avant d'atteindre
+> la moindre ligne de code**, parce que la coquille elle-même vient du
+> serveur. Le §2 relevait « aucun agent de service » comme un constat ; il
+> fallait le lire comme une dépendance. Un agent de service minimal a donc
+> été ajouté (`web/public/sw.js`, réseau d'abord, API jamais mise en
+> cache, une seule génération de coquille) : sans lui, l'instantané n'a
+> pas d'occasion d'être lu.
+>
+> **Ce qui reste à constater sur le terrain** : le navigateur d'essai
+> refuse d'enregistrer un agent de service, l'enregistrement étant
+> silencieux en cas d'échec. Le fichier est écrit, servi correctement et
+> testé pour ne rien casser ; **son effet hors ligne n'a pas été observé
+> ici** et devra l'être sur un poste de site. Six tests tiennent le reste
+> (`server/test/offline.test.js`), dont celui qui compte : une session
+> expirée n'est pas une coupure, et un instantané ne remplace jamais une
+> session.
+
+### N-06 (conception d'origine) — La survie hors ligne, en lecture seule
 
 **Constat.** Le §2 le dit : aucun cache, aucun agent de service. Quand la
 liaison satellite tombe — ce qui, à Houndé, se produit — l'écran est
@@ -686,7 +737,29 @@ se poursuivent après cet échec au lieu de s'arrêter. Sous 5 % de sessions
 concernées sur un trimestre, la capacité est retirée : elle aurait résolu
 un problème qui n'existe pas.
 
-### N-07 — Le contrôle de vie de la preuve
+### N-07 — Le contrôle de vie de la preuve — **CONSTRUIT le 30/08/2026**
+
+> **Livré** (migration 020, `server/src/probe.js`, huit tests). La
+> garantie que le comité a posée est celle qui a guidé le code : la sonde
+> **ne juge pas**. Un lien mort laisse le document approuvé — une liaison
+> satellite qui tombe la nuit ne désapprouve pas un jalon au matin. Elle
+> ne sort que vers les hôtes déjà présents dans `documentHosts` ; sans
+> hôtes configurés, elle s'abstient et le dit. Trois échecs consécutifs
+> avant d'avertir le chef de projet par le centre du §4, et le message
+> écrit noir sur blanc que rien n'a été retiré.
+>
+> Une distinction ajoutée en construisant : **401 et 403 ne sont pas une
+> perte**. Ils disent que la sonde n'a pas eu accès, pas que la pièce a
+> disparu — les confondre ferait crier l'outil sur des preuves
+> parfaitement en place derrière une authentification. D'où l'état
+> `forbidden`, distinct de `unreachable`.
+>
+> La bibliothèque montre le fait à côté du lien (✓ / ⚠ / 🔒), jamais dans
+> le statut. La mesure demandée — part des preuves approuvées dont le lien
+> a répondu — est calculée à chaque passage ; **le chiffre du premier
+> passage réel reste à consigner**, comme le comité l'a recommandé.
+
+### N-07 (conception d'origine) — Le contrôle de vie de la preuve
 
 **Constat.** Il ne vient pas du comité : il vient de la recette. Le mode
 résiduel R-01 nomme explicitement le cas « l'hôte de confiance héberge

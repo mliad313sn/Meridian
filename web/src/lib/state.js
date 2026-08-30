@@ -12,11 +12,41 @@ import { api, ApiError } from "./api.js";
 import { t } from "./i18n.js";
 import { can as rbacCan, canWriteProject as rbacWrite, canSeeProject } from "./permissions.js";
 
+/* ── N-06 · l'instantané de lecture ──────────────────────────────────
+   Un seul emplacement, portant le compte : changer d'utilisateur ou se
+   déconnecter l'efface, sur le patron déjà écrit pour le cache de vue.
+   Tout écart ici est silencieux par conception — un navigateur en mode
+   privé, un quota plein ou une politique d'entreprise ne doivent jamais
+   empêcher l'application de démarrer. */
+const SNAP_KEY = "meridian-snapshot";
+function saveSnapshot(userId, db, me) {
+  if (!userId) return;
+  try {
+    localStorage.setItem(SNAP_KEY, JSON.stringify({
+      who: userId, at: new Date().toISOString(), db, me,
+    }));
+  } catch { /* pas de place, pas d'instantané — l'application fonctionne */ }
+}
+function readSnapshot() {
+  try {
+    const raw = localStorage.getItem(SNAP_KEY);
+    if (!raw) return null;
+    const s = JSON.parse(raw);
+    return s?.db && s?.me ? s : null;
+  } catch { return null; }
+}
+export function clearSnapshot() {
+  try { localStorage.removeItem(SNAP_KEY); } catch { /* rien à faire */ }
+}
+
 export const App = {
   db: null,
   me: null,
   ready: false,
   busy: false,
+  /* Non nul = ce qui est à l'écran vient de l'instantané, et porte
+     l'heure à laquelle il a été pris. La coquille en fait un bandeau. */
+  offline: null,
 
   ui: {
     view: "portfolio", param: null,
@@ -52,14 +82,49 @@ export const App = {
 
   /* ── loading ────────────────────────────────────────────────────── */
 
+  /**
+   * N-06 — la survie hors ligne, en LECTURE SEULE.
+   *
+   * À Houndé, la liaison satellite tombe. Le responsable informatique de
+   * site n'a pas demandé à écrire hors ligne : il a demandé à pouvoir
+   * encore lire ce qu'il savait il y a une heure. Le livre est petit
+   * (~16 Ko au transfert), on le garde donc à chaque chargement réussi.
+   *
+   * Rien n'est mis en file. Deux raisons, chacune suffisante : la
+   * concurrence de ce produit repose sur `row_version`, qui ne peut pas
+   * être honorée contre un livre qu'on n'a pas relu ; et une écriture
+   * rejouée plus tard porterait sur la piste un horodatage qui n'est pas
+   * celui de l'acte. Mieux vaut un outil qui refuse honnêtement qu'un
+   * outil qui promet une synchronisation qu'il ne peut pas tenir.
+   *
+   * L'instantané porte le compte : A-03 a rappelé qu'un poste partagé de
+   * salle de conduite suit tout le monde, et il est effacé à la
+   * déconnexion comme le cache de vue l'est déjà.
+   */
   async load() {
-    const { db, me } = await api.bootstrap();
-    this.db = db;
-    this.me = me;
-    this.ready = true;
-    this.seedSelections();
-    this.emit();
-    return db;
+    try {
+      const { db, me } = await api.bootstrap();
+      this.db = db;
+      this.me = me;
+      this.offline = null;
+      this.ready = true;
+      this.seedSelections();
+      saveSnapshot(me?.id, db, me);
+      this.emit();
+      return db;
+    } catch (e) {
+      const snap = readSnapshot();
+      /* Un instantané ne remplace pas une session : si le serveur répond
+         « pas authentifié », il faut se reconnecter, pas lire un cache. */
+      if (!snap || e?.status === 401) throw e;
+      this.db = snap.db;
+      this.me = snap.me;
+      this.offline = snap.at;
+      this.ready = true;
+      this.seedSelections();
+      this.emit();
+      return snap.db;
+    }
   },
 
   /** Sensible first selections, so no view opens on nothing. */
@@ -166,11 +231,17 @@ export const App = {
 
   /* ── authority, mirrored from the server for rendering only ─────── */
 
-  /** R7.3 — controls the user has no authority for are absent, not greyed. */
+  /** R7.3 — controls the user has no authority for are absent, not greyed.
+      N-06 — et hors ligne, personne n'a d'autorité d'écriture : ce qui
+      est à l'écran vient d'un instantané, donc aucune commande d'écriture
+      n'est dessinée. La règle R7.3 fait le reste sans code nouveau — pas
+      un bouton grisé qui échouerait, un bouton qui n'existe pas. */
   can(action, resource) {
+    if (this.offline) return false;
     return rbacCan(this.me, action, resource).ok;
   },
   canWrite(project) {
+    if (this.offline) return false;
     return rbacWrite(this.me, project);
   },
   canSee(project) {

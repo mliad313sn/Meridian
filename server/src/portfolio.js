@@ -317,6 +317,10 @@ export async function loadPortfolio(user) {
         /* R-01 / R-13 — the artefact, its frozen address, its lineage. */
         uri: d.uri ?? "", uriHash: d.uri_locked_hash ?? "",
         uriLockedOn: d.uri_locked_on ?? null, supersedes: d.supersedes ?? null,
+        /* N-07 — un fait, jamais un jugement : la bibliothèque montre si
+           le lien répondait au dernier passage, et le statut reste celui
+           que des humains ont posé. */
+        probeState: d.probe_state ?? "never", probedAt: d.probed_at ?? null,
         version: d.row_version,
       })),
 

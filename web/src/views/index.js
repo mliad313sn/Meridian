@@ -3739,10 +3739,24 @@ Views.documents = (db) => {
        that is not http(s) is shown as text, never as an href: the server
        refuses to store other schemes, and this refuses to render one that
        ever got past it. */
-    { key: "uri", label: t("Artefact"), align: "c", width: "84px", sort: d => (d.uri ? 1 : 0), get: d => d.uri
+    { key: "uri", label: t("Artefact"), align: "c", width: "110px", sort: d => (d.uri ? 1 : 0), get: d => d.uri
         ? (safeHref(d.uri)
-          ? h("a", { href: d.uri, target: "_blank", rel: "noopener noreferrer", class: "small linkish",
-              title: d.uri, onClick: (e) => e.stopPropagation() }, t("open"))
+          ? h("span", { style: "display:inline-flex;gap:6px;align-items:center" },
+              h("a", { href: d.uri, target: "_blank", rel: "noopener noreferrer", class: "small linkish",
+                title: d.uri, onClick: (e) => e.stopPropagation() }, t("open")),
+              /* N-07 — le contrôle de vie, montré comme un FAIT à côté du
+                 lien. Il ne touche pas au statut : un jalon approuvé le
+                 reste, et quelqu'un qui sait où vit la pièce va vérifier. */
+              d.probeState === "unreachable"
+                ? h("span", { class: "xs", style: "color:var(--sig-red)",
+                    title: t("The last check did not reach this link. The approval is untouched.") }, "⚠")
+                : d.probeState === "forbidden"
+                ? h("span", { class: "xs muted",
+                    title: t("The check was refused access — the piece may well be there.") }, "🔒")
+                : d.probeState === "ok"
+                ? h("span", { class: "xs", style: "color:var(--sig-green)",
+                    title: t("Answered at the last check: ") + (d.probedAt ? fmtDate(String(d.probedAt).slice(0, 10)) : "") }, "✓")
+                : null)
           : h("span", { class: "xs", style: "color:var(--sig-amber)", title: d.uri }, t("unsafe link")))
         : h("span", { class: "xs", style: "color:var(--sig-amber)", title: t("No artefact — an approval will be refused") }, "—") },
     { key: "updated", label: "Updated", align: "r", sort: d => d.updated, get: d => h("span", { class: "mono small" }, fmtDate(d.updated)) },

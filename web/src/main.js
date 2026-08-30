@@ -9,7 +9,7 @@
 import "./styles.css";
 import { h, clear, icon, $, dialog, formDialog, searchBox, selectField, openDialogCount } from "./ui/kit.js";
 import { renderLogin } from "./ui/login.js";
-import { App, go, readRoute, routeAllowed, toast, bindEngine, reportError } from "./lib/state.js";
+import { App, go, readRoute, routeAllowed, toast, bindEngine, reportError, clearSnapshot } from "./lib/state.js";
 import { t, getLang, setLang } from "./lib/i18n.js";
 import { api, setUnauthenticatedHandler } from "./lib/api.js";
 import { Engine } from "../../shared/engine.js";
@@ -430,6 +430,22 @@ function render() {
     sidebar(db),
     h("main", { class: "main" },
       header(db),
+      /* N-06 — quand ce qui est à l'écran vient de l'instantané, le dire,
+         en permanence et avec l'heure. Un outil qui affiche des chiffres
+         d'il y a deux heures sans le dire est pire qu'un écran vide : on
+         y prend des décisions. Le bouton réessaie, parce que la liaison
+         revient souvent avant qu'on ait fini de lire. */
+      App.offline
+        ? h("div", { class: "banner", role: "status",
+            style: "display:flex;gap:10px;align-items:center;padding:8px 14px;" +
+                   "background:var(--sig-amber-soft, #fdf3e3);border-bottom:1px solid var(--rule-2)" },
+            h("span", { class: "small strong" }, t("Offline — showing what was last loaded")),
+            h("span", { class: "xs muted", style: "flex:1" },
+              t("as at ") + new Date(App.offline).toLocaleString() + " · " +
+              t("nothing can be recorded until the link is back")),
+            h("button", { class: "btn btn-xs", onClick: () => App.load().then(() => App.emit()).catch(() => {}) },
+              t("Try again")))
+        : null,
       h("div", { class: "scroll", id: "scroll" }, body))));
 }
 
@@ -439,6 +455,11 @@ async function signOut() {
   App.db = null;
   App.me = null;
   App.ready = false;
+  App.offline = null;
+  /* N-06 / A-03 — l'instantané part avec la session. Un poste partagé de
+     salle de conduite ne doit pas garder le livre d'un site sous les yeux
+     de la personne suivante. */
+  clearSnapshot();
   /* Leave no route behind: the next person to sign in on this browser
      should land on their own first screen, not on the last one this
      account was looking at. */
@@ -599,11 +620,30 @@ window.addEventListener("keydown", (e) => {
 applyTheme();
 window.matchMedia?.("(prefers-color-scheme: dark)").addEventListener?.("change", () => { applyTheme(); if (App.ready) render(); });
 
+/* N-06 — la coquille survit à la coupure, pour que l'instantané serve à
+   quelque chose. Sans ceci, un rechargement à Houndé échoue avant
+   d'atteindre la moindre ligne de ce fichier. L'enregistrement est
+   silencieux et sans conséquence s'il échoue : un navigateur qui refuse
+   les agents de service doit continuer à utiliser Meridian normalement. */
+if ("serviceWorker" in navigator && location.protocol !== "file:") {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => { /* tant pis, en ligne seulement */ });
+  });
+}
+
 (async function boot() {
   try {
     await api.me();          // a live cookie means we are already in
     await onSignedIn();
-  } catch {
+  } catch (e) {
+    /* Hors ligne avec une session encore valable : le cookie est là, mais
+       personne ne peut le confirmer. Plutôt que de renvoyer quelqu'un vers
+       un écran de connexion qui ne répondra pas, on tente l'instantané —
+       en lecture seule, et en le disant. */
+    const offlineHint = e?.status === undefined || e?.status === 0;
+    if (offlineHint) {
+      try { await onSignedIn(); return; } catch { /* pas d'instantané non plus */ }
+    }
     renderLogin($("#root"), onSignedIn);
   }
 })();

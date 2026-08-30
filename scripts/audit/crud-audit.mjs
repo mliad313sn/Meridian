@@ -126,6 +126,12 @@ const SERVER_ONLY = new Set([
   "expires_at", "user_agent",
   // write-time bookkeeping the interface has no reason to render
   "granted_at", "updated_at", "updated_by", "closed_in",
+  /* N-07 — la mécanique de la sonde, pas son résultat. La bibliothèque
+     montre `probe_state` et `probed_at` : le lien répondait-il, et quand.
+     Le code HTTP exact et le compteur d'échecs servent à décider quand
+     avertir ; les afficher demanderait au lecteur d'interpréter un 502 à
+     la place de l'outil. */
+  "probe_status", "probe_fails",
 ]);
 
 const verb = (spec) => {

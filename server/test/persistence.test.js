@@ -30,7 +30,8 @@ describe("schema and migrations (R2.2, R2.7)", () => {
        "011_demand_and_priority.sql", "012_money_and_people.sql",
        "013_notifications.sql", "014_evidence.sql", "015_rotation.sql",
        "016_timesheet.sql", "017_absence_minimisation.sql",
-       "018_notification_centre.sql", "019_notification_subscription.sql"]);
+       "018_notification_centre.sql", "019_notification_subscription.sql",
+       "020_evidence_probe.sql"]);
     const again = await migrate({ silent: true });
     assert.deepEqual(again, [], "a second run applies nothing");
   });

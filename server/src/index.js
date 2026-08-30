@@ -16,6 +16,7 @@ import { existsSync } from "node:fs";
 
 import { connect, migrate, engine, close, many, query } from "./db.js";
 import { sweep as notifySweep, purge, escalate } from "./notify.js";
+import { probeEvidence } from "./probe.js";
 import { attachUser, requireUser, requirePasswordChanged, sweepSessions, HttpError } from "./auth.js";
 import authRoutes from "./routes/auth.js";
 import portfolioRoutes from "./routes/portfolio.js";
@@ -269,6 +270,11 @@ export async function start({ port = process.env.PORT || 4173 } = {}) {
       try {
         await escalate();
         await notifySweep();
+        /* N-07 — la sonde tourne avec le reste, par petits lots : un
+           passage régulier couvre la bibliothèque sans jamais la
+           parcourir d'un coup, et n'interroge que les hôtes déjà
+           autorisés. */
+        await probeEvidence().catch(() => {});
         await purge();
       } finally {
         await query(`SELECT pg_advisory_unlock($1)`, [LOCK]).catch(() => {});

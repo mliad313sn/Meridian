@@ -896,6 +896,20 @@ export const FR = {
   "No accounts match that filter.": "Aucun compte ne correspond à ce filtre.",
   "The directory is empty.": "L'annuaire est vide.",
 
+  // ── N-07 · le contrôle de vie de la preuve
+  "The last check did not reach this link. The approval is untouched.":
+    "Le dernier contrôle n'a pas atteint ce lien. L'approbation reste intacte.",
+  "The check was refused access — the piece may well be there.":
+    "Le contrôle s'est vu refuser l'accès — la pièce est peut-être bien là.",
+  "Answered at the last check: ": "A répondu au dernier contrôle : ",
+
+  // ── N-06 · la survie hors ligne, en lecture seule
+  "Offline — showing what was last loaded": "Hors ligne — affichage du dernier état chargé",
+  "as at ": "arrêté au ",
+  "nothing can be recorded until the link is back":
+    "rien ne peut être consigné tant que la liaison n'est pas revenue",
+  "Try again": "Réessayer",
+
   // ── N-05 · le centre de notification
   "Notifications": "Notifications",
   "Notification centre": "Centre de notification",
