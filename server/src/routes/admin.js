@@ -10,6 +10,15 @@ import { audited } from "../audit.js";
 import { HttpError, createUser, setPassword, publicUser } from "../auth.js";
 import { loadSettings } from "../portfolio.js";
 import { buildArchive } from "../archive.js";
+import {
+  SCOPES, listIntegrations, createIntegration, rotateIntegrationKey, normaliseScopes,
+} from "../integrations.js";
+
+/* Même refus qu'ailleurs : un second écrivain est prévenu, jamais écrasé. */
+function conflict(result) {
+  if (!result.ok) throw new HttpError(409, "Someone else changed this record — reload and try again");
+  return result;
+}
 
 const r = Router();
 
@@ -172,6 +181,101 @@ r.get("/archive", async (req, res, next) => {
     res.setHeader("Content-Disposition",
       `attachment; filename="meridian-archive-${doc.generatedAt.slice(0, 10)}.json"`);
     res.json(doc);
+  } catch (e) { next(e); }
+});
+
+/* ── intégrations (INT-02) ────────────────────────────────────────────
+ *
+ * Une clé par système branché, une portée par clé, un nom dans la piste.
+ * La clé en clair n'existe qu'une fois — dans la réponse à sa création ou
+ * à sa rotation. Elle n'est ni stockée, ni relisible, ni renvoyée par la
+ * liste : si elle est perdue, on en tourne une nouvelle, ce qui est
+ * exactement le geste qu'on veut rendre banal.
+ */
+
+r.get("/integrations", async (_req, res, next) => {
+  try {
+    res.json({ integrations: await listIntegrations(), scopes: SCOPES });
+  } catch (e) { next(e); }
+});
+
+r.post("/integrations", async (req, res, next) => {
+  try {
+    const b = req.body ?? {};
+    if (!b.name) throw new HttpError(400, "An integration needs a name — it will appear in the audit trail");
+    let created = null;
+    const id = "INT-" + Date.now().toString(36).toUpperCase().slice(-6);
+    await audited(req.user,
+      { action: "Integration created", entity: "integration", entityId: id,
+        detail: `${b.name} — ${b.scopes || "no scope"}` },
+      async (t) => {
+        try {
+          created = await createIntegration({
+            id, name: b.name, purpose: b.purpose, scopes: b.scopes, createdBy: req.user.id,
+          }, t);
+        } catch (e) { throw new HttpError(400, e.message); }
+      });
+    /* La seule fois où la clé quitte le serveur. Dit en toutes lettres,
+       parce qu'un administrateur qui ferme la fenêtre sans copier doit
+       comprendre tout de suite qu'il faut tourner la clé, pas chercher
+       où elle est rangée. */
+    res.status(201).json({
+      id, ...created,
+      notice: "This key is shown once and is not stored. Copy it now; if it is lost, rotate it.",
+    });
+  } catch (e) { next(e); }
+});
+
+r.post("/integrations/:id/rotate", async (req, res, next) => {
+  try {
+    const row = await one(`SELECT id, name FROM integration WHERE id = $1`, [req.params.id]);
+    if (!row) throw new HttpError(404, "No such integration");
+    let out = null;
+    await audited(req.user,
+      { action: "Integration key rotated", entity: "integration", entityId: row.id,
+        detail: row.name },
+      async (t) => { out = await rotateIntegrationKey(row.id, t); });
+    res.json({ ...out, notice: "The previous key stopped working the moment this one was issued." });
+  } catch (e) { next(e); }
+});
+
+r.patch("/integrations/:id", async (req, res, next) => {
+  try {
+    const row = await one(`SELECT * FROM integration WHERE id = $1`, [req.params.id]);
+    if (!row) throw new HttpError(404, "No such integration");
+    const b = req.body ?? {};
+    const patch = {};
+    if (b.name !== undefined) patch.name = b.name;
+    if (b.purpose !== undefined) patch.purpose = b.purpose;
+    if (b.active !== undefined) patch.active = b.active === true;
+    if (b.scopes !== undefined) {
+      try { patch.scopes = normaliseScopes(b.scopes); }
+      catch (e) { throw new HttpError(400, e.message); }
+    }
+    const out = await audited(req.user,
+      { action: b.active === false ? "Integration revoked" : "Integration updated",
+        entity: "integration", entityId: row.id, detail: b.name ?? row.name,
+        before: { scopes: row.scopes, active: row.active },
+        after: { scopes: patch.scopes ?? row.scopes, active: patch.active ?? row.active } },
+      async (t) => conflict(await updateVersioned(t, "integration", row.id,
+        requiredVersion(b, "integration"), patch)));
+    res.json({ version: out.version });
+  } catch (e) { next(e); }
+});
+
+r.delete("/integrations/:id", async (req, res, next) => {
+  try {
+    const row = await one(`SELECT * FROM integration WHERE id = $1`, [req.params.id]);
+    if (!row) throw new HttpError(404, "No such integration");
+    /* La ligne `app_user` qui porte son nom, elle, RESTE : la piste
+       d'audit la référence, et une piste qui ne sait plus nommer qui a
+       écrit n'est plus une piste. Même règle que pour une personne
+       désactivée plutôt que supprimée (I-19). */
+    await audited(req.user,
+      { action: "Integration removed", entity: "integration", entityId: row.id,
+        detail: row.name, before: { ...row, key_hash: "[redacted]" } },
+      async (t) => t.query(`DELETE FROM integration WHERE id = $1`, [row.id]));
+    res.json({ ok: true });
   } catch (e) { next(e); }
 });
 

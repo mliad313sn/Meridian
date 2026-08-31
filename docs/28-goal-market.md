@@ -99,7 +99,7 @@ Tenu à jour par la boucle, à la source, comme le relevé de clôture de
 | Ligne | Version | État | Mesure |
 |---|:--:|---|---|
 | PM-02 | R3 | **close 31/08** | 024 · écran · 9 tests · adopté par le groupe, lu depuis un autre site, projet d'origine non nommé |
-| INT-02 | R3 | ouverte | — |
+| INT-02 | R3 | **close 31/08** | 025 · une clé par système, portées vérifiées, nom dans la piste, rotation · surface /api/v1 · 13 tests |
 | PM-01 | R3 | ouverte | — |
 | INT-01 | R3 | ouverte | — |
 | PM-03 | R3 | ouverte | — |

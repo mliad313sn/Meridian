@@ -25,6 +25,7 @@ import meetingRoutes from "./routes/meetings.js";
 import adminRoutes from "./routes/admin.js";
 import importRoutes from "./routes/importcsv.js";
 import federationRoutes from "./routes/federation.js";
+import v1Routes from "./routes/v1.js";
 import federationServiceRoutes from "./routes/federationService.js";
 import { translate } from "./pgerror.js";
 import { say, localeOf } from "./i18n.js";
@@ -143,6 +144,12 @@ export function buildApp() {
      service key, mounted BEFORE the session wall on purpose: the caller
      is another system, not a person. See server/src/federation.js. */
   app.use("/v1", federationServiceRoutes);
+
+  /* INT-02 — la surface que les autres systèmes lisent. Montée AVANT le
+     mur de session, comme la fédération et pour la même raison : celui
+     qui appelle est une machine, pas une personne. Chaque route porte sa
+     propre portée ; une clé qui ne l'a pas est refusée là, pas ici. */
+  app.use("/api/v1", v1Routes);
 
   // R1.1 — everything past this point needs a session.
   app.use("/api", requireUser());

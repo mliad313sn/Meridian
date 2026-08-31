@@ -471,6 +471,20 @@ export function projectScopeSql(user, alias = "p") {
       params: [[...sites]],
     };
   }
+  /* INT-02 — une intégration voit tout le portefeuille, et c'est une
+     DÉCISION, pas un effet de bord. Elle tombait jusqu'ici dans la
+     branche « lecteur sans habilitation », qui rend `true` : le bon
+     résultat pour la mauvaise raison, et donc une règle qu'un futur
+     changement du cas « viewer » aurait renversée sans le vouloir.
+
+     Un système branché est un acteur de niveau groupe par construction :
+     l'ERP ne connaît pas les sites, il connaît le portefeuille. Ce qui le
+     borne n'est pas son périmètre mais sa PORTÉE — une clé qui ne sait
+     que lire ne peut rien écrire, où que ce soit. Scoper une intégration
+     à un programme reste possible plus tard ; ce n'est pas le contrôle
+     qui manquait. */
+  if (user.role === "service") return { sql: "true", params: [] };
+
   // viewer
   if (!programmes.size && !sites.size) return { sql: "true", params: [] };
   return {
