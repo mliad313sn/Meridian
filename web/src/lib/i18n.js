@@ -1082,6 +1082,13 @@ export const FR = {
   "Closed by default: with none named, nothing is posted outward.":
     "Fermé par défaut : sans hôte nommé, rien n'est envoyé vers l'extérieur.",
 
+  /* R-01 · le réglage des hôtes de preuve, enfin posé à l'écran. */
+  "Evidence": "Preuve",
+  "where a proof may point": "où une preuve a le droit de pointer",
+  "Trusted evidence hosts": "Hôtes de preuve de confiance",
+  "Closed by default: with none named, no document can be approved as evidence.":
+    "Fermé par défaut : sans hôte nommé, aucun document ne peut être approuvé comme preuve.",
+
   // ── A-05 · l'aide au champ, là où un AUTRE lira la valeur.
   //    Chacune dit ce dont le lecteur futur aura besoin, jamais ce que
   //    le champ contient : « Note » n'apprend rien à personne.

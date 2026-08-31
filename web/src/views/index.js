@@ -1469,8 +1469,8 @@ function setHealth(db, p) {
     extra: h("div", { class: "small muted" }, "Derived status right now: " + RAG_LABEL[m.health.rag] + " — " + m.health.why),
     saveLabel: "Set status",
     onSave: (v) => App.write("Project status set", (a) => a.patch("/projects/" + p.id + "/health", {
-      rag: v.rag === "auto" ? null : v.rag, why: v.why, version: p.version,
-    }), { detail: v.rag === "auto" ? "Back to automatic" : v.why }),
+      rag: v.mode === "auto" ? null : v.rag, why: v.note, version: p.version,
+    }), { detail: v.mode === "auto" ? "Back to automatic" : v.note }),
   });
 }
 
@@ -4721,6 +4721,23 @@ Views.admin = (db) => {
               { detail: e.target.value }) },
             ...["Weekly — Monday 09:00", "Weekly — Friday 16:00", "Fortnightly — Wednesday 10:00", "Monthly — first working day"]
               .map(o => h("option", { value: o, selected: o === st.cadence }, o))))),
+
+      /* R-01 — le réglage que le refus d'approbation nomme (« name the
+         group's document estate ») et qu'aucun écran ne proposait : la
+         preuve de jalon restait inapprouvable sans passer par l'API
+         (comité de revue documentaire, docs/32). Même patron fermé par
+         défaut que les hôtes de webhook plus bas. */
+      h("div", { style: "height:22px" }), h("hr", { class: "hr" }), h("div", { style: "height:18px" }),
+      sectionHead(t("Evidence"), t("where a proof may point")),
+      h("div", { class: "form-grid" },
+        h("div", { class: "field full" }, h("label", null, t("Trusted evidence hosts")),
+          h("input", { class: "input input-sm", value: st.documentHosts ?? "",
+            placeholder: "docs.example.com, dms.example.com",
+            onChange: e => App.write("Evidence hosts changed",
+              (a) => a.patch("/admin/settings", { documentHosts: e.target.value }),
+              { detail: e.target.value || "(none)" }) }),
+          h("div", { class: "xs muted" },
+            t("Closed by default: with none named, no document can be approved as evidence.")))),
 
       /* N-05 / G-13 — les réglages que le produit EXIGE et qu'aucun écran
          ne proposait. Sans durée de conservation, la purge s'abstient et

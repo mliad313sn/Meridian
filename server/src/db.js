@@ -9,7 +9,7 @@
  * runs in production. Nothing above this file knows which is in use.
  */
 
-import { readdir, readFile } from "node:fs/promises";
+import { mkdir, readdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -148,6 +148,10 @@ async function clearStaleLocks(dataDir) {
 
 async function openPglite(dataDir) {
   const { PGlite } = await import("@electric-sql/pglite");
+  /* PGlite's own mkdir is not recursive, so a fresh checkout — where
+     server/.data does not exist yet — died on ENOENT before the engine
+     ever opened. */
+  if (dataDir) await mkdir(dataDir, { recursive: true });
   await clearStaleLocks(dataDir);
   const pglite = dataDir ? new PGlite(dataDir) : new PGlite();
   await pglite.waitReady;
@@ -223,7 +227,16 @@ async function openPglite(dataDir) {
 export async function connect(opts = {}) {
   const url = opts.url ?? process.env.DATABASE_URL;
   if (url) impl = await openPg(url);
-  else impl = await openPglite(opts.dataDir ?? process.env.PGLITE_DIR ?? null);
+  /* An explicit dataDir: null is a request for an in-memory instance —
+     the test harness's contract — and must not be overridden by a
+     PGLITE_DIR left in the environment. Everything else falls through
+     to the documented default: without it, `npm run seed && npm run dev`
+     seeded one in-memory instance, exited, and started another, empty —
+     a quick start that silently discarded the book (committee finding,
+     docs/32). */
+  else if (opts.dataDir === null) impl = await openPglite(null);
+  else impl = await openPglite(opts.dataDir ?? process.env.PGLITE_DIR
+    ?? join(process.cwd(), "server", ".data", "pgdata"));
   engineName = impl.name;
   return impl;
 }

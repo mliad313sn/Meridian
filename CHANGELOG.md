@@ -18,8 +18,54 @@ Unreleased work sits under `## [Unreleased]` until it is tagged.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The documented quick start silently discarded the book.**
+  `npm run seed && npm run dev` — the README's first three commands —
+  seeded an **in-memory** PGlite instance, exited, and started another,
+  empty: nothing set `PGLITE_DIR` on that path, and `server/.data/pgdata`
+  was only ever a promise in `.env.example`. Found by the documentation
+  review committee (`docs/32`) *running* the sequence, not reading it.
+  The embedded engine now defaults to `server/.data/pgdata` (created
+  recursively — PGlite does not create parent directories, the second
+  defect the retest found); an explicit `dataDir: null` remains an
+  in-memory instance, which is the test harness's contract and can no
+  longer be overridden by a stray `PGLITE_DIR`.
+- **Every manual health override returned 400.** The "Set project
+  status" dialog collected the reason under `note` but posted `why:
+  v.why` (undefined), which the server rightly refuses — an override
+  without a readable reason is not an override; and it tested
+  `v.rag === "auto"` where the source select is `v.mode`, so returning
+  to the automatic status was impossible. Two keys, both wrong since
+  the dialog was written; also a `docs/32` finding.
+
 ### Added
 
+- **The trusted evidence hosts, finally on a screen** (R-01 follow-up,
+  `docs/32` P-03). The approval refusal named the setting — "name the
+  group's document estate (`documentHosts`, in Administration)" — and
+  Administration offered no field to do it: on a fresh instance no
+  document could ever be approved as evidence and no gate could
+  advance without a hand-made API call. Settings gains an **Evidence**
+  section on the same closed-by-default pattern as the webhook hosts,
+  in both languages.
+
+### Documentation
+
+- **A documentation review committee, and its record**
+  (`docs/32-comite-revue-documentation.md`). Four independent seats —
+  accuracy against the code, manual-to-screen fidelity, French
+  terminology against the product's own dictionary, cross-document
+  coherence — produced 71 findings on the freshly written set; each
+  closed with a source citation, or converted into an open product
+  finding (O-1…O-7) for the register. The stale figures are gone
+  (nine gates, not eight; 375 tests, not 356; 84 view renders under
+  gate F8, not "72 under sweep"), the manuals now say what exists —
+  and name what exists only in the API — and the French manual speaks
+  the dictionary's French (*provision*, *rectification*, *ambre*,
+  *heures de silence*…), keeping the gate names in the English the
+  screen actually shows. Documentation work now files under this
+  heading, as the header's own PATCH rule always implied.
 - **`docs/29-technical-reference.md`** — the current-state map of the
   product, written from a full read of the source rather than from the
   design documents: the project description, the 46-table database

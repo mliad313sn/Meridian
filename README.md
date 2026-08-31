@@ -50,15 +50,15 @@ Stated here rather than discovered later:
   `docs/24-comite-marche.md`, which is an independent committee's
   assessment saying exactly that, in more detail than a vendor would.
 - **The reports and committee records are in French.** The code, its
-  comments and the interface are in English and French; the twenty-five
-  documents in `docs/` that explain *why* each decision was taken are
-  mostly French.
+  comments and the interface are in English and French; the documents
+  in `docs/` that explain *why* each decision was taken are mostly
+  French.
 - **Three blocking operational findings are yours to close**, not the
   software's: a tested backup, a second instance, and a written security
   policy. See [SECURITY.md](SECURITY.md).
 
 You are getting the source, an archive format that gets all your data
-back out (`npm run restore`), and a build that fails on eight static
+back out (`npm run restore`), and a build that fails on nine static
 gates before it will let a change through.
 
 ---
@@ -89,10 +89,10 @@ Other commands:
 npm test              # 375 tests
 npm run audit         # nine gates: routes, CRUD+audit, versions, controls, language, field help, kit imports, view render, API contract
 npm run verify        # tests + build + the nine gates + a dependency audit
-npm run sweep         # 286 use cases × 4 roles + 72 view renders, on a fresh instance
+npm run sweep         # 73 use cases run as each of 4 roles — 286 exercised cases — on a fresh instance
 npm run build         # build the client into web/dist
 npm run package:installer  # dist/MeridianSetup.exe — Windows service installer
-powershell -File scripts/deploy-local.ps1   # extract it, install it elevated, check /api/health
+powershell -ExecutionPolicy Bypass -File scripts\deploy-local.ps1   # extract it, install it elevated, check /api/health
 npm run openapi       # regenerate docs/openapi.v1.json from the mounted routes
 npm run restore       # reload an exported archive into an empty instance (M-01)
 npm run training      # a separate practice instance on :4180 — never touches the real book
@@ -122,7 +122,8 @@ the Windows story in depth is
 2. **Production, from source** — Node 24 + your PostgreSQL:
    `DATABASE_URL=… npm run migrate && npm run seed && npm start`, under
    your own supervisor (systemd, pm2). Set `MERIDIAN_SECURE_COOKIES=1`
-   once — and only once — it is behind HTTPS.
+   only once it is behind HTTPS — never on plain HTTP, where the Secure
+   cookie is silently dropped and sign-in loops.
 3. **Windows service, one `.exe`** — for a machine with no Node and
    possibly no internet. `npm run package:installer` produces
    `dist/MeridianSetup.exe` (~33 MB, built with IExpress, which ships
@@ -135,9 +136,9 @@ the Windows story in depth is
    `http://localhost:4173`. **Upgrading is running the new setup again**:
    it stops the service, replaces the files, keeps your
    `meridian.config.json`, and restarts. From a checkout,
-   `powershell -File scripts/deploy-local.ps1` does the whole
-   extract-install-verify cycle; `Uninstall-Service.cmd` in the install
-   directory reverses everything.
+   `powershell -ExecutionPolicy Bypass -File scripts\deploy-local.ps1`
+   does the whole extract-install-verify cycle; `Uninstall-Service.cmd`
+   in the install directory reverses everything.
 4. **Training instance** — `npm run training`, a separate practice book
    on `:4180` that never touches the real one.
 
@@ -201,9 +202,9 @@ web/             src/ui/kit.js     h() builder, dialogs, tables, charts (from v4
 `shared/rbac.js`, server-side — the browser imports the same module, but
 only to decide what to draw. Every mutation goes through `audited()`,
 which writes the audit row inside the same transaction, so a change that
-is not audited does not commit. Every mutable row carries `row_version`,
-and an update asserts the version it read — a second writer gets a 409,
-never a silent overwrite.
+is not audited does not commit. Every versioned entity row carries
+`row_version`, and an update asserts the version it read — a second
+writer gets a 409, never a silent overwrite.
 
 ---
 
@@ -214,7 +215,7 @@ never a silent overwrite.
 | [`docs/00-committee-charter.md`](docs/00-committee-charter.md) | Who specified this and what they decided |
 | [`docs/01-requirements-register.md`](docs/01-requirements-register.md) | 48 requirements, each traced to a test |
 | [`docs/02-gap-analysis.md`](docs/02-gap-analysis.md) | What the v4 build got right, and its 15 defects |
-| [`docs/03-target-architecture.md`](docs/03-target-architecture.md) | Architecture decisions, API surface, authority matrix |
+| [`docs/03-target-architecture.md`](docs/03-target-architecture.md) | Architecture decisions, API surface, authority matrix — as targeted; what shipped is `29` |
 | [`docs/04-access-model.md`](docs/04-access-model.md) | Group / site / admin / viewer, and how it is enforced |
 | [`docs/05-meeting-animation.md`](docs/05-meeting-animation.md) | The meetings module and the playbook for running one |
 | [`docs/06-amdec-uat.md`](docs/06-amdec-uat.md) | AMDEC/FMEA acceptance review — 22 failure modes scored and closed |
@@ -243,6 +244,7 @@ never a silent overwrite.
 | [`docs/29-technical-reference.md`](docs/29-technical-reference.md) | Current-state reference — project description, the 46-table database schema, every functionality, and the module map |
 | [`docs/30-user-manual.md`](docs/30-user-manual.md) | User manual (EN) — role by role, workflow by workflow, with the product description in five languages |
 | [`docs/31-manuel-utilisateur.md`](docs/31-manuel-utilisateur.md) | Manuel utilisateur (FR) — rôle par rôle, processus par processus |
+| [`docs/32-comite-revue-documentation.md`](docs/32-comite-revue-documentation.md) | Documentation review committee (FR) — four seats, 71 findings, three product defects found by running what the docs promised |
 
 ---
 
@@ -291,7 +293,10 @@ Stated plainly rather than buried; all scored in the AMDEC.
   now ignored, and [CONTRIBUTING.md](CONTRIBUTING.md) says to install your
   proxy's CA instead.
 - **Three settings wait on the sponsor** (accepted in writing,
-  `docs/18-amdec-recette.md`): `MERIDIAN_SMTP_URL` before notifications
-  actually send, `MERIDIAN_OIDC_*` before Entra sign-in appears, and the
-  real `documentHosts` before documents can be approved — the trusted-host
-  list ships **closed by default** and says so.
+  `docs/18-amdec-recette.md`): an outbound destination before
+  notifications actually leave — today that is the `MERIDIAN_NOTIFY_URL`
+  webhook gated by `notifyHosts`; `MERIDIAN_SMTP_URL` is reserved, the
+  SMTP client itself is not yet carried — `MERIDIAN_OIDC_*` before Entra
+  sign-in appears, and the real `documentHosts` (Administration →
+  Evidence) before documents can be approved — the trusted-host list
+  ships **closed by default** and says so.

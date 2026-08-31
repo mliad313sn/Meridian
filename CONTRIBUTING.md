@@ -34,7 +34,7 @@ just for you.
 npm run verify
 ```
 
-That is 356 tests, a client build, eight static gates and a dependency
+That is 375 tests, a client build, nine static gates and a dependency
 audit. It must be green. It takes about two minutes.
 
 `npm run sweep` exercises 286 use cases across the four roles and is

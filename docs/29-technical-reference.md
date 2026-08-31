@@ -59,7 +59,7 @@ record, so the dictionary exists on both).
 
 | Module | What it is |
 |---|---|
-| `engine.js` | The portfolio arithmetic, behaviour-frozen from v4: EVM metrics (SPI/CPI/EAC/VAC), critical path and float, gate status and advancement rules, RAID exposure and escalation, capacity bucketing, effective FTE after rotation/availability, prioritisation against a capital envelope, tolerance measurement and breach detection, benefit attainment, site clocks, the S-curve. Also the fixed vocabularies: 4 gates, 6 phases, RAID types, 11 ISO 21502 lesson categories, 9 document types. |
+| `engine.js` | The portfolio arithmetic, behaviour-frozen from v4: EVM metrics (SPI/CPI/EAC/VAC), critical path and float, gate status and advancement rules, RAID exposure and escalation, capacity bucketing, effective FTE from availability, prioritisation against a capital envelope, tolerance measurement and breach detection, benefit attainment, site clocks, the S-curve. Also the fixed vocabularies: 4 gates, 6 phases, RAID types, 11 ISO 21502 lesson categories, 9 document types. |
 | `rbac.js` | The single authorisation gate: `can(user, action, resource)` over ~40 named actions, four roles (`admin`, `group`, `site`, `viewer`), grants that name exactly one programme or one site, group-only writes, admin-only writes, and the visibility rules. |
 | `meetings.js` | Agenda generation: exception-only weekly agendas, full monthly steering packs, referral and cross-level action threading, section time-boxing. |
 
@@ -75,7 +75,7 @@ record, so the dictionary exists on both).
 | `audit.js` | `audited()` — the wrapper every mutation goes through: audit row with before/after images inside the mutation's transaction. |
 | `rbac` (shared) + `pgerror.js` | Refusals with reasons; constraint violations translated into actionable 400/409s. |
 | `portfolio.js` | The serialiser: database rows → the exact object shape the frozen engine reads. Money stored in whole units, divided by 1e6 at this boundary. Default settings live here. |
-| `notify.js` | The notification pipeline: queue (never direct send), dedupe, grouping, severity, per-user locale and cadence, quiet hours in the *site's* timezone, SMTP delivery only when `MERIDIAN_SMTP_URL` is set. |
+| `notify.js` | The notification pipeline: queue (never direct send), dedupe, grouping, severity, per-user locale and cadence, quiet hours in the *site's* timezone. Outbound delivery is an HTTPS webhook (`MERIDIAN_NOTIFY_URL`, gated by the `notifyHosts` allow-list); an SMTP transport is reserved (`MERIDIAN_SMTP_URL`) but not yet carried. |
 | `exceptions.js` | The hourly tolerance sweep: measures schedule/cost/benefit against the active tolerance and *records* exceptions — nobody has to volunteer bad news. |
 | `probe.js` | Evidence liveness: re-checks approved document URIs; three consecutive failures alert, but a probe never changes a document's status. |
 | `federation.js` + `routes/federation*.js` | SDP (IT-operations dashboard) federation: outbound pulls of actions/changes into a PII-free display cache, inbound `/v1` sync under a hashed service key. |
@@ -105,10 +105,10 @@ API), `routes/meetings.js`, `routes/admin.js`, `routes/importcsv.js`,
 
 Nine static gates (`npm run audit`): route match, CRUD+audit coverage,
 row-version coverage, control coverage, i18n coverage, field-help
-coverage, kit-import hygiene, view render (all screens, all roles), and
-OpenAPI drift. Plus the use-case sweep (286 use cases × 4 roles on a
-fresh instance), the Windows packaging chain, the training instance, the
-archive restore, and the admin handover.
+coverage, kit-import hygiene, view render (all 21 screens × 4 roles),
+and OpenAPI drift. Plus the use-case sweep (73 use cases run as each of
+the 4 roles on a fresh instance), the Windows packaging chain, the
+training instance, the archive restore, and the admin handover.
 
 ---
 
@@ -119,9 +119,10 @@ applied automatically at boot. Identical SQL on PostgreSQL and PGlite.
 
 ### Cross-cutting conventions
 
-- **Optimistic concurrency** — every mutable row carries `row_version`;
-  an update asserts the version it read, a mismatch is a 409, never a
-  silent overwrite.
+- **Optimistic concurrency** — every versioned entity row carries
+  `row_version`; an update asserts the version it read, a mismatch is a
+  409, never a silent overwrite. Settings, narrative blocks and
+  approval-chain steps sit deliberately outside the scheme.
 - **Append-only records** — `audit_event`, `report_period` and
   `report_snapshot` carry database `RULE`s that turn `UPDATE` and
   `DELETE` into no-ops. History cannot be rewritten by application code.
@@ -138,13 +139,13 @@ applied automatically at boot. Identical SQL on PostgreSQL and PGlite.
   tokens and integration/federation keys are stored as SHA-256 hashes
   only.
 
-### Organisation & identity (001, 004, 021, 022, 025)
+### Organisation & identity (001, 004, 006, 015, 019, 021–023, 025)
 
 | Table | Purpose · notable columns |
 |---|---|
 | `site` | A delivery site: city, region, `tz_offset`/`tz_name` (drives plant windows and quiet hours), headcount/FTE, charter, network link (`link_mbps`, `link_kind`), `readiness` state, `champion_id` — the named local referent (A-12). |
 | `programme` | A programme: name, sponsor, `manager_id`, `origin`. |
-| `person` | The directory: role, site, `day_rate`, `employment` (staff/contractor), `rotation` ("4/2", "14/14"), `availability` %, supplier. Referenced from eleven places. |
+| `person` | The directory: role, site, `day_rate`, `employment` (staff/contractor), `rotation` ("4/2", "14/14"), `availability` %, supplier. Referenced from twenty-one tables. |
 | `app_user` | An account: unique email (case-insensitive), scrypt `pw_hash`+`pw_salt`, `role ∈ (admin, group, site, viewer)`, `must_change_password`, `locale` (en/fr), `notify_pref`, quiet hours (`quiet_from`/`quiet_to`). |
 | `access_grant` | One row = one grant naming exactly one programme **or** one site (CHECK-enforced exclusivity). No wildcard grants — "all" is a property of the admin role. |
 | `session` | Server-side sessions; `token_hash` (SHA-256, never the token), expiry, `acting_for` — the deputy authority, verified per request against the absence that justifies it. |
@@ -154,7 +155,7 @@ applied automatically at boot. Identical SQL on PostgreSQL and PGlite.
 | `usage_daily` | Anonymous adoption/security counters: one row per day per kind (`refusal`, `sign-in`, `sign-in-failed`, `write`). Counts how many, never who — the boundary is in the schema. |
 | `integration` | Named integrations: unique name (appears in the audit trail), `key_hash`/`key_hint`, comma-separated `scopes` (empty = can do nothing), active flag, `rotated_at`, `last_used_at`. |
 
-### Portfolio core (002, 004, 005, 008, 010, 011)
+### Portfolio core (002, 004, 005, 008, 010–012, 014, 020)
 
 | Table | Purpose · notable columns |
 |---|---|
@@ -246,11 +247,12 @@ source; a routed approval chain (steps, states, comments); CCB threshold
 routing; approval applies the deltas to budget, dates and contingency.
 
 **Resources & people.** Range-based allocations bucketed into weekly
-capacity; over-allocation and bench views; effective FTE after rotation
-("4/2", "14/14") and availability; contractors and suppliers;
-minimal weekly timesheets (actuals beside plan); absences with deputies —
-a deputy acts *as* the absent person, within their authority, audited
-under both names.
+capacity; over-allocation and bench views; effective FTE from the
+`availability` percentage (rotation — "4/2", "14/14" — employment kind
+and supplier are recorded as directory data, not folded into the
+arithmetic); minimal weekly timesheets (actuals beside plan); absences
+with deputies — a deputy acts *as* the absent person, within their
+authority, audited under both names.
 
 **Benefits & value.** Benefits in their own units (production,
 availability, cost, risk, compliance), baseline/target/actual;
@@ -263,9 +265,10 @@ measured vs allowed, on the same numbers as the screen; an exception
 closes only by an answer (tolerance raised, plan revised, accepted,
 stopped), never by the forecast drifting back.
 
-**Lessons learned.** Proposed by whoever lived it, adopted by group,
-surfaced by relevance (programme/site) when a new project starts;
-positive lessons recorded alongside failures.
+**Lessons learned.** Proposed by whoever lived it, adopted by group —
+adoption is what makes a lesson visible beyond its site; a
+relevance-filtered read (programme/site) exists in the API; positive
+lessons recorded alongside failures.
 
 **Meetings.** Weekly exception-only agendas and monthly steering packs,
 generated from live state and frozen at close; decisions (immutable once
@@ -278,12 +281,15 @@ plant/safety classification of projects with an independent MoC
 signature; intrusive milestones checked against windows; site readiness
 and link quality; rollout waves per site.
 
-**Notifications.** Nine kinds, queued rather than sent, deduplicated and
-grouped, severity computed; an in-app centre with read/acted state; per-
-user locale (EN/FR), cadence, subscriptions, and quiet hours in the
-site's timezone (urgent pierces); delivery only when SMTP is configured,
-with the queue visible either way; retention purge that refuses to run
-unconfigured.
+**Notifications.** Nine kinds in the vocabulary; four are emitted today
+(action due/overdue, gate blocked, evidence unreachable) plus the
+tolerance breach — the rest are defined but not yet fed. Queued rather
+than sent, deduplicated and grouped, severity computed; an in-app centre
+with read/acted state; per-user locale (EN/FR) and cadence; quiet hours
+in the site's timezone (urgent pierces). Outbound delivery is an HTTPS
+webhook (`MERIDIAN_NOTIFY_URL` + the `notifyHosts` allow-list); the
+subscription and quiet-hours API exists ahead of its screen; retention
+purge refuses to run unconfigured.
 
 **Reporting & period close.** Live dashboards plus closed periods: a
 close freezes per-project snapshots (append-only), a correction is a new
@@ -350,37 +356,44 @@ Group-only, whatever the project: baselining, the cost ledger,
 contingency release, data import, the benefit verdict, period close,
 lesson adoption, setting tolerances and answering exceptions — each for
 the same reason: the person who delivers does not get to rule on their
-own delivery. Admin-only: user management and global settings. Service
-and integration keys can never open the interactive interface — their
-role is unknown to `rbac.can()`.
+own delivery. The admin role is the deliberate exception to the
+separation rules — a break-glass the code itself annotates. Admin-only:
+user management and global settings. Service and integration keys can
+never open the interactive interface: authenticating a key never
+creates a session user, and the key-guarded surfaces are mounted ahead
+of the session guard, so `rbac.can()` is never reached with a key
+identity.
 
 ---
 
 ## 7 · The 21 screens
 
-| View | What it shows |
-|---|---|
-| `portfolio` | The book: every project in scope with health, progress, SPI/CPI, finish vs baseline. |
-| `my` | My week: my actions, my projects, my entries owed. |
-| `mysite` | The site cockpit: local projects, group projects landing here, concerns, absences and deputies. |
-| `programmes` | Programme roll-ups. |
-| `project` | The project page: schedule, gates and evidence, RAID, change, money, benefits, tolerance, waves, SDP links, lessons. |
-| `schedule` | The integrated master schedule with cross-project dependencies. |
-| `board` | The delivery board (columns, WIP). |
-| `risk` | The RAID register and exposure profile. |
-| `roadmap` | The portfolio timeline. |
-| `pipeline` | Demand intake and the ranked capital queue against the envelope. |
-| `budget` | The financial position: ledger, commitments, capex/opex, currencies. |
-| `change` | Change requests and their approval chains. |
-| `resources` | Capacity, over-allocation, bench, rotation, timesheets. |
-| `documents` | The evidence library, probe results included. |
-| `reports` | The weekly/monthly pack, closed periods and restatements, digest. |
-| `meetings` | Series, agendas, minutes, actions, referrals. |
-| `lessons` | The lessons register: propose, adopt, search by relevance. |
-| `locations` | Sites: clocks, links, readiness, windows, champions. |
-| `adoption` | Per-site adoption indicators. |
-| `inbox` | The notification centre. |
-| `admin` | Users, grants, settings, integrations, federation, archive. |
+The *View* column is the route identifier in the code; *In the menu* is
+what the user actually reads (EN / FR).
+
+| View | In the menu | What it shows |
+|---|---|---|
+| `portfolio` | Portfolio / Portefeuille | The book: every project in scope with health, progress, SPI/CPI, finish vs baseline. |
+| `my` | My week / Ma semaine | Everyone's landing page: my actions, my projects, my entries owed. |
+| `mysite` | My site / Mon site | The site cockpit: local projects, group projects landing here, concerns, absences and deputies. |
+| `programmes` | Programmes | Programme roll-ups. |
+| `project` | Project overview / Vue projet | The project page: stage plan, milestones and gates, RAID, money, benefits, tolerance, waves, SDP links. |
+| `schedule` | Schedule / Planning | The integrated master schedule with cross-project dependencies. |
+| `board` | Board / Kanban | The delivery board (work items, columns, WIP limits). |
+| `risk` | Risks & issues / Risques & problèmes | The RAID register and exposure profile. |
+| `roadmap` | Roadmap / Feuille de route | The portfolio timeline. |
+| `pipeline` | Pipeline / Portefeuille de demandes | Demand intake and the ranked capital queue against the envelope. |
+| `budget` | Budget & cost / Budget & coûts | The financial position: ledger, commitments, capex/opex, currencies. |
+| `change` | Change requests / Demandes de changement | Change requests and their approval chains. |
+| `resources` | Resources / Ressources | Capacity, over-allocation, bench, timesheets, absences. |
+| `documents` | Documents | The evidence library, probe results included. |
+| `reports` | Reports / Rapports | The weekly/monthly pack, closed periods and restatements, digest. |
+| `meetings` | Meetings / Réunions | Series, agendas, minutes, actions, referrals. |
+| `lessons` | Lessons / Enseignements | The lessons register: propose, adopt, filter by relevance. |
+| `locations` | Locations / Sites | Sites: clocks, links, readiness, windows. (The site champion is named in Administration and shown by the in-app guide.) |
+| `adoption` | Adoption | Per-site adoption indicators. |
+| `inbox` | Notifications | The notification centre. |
+| `admin` | Administration | Users, grants, settings, integrations, federation, CSV import, archive. |
 
 ---
 
@@ -422,9 +435,10 @@ demonstration portfolio entirely. Behind HTTPS, set
 `MERIDIAN_SECURE_COOKIES=1` — and only behind HTTPS: on plain LAN HTTP a
 `Secure` cookie is silently dropped and sign-in appears to succeed while
 every next request is anonymous. Optional integrations are environment
-variables read at start: `MERIDIAN_SMTP_URL` (notifications actually
-send), `MERIDIAN_OIDC_*` (Entra sign-in appears), and the
-`documentHosts` setting (evidence approval opens — it ships closed).
+variables read at start: `MERIDIAN_NOTIFY_URL` (outbound notification
+webhook, gated by the `notifyHosts` allow-list), `MERIDIAN_OIDC_*`
+(Entra sign-in appears), and the `documentHosts` setting in
+Administration (evidence approval opens — it ships closed).
 Process supervision is the platform's own (systemd, pm2, the Windows
 service below); the app applies pending migrations itself at boot.
 
@@ -457,7 +471,8 @@ self-elevates through UAC and then, in order:
 2. unpacks to `C:\Apps\Meridian`, **keeping any existing
    `meridian.config.json`** — configuration belongs to the machine, not
    the package;
-3. locks the directory down to Administrators and SYSTEM (the service
+3. breaks ACL inheritance on the directory: full control to
+   Administrators and SYSTEM, read-and-execute for Users (the service
    runs as LocalSystem; a world-writable install directory would be a
    privilege escalation);
 4. prepares a database, in this order: an existing usable PostgreSQL is
@@ -472,7 +487,8 @@ self-elevates through UAC and then, in order:
    on failure after 10 s / 60 s / 120 s, logs in `C:\Apps\Meridian\logs`
    rolled at 10 MB;
 6. starts it and waits — up to thirty seconds — for the service manager
-   to report RUNNING, then checks `/api/health`.
+   to report RUNNING. (The `/api/health` check afterwards is what
+   `scripts\deploy-local.ps1` adds on a development checkout.)
 
 The app is then at `http://localhost:4173`.
 
@@ -520,7 +536,10 @@ book.
 ## 9 · Verification
 
 - `npm test` — 375 tests, 53 suites (all green as at this document).
-- `npm run audit` — the nine static gates.
-- `npm run sweep` — 286 use cases × 4 roles + 72 view renders on a fresh
-  instance.
+- `npm run audit` — the nine static gates, including F8, which renders
+  all 21 screens as each of the 4 roles — 84 renders, no exception
+  tolerated (`npm run audit:views` runs it alone).
+- `npm run sweep` — the use-case sweep: 73 use cases (67 as a viewer,
+  which has nothing to decide) run in each of the 4 roles — 286
+  exercised cases across 18 domains, on a fresh instance.
 - `npm run verify` — tests + build + gates + dependency audit.

@@ -2,18 +2,19 @@
 
 **Version 5.3.0 · 2026-08-31 · English.** The same manual exists in
 French: [`31-manuel-utilisateur.md`](31-manuel-utilisateur.md). The
-interface itself speaks both languages — switch at any time from the
-menu under your name.
+interface itself speaks both languages — an **EN / FR** button sits
+next to your name in the sidebar.
 
 A note on where the *living* manual is: the adoption committee ruled
 that "one more Markdown file in docs/" would never be read on a mine
 site, so the product carries its own guide — **Help, inside the
-application**, organised by task, with first-steps checklists that tick
-themselves as your real data arrives. This document is the *written*
-companion: for the person evaluating Meridian without an account yet,
-for training material, and for reading a workflow end to end before
-doing it. When the two disagree, trust the one inside the product — it
-is generated against the running version.
+application**, organised by task, with first-steps lists per role. This
+document is the *written* companion: for the person evaluating Meridian
+without an account yet, for training material, and for reading a
+workflow end to end before doing it. When the two disagree, trust the
+one inside the product — it is generated from the running version.
+Every claim below was verified against the source by a documentation
+review committee ([`32-comite-revue-documentation.md`](32-comite-revue-documentation.md)).
 
 ---
 
@@ -54,11 +55,12 @@ sponsors reading in other languages:
 
 > **Français** — Meridian est un outil libre et auto-hébergé de gestion
 > de portefeuille de projets pour les organisations multi-sites :
-> valeur acquise, jalons avec preuve vérifiée, maîtrise des risques et
-> des changements, capacité des ressources, bénéfices, tolérances, et
-> réunions de gouvernance engendrées depuis le portefeuille lui-même.
-> Chaque modification est auditée et l'historique ne peut pas être
-> réécrit. Sans éditeur, sans télémétrie, sans compte à créer.
+> valeur acquise, jalons de contrôle avec preuve vérifiée, maîtrise des
+> risques et des changements, capacité des ressources, bénéfices,
+> tolérances, et réunions de gouvernance engendrées depuis le
+> portefeuille lui-même. Chaque modification est auditée et
+> l'historique ne peut pas être réécrit. Sans éditeur, sans télémétrie,
+> sans compte à créer.
 
 > **Português** — O Meridian é uma ferramenta livre e auto-hospedada de
 > gestão de portefólio de projetos para organizações com vários sítios:
@@ -101,13 +103,17 @@ you to choose your own password. Until you do, nothing can be written —
 because from that moment on, the audit trail attributes actions to a
 person only that person can be.
 
-**Language** — the menu under your name switches English ↔ French. Your
-choice also decides the language of the emails Meridian sends you.
+**Language** — the **EN / FR** button next to your name switches the
+interface. The language of the emails Meridian sends you is a separate
+setting — *Notification preferences*, under the bell icon — and
+defaults to following the interface.
 
-**First steps** — open **Help**. You will find a checklist *for your
-role* whose items tick themselves when the real work is done (not when
-you click them): choose your password, find *My week*, update a stage,
-raise a risk… It is the fastest honest tour of the product.
+**First steps** — open **Help** ("?"), then *Using Meridian — first
+steps and answers* → **First steps**. You will find a list *for your
+role*: choose your password, find *My week*, update a stage, raise a
+risk… Items tick when the portfolio carries the corresponding data (or,
+for the find-your-way steps, once you have opened the screen) — not
+because you clicked them.
 
 **Where things are** — the navigation has five groups:
 
@@ -128,7 +134,7 @@ effort not yet entered.
 
 ## 3 · Understanding what you may do, and why
 
-Four roles exist:
+Four roles exist (the identifiers below are what Administration shows):
 
 | Role | In short |
 |---|---|
@@ -145,13 +151,17 @@ Two consequences you will meet daily:
 
 - On a **group-governed project delivered at your site**, your controls
   are read-only, and the screen says so in a sentence. Your voice is
-  the **concern**: raise one from *My site*, and it appears — named as
-  your site's — on the programme office's next agenda.
+  the **concern**: raise one from *My site* ("Raise concern"), and it
+  appears — named as your site's — on the programme office's next
+  agenda.
 - **You never decide your own act.** The raiser of a change does not
   approve it; the deliverer of a benefit does not rule it met; the
   owner of a document does not approve it as evidence; a site does not
   set its own tolerance. Where you expect a button and see none, this
   separation is usually why — and the sentence on screen says which.
+  One deliberate exception: the **admin** role bypasses these
+  separations — a break-glass the code itself annotates — which is a
+  reason to keep admin accounts few.
 
 If something is refused, the refusal always states its reason, in your
 language. There are no silent failures.
@@ -163,81 +173,98 @@ language. There are no silent failures.
 ### Creating a project
 
 Two doors. **Pipeline** → convert an *approved* demand — the normal
-route, because it keeps the trail from idea to project. Or
-**Portfolio → New project** (group level) for a project decided
-elsewhere. A project carries its programme, its lead site, its
-governance level, method, dates, budget and contingency.
+route, because it keeps the trail from idea to project. Or the **New
+project** action, offered on Portfolio, Programmes, My site and
+Schedule: group accounts create projects in their granted programmes,
+and a site account can create a **site-governed** project in a granted
+site. A project carries its programme, its lead site, its governance
+level, method, dates, budget and contingency.
 
 ### The project page
 
-*Project overview* is the working surface: pick a project and every
-register about it is on one page — stage plan, milestones and gates,
-RAID, changes, money, benefits, documents, waves, the margin it works
-inside, linked operational items, and the lessons other projects left
-for it. The **status snippet** button copies a Markdown summary for
-email or chat; **everything on the record** shows the project as at any
-date.
+*Project overview* is the working surface: pick a project and its
+registers are on one page — the stage plan, milestones and gates, open
+RAID, team and allocations, the cost position, value and benefits, the
+margin it works inside (tolerance and exceptions), plant and rollout,
+and linked SDP operations. Change requests are raised from the header
+("Raise change") and decided on the *Change requests* screen; gate
+evidence lives in the *Documents* library, one click from the gate
+panel. Two header buttons worth knowing: **Copy status** copies a
+Markdown summary for email or chat, and **Evidence pack** downloads
+everything on the record for the project, as at a date you choose, as a
+Markdown file.
 
 ### Progress, and what the indices mean
 
-Update each stage's percentage in the **stage plan** (or move the item
-on the **Board**). The engine computes earned value from stage weights:
+Update each stage's percentage in the **stage plan**. The engine
+computes earned value from stage weights. (The **Board** tracks work
+items and WIP limits — moving a card does not report stage progress.)
 
 - **SPI** — schedule performance: below 1.0, late for the work done.
 - **CPI** — cost performance: below 1.0, over cost for the work done.
 - **EAC / VAC** — where the cost lands if performance holds.
 
 Thresholds (amber at 0.95, red at 0.90 by default) colour the
-portfolio. A project that has spent less than 2 % of its plan shows
-"—": **too early to measure** is an answer, not a gap. Health is
-computed (RAG) but can be **overridden by hand with a written reason**
-— the reason travels with the dot everywhere it is shown.
+portfolio. Until 2 % of the plan is scheduled *and* 0.5 % of it is
+booked, a project shows "—": **too early to measure** is an answer, not
+a gap. Health is computed (RAG — green/amber/red) but can be
+**overridden by hand with a written reason** ("Set status" on the
+project page); the reason travels with the dot everywhere it is shown,
+and switching back to *Derived from SPI and CPI* removes the override.
 
 ### Schedule and dependencies
 
 Stages have dates, baseline dates and finish-to-start links; the
 critical path and each stage's float are computed on the project.
-Cross-project dependencies are drawn on **Schedule** (the integrated
-master schedule); a dependency landing later than its dependent
-tolerates five days, then flags. **Re-baselining is a group act** — it
-moves the dates the group committed to.
+Within a project, a stage that bites more than five days deeper into
+its predecessor than the baseline already allowed is flagged on
+**Schedule**. Cross-project dependencies are drawn on the integrated
+master schedule so the collision is visible — they are not
+tolerance-checked. **Re-baselining is a group act** — it moves the
+dates the group committed to.
 
-### Risks, issues, and the register (RAID)
+### Risks, issues, and the RAID register
 
 Anything that could cost time or money belongs on **Risks & issues**
-before it does. Probability × impact (1–5 each) bands the exposure;
-high-exposure items escalate onto steering agendas by themselves.
-Portfolio-wide items (a bench shortage that belongs to no project) are
-allowed. Site-raised concerns carry the site's name.
+before it does — as a risk, an issue, an assumption or a dependency
+(the four RAID natures). Probability × impact (1–5 each) places the
+exposure in bands; high-exposure items escalate onto steering agendas
+by themselves. Portfolio-wide items (a resourcing shortfall that
+belongs to no project) are allowed. Site-raised concerns carry the
+site's name.
 
 ### Change requests
 
 Raise from the project or **Change requests**: what changes, cost
-delta, weeks delta, funding source. The request routes itself into an
-approval chain by size — below the CCB threshold one approver, above it
-the full chain — and *approval applies the deltas* to budget, dates and
-contingency. You cannot approve what you raised.
+delta, weeks delta, funding source. Every request runs the same
+four-step chain — project manager, change authority, finance, steering
+— and the CCB threshold decides *who may sign*: above it (cost or
+schedule impact), only a group account may. *Approval applies the
+deltas* to budget, dates and contingency. You cannot approve what you
+raised.
 
 ### Money
 
 **Budget & cost** carries the ledger. A cost line has a period, an
 amount, capex/opex, a currency and the FX rate *as booked*. A mistake
-is corrected by a **reversing line**, never an edit — the ledger must
-reconcile. **Commitments** (purchase orders raised, money promised but
-not yet booked) are tracked separately and count against the envelope.
-Booking cost and releasing contingency are group acts.
+is corrected by a **reversing line** ("Reverse this posting"), never an
+edit — the ledger must reconcile. **Commitments** (purchase orders
+raised, money promised but not yet booked) are tracked separately and
+count against the envelope. Booking cost and releasing contingency are
+group acts.
 
 ### People, capacity, actuals, absences
 
-**Resources** buckets range-based allocations into weeks. A person's
-*effective* capacity accounts for rotation ("4/2", "14/14") and
-availability; contractors are marked as such. **Timesheets** are
-deliberately minimal — person, project, week, days — and sit *beside*
-the plan: the gap is the point. Declare **absences** with an optional
-deputy: the deputy then signs in as themselves and *acts for* the
+**Resources** buckets range-based allocations into weeks; a person's
+effective capacity is their **availability** percentage (their rotation
+— "4/2", "14/14" — and employment kind are recorded in the directory
+for the planner's eye, not folded into the arithmetic). **Timesheets**
+are deliberately minimal — person, project, week, days — and sit
+*beside* the plan: the gap is the point. Declare **absences** with an
+optional deputy: the deputy signs in as themselves and *acts for* the
 absent person, within that person's authority and never more; the
-trail names both. Notifications sent to your deputy in your name are
-listed for you when you return.
+trail names both. On your return, the **digest** on Reports is sized to
+cover the time you were away.
 
 ---
 
@@ -245,16 +272,17 @@ listed for you when you return.
 
 ### Gates and evidence
 
-Four gates punctuate a project: **Mandate, Design authority, Readiness,
-Benefits** — each demanding named evidence documents. A gate cannot be
-advanced until its evidence is **Approved**, and approving is a
-distinct power from editing: the document must point (https) at a real
-artefact on one of the **trusted hosts** the sponsor configured, the
-link is fingerprinted at approval, and changing it afterwards drops the
-document back to *In review*. A background probe re-checks approved
-links and flags — after three consecutive failures — evidence that no
-longer answers; the flag never un-approves anything, because a satellite
-link that drops for a night is not a lost proof.
+Four gates punctuate a project — the interface names them in English:
+**Gate 1 — Mandate, Gate 2 — Design authority, Gate 3 — Readiness,
+Gate 4 — Benefits** — each demanding named evidence documents. A gate
+cannot be advanced until its evidence is **Approved**, and approving is
+a distinct power from editing: the document must point (https) at a
+real artefact on one of the **trusted evidence hosts** set in
+Administration, the link is fingerprinted at approval, and changing it
+afterwards drops the document back to *In review*. A background probe
+re-checks approved links and flags — after three consecutive failures —
+evidence that no longer answers; the flag never un-approves anything,
+because a satellite link that drops for a night is not a lost proof.
 
 ### Demand and prioritisation
 
@@ -262,10 +290,10 @@ link that drops for a night is not a lost proof.
 demand; **deciding** — triage, approve, decline — is group work, and a
 decline records its reason like any decision. Approved demands convert
 to projects with the trail intact. Score fit, value, risk and effort
-(1–5 each — a model a room can hold in its head), rank against the
-**capital envelope**, and see which projects fit the money and which
-fall below the line. The room may overrule the score by hand-placing
-rank — the score ranks, it never decides.
+(1–5 each — a model a room can hold in its head), set the **capital
+envelope** from the Pipeline header, and see which projects fit the
+money and which fall below the line. The room may overrule the score by
+hand-placing rank — the score ranks, it never decides.
 
 ### Tolerances and exceptions
 
@@ -283,7 +311,7 @@ never by the forecast drifting back inside.
 Each project's promises live as **benefits** in their own units —
 tonnes, hours of availability, cost per ounce — with baseline, target
 and measured actual. The project records what was measured; whether
-that counts as **met** is a group verdict (`benefit review`), and the
+that counts as **met** is a group verdict (`benefit.review`), and the
 project's single **post-implementation review** verdict is recorded the
 same way.
 
@@ -292,8 +320,9 @@ same way.
 Whoever lived it records it — what happened, why, what to do
 differently, in one of the eleven ISO 21502 categories, positive
 outcomes included. **Adopting** a lesson is a group act: adoption is
-what makes it visible to the other sites, and new projects are shown
-the adopted lessons relevant to their programme and site at the start.
+what makes it visible to the other sites. Before starting a project,
+read the **Lessons** register filtered by your programme and your site
+— that is what the register is for.
 
 ### Reporting, and the period close
 
@@ -317,7 +346,8 @@ The module the rest exists for. A **series** has a cadence and a scope
    state: weekly series get an exception-only agenda (nothing to say
    about a project means it is not on it), monthly series get the full
    steering pack — position, gates, money, benefits. Sections with
-   nothing in them are dropped, never shown empty.
+   nothing in them are dropped — except *Actions carried forward*,
+   which always appears, saying "register is clear" when it is.
 2. **Run it.** Take attendance (deputies recorded as such). Record
    **decisions** — say *what was decided*, not that a decision
    happened; it will be read back months later. Record **actions** with
@@ -336,18 +366,25 @@ The module the rest exists for. A **series** has a cadence and a scope
 
 ## 7 · Notifications
 
-Meridian goes out to find people rather than waiting to be visited: an
-action falling due, a gate blocked, a decision owed, a concern raised,
-a site quiet for thirty days, a week of effort missing, an approved
-evidence link no longer answering, the digest.
+Meridian goes out to find people rather than waiting to be visited.
+Today four things are emitted: an action falling due or overdue, a gate
+blocked at its milestone, an approved evidence link that stopped
+answering, and a tolerance breach. (The vocabulary reserves more —
+decision owed, concern raised, site quiet, timesheet missing, an
+emailed digest — defined but not yet fed; the on-screen digest on
+Reports covers that ground meanwhile.)
 
 The **Notification centre** (Deliver → Notifications) is your inbox:
 everything addressed to you lands there, always, with read and acted
-state. **Subscriptions** tune what goes *out* to you by email — by
-kind, scope, minimum severity and cadence — and **quiet hours** hold
-messages during your night, *in your site's timezone*; urgent pierces.
-Email leaves the building only once an administrator configures SMTP;
-until then the centre shows exactly what would have been sent.
+state. Under the bell icon, **Notification preferences** set the
+language of your emails and your cadence (immediate, daily, weekly,
+off). Finer subscriptions — by kind and minimum severity — and quiet
+hours held in *your site's* timezone exist in the API ahead of their
+screen; an administrator or an integration can set them for you.
+Messages leave the building only through the outbound webhook an
+administrator configures (`MERIDIAN_NOTIFY_URL`, gated by the trusted
+webhook hosts list — closed by default); until then, Administration
+shows the queue of exactly what would have been sent.
 
 ---
 
@@ -356,24 +393,34 @@ until then the centre shows exactly what would have been sent.
 Everything under **System → Administration**:
 
 - **Accounts and grants** — create accounts (first sign-in forces a
-  password change), grant programmes or sites one by one, deactivate,
-  revoke all sessions. People, sites (with their windows, champions and
-  readiness), programmes and board columns are edited here too.
-- **Settings** — RAG thresholds, CCB threshold, capital envelope,
-  trusted evidence hosts (**closed by default**: until hosts are named,
+  password change), grant programmes or sites one by one, deactivate.
+  People, sites (windows, champions, readiness), programmes and board
+  columns are edited here too.
+- **Bringing existing data in** — the CSV panel: download the
+  template, paste or pick a file, read the line-by-line preview, then
+  apply — all or nothing. Projects, people and milestones; the door for
+  a site's existing book. (The v4 JSON book import and the archive
+  restore are the other two doors.)
+- **Settings** — RAG thresholds, the steering (CCB) threshold,
+  **trusted evidence hosts** (closed by default: until hosts are named,
   nothing can be approved as evidence), notification retention (the
-  purge refuses to run until a duration is decided), organisation name,
-  status date.
+  purge refuses to run until a duration is decided), trusted webhook
+  hosts, organisation name, status date. (The capital envelope is set
+  from the Pipeline screen, where the queue is ranked.)
 - **Connected systems** — issue a named, scoped API key per integration
   (shown once, stored only as a fingerprint), change its scopes, rotate
   it, revoke it. Every act a key performs is audited under its name.
   The SDP federation (operational actions and changes linked, never
   copied) is configured here as well.
-- **Audit** — the full trail, searchable, with before/after images; a
-  damaged row can be restored *from* its audit image, which is itself
-  an audited act.
-- **Archive** — export everything; `npm run restore` reloads it into an
-  empty instance. This is the exit door, and it is always open.
+- **Audit** — the full trail, searchable, with before/after images. An
+  administrator can re-create a **deleted** register row (RAID items,
+  documents, milestones, work items, benefits, commitments, waves,
+  windows, absences) from its audit image — itself an audited act;
+  edits are not rolled back.
+- **Continuity** — the archive export (`npm run restore` reloads it
+  into an empty instance — the exit door, always open), the admin
+  handover, and **End every session**, which signs out every account on
+  the instance, including yours.
 - **Adoption** — per-site usage: accounts seen, last progress, meetings
   held, actions closed, weeks entered. Counts, never surveillance.
 
@@ -386,16 +433,17 @@ security posture and what remains yours to close is
 
 ## 9 · Practice, help, and getting unstuck
 
-- **Training instance** — `npm run training` starts a separate practice
-  book on `:4180` that never touches the real one, and resets on
-  demand. Learn by breaking things there.
+- **The training ground** — `npm run training` starts a separate
+  practice book on `:4180` that never touches the real one, and resets
+  on demand. Nothing here touches the real book — break things on
+  purpose.
 - **Help, in-app** — the manual by task, the field help on every form,
   and your role's first-steps list.
 - **Your site champion** — every site names one person to call first;
   Help shows their name before suggesting the group.
-- **"Somebody else changed this"** — two people edited the same row;
-  Meridian refuses the silent overwrite. Re-open the item, read the
-  fresh state, make your change again.
+- **"Someone else changed this record — reload and try again"** — two
+  people edited the same row; Meridian refuses the silent overwrite.
+  Reload, read the fresh state, make your change again.
 - **A button is missing** — read the sentence where it would be: it
   names the authority you lack or the separation of duties in play.
 - **Sign-in loops on a LAN install** — the instance is sending Secure
