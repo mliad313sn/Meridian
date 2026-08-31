@@ -18,7 +18,21 @@ Unreleased work sits under `## [Unreleased]` until it is tagged.
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- Screen for the connected systems (INT-02): issue a key, change what it
+  may do, rotate it, revoke it. Without it, connecting a system meant an
+  HTTP call by hand — which guarantees nobody ever rotates a key, and a
+  rotation nobody dares perform is not a rotation.
+
+### Fixed
+
+- An integration's shadow account appeared in the list of user
+  accounts, offering "Edit" and "Grants" on something that is not a
+  person. Those rows exist only so the audit trail can name the
+  integration rather than write "system". Accounts in the reserved
+  `.invalid` domain are now excluded from the account list, and stay
+  visible where they mean something.
 
 ---
 

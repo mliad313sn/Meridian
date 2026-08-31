@@ -32,9 +32,24 @@ r.use((req, _res, next) => {
 
 r.get("/users", async (_req, res, next) => {
   try {
+    /* Les comptes de service ne sont pas des comptes de personne.
+       Une intégration et la fédération portent chacune une ligne
+       `app_user` — c'est ce qui permet à la piste d'audit de les NOMMER
+       plutôt que d'écrire « système ». Mais elles n'ont ni mot de passe,
+       ni session possible, ni habilitation à gérer : les laisser dans la
+       liste des comptes offrait « Modifier » et « Habilitations » sur
+       quelque chose qui n'est pas quelqu'un, et laissait croire qu'un
+       accès de plus existait.
+
+       Le discriminant est leur adresse, dans le domaine réservé
+       `.invalid` (RFC 2606) — réservé précisément pour ce qui ne doit
+       jamais résoudre. Elles restent visibles là où elles ont un sens :
+       « Systèmes branchés » et « Fédération SDP ». */
     const users = await many(
       `SELECT id, email, display_name, person_id, role, active, created_at, last_login_at, row_version
-         FROM app_user ORDER BY display_name`);
+         FROM app_user
+        WHERE email NOT LIKE '%.invalid'
+        ORDER BY display_name`);
     const grants = await many(`SELECT * FROM access_grant ORDER BY user_id`);
     const byUser = new Map();
     for (const g of grants) {

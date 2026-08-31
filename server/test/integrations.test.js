@@ -138,6 +138,22 @@ describe("INT-02 · ce qu'une clé ne peut jamais faire", () => {
     assert.equal(row.display_name, "Sans mot de passe");
   });
 
+  test("son compte fantôme n'apparaît pas dans la liste des comptes", async () => {
+    /* Trouvé à l'écran, pas en test : la ligne `app_user` qui existe pour
+       que la piste puisse NOMMER l'intégration se présentait comme un
+       compte ordinaire, avec « Modifier » et « Habilitations ». Ce n'est
+       pas quelqu'un. */
+    const admin = await as("admin");
+    const made = await mint(admin, "Fantôme", "read:portfolio");
+    const users = (await admin.get("/api/admin/users")).body.users;
+    assert.equal(users.some((u) => u.id === made.id), false,
+      "un compte de service n'est pas un compte de personne");
+    assert.equal(users.some((u) => String(u.email).endsWith(".invalid")), false);
+    /* …mais il reste visible là où il a un sens. */
+    const list = (await admin.get("/api/admin/integrations")).body.integrations;
+    assert.ok(list.some((i) => i.id === made.id), "elle se gère depuis « Systèmes branchés »");
+  });
+
   test("une clé inconnue et une clé révoquée répondent exactement pareil", async () => {
     const admin = await as("admin");
     const made = await mint(admin, "À révoquer", "read:portfolio");

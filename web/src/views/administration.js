@@ -681,6 +681,194 @@ async function loadFed() {
   }
 }
 
+/* ── intégrations (INT-02) ────────────────────────────────────────────
+   Une clé par système branché, une portée par clé. L'écran existe pour
+   une raison précise : sans lui, créer une intégration demande un appel
+   HTTP à la main, ce qui garantit que personne ne tournera jamais une
+   clé. Une rotation qu'on n'ose pas faire n'est pas une rotation. */
+
+const intState = { data: null, loading: false };
+
+function loadIntegrations(force) {
+  if (force) intState.data = null;
+  if (intState.data || intState.loading) return;
+  intState.loading = true;
+  api.get("/admin/integrations")
+    .then((d) => { intState.data = d; })
+    .catch(() => { intState.data = { failed: true, integrations: [], scopes: {} }; })
+    .finally(() => { intState.loading = false; App.emit(); });
+}
+
+/** La clé, montrée une seule fois. Le dialogue le dit et ne s'excuse pas. */
+function showKeyOnce(title, key, extra) {
+  dialog({
+    title, kicker: t("Copy it now"),
+    body: h("div", null,
+      h("p", { class: "small", style: "max-width:60ch" },
+        t("This key is shown once and is not stored anywhere. If it is lost, rotate it — that is a normal thing to do, not a failure.")),
+      h("div", { class: "mono", style: "user-select:all;word-break:break-all;padding:10px 12px;" +
+          "border:1px solid var(--rule-2);border-radius:6px;background:var(--bg-2);margin:10px 0" }, key),
+      extra ? h("p", { class: "xs muted", style: "max-width:60ch" }, extra) : null),
+    /* `actions` est une FONCTION qui reçoit `close`, pas un tableau — la
+       coquille l'appelle. Un tableau donne « n is not a function » au
+       moment précis où l'on affiche la clé, c'est-à-dire au moment où
+       elle est perdue. */
+    actions: (close) => [
+      h("button", { class: "btn btn-primary", onClick: close }, t("I have copied it")),
+    ],
+  });
+}
+
+function scopeFields(scopes, held) {
+  /* Une case par portée, avec ce qu'elle ouvre écrit à côté. Un champ
+     texte libre demanderait à l'administrateur de connaître par cœur un
+     vocabulaire que le serveur est seul à posséder. */
+  return Object.entries(scopes).map(([key, what]) => ({
+    key: "scope_" + key.replace(":", "_"), label: key, type: "checkbox", span: 2,
+    value: held.includes(key), hint: what,
+  }));
+}
+const pickedScopes = (v, scopes) => Object.keys(scopes)
+  .filter((k) => v["scope_" + k.replace(":", "_")] === true).join(",");
+
+function newIntegration(scopes) {
+  formDialog({
+    title: t("Connect a system"), kicker: t("Integrations"),
+    fields: [
+      { key: "name", label: t("Name"), span: 2, required: true,
+        hint: t("This is what the audit trail will show when it writes. Name the system, not the person."),
+        placeholder: t("SAP — financial actuals") },
+      { key: "purpose", label: t("What it is for"), type: "textarea", span: 2, rows: 2,
+        hint: t("Read months later by whoever wonders whether this key can be revoked.") },
+      ...scopeFields(scopes, []),
+    ],
+    saveLabel: t("Issue a key"),
+    onSave: async (v) => {
+      const out = await App.write("Integration created",
+        (a) => a.post("/admin/integrations", {
+          name: v.name, purpose: v.purpose, scopes: pickedScopes(v, scopes),
+        }), { refresh: false, rethrow: true });
+      loadIntegrations(true);
+      if (out && out.key) showKeyOnce(t("The key for") + " " + v.name, out.key);
+      return out;
+    },
+  });
+}
+
+function editIntegration(row, scopes) {
+  formDialog({
+    title: t("Change what this key may do"), kicker: row.id,
+    fields: [
+      { key: "name", label: t("Name"), span: 2, required: true, value: row.name },
+      { key: "purpose", label: t("What it is for"), type: "textarea", span: 2, rows: 2,
+        value: row.purpose },
+      ...scopeFields(scopes, String(row.scopes ?? "").split(",")),
+    ],
+    saveLabel: t("Save"),
+    onSave: async (v) => {
+      const r = await App.write("Integration updated",
+        (a) => a.patch("/admin/integrations/" + row.id, {
+          name: v.name, purpose: v.purpose, scopes: pickedScopes(v, scopes),
+          version: row.row_version,
+        }), { refresh: false, rethrow: true });
+      loadIntegrations(true);
+      return r;
+    },
+  });
+}
+
+export function integrationsPanel() {
+  if (!App.isAdmin) return null;
+  loadIntegrations();
+  const d = intState.data;
+  if (!d) return h("div", { class: "small muted" }, t("Reading the connected systems…"));
+
+  const rows = d.integrations ?? [];
+  const scopes = d.scopes ?? {};
+
+  return h("div", null,
+    sectionHead(t("Connected systems"),
+      t("One key per system, and each key says what it may do"),
+      h("button", { class: "btn btn-sm", onClick: () => newIntegration(scopes) },
+        icon("plus", 12), t("Connect a system"))),
+
+    h("p", { class: "xs muted", style: "max-width:66ch;margin:0 0 12px" },
+      t("A key is never stored — only its fingerprint. Every act it performs is recorded under the name you give it here, not as an anonymous system. Revoking one key never affects another.")),
+
+    rows.length
+      ? table({
+          cols: [
+            { key: "n", label: t("System"), get: (i) => h("div", null,
+                h("div", { class: "strong small" }, i.name),
+                h("div", { class: "xs muted", style: "max-width:44ch" }, i.purpose || "—")) },
+            { key: "s", label: t("May"), get: (i) => {
+                const held = String(i.scopes ?? "").split(",").filter(Boolean);
+                return held.length
+                  ? h("div", { style: "display:flex;gap:4px;flex-wrap:wrap" },
+                      ...held.map((s) => tag(s, "tag-ink")))
+                  : h("span", { class: "xs", style: "color:var(--sig-amber)" },
+                      t("nothing — closed by default"));
+              } },
+            { key: "k", label: t("Key"), align: "c",
+              get: (i) => h("span", { class: "mono xs muted" }, "…" + i.key_hint) },
+            { key: "u", label: t("Last used"), align: "c",
+              get: (i) => i.last_used_at
+                ? h("span", { class: "mono xs" }, String(i.last_used_at).slice(0, 10))
+                : h("span", { class: "xs muted" }, t("never")) },
+            { key: "a", label: t("Status"), align: "c",
+              get: (i) => i.active ? tag(t("Live"), "tag-green") : tag(t("Revoked"), "tag-out") },
+            /* L'autorité est redemandée ICI, à côté des boutons, et pas
+               seulement en tête de panneau : la porte des contrôles exige
+               de la lire dans le même groupe que la commande, parce qu'un
+               panneau se déplace et qu'une garde restée en haut ne suit
+               pas. */
+            { key: "do", label: "", align: "r", get: (i) => App.isAdmin
+                ? h("div", { class: "btn-row" },
+                    h("button", { class: "btn btn-xs", onClick: () => editIntegration(i, scopes) },
+                      icon("pencil", 11)),
+                    h("button", { class: "btn btn-xs", onClick: () => rotateKey(i) }, t("Rotate")),
+                    h("button", {
+                      class: "btn btn-xs" + (i.active ? " btn-danger" : ""),
+                      onClick: () => setLive(i, !i.active),
+                    }, i.active ? t("Revoke") : t("Restore")))
+                : null },
+          ],
+          rows,
+        })
+      : emptyState(t("No system is connected"),
+          t("Issue a key when a system needs to read the portfolio. Until then, nothing outside can reach it.")));
+}
+
+async function rotateKey(row) {
+  const ok = await confirmDialog({
+    title: t("Rotate this key?"),
+    message: t("The current key stops working the moment the new one is issued."),
+    detail: t("Whatever is using it will fail until it is given the new key."),
+    confirmLabel: t("Rotate it"), danger: true,
+  });
+  if (!ok) return;
+  const out = await App.write("Integration key rotated",
+    (a) => a.post("/admin/integrations/" + row.id + "/rotate", {}), { refresh: false });
+  loadIntegrations(true);
+  if (out && out.key) showKeyOnce(t("The new key for") + " " + row.name, out.key);
+}
+
+async function setLive(row, active) {
+  if (active === false) {
+    const ok = await confirmDialog({
+      title: t("Revoke this key?"),
+      message: t("It stops working immediately. No other integration is affected."),
+      detail: t("The record stays, so the audit trail can still name what it wrote."),
+      confirmLabel: t("Revoke it"), danger: true,
+    });
+    if (!ok) return;
+  }
+  await App.write(active ? "Integration updated" : "Integration revoked",
+    (a) => a.patch("/admin/integrations/" + row.id, { active, version: row.row_version }),
+    { refresh: false });
+  loadIntegrations(true);
+}
+
 /* ── continuité (M-01, G-10) ──────────────────────────────────────────
    Deux gestes de gouvernance qui existaient côté serveur et n'avaient
    aucun écran : emporter le livre entier, et couper toutes les sessions.

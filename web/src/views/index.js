@@ -26,7 +26,7 @@ import {
 } from "../../../shared/engine.js";
 
 import { meetingsView, invalidateMeetings } from "./meetings.js";
-import { accessPanel, directoryPanel, referencePanel, federationPanel, notificationsPanel, importPanel, continuityPanel, invalidateAdmin } from "./administration.js";
+import { accessPanel, directoryPanel, referencePanel, federationPanel, notificationsPanel, importPanel, continuityPanel, integrationsPanel, invalidateAdmin } from "./administration.js";
 
 export const Views = {};
 
@@ -4637,6 +4637,10 @@ Views.admin = (db) => {
       referencePanel(db) ? h("div", null,
         h("div", { style: "height:24px" }), h("hr", { class: "hr" }), h("div", { style: "height:18px" }),
         referencePanel(db)) : null,
+
+      integrationsPanel() ? h("div", null,
+        h("div", { style: "height:24px" }), h("hr", { class: "hr" }), h("div", { style: "height:18px" }),
+        integrationsPanel()) : null,
 
       continuityPanel() ? h("div", null,
         h("div", { style: "height:24px" }), h("hr", { class: "hr" }), h("div", { style: "height:18px" }),
