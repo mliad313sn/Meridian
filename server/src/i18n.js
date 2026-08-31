@@ -144,18 +144,24 @@ const FR_PREFIX = [
  * The locale for THIS request. Explicit query beats the header, so a link
  * in a French email lands in French whatever the browser is set to.
  */
+/* I18N-01 — les langues que le SERVEUR sait parler. Distinct du registre
+   client à dessein : une langue d'interface peut exister avant que les
+   refus, aides d'agenda et notifications soient traduits, et répondre à
+   moitié dans une langue est pire que répondre en anglais. Une langue
+   n'entre ici qu'avec ses messages serveur (décision du comité 29 §4). */
+export const SERVER_LANGS = ["en", "fr"];
+
 export function localeOf(req) {
-  const q = String(req?.query?.lang ?? "").toLowerCase();
-  if (q.startsWith("fr")) return "fr";
-  if (q.startsWith("en")) return "en";
+  const match = (v) => SERVER_LANGS.find((c) => String(v ?? "").toLowerCase().startsWith(c) && c !== "en")
+    ?? (String(v ?? "").toLowerCase().startsWith("en") ? "en" : null);
+  const q = match(req?.query?.lang);
+  if (q) return q;
   /* The app's own toggle, sent as X-Lang. It cannot use Accept-Language:
      browsers forbid scripts from setting that header, so a French UI on
      an English browser would otherwise be answered in English. */
-  const chosen = String(req?.headers?.["x-lang"] ?? "").toLowerCase();
-  if (chosen.startsWith("fr")) return "fr";
-  if (chosen.startsWith("en")) return "en";
-  const header = String(req?.headers?.["accept-language"] ?? "").toLowerCase();
-  return header.split(",")[0]?.trim().startsWith("fr") ? "fr" : "en";
+  const chosen = match(req?.headers?.["x-lang"]);
+  if (chosen) return chosen;
+  return match(String(req?.headers?.["accept-language"] ?? "").split(",")[0]?.trim()) ?? "en";
 }
 
 /** Translate a user-facing message. Unknown strings pass through. */

@@ -570,9 +570,10 @@ r.post("/sites", async (req, res, next) => {
     await audited(req.user,
       { action: "Site added", entity: "site", entityId: b.id, detail: b.city },
       async (t) => t.query(
-        `INSERT INTO site (id, city, region, tz_offset, tz_name, headcount, fte, charter)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-        [String(b.id).toUpperCase().slice(0, 5), b.city, b.region ?? "", Number(b.tz ?? 0),
+        `INSERT INTO site (id, city, region, country, legal_entity, tz_offset, tz_name, headcount, fte, charter)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+        [String(b.id).toUpperCase().slice(0, 5), b.city, b.region ?? "",
+         String(b.country ?? "").toUpperCase(), b.legalEntity ?? "", Number(b.tz ?? 0),
          b.tzName ?? "UTC", Number(b.headcount ?? 0), Number(b.fte ?? 0), b.charter ?? ""]));
     res.status(201).json({ id: b.id });
   } catch (e) { next(e); }
@@ -615,6 +616,18 @@ r.patch("/sites/:id", async (req, res, next) => {
     const patch = {};
     if (b.city !== undefined) patch.city = b.city;
     if (b.region !== undefined) patch.region = b.region;
+    /* MC-01 — la forme est vérifiée ici plutôt que laissée à la
+       contrainte : le refus de la base parlerait en SQL, celui-ci parle
+       à la personne. Majuscules imposées — "sn" et "SN" sont le même
+       pays et ne doivent pas classer différemment. */
+    if (b.country !== undefined) {
+      const c = String(b.country ?? "").toUpperCase().trim();
+      if (c !== "" && !/^[A-Z]{2}$/.test(c)) {
+        throw new HttpError(400, "A country is its two-letter ISO code (SN, CI, PE…) — or empty");
+      }
+      patch.country = c;
+    }
+    if (b.legalEntity !== undefined) patch.legal_entity = b.legalEntity;
     if (b.tz !== undefined) patch.tz_offset = Number(b.tz);
     if (b.tzName !== undefined) patch.tz_name = b.tzName;
     if (b.headcount !== undefined) patch.headcount = Number(b.headcount);

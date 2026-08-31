@@ -45,9 +45,16 @@ se produit.
 datée, `npm run verify` vert, `npm run sweep` sans écart nouveau, et une
 exception ouverte puis répondue **au navigateur**, pas seulement en test.
 
+> **Comité 29 (31/08).** Le registre international/SaaS
+> ([`29`](29-comite-international-saas.md) §5) entre dans ce carnet.
+> PG-01, I18N-01 et MC-01 sont livrés avec son rapport ; le reste rejoint
+> les versions ci-dessous en respectant l'alternance — SaaS-02 en tête,
+> parce que le piège qu'il ferme (un binaire ancien sur une base neuve) a
+> été vécu le matin même.
+
 ### R4 — « présent là où les gens travaillent »
 
-PM-06 (risque résiduel et lien à la provision) · INT-04 (événements
+SaaS-02 (garde de décalage de version) · PM-06 (risque résiduel et lien à la provision) · I18N-02 (espagnol, en brouillon jusqu'à relecture native) · INT-04 (événements
 sortants signés) · PM-08 (clôture et transfert à l'exploitation) ·
 INT-06 (transport Teams) · PM-04 (critères d'acceptation et revues
 qualité) · INT-08 (invitations de réunion véritables) · INT-09
@@ -55,7 +62,7 @@ qualité) · INT-08 (invitations de réunion véritables) · INT-09
 
 ### R5 — « déployable partout »
 
-PM-05 (parties prenantes) · INT-03 (Entra éprouvé puis SCIM) · PM-09
+SaaS-04 (identité d'instance) · MC-02 (formats locaux) · I18N-03 (portugais) · SaaS-01 (premier démarrage sans console) · SaaS-03 (sauvegarde par instance = G-01) · SaaS-05 (dossier d'exploitation flotte) · PM-05 (parties prenantes) · INT-03 (Entra éprouvé puis SCIM) · PM-09
 (revues d'assurance) · INT-13 (réception idempotente) · PM-14 (alignement
 stratégique) · INT-10 (Jira, Azure DevOps) · PM-12 (compétences) ·
 INT-11 (réalisé ERP) · INT-12 (ITSM) · PM-07 (profondeur
@@ -104,6 +111,9 @@ Tenu à jour par la boucle, à la source, comme le relevé de clôture de
 | INT-01 | R3 | **close 31/08** | `server/src/openapi.js` engendré depuis le routeur · `GET /api/v1/openapi.json` · `docs/openapi.v1.json` publié · **porte F9** qui refuse toute dérive dans les deux sens · 3 tests |
 | PM-03 | R3 | ouverte | — |
 | INT-05 | R3 | ouverte | — |
+| PG-01 | 29 | **close 31/08** | refus réel exercé, sortie 1 ; drapeau posé par l'installateur |
+| I18N-01 | 29 | **close 31/08** | registre de langues client+serveur, contrainte de forme (027), cycle exercé au navigateur |
+| MC-01 | 29 | **close 31/08** | pays ISO + entité légale sur le site, 027, dialogue exercé (« br » → BR) |
 
 *(les lignes de R4 et R5 sont reportées ici au fur et à mesure qu'elles
 entrent en travail)*

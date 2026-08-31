@@ -252,18 +252,24 @@ if (-not $cfg.PORT) { $cfg | Add-Member -NotePropertyName PORT -NotePropertyValu
 # P-02 : la version du paquet suit la mise à jour, même quand la config
 # de l'exploitant est préservée par-dessus.
 if ($Version) { $cfg | Add-Member -NotePropertyName MERIDIAN_VERSION -NotePropertyValue $Version -Force }
+# PG-01 (comite 29) : une installation de SERVICE exige PostgreSQL. Le
+# binaire refuse de demarrer sur PGlite quand ce drapeau est pose - une
+# installation mal configuree doit echouer avec un message, pas tourner
+# en silence sur un moteur mono-connexion sans sauvegarde.
 if (-not $cfg.MERIDIAN_SECURE_COOKIES) {
   $cfg | Add-Member -NotePropertyName MERIDIAN_SECURE_COOKIES -NotePropertyValue "0" -Force
 }
 
 if ($dsn) {
   $cfg | Add-Member -NotePropertyName DATABASE_URL -NotePropertyValue $dsn -Force
+  $cfg | Add-Member -NotePropertyName MERIDIAN_REQUIRE_POSTGRES -NotePropertyValue "1" -Force
   Say "configuration : PostgreSQL"
 } else {
   # Repli assumé : l'application démarre, sert et enregistre. PGlite est le
   # même moteur compilé en WebAssembly ; ce qui manque, c'est un serveur
   # que d'autres machines pourraient interroger.
   $cfg.PSObject.Properties.Remove("DATABASE_URL")
+  $cfg.PSObject.Properties.Remove("MERIDIAN_REQUIRE_POSTGRES")
   $cfg | Add-Member -NotePropertyName PGLITE_DIR -NotePropertyValue (Join-Path $Target "data") -Force
   Warn "configuration : PGlite (base embarquée) — l'application fonctionne."
   Warn "pour passer sur un vrai serveur plus tard : renseignez DATABASE_URL et redémarrez le service."

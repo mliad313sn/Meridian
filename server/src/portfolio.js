@@ -188,7 +188,12 @@ export async function loadPortfolio(user) {
     viewer: user ? { id: user.id, role: user.role, name: user.displayName } : null,
 
     sites: sites.map((s) => ({
-      id: s.id, city: s.city, region: s.region, tz: Number(s.tz_offset),
+      id: s.id, city: s.city, region: s.region,
+      /* MC-01 — G-14 exige un avis juridique « de son pays » et une
+         demande RGPD arrive à UNE entité : le site sait désormais dire
+         les deux. */
+      country: s.country ?? "", legalEntity: s.legal_entity ?? "",
+      tz: Number(s.tz_offset),
       tzName: s.tz_name, headcount: s.headcount, fte: s.fte, role: s.charter,
       // what the site actually is, not only what time it is there (V-07)
       linkMbps: s.link_mbps === null ? null : Number(s.link_mbps),

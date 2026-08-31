@@ -22,6 +22,42 @@ Nothing yet.
 
 ---
 
+## [5.4.0] — 2026-08-31
+
+The international, SaaS and multi-tenant strategy (committee report
+`docs/29`), and its first three lines.
+
+### Added
+
+- **The tenancy decision, written down.** Multi-tenant SaaS is
+  **one instance per tenant**, not a `tenant_id` column: this product
+  sells an inviolable audit trail to industrial groups that are sometimes
+  competitors, and isolation by code discipline is not isolation — one
+  forgotten WHERE clause would show one group's portfolio to another.
+  The product was already built for instance-per-tenant without knowing
+  it: a single-file binary that migrates itself, an archive that IS
+  tenant portability, and per-instance settings that become per-tenant
+  settings for free.
+- **A language registry** (I18N-01, migration `027`). The switch was a
+  hard-coded EN/FR boolean and the database constrained the list itself;
+  adding Spanish would have taken one migration per language. Languages
+  are now data — a dictionary plus one registry line — the switch cycles,
+  and the database constrains the *shape* of a code, not the list.
+  Spanish and Portuguese are next, by the geography of the target market;
+  Arabic is deferred **with the reason stated** (right-to-left is an
+  interface project, not a dictionary).
+- **Country and legal entity on every site** (MC-01). G-14 requires
+  per-country legal advice and the product could not say what country a
+  site is in; a data-subject request is answered by a legal entity, and
+  nothing said which one carries which site.
+- **A service installation refuses PGlite** (PG-01, sponsor's
+  instruction). `MERIDIAN_REQUIRE_POSTGRES=1` is written by the
+  installer; a start without a real PostgreSQL then fails with a message
+  that says what to do, instead of silently running a governance book on
+  a single-connection trial engine.
+
+---
+
 ## [5.3.0] — 2026-08-31
 
 ### Added

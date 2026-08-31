@@ -239,8 +239,32 @@ export async function mountModule({ url = process.env.MERIDIAN_DATABASE_URL || p
   return { app: buildApp(), bridgeSession, engine: engine(), close };
 }
 
+/* PG-01 (comité 29 §3) — le message d'un refus de moteur, isolé pour
+   être testable sans tuer un processus. Rend null quand tout va bien. */
+export function engineRefusal(requireFlag, engineName) {
+  if (requireFlag !== "1" || engineName === "postgres") return null;
+  return [
+    "MERIDIAN_REQUIRE_POSTGRES=1 is set and this instance is running on " + engineName + ".",
+    "PGlite is a trial engine: single-connection, no hot backup, fragile on hard stops —",
+    "three properties a governance book cannot accept. Set DATABASE_URL to a real",
+    "PostgreSQL cluster (the installer provisions one), or unset the flag if this is",
+    "a demonstration that carries nothing real.",
+  ].join("\n  ");
+}
+
 export async function start({ port = process.env.PORT || 4173 } = {}) {
   await connect();
+
+  /* PG-01 — une installation de service refuse PGlite au lieu de tourner
+     en silence sur le mauvais moteur. Le refus arrive AVANT les
+     migrations : on ne modifie pas une base qu'on refuse d'exploiter. */
+  const refusal = engineRefusal(process.env.MERIDIAN_REQUIRE_POSTGRES, engine());
+  if (refusal) {
+    console.error("\nMeridian refuses to start.\n  " + refusal + "\n");
+    await close();
+    process.exit(1);
+  }
+
   await migrate({ silent: true });
   const app = buildApp();
   /* S-08 — listen where the operator said, and say where that is.

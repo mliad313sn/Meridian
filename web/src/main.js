@@ -26,7 +26,7 @@ import "./styles.css";
 import { h, clear, icon, $, dialog, formDialog, searchBox, selectField, openDialogCount } from "./ui/kit.js";
 import { renderLogin } from "./ui/login.js";
 import { App, go, readRoute, routeAllowed, toast, bindEngine, reportError, clearSnapshot } from "./lib/state.js";
-import { t, getLang, setLang } from "./lib/i18n.js";
+import { t, getLang, setLang, nextLang } from "./lib/i18n.js";
 import { api, setUnauthenticatedHandler } from "./lib/api.js";
 import { Engine } from "../../shared/engine.js";
 import { VIEWS, HEADER_ACTIONS, initials } from "./views/index.js";
@@ -156,14 +156,20 @@ function sidebar(db) {
       h("div", { style: "line-height:1.3;min-width:0;flex:1" },
         h("div", { class: "strong truncate", style: "font-size:12.5px" }, me.name),
         h("div", { class: "xs muted truncate" }, scopeSentence(db, me))),
-      /* Bilingual UI (sponsor decision): the toggle names the language it
-         SWITCHES TO — the reader who needs it cannot read the current one. */
-      h("button", {
-        class: "btn btn-ghost", style: "font-size:11px;font-weight:700;letter-spacing:.05em",
-        title: getLang() === "fr" ? "Switch to English" : "Passer en français",
-        "aria-label": getLang() === "fr" ? "Switch to English" : "Passer en français",
-        onClick: () => { setLang(getLang() === "fr" ? "en" : "fr"); App.emit(); },
-      }, getLang() === "fr" ? "EN" : "FR"),
+      /* Le commutateur nomme la langue vers laquelle il BASCULE — la
+         personne qui en a besoin ne lit pas celle qui est affichée. Il
+         cycle sur le registre (I18N-01) : une troisième langue apparaît
+         ici sans qu'on retouche ce bouton. Une langue en brouillon
+         l'annonce dans l'infobulle, dans sa propre langue. */
+      (() => {
+        const nxt = nextLang();
+        const label = nxt.name + (nxt.draft ? " (draft)" : "");
+        return h("button", {
+          class: "btn btn-ghost", style: "font-size:11px;font-weight:700;letter-spacing:.05em",
+          title: label, "aria-label": label,
+          onClick: () => { setLang(nxt.code); App.emit(); },
+        }, nxt.code.toUpperCase());
+      })(),
       /* R-11 — the recipient owns the language of their emails and the
          cadence; one small dialog, saved on the account. */
       h("button", {

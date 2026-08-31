@@ -8,7 +8,7 @@
 
 import { h, clear, icon } from "./kit.js";
 import { api, ApiError } from "../lib/api.js";
-import { t, getLang, setLang } from "../lib/i18n.js";
+import { t, getLang, setLang, nextLang } from "../lib/i18n.js";
 
 const ROLE_NOTE = {
   admin:  "Everything, including users, grants and global settings",
@@ -94,11 +94,16 @@ export function renderLogin(root, onSignedIn) {
           h("span", { class: "sp", style: "flex:1" }),
           /* The front door is where language matters most: the toggle
              names the language it switches TO. */
-          h("button", {
-            class: "btn btn-ghost", type: "button",
-            style: "font-size:11px;font-weight:700;letter-spacing:.05em",
-            onClick: () => { setLang(getLang() === "fr" ? "en" : "fr"); renderLogin(root, onSignedIn); },
-          }, getLang() === "fr" ? "EN" : "FR")),
+          (() => {
+            const nxt = nextLang();
+            const label = nxt.name + (nxt.draft ? " (draft)" : "");
+            return h("button", {
+              class: "btn btn-ghost", type: "button",
+              style: "font-size:11px;font-weight:700;letter-spacing:.05em",
+              title: label, "aria-label": label,
+              onClick: () => { setLang(nxt.code); renderLogin(root, onSignedIn); },
+            }, nxt.code.toUpperCase());
+          })()),
         h("div", { class: "kicker" }, t("Group IT portfolio management office")),
         h("h2", { style: "margin:24px 0 6px" }, t("Sign in")),
         h("p", { class: "small muted", style: "margin:0 0 24px;max-width:38ch" },

@@ -614,6 +614,14 @@ function siteDialog(db, s) {
         validate: (v) => (/^[A-Za-z]{2,5}$/.test(v) ? "" : "Two to five letters") }]),
       { key: "city", label: "City", required: true, value: s ? s.city : "" },
       { key: "region", label: "Region", value: s ? s.region : "" },
+      /* MC-01 — le pays sert deux obligations, pas une préférence : G-14
+         (l'avis social et juridique est PAR PAYS) et la réponse RGPD (une
+         demande arrive à une entité juridique nommée). */
+      { key: "country", label: t("Country"), value: s ? s.country : "",
+        hint: t("Two-letter ISO code — SN, CI, PE. The per-country legal condition on time entry (G-14) reads this."),
+        validate: (v) => (v === "" || /^[A-Za-z]{2}$/.test(v) ? "" : t("Two letters, or empty")) },
+      { key: "legalEntity", label: t("Legal entity"), value: s ? s.legalEntity : "",
+        hint: t("The company that carries this site. A data-subject request is answered by an entity, not by a city.") },
       { key: "tz", label: "UTC offset", type: "number", step: 0.5, value: s ? s.tz : 0 },
       { key: "tzName", label: "Zone name", value: s ? s.tzName : "UTC" },
       { key: "headcount", label: "Headcount", type: "number", min: 0, value: s ? s.headcount : 0 },
@@ -625,11 +633,13 @@ function siteDialog(db, s) {
     onSave: (v) => write(s ? "Site updated" : "Site added",
       (a) => (s
         ? a.patch("/admin/sites/" + s.id, {
-            city: v.city, region: v.region, tz: Number(v.tz), tzName: v.tzName,
+            city: v.city, region: v.region, country: v.country, legalEntity: v.legalEntity,
+            tz: Number(v.tz), tzName: v.tzName,
             headcount: Number(v.headcount), fte: Number(v.fte), charter: v.charter,
             version: s.version })
         : a.post("/admin/sites", {
-            id: v.id, city: v.city, region: v.region, tz: Number(v.tz), tzName: v.tzName,
+            id: v.id, city: v.city, region: v.region, country: v.country, legalEntity: v.legalEntity,
+            tz: Number(v.tz), tzName: v.tzName,
             headcount: Number(v.headcount), fte: Number(v.fte), charter: v.charter })),
       v.city),
   });

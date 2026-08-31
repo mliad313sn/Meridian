@@ -20,23 +20,52 @@
 
 const KEY = "meridian-lang";
 
+/* ── le registre des langues (I18N-01, comité 29 §4) ──────────────────
+   La liste des langues est une DONNÉE, plus une condition codée en dur.
+   Le commutateur était un booléen EN/FR : chaque langue nouvelle aurait
+   exigé une chirurgie du commutateur, de t(), du serveur et de la base.
+   Désormais, ajouter une langue = un dictionnaire + une ligne ici (et la
+   contrainte en base vérifie une FORME, pas une liste — migration 027).
+
+   `name` est écrit DANS la langue elle-même : la personne qui a besoin
+   du commutateur est précisément celle qui ne lit pas la langue
+   affichée. `draft` marque une traduction produite sans relecture par un
+   locuteur natif du métier — politique du comité : une langue peut
+   s'afficher en brouillon, mais elle le dit, et ne perd la marque
+   qu'après relecture. Les dictionnaires s'enregistrent en FIN de fichier
+   (les `const` ne sont pas encore nés ici). */
+export const LANGS = [
+  { code: "en", name: "English", draft: false },
+  { code: "fr", name: "Français", draft: false },
+];
+const DICTS = {};   // code → { dict, frag } ; l'anglais est la clé elle-même
+
+const known = (code) => LANGS.some((l) => l.code === code);
+
 let lang = "en";
-try { lang = localStorage.getItem(KEY) === "fr" ? "fr" : "en"; } catch { /* private window */ }
+try { const stored = localStorage.getItem(KEY); if (known(stored)) lang = stored; }
+catch { /* private window */ }
 
 export function getLang() { return lang; }
 export function setLang(l) {
-  lang = l === "fr" ? "fr" : "en";
+  lang = known(l) ? l : "en";
   try { localStorage.setItem(KEY, lang); } catch { /* session-local is fine */ }
   /* R-06 — the language of the DOCUMENT, not only of its strings. A
      screen reader pronounces from this attribute; leaving it at "en"
      reads French with English phonetics, which is unusable. */
   try { document.documentElement.lang = lang; } catch { /* no DOM in tests */ }
 }
+/** La langue suivante du cycle — ce que le commutateur affiche et posera. */
+export function nextLang() {
+  const i = LANGS.findIndex((l) => l.code === lang);
+  return LANGS[(i + 1) % LANGS.length];
+}
 try { document.documentElement.lang = lang; } catch { /* no DOM in tests */ }
 
 export function t(s) {
-  if (lang !== "fr") return s;
-  return FR[s] ?? s;
+  const d = DICTS[lang];
+  if (!d) return s;
+  return d.dict[s] ?? s;
 }
 
 /* ── composed data fragments (R-15) ───────────────────────────────────
@@ -95,11 +124,12 @@ const FRAG = [
   [/\bopen\b/g, "ouvert(s)"],
 ];
 export function tData(s) {
-  if (lang !== "fr" || !s) return s;
-  const whole = FR[s];
+  const d = DICTS[lang];
+  if (!d || !s) return s;
+  const whole = d.dict[s];
   if (whole) return whole;
   let out = String(s);
-  for (const [re, fr] of FRAG) out = out.replace(re, fr);
+  for (const [re, to] of d.frag ?? []) out = out.replace(re, to);
   return out;
 }
 
@@ -123,6 +153,15 @@ export const FR = {
   "Reports": "Rapports",
   "Locations": "Sites",
   "Administration": "Administration",
+
+  /* MC-01 · le pays et l'entité légale du site */
+  "Country": "Pays",
+  "Legal entity": "Entité légale",
+  "Two-letter ISO code — SN, CI, PE. The per-country legal condition on time entry (G-14) reads this.":
+    "Code ISO à deux lettres — SN, CI, PE. La condition légale par pays sur la saisie du temps (G-14) lit ce champ.",
+  "The company that carries this site. A data-subject request is answered by an entity, not by a city.":
+    "La société qui porte ce site. Une demande d'accès aux données reçoit la réponse d'une entité, pas d'une ville.",
+  "Two letters, or empty": "Deux lettres, ou vide",
 
   /* PM-01 · la marge et les dépassements */
   " past the margin — waiting on an answer": " au-delà de la marge — en attente de réponse",
@@ -1367,3 +1406,10 @@ export const FR = {
   "Four notes are needed — fit, value, risk and effort. An unscored project sorts last, not worst.":
     "Quatre notes sont nécessaires — adéquation, valeur, risque et effort. Un projet sans score se place en dernier, pas en pire.",
 };
+
+/* ── enregistrement des dictionnaires ─────────────────────────────────
+   Ici et pas en tête : FR et FRAG sont des `const` déclarées plus haut,
+   et un registre rempli avant leur naissance lirait la zone morte
+   temporelle. Une langue nouvelle s'ajoute par une ligne LANGS et une
+   ligne ici — rien d'autre (comité 29, I18N-01). */
+DICTS.fr = { dict: FR, frag: FRAG };
