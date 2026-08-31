@@ -1,0 +1,71 @@
+# The same command a maintainer runs before committing, run on every push
+# and every pull request. Nothing here is special to CI: if this is red,
+# `npm run verify` is red on your machine too.
+#
+# Two engines on purpose. Meridian runs on PGlite when no DATABASE_URL is
+# set and on PostgreSQL when one is, and the two are not interchangeable
+# in every detail — `rowCount` versus `affectedRows` cost this project a
+# route that answered 404 about a row it had just updated. The suites run
+# on PGlite; this workflow also boots the migrations against a real
+# PostgreSQL 17, which is what production uses.
+
+name: verify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # 334 tests, the client build, eight static gates, a dependency audit.
+      - run: npm run verify
+
+      # 286 use cases across the four roles. Twelve warnings are documented
+      # and expected; the command fails only on an unexpected outcome.
+      - run: npm run sweep
+
+  postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: ci-only-not-a-secret
+          POSTGRES_DB: meridian
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports: [5432:5432]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+
+      # The migrations must apply cleanly to the engine production runs on,
+      # not only to the one the tests run on.
+      - run: npm run migrate
+        env:
+          DATABASE_URL: postgres://postgres:ci-only-not-a-secret@localhost:5432/meridian
+      - run: npm run seed
+        env:
+          DATABASE_URL: postgres://postgres:ci-only-not-a-secret@localhost:5432/meridian
+      - run: npm run migrate
+        env:
+          DATABASE_URL: postgres://postgres:ci-only-not-a-secret@localhost:5432/meridian

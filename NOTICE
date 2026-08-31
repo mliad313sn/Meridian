@@ -1,0 +1,71 @@
+Meridian IT-PMO
+Copyright 2026 The Meridian IT-PMO contributors
+
+This product includes software developed by The Meridian IT-PMO
+contributors, licensed under the Apache License, Version 2.0. See the
+LICENSE file for the full terms.
+
+
+-------------------------------------------------------------------------
+THIRD-PARTY COMPONENTS
+-------------------------------------------------------------------------
+
+Meridian ships with, or builds against, the components below. Each keeps
+its own licence; none of them is Apache-2.0-incompatible for
+redistribution.
+
+Runtime dependencies — these run in production:
+
+  @electric-sql/pglite    Apache-2.0   PostgreSQL compiled to WebAssembly,
+                                       used when no DATABASE_URL is set
+  express                 MIT          HTTP server
+  pg                      MIT          PostgreSQL client
+  cookie-parser           MIT          cookie parsing middleware
+
+Build and development dependencies — these never reach a running server:
+
+  vite                    MIT          client bundler
+  esbuild                 MIT          used by the single-file packager
+  jsdom                   MIT          renders every screen in the F8 gate
+  node-windows            MIT          Windows service registration
+  postject                MIT          injects the app into the Node binary
+  @fontsource/ibm-plex-sans   OFL-1.1  packaged web font
+  @fontsource/ibm-plex-mono   OFL-1.1  packaged web font
+
+Typefaces:
+
+  IBM Plex Sans and IBM Plex Mono
+  Copyright IBM Corp., licensed under the SIL Open Font License 1.1.
+  The full OFL text ships with the packages, under
+  node_modules/@fontsource/ibm-plex-*/LICENSE, and is reproduced in any
+  distribution that includes the built client.
+
+  These fonts are packaged with the application on purpose. They were
+  previously fetched from Google Fonts on every page load, which told a
+  third party the address of every person who opened the tool, cost a
+  site on a poor link the wait, and left the interface degraded offline.
+  A tool that holds an audit trail should not make that request.
+
+
+-------------------------------------------------------------------------
+WHAT MERIDIAN ITSELF SENDS OUT
+-------------------------------------------------------------------------
+
+Nothing, unless you configure it to.
+
+There is no telemetry, no usage reporting, no update check and no
+licence check. A default installation makes no outbound network request
+of any kind. Four features can reach the network, and each stays inert
+until an administrator supplies the address:
+
+  · notifications        MERIDIAN_NOTIFY_URL plus the `notifyHosts`
+                         setting — both required, HTTPS only
+  · evidence probing     only hosts listed in `documentHosts`, which
+                         ships empty, meaning closed
+  · Entra ID sign-in     MERIDIAN_OIDC_* — absent by default
+  · SDP federation       an optional integration seam, off unless an
+                         address and key are configured
+
+You can verify this claim rather than trust it: search the server source
+for `fetch(` and for `https://`. Every hit is behind one of the four
+gates above.

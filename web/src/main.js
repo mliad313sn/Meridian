@@ -6,6 +6,22 @@
  * what the account may reach (R7.3), and a Meetings section (D-04).
  */
 
+/* Les polices, empaquetées avec l'application plutôt que demandées à
+   Google à chaque ouverture de page. Trois raisons, dans cet ordre : le
+   navigateur de chaque personne annonçait son adresse à un tiers, ce qui
+   n'est pas défendable dans un outil qui héberge une piste d'audit ; un
+   site au bout d'une liaison satellite payait l'attente ; et l'écran se
+   dégradait hors ligne, alors que le mode hors ligne est une fonction
+   annoncée. IBM Plex est sous licence SIL Open Font 1.1 — voir NOTICE.
+   Seules les graisses réellement employées par styles.css sont importées. */
+import "@fontsource/ibm-plex-sans/400.css";
+import "@fontsource/ibm-plex-sans/500.css";
+import "@fontsource/ibm-plex-sans/600.css";
+import "@fontsource/ibm-plex-sans/700.css";
+import "@fontsource/ibm-plex-mono/400.css";
+import "@fontsource/ibm-plex-mono/500.css";
+import "@fontsource/ibm-plex-mono/600.css";
+
 import "./styles.css";
 import { h, clear, icon, $, dialog, formDialog, searchBox, selectField, openDialogCount } from "./ui/kit.js";
 import { renderLogin } from "./ui/login.js";

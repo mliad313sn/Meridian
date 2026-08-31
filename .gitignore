@@ -5,3 +5,8 @@ dist/
 *.log
 .env
 
+
+# S-18 — le contournement de proxy reste local. Un dépôt public qui livre
+# strict-ssl=false enseigne une faiblesse de chaîne d'approvisionnement à
+# tous ceux qui le clonent ; installez plutôt l'AC de votre proxy.
+.npmrc

@@ -1,25 +1,65 @@
 # Meridian IT-PMO
 
-Group-wide IT project portfolio management —
-earned value, critical path, stage gates, RAID, change control, resource
-capacity, and the weekly and monthly meetings that run on top of them.
+**Project portfolio management for a group that runs several sites.**
+Earned value, critical path, stage gates, RAID, change control, resource
+capacity — and the weekly and monthly meetings that run on top of them,
+generated from the portfolio rather than typed into a deck.
 
-> **STANDALONE RESTART BASELINE (2026-08-28).** This project is Meridian
-> running fully on its own — its own PostgreSQL 17 database
-> (`DATABASE_URL` → `meridian_standalone`; PGlite fallback with no env),
-> served at the root of its own port. It carries everything the first
-> integration round built and proved (the federation contracts C1–C6 in
-> `server/src/federation.js` + `server/src/routes/federation*.js`, the
-> `ext_link` store, origin provenance, sign-in rate limit, honest
-> budget-less display, `npm run reset-book`) — all config-gated and inert
-> until pointed at an SDP. Integration with SDP restarts from here,
-> module by module; the previous integrated build remains on the
-> `release/pmo-integration` branch of `sdp-dashboard` for reference.
+Free software, Apache-2.0. Self-hosted. No telemetry, no licence check,
+no account to create. `npm install && npm run seed && npm run dev` and it
+is running on your machine in about a minute.
 
-Version 5 replaces the single-file v4 prototype (kept in
-`legacy/meridian-pmo-v4.html`) with a client/server application on
-PostgreSQL, real authentication and authorisation, an append-only audit
-trail, and a meeting-animation module the prototype had no equivalent of.
+---
+
+## What it is for, and what it is not
+
+Meridian is built for the situation where **authority is split between a
+group function and the sites that deliver**: a programme office in one
+country, delivery teams in eight others, an auditor who will eventually
+ask why a decision was taken in March.
+
+It is opinionated about three things, and they are the reason to choose
+it over a generic work tracker:
+
+- **Authority is data, not convention.** A project is governed at group
+  or at site level, and that single fact decides who may re-baseline it,
+  book money against it, or approve its gate. The decision is made in one
+  place, server-side, and the browser imports the same module only to
+  decide what to draw.
+- **The trail cannot be rewritten.** Every change writes an audit row
+  inside its own transaction — a change that is not audited does not
+  commit — with before and after images. The table refuses `UPDATE` and
+  `DELETE` at the database, not in application code.
+- **The meeting is generated.** Agendas are built from what the portfolio
+  actually says this week; decisions and actions land back on the
+  projects they concern, and a site decision can be referred up without
+  anyone re-typing it.
+
+**It is not** a task manager, a time-and-billing system, an ITSM tool, or
+an agile team board. It sits above those and reports on the work they
+carry out.
+
+## What you are not getting
+
+Stated here rather than discovered later:
+
+- **There is no vendor.** No support contract, no one on call, no
+  service-level commitment. If it breaks on a Sunday, you fix it or you
+  wait.
+- **It has not yet run a real portfolio for a full year.** Read
+  `docs/24-comite-marche.md`, which is an independent committee's
+  assessment saying exactly that, in more detail than a vendor would.
+- **The reports and committee records are in French.** The code, its
+  comments and the interface are in English and French; the twenty-five
+  documents in `docs/` that explain *why* each decision was taken are
+  mostly French.
+- **Three blocking operational findings are yours to close**, not the
+  software's: a tested backup, a second instance, and a written security
+  policy. See [SECURITY.md](SECURITY.md).
+
+You are getting the source, an archive format that gets all your data
+back out (`npm run restore`), and a build that fails on eight static
+gates before it will let a change through.
 
 ---
 
@@ -171,6 +211,24 @@ stops at DONE, BLOCKED, or after five cycles without closure. See
 
 ---
 
+## Licence, and using this
+
+Apache License 2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE). You may
+run it, change it, and deploy it commercially, including inside a company
+that sells something else. The patent grant is deliberate: it protects
+you and it protects the people who contributed.
+
+- [CONTRIBUTING.md](CONTRIBUTING.md) — how to build it, and the five
+  rules that are not negotiable
+- [SECURITY.md](SECURITY.md) — how to report a vulnerability, what is in
+  scope, and what response you can realistically expect
+
+Third-party components and their licences are listed in
+[NOTICE](NOTICE), which also states, and shows you how to verify, that a
+default installation makes no outbound network request at all.
+
+---
+
 ## Known limits
 
 Stated plainly rather than buried; all scored in the AMDEC.
@@ -181,10 +239,12 @@ Stated plainly rather than buried; all scored in the AMDEC.
   bootstrap transfers ~16 KB.
 - ~~No rate limit on sign-in~~ (C-06) — **closed**: the standalone baseline
   carries the sign-in rate limit from the integration round.
-- **`.npmrc` disables strict TLS for the package registry** (C-05).
-  A Cisco Umbrella inspection proxy re-signs registry traffic and its root
-  CA is not in the Windows trust store. Remove the line once the CA is
-  installed; it has no bearing on the running system.
+- ~~`.npmrc` disables strict TLS for the package registry~~ (C-05, S-18)
+  — **closed by not shipping it**. The workaround was one maintainer's
+  corporate proxy; a public repository that carries `strict-ssl=false`
+  teaches a supply-chain weakness to everyone who clones it. The file is
+  now ignored, and [CONTRIBUTING.md](CONTRIBUTING.md) says to install your
+  proxy's CA instead.
 - **Three settings wait on the sponsor** (accepted in writing,
   `docs/18-amdec-recette.md`): `MERIDIAN_SMTP_URL` before notifications
   actually send, `MERIDIAN_OIDC_*` before Entra sign-in appears, and the

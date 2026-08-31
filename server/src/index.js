@@ -78,8 +78,11 @@ export function buildApp() {
   const CSP = [
     "default-src 'self'",
     "script-src 'self'",
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-    "font-src 'self' https://fonts.gstatic.com",
+    /* Plus aucun hôte tiers : les polices sont empaquetées avec
+       l'application. Tant que Google figurait ici, la politique autorisait
+       ce qu'elle prétendait interdire — une page complètement autonome. */
+    "style-src 'self' 'unsafe-inline'",
+    "font-src 'self'",
     "img-src 'self' data:",
     "connect-src 'self'",
     "form-action 'self'",
