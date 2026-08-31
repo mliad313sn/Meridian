@@ -34,7 +34,7 @@ just for you.
 npm run verify
 ```
 
-That is 334 tests, a client build, eight static gates and a dependency
+That is 356 tests, a client build, eight static gates and a dependency
 audit. It must be green. It takes about two minutes.
 
 `npm run sweep` exercises 286 use cases across the four roles and is
@@ -97,6 +97,27 @@ Say what changed and **why it was wrong before**. The commit log of this
 project is part of its documentation; several commits are the only place
 a subtle decision is explained. A message that only says what a diff
 already shows is a wasted opportunity.
+
+## Versioning — one version per change
+
+Every change carries a version. Not one per release train: **one per
+change**, so that a finding from the field can always be tied to a
+build.
+
+Before opening a pull request:
+
+1. add your entry under `## [Unreleased]` in
+   [CHANGELOG.md](CHANGELOG.md), under Added / Fixed / Changed /
+   Security — say what changed **and why it was wrong before**;
+2. bump `version` in `package.json` — MAJOR if an operator must act
+   before upgrading, MINOR for new capability, PATCH for a defect;
+3. when it merges, the version is tagged `vX.Y.Z` and `## [Unreleased]`
+   becomes that version, with its date.
+
+That number is what `GET /api/health` returns and what the packaged
+binary stamps. Without it, "it was fixed in ours" and "not in mine"
+cannot be told apart — which is the whole reason the field exists
+(finding P-02).
 
 ## Reporting a security defect
 

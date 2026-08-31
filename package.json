@@ -1,6 +1,6 @@
 {
   "name": "meridian-itpmo",
-  "version": "5.0.0",
+  "version": "5.1.0",
   "private": true,
   "type": "module",
   "description": "Meridian group IT-PMO — multi-site project portfolio management",
@@ -22,7 +22,8 @@
     "package": "node scripts/package/build-exe.mjs",
     "package:installer": "npm run package && node scripts/package/build-installer.mjs",
     "training": "node scripts/training.mjs",
-    "audit:deps": "npm audit --omit=dev --audit-level=high"
+    "audit:deps": "npm audit --omit=dev --audit-level=high",
+    "admin:handover": "node scripts/admin-handover.mjs"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.2.17",
@@ -38,5 +39,14 @@
     "node-windows": "^1.0.0-beta.8",
     "postject": "^1.0.0-alpha.6",
     "vite": "^6.0.7"
-  }
+  },
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mliad313sn/Meridian.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mliad313sn/Meridian/issues"
+  },
+  "homepage": "https://github.com/mliad313sn/Meridian#readme"
 }
