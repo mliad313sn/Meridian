@@ -1151,6 +1151,20 @@ Views.project = (db) => {
        stays open; the quarterly read folds, each fold saying what it
        holds. Nothing is removed. */
     h("div", { style: "height:20px" }),
+    /* PM-03 — la justification d'abord : avant de lire ce que le projet
+       vaut, lire pourquoi on le fait, et si quelqu'un l'a redit depuis
+       que les chiffres ont bougé. Ouvert quand la reconfirmation ne
+       couvre plus le texte — c'est l'état qu'on ne doit pas déplier
+       pour voir. */
+    (() => {
+      const bc = (db.businessCases ?? []).find((c) => c.project === p.id);
+      const note = !bc ? t("none written")
+        : bc.staleSinceReconfirm ? t("changed since it was last reconfirmed")
+        : bc.reconfirmedOn ? t("reconfirmed at gate ") + bc.reconfirmedGate
+        : t("written, never reconfirmed at a gate");
+      return fold(t("Business case"), note, !!(bc && bc.staleSinceReconfirm),
+        businessCaseBlock(db, p, bc));
+    })(),
     (() => {
       const vp = Engine.valueProfile(db, [p]);
       return fold(t("Value"),
@@ -3214,6 +3228,87 @@ function benefitFigure(b) {
   const u = b.unit ? " " + b.unit : "";
   const n = (v) => (v == null ? "—" : String(v));
   return n(b.baseline) + " → " + n(b.target) + u;
+}
+
+/* ── PM-03 · le cas d'affaire ─────────────────────────────────────────
+   La promesse contre laquelle le réalisé se relira : pourquoi, combien,
+   pour combien — et la question de PRINCE2, « cela vaut-il ENCORE la
+   peine ? », posée comme un acte daté à chaque jalon. */
+
+function caseDialog(db, p, bc) {
+  formDialog({
+    title: bc ? t("Revise the business case") : t("Write the business case"), kicker: p.id,
+    fields: [
+      { key: "summary", label: t("Why this project"), type: "textarea", span: 2, rows: 3,
+        required: true, value: bc ? bc.summary : "",
+        hint: t("The justification in the payer's words — what the group gets, not how the team will build it.") },
+      { key: "expectedCost", label: t("Expected cost ($M)"), type: "number", min: 0, step: 0.1,
+        value: bc && bc.expectedCost != null ? bc.expectedCost : "",
+        hint: t("What was promised when the money was asked for. The ledger holds what actually happened.") },
+      { key: "expectedBenefit", label: t("Expected benefit ($M/yr)"), type: "number", min: 0, step: 0.1,
+        value: bc && bc.expectedBenefit != null ? bc.expectedBenefit : "",
+        hint: t("Annual, once delivered. The benefits register holds the measured truth.") },
+      { key: "basis", label: t("What the numbers rest on"), type: "textarea", span: 2, rows: 2,
+        value: bc ? bc.basis : "",
+        hint: t("A figure with its basis can be checked; a figure without one can only be argued with.") },
+    ],
+    saveLabel: bc ? t("Save the case") : t("Write it"),
+    onSave: (val) => App.write(bc ? "Business case updated" : "Business case written",
+      (a) => a.put("/projects/" + p.id + "/case",
+        bc ? { ...val, version: bc.version } : val)),
+  });
+}
+
+async function reconfirmCase(db, p, bc) {
+  const ok = await confirmDialog({
+    title: t("Still worth doing?"),
+    message: t("This records that the justification holds, at the current gate, under your name."),
+    detail: t("If the case no longer holds, do not reconfirm it — revise it, or take the project to the steering committee."),
+    confirmLabel: t("It still holds"),
+  });
+  if (!ok) return;
+  await App.write("Business case reconfirmed",
+    (a) => a.post("/projects/" + p.id + "/case/reconfirm",
+      { gate: Math.max(1, p.gate || 1), version: bc.version }));
+}
+
+function businessCaseBlock(db, p, bc) {
+  const mayCase = () => may("case.write", p);
+  if (!bc) {
+    return h("div", null,
+      h("p", { class: "xs muted", style: "max-width:62ch;margin:0 0 10px" },
+        t("Nothing here says why this project deserves its budget. Gate 1 asks for the business case as evidence — and without it, nobody can ever answer whether it still holds.")),
+      may("case.write", p)
+        ? h("button", { class: "btn btn-sm", onClick: () => caseDialog(db, p, null) },
+            icon("plus", 12), t("Write the business case"))
+        : h("p", { class: "xs muted" }, t("Only the programme office writes it — the deliverer executes the justification, it does not author it.")));
+  }
+  return h("div", null,
+    sectionHead(t("Business case"),
+      t("written ") + fmtDate(bc.writtenOn) + (bc.updatedOn ? t(", revised ") + fmtDate(bc.updatedOn) : ""),
+      mayCase() && may("case.write", p)
+        ? h("div", { class: "btn-row" },
+            h("button", { class: "btn btn-xs", onClick: () => caseDialog(db, p, bc) },
+              icon("pencil", 11), t("Revise")),
+            h("button", { class: "btn btn-xs", onClick: () => reconfirmCase(db, p, bc) },
+              t("It still holds")))
+        : null),
+    bc.staleSinceReconfirm
+      ? h("div", { class: "small", style: "color:var(--sig-amber);margin-bottom:8px" },
+          t("Revised after its last reconfirmation — what was reconfirmed is not what is written below."))
+      : null,
+    h("p", { class: "small", style: "max-width:64ch;margin:0 0 10px" }, bc.summary),
+    h("div", { style: "display:flex;gap:22px;flex-wrap:wrap;margin-bottom:8px" },
+      h("div", null, h("div", { class: "kicker" }, t("Expected cost")),
+        h("div", { class: "mono strong" }, bc.expectedCost != null ? money(bc.expectedCost) : "—")),
+      h("div", null, h("div", { class: "kicker" }, t("Expected benefit / yr")),
+        h("div", { class: "mono strong" }, bc.expectedBenefit != null ? money(bc.expectedBenefit) : "—")),
+      h("div", null, h("div", { class: "kicker" }, t("Last reconfirmed")),
+        h("div", { class: "small" }, bc.reconfirmedOn
+          ? t("gate ") + bc.reconfirmedGate + " · " + fmtDate(bc.reconfirmedOn)
+          : h("span", { class: "muted" }, t("never"))))),
+    bc.basis ? h("p", { class: "xs muted", style: "max-width:64ch" },
+      t("Basis: ") + bc.basis) : null);
 }
 
 /* ── PM-01 · la marge, et les dépassements ────────────────────────────

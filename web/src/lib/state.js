@@ -191,6 +191,8 @@ export const App = {
     "Window declared": ["windows"], "Window withdrawn": ["windows"],
     /* PM-02 — le registre est une collection comme une autre ; adopter
        change une ligne, pas le portefeuille. */
+    "Business case written": ["businessCases"], "Business case updated": ["businessCases"],
+    "Business case reconfirmed": ["businessCases"],
     "Lesson raised": ["lessons"], "Lesson updated": ["lessons"],
     "Lesson removed": ["lessons"], "Lesson adopted": ["lessons"],
   },

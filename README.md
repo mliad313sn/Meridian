@@ -86,7 +86,7 @@ DATABASE_URL=postgres://user:pass@host:5432/meridian npm start
 Other commands:
 
 ```bash
-npm test              # 384 tests
+npm test              # 396 tests
 npm run audit         # nine gates: routes, CRUD+audit, versions, controls, language, field help, kit imports, view render, API contract
 npm run verify        # tests + build + the nine gates + a dependency audit
 npm run sweep         # 286 use cases × 4 roles + 72 view renders, on a fresh instance
@@ -150,8 +150,8 @@ server/          src/db.js         pg | PGlite, migrations, optimistic concurren
                  src/audit.js      append-only, inside the mutation's transaction
                  src/portfolio.js  rows → the shape the engine reads
                  src/routes/       auth · portfolio · meetings · admin · import
-                 migrations/       ordered SQL (001–027, applied at boot)
-                 test/             384 tests
+                 migrations/       ordered SQL (001–029, applied at boot)
+                 test/             396 tests
 
 web/             src/ui/kit.js     h() builder, dialogs, tables, charts (from v4)
                  src/lib/          api client, state, permission mirror
@@ -203,6 +203,7 @@ never a silent overwrite.
 | [`docs/27-comite-interoperabilite.md`](docs/27-comite-interoperabilite.md) | Interoperability committee (FR) — four surfaces instead of twenty connectors, and why |
 | [`docs/28-goal-market.md`](docs/28-goal-market.md) | The single ordered backlog to a finished product, and the loop that works it |
 | [`docs/29-comite-international-saas.md`](docs/29-comite-international-saas.md) | International, SaaS & multi-tenant committee (FR) — instance-per-tenant decided, the language registry, and PostgreSQL required in service |
+| [`docs/30-vues-restitution.md`](docs/30-vues-restitution.md) | The `reporting.*` read contract — fourteen stable SQL views for Power BI, Excel, Tableau, Qlik |
 
 ---
 

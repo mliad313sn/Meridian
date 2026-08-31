@@ -13,7 +13,7 @@
 import { test, before, after, describe } from "node:test";
 import assert from "node:assert/strict";
 import { boot, shutdown, as } from "./harness.js";
-import { one, query } from "../src/db.js";
+import { one, query, migrate } from "../src/db.js";
 import { engineRefusal } from "../src/index.js";
 import { localeOf, SERVER_LANGS } from "../src/i18n.js";
 import { LANGS, getLang, setLang, nextLang, t } from "../../web/src/lib/i18n.js";
@@ -113,5 +113,27 @@ describe("MC-01 · le pays et l'entité légale d'un site", () => {
     assert.equal(r.status, 200);
     const after = (await admin.get("/api/bootstrap")).body.db.sites.find((x) => x.id === "GRU");
     assert.equal(after.country, "", "un code pays FAUX classe faux ; un code vide classe pas");
+  });
+});
+
+describe("SaaS-02 · un binaire ancien refuse une base plus récente", () => {
+  test("une migration inconnue en base bloque net, avec son nom dans le message", async () => {
+    /* Le piège vécu : la passation a failli appliquer la 023 sous le
+       binaire de production qui lisait encore l'ancienne colonne. Un
+       refus net ici est ce qui rend une montée de version ratée bruyante
+       au lieu de sournoise. */
+    await query(`INSERT INTO schema_migration (name) VALUES ('999_future.sql')`);
+    try {
+      await assert.rejects(() => migrate({ silent: true }), (e) => {
+        assert.match(e.message, /999_future\.sql/, "le message nomme ce que la base porte");
+        assert.match(e.message, /older than the database/i);
+        return true;
+      });
+    } finally {
+      await query(`DELETE FROM schema_migration WHERE name = '999_future.sql'`);
+    }
+    /* Et une fois la base revenue à ce que le binaire connaît, tout
+       repart : le refus était le décalage, pas un verrou. */
+    assert.deepEqual(await migrate({ silent: true }), []);
   });
 });

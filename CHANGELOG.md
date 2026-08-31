@@ -22,6 +22,45 @@ Nothing yet.
 
 ---
 
+## [5.5.0] — 2026-08-31
+
+**R3 — “conformant, and connectable” — is pronounced.** All six lines of
+the release are closed with dated measures.
+
+### Added
+
+- **The business case, held as a record** (PM-03, migration `028`). The
+  chain demand → case → benefit → review was broken in the middle: the
+  case existed only as a document *type*. One case per project, written
+  and reconfirmed by the paying level alone; PRINCE2's first question —
+  “is it still worth doing?” — becomes a dated act at a gate. A case
+  revised after its reconfirmation says so, by event order rather than by
+  clock: two dates on the same day cannot say which came first, so
+  reconfirming clears the revision mark and revising sets it.
+- **The reporting schema** (INT-05, migration `029`). Fourteen stable
+  read-only views under `reporting.*` — Power BI, Excel, Tableau and
+  Qlik connect with no connector written. No earned-value numbers in SQL
+  (the frozen engine stays the single truth; dashboards read
+  `/api/v1/portfolio`), no secrets, no before/after images. Documented
+  column by column in `docs/30`, and a test holds doc and schema equal
+  in both directions.
+- **The version-skew guard** (SaaS-02). A binary older than its database
+  now refuses to start, naming the migrations it does not know — instead
+  of failing query by query with no message saying why. The trap was
+  lived, not imagined: an admin-handover nearly applied migration 023
+  under the production binary that still read the old column.
+
+### Fixed
+
+- Four of the ten audit-action labels in the first draft of
+  `reporting.decisions` did not exist — a filter on an invented label
+  returns emptiness, not an error, and an empty register inspires
+  confidence while lying by omission. Caught by grep before the
+  migration shipped; held by a test that replays a real decision and
+  reads it back through the view.
+
+---
+
 ## [5.4.0] — 2026-08-31
 
 The international, SaaS and multi-tenant strategy (committee report

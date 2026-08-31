@@ -1927,6 +1927,100 @@ r.post("/exceptions/:id/answer", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+/* ── business case (PM-03) ────────────────────────────────────────────
+ *
+ * La chaîne demande → cas d'affaire → bénéfice → revue était rompue en
+ * son milieu : le cas n'existait que comme type de document. Un cas par
+ * projet, écrit et reconfirmé par le niveau qui paie ; la question de la
+ * justification continue — « cela vaut-il ENCORE la peine ? » — devient
+ * un acte daté au lieu d'une opinion de couloir.
+ */
+
+r.put("/projects/:id/case", async (req, res, next) => {
+  try {
+    const p = await project(req.params.id, req.user);
+    gate(req.user, "case.write", { project: p });
+    const b = req.body ?? {};
+    if (!b.summary || !String(b.summary).trim()) {
+      bad("A business case starts with the justification, in the payer's words");
+    }
+    const num = (v, what) => {
+      if (v === undefined || v === null || v === "") return null;
+      const n = Number(v);
+      if (!Number.isFinite(n) || n < 0) bad(what + " must be zero or more, in millions");
+      return fromM(n);
+    };
+    const cost = num(b.expectedCost, "The expected cost");
+    const benefit = num(b.expectedBenefit, "The expected annual benefit");
+
+    const existing = await one(
+      `SELECT * FROM business_case WHERE project_id = $1`, [p.id]);
+
+    if (!existing) {
+      let id = null;
+      await audited(req.user,
+        () => ({ action: "Business case written", entity: "business_case", entityId: id,
+                 detail: p.id + " — " + String(b.summary).slice(0, 80) }),
+        async (t) => {
+          id = await allocateId(t, "CAS", { pad: 3 });
+          return t.query(
+            `INSERT INTO business_case
+               (id, project_id, summary, expected_cost, expected_benefit, basis, written_by)
+             VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+            [id, p.id, b.summary, cost, benefit, b.basis ?? "", req.user.id]);
+        });
+      return res.status(201).json({ id });
+    }
+
+    /* Modifier le cas ne retire PAS la reconfirmation passée — elle a eu
+       lieu, elle est datée — mais `updated_on` avance, et le sérialiseur
+       en déduit que la reconfirmation ne couvre plus le texte présent. */
+    const out = await audited(req.user,
+      { action: "Business case updated", entity: "business_case", entityId: existing.id,
+        detail: p.id,
+        before: { summary: existing.summary, cost: existing.expected_cost,
+                  benefit: existing.expected_benefit },
+        after: { summary: b.summary, cost, benefit } },
+      async (t) => conflict(await updateVersioned(t, "business_case", existing.id,
+        requiredVersion(b, "business case"),
+        { summary: b.summary, expected_cost: cost, expected_benefit: benefit,
+          basis: b.basis ?? existing.basis, updated_on: iso(new Date()) })));
+    res.json({ version: out.version });
+  } catch (e) { next(e); }
+});
+
+/**
+ * « Oui, cela vaut encore la peine. » Au jalon N, tel jour, signé. La
+ * route refuse de reconfirmer un cas qui n'existe pas — reconfirmer le
+ * vide est exactement le geste de complaisance que PM-03 ferme.
+ */
+r.post("/projects/:id/case/reconfirm", async (req, res, next) => {
+  try {
+    const p = await project(req.params.id, req.user);
+    gate(req.user, "case.write", { project: p });
+    const existing = await one(`SELECT * FROM business_case WHERE project_id = $1`, [p.id]);
+    if (!existing) bad("There is no business case to reconfirm — write it first");
+    const g = Number(req.body?.gate ?? p.gate ?? 0);
+    if (!(g >= 1 && g <= 4)) bad("Reconfirmation happens at a gate — 1 to 4");
+
+    const out = await audited(req.user,
+      { action: "Business case reconfirmed", entity: "business_case", entityId: existing.id,
+        detail: `${p.id} — still worth doing, at gate ${g}`,
+        before: { gate: existing.reconfirmed_gate, on: existing.reconfirmed_on },
+        after: { gate: g } },
+      async (t) => conflict(await updateVersioned(t, "business_case", existing.id,
+        requiredVersion(req.body, "business case"),
+        /* updated_on repasse à NULL : la reconfirmation couvre le texte
+           PRÉSENT. Comparer deux dates ne suffit pas — une révision le
+           même jour ne serait jamais « plus récente » qu'une
+           reconfirmation du matin. L'ordre des événements se code par
+           l'effacement, pas par l'horloge. */
+        { reconfirmed_gate: g, reconfirmed_on: iso(new Date()), reconfirmed_by: req.user.id,
+          updated_on: null })));
+    res.json({ version: out.version });
+  } catch (e) { next(e); }
+});
+
 /* ── lessons (PM-02) ──────────────────────────────────────────────────
  *
  * Le jalon 4 du produit exige comme preuve « Realisation report, lessons

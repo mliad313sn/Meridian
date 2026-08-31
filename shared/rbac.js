@@ -47,6 +47,11 @@ export const ACTIONS = [
   /* R-02 : déclarer une absence et son suppléant est un fait du site,
      comme le calendrier des arrêts. */
   "absence.write",
+  /* PM-03 : le cas d'affaire est la parole du niveau qui paie. Celui qui
+     livre exécute la justification ; il ne l'écrit pas et ne la
+     reconfirme pas — la même indépendance que la revue de bénéfice, à
+     l'autre bout de la même chaîne. */
+  "case.write",
   /* PM-01 : poser la marge dans laquelle un projet peut travailler, et
      répondre quand elle est franchie. Les deux appartiennent au niveau
      qui a délégué — un chef de site qui fixe sa propre tolérance ne fixe
@@ -89,6 +94,11 @@ const GROUP_ONLY_WRITES = new Set([
      lived it proposes; the programme office decides it holds beyond the
      project that produced it. Same independence as benefit.review. */
   "lesson.adopt",
+  /* PM-03: the business case is the paying level's word. The deliverer
+     executes the justification; it does not write it, and does not get
+     to reconfirm it — benefit.review's twin at the other end of the
+     same chain. */
+  "case.write",
   /* PM-01: a tolerance is granted by the level above, and the exception
      it raises is answered by the same level. The delivery team lives
      inside the margin; it does not set it, and it does not get to rule

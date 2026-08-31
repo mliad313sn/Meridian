@@ -105,7 +105,7 @@ export async function loadPortfolio(user) {
   const [
     activities, deps, milestones, ledger, raidRows, crRows, stepRows,
     allocations, docs, columns, items, crossDeps, narrativeRows, extLinks,
-    benefits, waves, commitments, timesheets, lessonRows, tolerances, exceptions,
+    benefits, waves, commitments, timesheets, lessonRows, tolerances, exceptions, caseRows,
   ] = await Promise.all([
     inScope(`SELECT * FROM activity WHERE project_id = ANY($1) ORDER BY project_id, stage`),
     inScope(`SELECT d.* FROM activity_dep d JOIN activity a ON a.id = d.activity_id
@@ -160,6 +160,8 @@ export async function loadPortfolio(user) {
               WHERE project_id = ANY($1) AND active ORDER BY project_id`),
     inScope(`SELECT * FROM project_exception
               WHERE project_id = ANY($1) ORDER BY raised_on DESC, id`),
+    /* PM-03 — la promesse contre laquelle le réalisé se relira. */
+    inScope(`SELECT * FROM business_case WHERE project_id = ANY($1)`),
   ]);
 
   const depsByActivity = new Map();
@@ -325,6 +327,24 @@ export async function loadPortfolio(user) {
       measured: Number(x.measured), allowed: Number(x.allowed), detail: x.detail,
       status: x.status, answerKind: x.answer_kind, answer: x.answer,
       answeredBy: x.answered_by, answeredOn: x.answered_on, version: x.row_version,
+    })),
+
+    /* PM-03 — le cas d'affaire : la justification, ses deux chiffres,
+       et si elle a été reconfirmée depuis sa dernière modification. */
+    businessCases: caseRows.map((c) => ({
+      id: c.id, project: c.project_id, summary: c.summary,
+      expectedCost: c.expected_cost == null ? null : toM(c.expected_cost),
+      expectedBenefit: c.expected_benefit == null ? null : toM(c.expected_benefit),
+      basis: c.basis, writtenBy: c.written_by, writtenOn: c.written_on,
+      updatedOn: c.updated_on,
+      reconfirmedGate: c.reconfirmed_gate, reconfirmedOn: c.reconfirmed_on,
+      reconfirmedBy: c.reconfirmed_by,
+      /* Reconfirmé, puis modifié : la reconfirmation ne couvre plus ce
+         qui est écrit. Codé par l'ORDRE des événements, pas par
+         l'horloge : reconfirmer efface updated_on, réviser le repose —
+         deux dates du même jour ne savent pas dire qui fut premier. */
+      staleSinceReconfirm: !!(c.reconfirmed_on && c.updated_on),
+      version: c.row_version,
     })),
 
     /* PM-02 — ce qu'on a appris, et qui doit survivre au projet.

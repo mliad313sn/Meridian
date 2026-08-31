@@ -279,6 +279,25 @@ export async function migrate({ silent = false } = {}) {
     (await many("SELECT name FROM schema_migration")).map((r) => r.name)
   );
 
+  /* SaaS-02 — la base est-elle PLUS RÉCENTE que ce binaire ?
+     Le piège a été vécu, pas imaginé : la passation d'administrateur a
+     failli appliquer la 023 (renommage de la colonne du jeton) sous le
+     binaire de production qui lisait encore l'ancien nom — toutes les
+     connexions auraient échoué, requête par requête, sans qu'aucun
+     message ne dise pourquoi. Un binaire ancien sur une base neuve doit
+     refuser NET, ici, avant de toucher quoi que ce soit : dans une
+     flotte, c'est ce qui rend une montée de version ratée bruyante au
+     lieu de sournoise. */
+  const local = new Set(files);
+  const ahead = [...done].filter((name) => !local.has(name)).sort();
+  if (ahead.length) {
+    throw new Error(
+      `This database carries ${ahead.length} migration(s) this binary does not know ` +
+      `(${ahead.join(", ")}). The binary is older than the database: deploy the ` +
+      `current version instead of starting this one — running on would fail ` +
+      `query by query, with no message saying why.`);
+  }
+
   const applied = [];
   for (const file of files) {
     if (done.has(file)) continue;

@@ -168,7 +168,7 @@ absence coûte.
 | **I18N-03** | **Le portugais.** Même règle. | Brésil, Mozambique, Angola | 2 j |
 | **MC-02** | **Formats locaux.** Dates et nombres au format de la langue affichée (les libellés de mois sont anglais en dur). | « 03/04 » se lit dans deux ordres selon le lecteur — sur un jalon, c'est un incident | 2 j |
 | **SaaS-01** | **Premier démarrage sans console.** Une instance neuve accueille son premier administrateur par l'écran (aujourd'hui : `admin-handover` en ligne de commande). | Provisionner un tenant exige un accès shell — inacceptable en flotte | 3 j |
-| **SaaS-02** | **Garde de décalage de version.** Le binaire refuse une base portant des migrations plus récentes que lui. | Le piège 023 vécu ce matin : un vieux binaire sur une base neuve échoue requête par requête au lieu de refuser net | ½ j |
+| ~~**SaaS-02**~~ **LEVÉE 31/08** | **Garde de décalage de version.** Le binaire refuse une base portant des migrations plus récentes que lui. | Le piège 023 vécu ce matin : un vieux binaire sur une base neuve échoue requête par requête au lieu de refuser net | ½ j |
 | **SaaS-03** | **Sauvegarde par instance, éprouvée.** `pg_dump` orchestré + restauration chronométrée. | C'est G-01, toujours ouvert — bloquant AVANT tout client externe, pas après | 2 j + exploitation |
 | **SaaS-04** | **Identité d'instance dans `/api/health`** (nom du tenant, moteur, migrations) pour la supervision de flotte. | Une flotte sans identité se supervise à l'aveugle | ½ j |
 | **SaaS-05** | **Dossier d'exploitation flotte.** Proxy, TLS, provisionnement, montée de version tenant par tenant, gabarits. | Chaque déploiement réinvente ; les erreurs sont neuves à chaque fois | 3 j, documentaire |

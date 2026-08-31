@@ -41,6 +41,12 @@ se produit.
 | 5 | **PM-03** cas d'affaire tenu comme un enregistrement | 26 | Referme la chaîne demande → cas d'affaire → bénéfice → revue. |
 | 6 | **INT-05** vues SQL de restitution | 27 | Trois jours, et Power BI, Excel, Tableau et Qlik se branchent sans qu'on écrive un connecteur. |
 
+> **R3 EST PRONONCÉE — 31/08/2026.** Les six lignes sont closes avec
+> mesure datée, `npm run verify` est vert (396 tests, 9 portes), le
+> balayage n'a pas d'écart nouveau, et une exception a été ouverte puis
+> répondue au navigateur (PM-01). Le produit est « conforme et
+> branchable » au sens du §2.
+
 **Condition de prononcé de R3 :** les six lignes closes avec mesure
 datée, `npm run verify` vert, `npm run sweep` sans écart nouveau, et une
 exception ouverte puis répondue **au navigateur**, pas seulement en test.
@@ -109,11 +115,12 @@ Tenu à jour par la boucle, à la source, comme le relevé de clôture de
 | INT-02 | R3 | **close 31/08** | 025 · une clé par système, portées vérifiées, nom dans la piste, rotation · surface /api/v1 · 13 tests |
 | PM-01 | R3 | **close 31/08** | 026 · moteur · balayage horaire · écran · 15 tests · constat et réponse exercés au navigateur |
 | INT-01 | R3 | **close 31/08** | `server/src/openapi.js` engendré depuis le routeur · `GET /api/v1/openapi.json` · `docs/openapi.v1.json` publié · **porte F9** qui refuse toute dérive dans les deux sens · 3 tests |
-| PM-03 | R3 | ouverte | — |
-| INT-05 | R3 | ouverte | — |
+| PM-03 | R3 | **close 31/08** | 028 · un cas par projet, reconfirmation datée à un jalon, péremption par ordre d'événements · 7 tests · cycle complet au navigateur |
+| INT-05 | R3 | **close 31/08** | 029 · schéma reporting, 14 vues, doc colonne par colonne (docs/30), test doc↔schéma dans les deux sens, une décision rejouée se relit dans la vue |
 | PG-01 | 29 | **close 31/08** | refus réel exercé, sortie 1 ; drapeau posé par l'installateur |
 | I18N-01 | 29 | **close 31/08** | registre de langues client+serveur, contrainte de forme (027), cycle exercé au navigateur |
 | MC-01 | 29 | **close 31/08** | pays ISO + entité légale sur le site, 027, dialogue exercé (« br » → BR) |
+| SaaS-02 | 29 | **close 31/08** | migrate() refuse une base plus récente que le binaire, en nommant les migrations inconnues — le piège 023, fermé à la racine |
 
 *(les lignes de R4 et R5 sont reportées ici au fur et à mesure qu'elles
 entrent en travail)*
