@@ -22,6 +22,19 @@ Nothing yet.
 
 ---
 
+## [5.2.1] — 2026-08-31
+
+### Fixed
+
+- `scripts/deploy-local.ps1` declared the extraction failed when it had
+  not. The IExpress self-extractor **returns before it has finished
+  writing**, so checking for `setup.cmd` immediately afterwards finds an
+  empty directory. It now waits for the file to appear and stop growing.
+  Found by deploying, not by reading — the same class of defect as every
+  other one this project has caught by actually running the thing.
+
+---
+
 ## [5.2.0] — 2026-08-31
 
 ### Added

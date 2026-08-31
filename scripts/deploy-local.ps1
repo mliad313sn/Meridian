@@ -40,8 +40,24 @@ New-Item -ItemType Directory -Force $stage | Out-Null
 
 Write-Host "  extraction  $stage"
 & $exe /Q /C /T:$stage
-if (-not (Test-Path (Join-Path $stage "setup.cmd"))) {
-    Write-Host "  L'extraction n'a pas produit setup.cmd." -ForegroundColor Red
+
+# L'auto-extractible IExpress REND LA MAIN AVANT D'AVOIR FINI d'écrire :
+# vérifier dans la foulée trouve un dossier vide et conclut à tort que
+# l'extraction a échoué. On attend que le script d'installation soit là,
+# et qu'il ait cessé de grossir.
+$setup = Join-Path $stage "setup.cmd"
+$size = -1
+foreach ($try in 1..60) {
+    if (Test-Path $setup) {
+        $now = (Get-Item $setup).Length
+        if ($now -gt 0 -and $now -eq $size) { break }
+        $size = $now
+    }
+    Start-Sleep -Milliseconds 500
+}
+if (-not (Test-Path $setup)) {
+    Write-Host "  L'extraction n'a pas produit setup.cmd apres 30 s." -ForegroundColor Red
+    Write-Host "  Le dossier est conserve : $stage"
     exit 1
 }
 
