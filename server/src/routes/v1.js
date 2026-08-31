@@ -25,6 +25,7 @@ import { Router } from "express";
 import { loadPortfolio } from "../portfolio.js";
 import { readAudit } from "../audit.js";
 import { requireIntegration } from "../integrations.js";
+import { openApiDocument } from "../openapi.js";
 
 const r = Router();
 
@@ -74,6 +75,25 @@ r.get("/audit", requireIntegration("read:audit"), async (req, res, next) => {
 });
 
 /**
+ * La description OpenAPI de ce contrat, servie par l'instance elle-même.
+ *
+ * Le même document que `docs/openapi.v1.json`, à ceci près qu'il porte la
+ * version RÉELLEMENT en service et l'adresse à laquelle on l'a demandé —
+ * ce que le fichier publié ne peut pas savoir. Un intégrateur branché sur
+ * une instance lit donc le contrat de CETTE instance, pas celui de la
+ * dernière livraison.
+ *
+ * Réservé à une clé valable, comme la découverte : la forme d'une API est
+ * de la reconnaissance, et le comité a posé « fermé par défaut ».
+ */
+r.get("/openapi.json", requireIntegration(), (req, res) => {
+  res.json(openApiDocument({
+    version: process.env.MERIDIAN_VERSION || "dev",
+    servers: [{ url: `${req.protocol}://${req.get("host")}`, description: "This instance" }],
+  }));
+});
+
+/**
  * Ce que sert cette version, et sous quelles portées. Ouvert à toute clé
  * valable quelle que soit sa portée : un intégrateur doit pouvoir
  * découvrir ce qui lui manque sans écrire à un administrateur.
@@ -83,6 +103,7 @@ r.get("/", requireIntegration(), (req, res) => {
     ...stamp(),
     integration: req.user.displayName,
     scopesHeld: req.user.scopes,
+    describedBy: "/api/v1/openapi.json",
     endpoints: [
       { path: "/api/v1/portfolio", scope: "read:portfolio" },
       { path: "/api/v1/audit", scope: "read:audit" },

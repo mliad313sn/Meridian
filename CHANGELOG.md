@@ -22,6 +22,29 @@ Nothing yet.
 
 ---
 
+## [5.3.0] — 2026-08-31
+
+### Added
+
+- **The API contract, published and pinned to the code** (INT-01).
+  Without a published contract nothing is integrable, and an integrator
+  has to read the source to guess a shape nobody promised to keep. The
+  description is **generated from the mounted Express routes**, not
+  written beside them: a description kept alongside code goes stale
+  silently, which is the worse of the two errors — it inspires confidence
+  and lies by omission. Only the prose is written by hand.
+  `GET /api/v1/openapi.json` serves the running instance's own contract,
+  carrying the version actually deployed and the address it was asked at;
+  `docs/openapi.v1.json` is published for whoever has no instance yet.
+- **A ninth gate, F9.** It compares three things that must agree: the
+  routes really mounted, the routes described, and the published file. A
+  route without a description, a description without a route, or a stale
+  file fails the build. Proven in both directions before being trusted —
+  it caught its author's own undescribed route within a minute of
+  existing.
+
+---
+
 ## [5.2.1] — 2026-08-31
 
 ### Fixed

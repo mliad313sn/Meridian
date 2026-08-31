@@ -20,6 +20,7 @@ import assert from "node:assert/strict";
 import { boot, shutdown, as, client } from "./harness.js";
 import { one } from "../src/db.js";
 import { normaliseScopes, SCOPES } from "../src/integrations.js";
+import { mountedRoutes } from "../src/openapi.js";
 
 before(async () => { await boot(); });
 after(shutdown);
@@ -228,5 +229,49 @@ describe("INT-02 · la rotation, et le nom dans la piste", () => {
     await new Promise((r) => setTimeout(r, 250));
     const after = await one(`SELECT last_used_at FROM integration WHERE id = $1`, [made.id]);
     assert.ok(after.last_used_at, "une clé inutilisée depuis six mois est une clé qu'on peut couper");
+  });
+});
+
+describe("INT-01 · le contrat publié", () => {
+  test("la description est servie, et décrit ce qui est réellement monté", async () => {
+    const admin = await as("admin");
+    const made = await mint(admin, "Intégrateur curieux", "");
+    const c = client();
+    const r = await c.get("/api/v1/openapi.json", { "X-API-Key": made.key });
+    assert.equal(r.status, 200, "une clé sans portée lit quand même le contrat");
+
+    const doc = r.body;
+    assert.equal(doc.openapi, "3.1.0");
+    assert.equal(doc.info.license.identifier, "Apache-2.0");
+    /* La description dit les MÊMES routes que le routeur : c'est la porte
+       F9 qui le tient à la construction, et ceci qui le tient à
+       l'exécution — une description juste dans le dépôt et fausse en
+       service n'aurait servi personne. */
+    const decrites = Object.keys(doc.paths).sort();
+    assert.deepEqual(decrites, mountedRoutes().map((x) => x.path).sort()
+      .filter((v, i, a) => a.indexOf(v) === i));
+
+    /* Chaque route dit la portée qu'elle exige — c'est ce qu'un
+       intégrateur vient chercher avant de demander une clé. */
+    assert.equal(doc.paths["/api/v1/audit"].get["x-required-scope"], "read:audit");
+    assert.equal(doc.paths["/api/v1/portfolio"].get["x-required-scope"], "read:portfolio");
+    assert.equal(doc.paths["/api/v1/openapi.json"].get["x-required-scope"], null);
+  });
+
+  test("la version servie est celle du binaire, pas celle du fichier publié", async () => {
+    const admin = await as("admin");
+    const made = await mint(admin, "Intégrateur versionné", "read:portfolio");
+    const c = client();
+    const doc = (await c.get("/api/v1/openapi.json", { "X-API-Key": made.key })).body;
+    const health = (await c.get("/api/health")).body;
+    assert.equal(doc.info.version, health.version,
+      "sinon « c'était comme ça chez nous » et « pas chez moi » ne se départagent pas");
+    assert.match(doc.servers[0].url, /^http:\/\/127\.0\.0\.1:\d+$/,
+      "l'adresse est celle à laquelle on l'a demandé");
+  });
+
+  test("sans clé du tout, le contrat ne se lit pas", async () => {
+    assert.equal((await client().get("/api/v1/openapi.json")).status, 401,
+      "la forme d'une API est de la reconnaissance : fermé par défaut");
   });
 });

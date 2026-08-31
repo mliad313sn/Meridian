@@ -86,13 +86,14 @@ DATABASE_URL=postgres://user:pass@host:5432/meridian npm start
 Other commands:
 
 ```bash
-npm test              # 372 tests
-npm run audit         # eight gates: routes, CRUD+audit, versions, controls, language, field help, kit imports, view render
-npm run verify        # tests + build + the eight gates + a dependency audit
+npm test              # 375 tests
+npm run audit         # nine gates: routes, CRUD+audit, versions, controls, language, field help, kit imports, view render, API contract
+npm run verify        # tests + build + the nine gates + a dependency audit
 npm run sweep         # 286 use cases × 4 roles + 72 view renders, on a fresh instance
 npm run build         # build the client into web/dist
 npm run package:installer  # dist/MeridianSetup.exe — Windows service installer
 powershell -File scripts/deploy-local.ps1   # extract it, install it elevated, check /api/health
+npm run openapi       # regenerate docs/openapi.v1.json from the mounted routes
 npm run restore       # reload an exported archive into an empty instance (M-01)
 npm run training      # a separate practice instance on :4180 — never touches the real book
 npm run training -- --reset   # put it back to how it started
@@ -150,7 +151,7 @@ server/          src/db.js         pg | PGlite, migrations, optimistic concurren
                  src/portfolio.js  rows → the shape the engine reads
                  src/routes/       auth · portfolio · meetings · admin · import
                  migrations/       ordered SQL (001–026, applied at boot)
-                 test/             372 tests
+                 test/             375 tests
 
 web/             src/ui/kit.js     h() builder, dialogs, tables, charts (from v4)
                  src/lib/          api client, state, permission mirror

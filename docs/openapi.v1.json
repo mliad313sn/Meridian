@@ -1,0 +1,235 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Meridian IT-PMO",
+    "version": "5.3.0",
+    "summary": "Read a governed project portfolio, and the trail of how it got that way",
+    "description": "The surface other systems read. It is versioned in the path: the day the shape has to change it becomes /api/v2, so that nobody has to guess. Authentication is a key issued per connected system, carrying explicit scopes; the product never stores the key itself, only its fingerprint.\n\nThere is no write surface yet, and that is deliberate: a scope is only published once a route honours it. Declaring one earlier would advertise a door that does not exist and imply it is guarded.",
+    "license": {
+      "name": "Apache-2.0",
+      "identifier": "Apache-2.0"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:4173",
+      "description": "A local instance"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "apiKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key",
+        "description": "Issued from Administration → Connected systems. `Authorization: Bearer <key>` is accepted too."
+      }
+    },
+    "x-scopes": {
+      "read:portfolio": "Read the portfolio — projects, schedule, money, risks, benefits",
+      "read:audit": "Read the audit trail — every recorded decision and change"
+    }
+  },
+  "security": [
+    {
+      "apiKey": []
+    }
+  ],
+  "paths": {
+    "/api/v1/audit": {
+      "get": {
+        "summary": "The audit trail — every recorded decision and change",
+        "description": "Its own scope, because it is the most sensitive read in the product: a system that copies the portfolio into a warehouse has no reason to carry away who approved what. Filters: entity, entityId, action, limit, before.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scope": "read:audit",
+        "responses": {
+          "200": {
+            "description": "The document described above",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "contract": {
+                      "type": "string"
+                    },
+                    "generatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "events": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No key, an unknown key, or a revoked key — the three are indistinguishable on purpose"
+          },
+          "403": {
+            "description": "The key is live but does not carry the scope this route requires"
+          }
+        }
+      }
+    },
+    "/api/v1/openapi.json": {
+      "get": {
+        "summary": "This contract, as served by this instance",
+        "description": "The same document published at docs/openapi.v1.json, carrying the version actually running here and the address it was asked at — two things a file in a repository cannot know. Open to any live key.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scope": null,
+        "responses": {
+          "200": {
+            "description": "The document described above",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "openapi": {
+                      "type": "string"
+                    },
+                    "info": {
+                      "type": "object"
+                    },
+                    "servers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "paths": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No key, an unknown key, or a revoked key — the three are indistinguishable on purpose"
+          },
+          "403": {
+            "description": "The key is live but does not carry the scope this route requires"
+          }
+        }
+      }
+    },
+    "/api/v1/portfolio": {
+      "get": {
+        "summary": "The whole portfolio the key is entitled to read",
+        "description": "The same output the screens are drawn from — deliberately, because two projections would drift apart at the first change and an integrator would then be reading numbers nobody can see in the product. Money is in millions; dates are ISO-8601 calendar dates.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scope": "read:portfolio",
+        "responses": {
+          "200": {
+            "description": "The document described above",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "contract": {
+                      "type": "string"
+                    },
+                    "generatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "asAt": {
+                      "type": "string",
+                      "format": "date"
+                    },
+                    "counts": {
+                      "type": "object"
+                    },
+                    "portfolio": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No key, an unknown key, or a revoked key — the three are indistinguishable on purpose"
+          },
+          "403": {
+            "description": "The key is live but does not carry the scope this route requires"
+          }
+        }
+      }
+    },
+    "/api/v1": {
+      "get": {
+        "summary": "What this contract serves, and what your key may reach",
+        "description": "Open to any live key, whatever its scopes, so an integrator can read what they are missing without writing to an administrator.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scope": null,
+        "responses": {
+          "200": {
+            "description": "The document described above",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "contract": {
+                      "type": "string"
+                    },
+                    "generatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "integration": {
+                      "type": "string"
+                    },
+                    "scopesHeld": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "endpoints": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No key, an unknown key, or a revoked key — the three are indistinguishable on purpose"
+          },
+          "403": {
+            "description": "The key is live but does not carry the scope this route requires"
+          }
+        }
+      }
+    }
+  }
+}
