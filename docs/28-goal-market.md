@@ -122,6 +122,13 @@ Tenu à jour par la boucle, à la source, comme le relevé de clôture de
 | MC-01 | 29 | **close 31/08** | pays ISO + entité légale sur le site, 027, dialogue exercé (« br » → BR) |
 | SaaS-02 | 29 | **close 31/08** | migrate() refuse une base plus récente que le binaire, en nommant les migrations inconnues — le piège 023, fermé à la racine |
 | PM-06 | R4 | **close 31/08** | 030 · cible résiduelle sur le RAID · le tirage de provision nomme son risque · 6 tests · deux tests d'ancien monde mis au niveau, en le disant |
+| INT-04 | R4 | **close 31/08** | 031 · livraisons signées HMAC depuis la piste (même liste que reporting.decisions, tenue par un test qui lit la définition de la vue) · réémission · journal · un abonné HTTP réel a vérifié la signature |
+| INT-06 | R4 | **close 31/08** | transport Teams (MessageCard) sur la même liste d'hôtes fermée par défaut |
+| PM-08 | R4 | **close 31/08** | 032 · Closed exige exploitant + propriétaire de bénéfice + mot de la fin · dialogue de passation |
+| PM-04 | R4 | **close 31/08** | 032 · critères posés d'avance ; cocher exige de nommer qui a constaté |
+| INT-08 | R4 | **close 31/08** | ICS METHOD:REQUEST avec ORGANIZER résolu, ATTENDEE réels, SEQUENCE, STATUS:CANCELLED à la clôture |
+| INT-09 | R4 | **close 31/08** | docs/31 — la recette, ce que le cadenas garantit et ne garantit pas, la sonde Graph différée AVEC sa raison |
+| I18N-02 | R4 | ouverte | l'espagnol — la seule ligne qui retient le prononcé de R4 |
 
 *(les lignes de R4 et R5 sont reportées ici au fur et à mesure qu'elles
 entrent en travail)*

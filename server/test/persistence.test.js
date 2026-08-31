@@ -32,7 +32,7 @@ describe("schema and migrations (R2.2, R2.7)", () => {
        "016_timesheet.sql", "017_absence_minimisation.sql",
        "018_notification_centre.sql", "019_notification_subscription.sql",
        "020_evidence_probe.sql", "021_usage_counters.sql",
-       "022_site_champion.sql", "023_session_digest.sql", "024_lessons.sql", "025_integrations.sql", "026_tolerance.sql", "027_international.sql", "028_business_case.sql", "029_reporting_views.sql", "030_residual_risk.sql"]);
+       "022_site_champion.sql", "023_session_digest.sql", "024_lessons.sql", "025_integrations.sql", "026_tolerance.sql", "027_international.sql", "028_business_case.sql", "029_reporting_views.sql", "030_residual_risk.sql", "031_outbound_events.sql", "032_closure_quality.sql"]);
     const again = await migrate({ silent: true });
     assert.deepEqual(again, [], "a second run applies nothing");
   });

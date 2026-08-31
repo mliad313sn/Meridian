@@ -251,6 +251,9 @@ export async function loadPortfolio(user) {
       closed: p.closed, origin: p.origin ?? "local",
       // the post-implementation verdict, where one has been given (V-01)
       pirOn: p.pir_on ?? null, pirVerdict: p.pir_verdict ?? null, pirNote: p.pir_note ?? "",
+      /* PM-08 — les trois signatures de la clôture. */
+      opsAcceptedBy: p.ops_accepted_by ?? null, benefitsTo: p.benefits_owner_id ?? null,
+      closureNote: p.closure_note ?? "", closedOn: p.closed_on ?? null,
       // what this reaches into, and whether it has been released (V-03)
       plantImpact: p.plant_impact ?? "none", mocRef: p.moc_ref ?? "",
       mocApprovedOn: p.moc_approved_on ?? null, mocApprovedBy: p.moc_approved_label ?? "",
@@ -286,6 +289,9 @@ export async function loadPortfolio(user) {
       id: m.id, project: m.project_id, name: m.name, date: m.due_date,
       baseDate: m.base_date, gate: m.gate, kind: m.kind, owner: m.owner_id,
       done: m.done, intrusive: m.intrusive === true,
+      /* PM-04 — les critères posés d'avance, et qui a constaté. */
+      acceptanceCriteria: m.acceptance_criteria ?? "",
+      acceptedBy: m.accepted_by ?? null, acceptedOn: m.accepted_on ?? null,
       origin: m.origin ?? "local", version: m.row_version,
     })),
 

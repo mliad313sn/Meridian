@@ -22,6 +22,40 @@ Nothing yet.
 
 ---
 
+## [5.7.0] — 2026-08-31
+
+R4 — “present where people work” — all but one line. Spanish (I18N-02)
+alone holds the pronouncement back.
+
+### Added
+
+- **Signed outbound events** (INT-04, migration `031`). What makes
+  Meridian *reactive* for other systems, not merely queryable. The source
+  is the audit trail itself, filtered on the same governance actions as
+  `reporting.decisions` — one truth, two readers, held equal by a test
+  that reads the view's SQL definition. Deliveries are HMAC-signed,
+  retried up to eight times, and a dead webhook is *readable* in the
+  delivery journal — a subscriber failing silently is a subscriber who
+  believes it is informed.
+- **Closure that is signed** (PM-08, migration `032`). Closing was a
+  boolean. It now takes three signatures: the named operations owner who
+  takes the delivery over, the benefits owner who accepts the baton —
+  benefits realise *after* closure, and left with the project they belong
+  to nobody — and the closing word.
+- **Milestones that are accepted, not felt** (PM-04, migration `032`).
+  Criteria are written before the work; a milestone that has them can
+  only be marked done by naming who checked them, and the name stays.
+- **Real meeting invitations** (INT-08): `METHOD:REQUEST` with a resolved
+  organizer and real attendee addresses, `SEQUENCE` so an update replaces
+  instead of duplicating, `STATUS:CANCELLED` when the occurrence closes.
+- **A Microsoft Teams transport** (INT-06) for the notification queue —
+  behind the same closed-by-default host list as every outbound channel.
+- **SharePoint/OneDrive as evidence hosts, documented** (INT-09,
+  `docs/31`): the recipe, what the locked probe state can honestly say,
+  and the authenticated Graph probe deferred with its reason stated.
+
+---
+
 ## [5.6.0] — 2026-08-31
 
 ### Added

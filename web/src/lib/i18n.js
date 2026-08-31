@@ -154,6 +154,20 @@ export const FR = {
   "Locations": "Sites",
   "Administration": "Administration",
 
+  /* PM-08 · PM-04 — clôture et acceptation */
+  "Acceptance criteria": "Critères d'acceptation",
+  "Benefits owner after closure": "Propriétaire des bénéfices après clôture",
+  "Benefits realise AFTER closure. Left with the project, they belong to nobody.": "Les bénéfices se réalisent APRÈS la clôture. Laissés au projet, ils n'appartiennent à personne.",
+  "Checked by": "Constaté par",
+  "Close it": "Clore",
+  "Close this project": "Clore ce projet",
+  "Operations owner who takes it over": "Exploitant qui reprend",
+  "Required to mark done when criteria exist — the named person who checked them. The name stays.": "Exigé pour cocher quand des critères existent — la personne nommée qui les a constatés. Le nom reste.",
+  "The closing word": "Le mot de la fin",
+  "The person who answers when what was delivered breaks. Without a name, the dissolved project team gets the call.": "La personne qui répond quand ce qui a été livré tombe en panne. Sans nom, c'est l'équipe projet dissoute qu'on appelle.",
+  "What is left behind, and what was deliberately not done. Read by whoever inherits this.": "Ce qu'on laisse, et ce qu'on n'a délibérément pas fait. Lu par qui en hérite.",
+  "What must be TRUE for this to count as achieved — testable, written before the work. Empty means no formal acceptance.": "Ce qui doit être VRAI pour que ce soit tenu — vérifiable, écrit avant le travail. Vide = pas d'acceptation formelle.",
+
   /* PM-06 · le risque résiduel et la provision nommée */
   "Required for a contingency draw when the project has open risks — the committee reads what the reserve was spent against.": "Exigé pour un tirage de provision quand le projet a des risques ouverts — le comité lit contre quoi la réserve a été dépensée.",
   "Risk this draw answers": "Risque que ce tirage finance",

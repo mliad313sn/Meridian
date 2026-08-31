@@ -333,6 +333,27 @@ r.patch("/projects/:id/phase", async (req, res, next) => {
     const i = PHASES.indexOf(current.phase);
     const next = PHASES[Math.min(i + 1, PHASES.length - 1)];
 
+    /* PM-08 — clore, ce sont trois signatures, pas un booléen. Sans
+       exploitant nommé, le jour où ça tombe en panne c'est l'équipe
+       dissoute qu'on appelle ; sans propriétaire de bénéfice, « les
+       bénéfices restent au projet » veut dire « à personne ». */
+    let closure = {};
+    if (next === "Closed") {
+      const b = req.body ?? {};
+      if (!b.opsAcceptedBy) bad("Closing needs the named operations owner who takes this over");
+      if (!b.benefitsTo) bad("Closing needs the named benefits owner — benefits realise AFTER closure");
+      const people = await many(
+        `SELECT id FROM person WHERE id = ANY($1) AND active`, [[b.opsAcceptedBy, b.benefitsTo]]);
+      const found = new Set(people.map((x) => x.id));
+      if (!found.has(b.opsAcceptedBy)) bad("The operations owner must be an active person in the directory");
+      if (!found.has(b.benefitsTo)) bad("The benefits owner must be an active person in the directory");
+      closure = {
+        ops_accepted_by: b.opsAcceptedBy, benefits_owner_id: b.benefitsTo,
+        closure_note: String(b.closureNote ?? "").slice(0, 2000),
+        closed_on: iso(new Date()),
+      };
+    }
+
     const overridden = !advance.ok && !!req.body?.override;
     const out = await audited(req.user,
       overridden
@@ -344,7 +365,7 @@ r.patch("/projects/:id/phase", async (req, res, next) => {
             detail: `${current.phase} → ${next}` },
       async (t) => conflict(await updateVersioned(t, "project", p.id,
         requiredVersion(req.body, "phase"),
-        { phase: next, closed: next === "Closed" })));
+        { phase: next, closed: next === "Closed", ...closure })));
     res.json({ version: out.version, phase: next });
   } catch (e) { next(e); }
 });
@@ -439,7 +460,24 @@ r.patch("/milestones/:id", async (req, res, next) => {
     const patch = {};
     if (b.name !== undefined) patch.name = b.name;
     if (b.date !== undefined) patch.due_date = b.date;
-    if (b.done !== undefined) patch.done = !!b.done;
+    /* PM-04 — les critères se posent d'avance ; l'acceptation nomme qui
+       a constaté qu'ils sont tenus. */
+    if (b.acceptanceCriteria !== undefined) patch.acceptance_criteria = b.acceptanceCriteria;
+    if (b.done !== undefined) {
+      patch.done = !!b.done;
+      const criteria = b.acceptanceCriteria !== undefined
+        ? b.acceptanceCriteria : m.acceptance_criteria;
+      if (patch.done && String(criteria ?? "").trim()) {
+        if (!b.acceptedBy) {
+          bad("This milestone has acceptance criteria — done needs the named person who checked them");
+        }
+        const who = await one(`SELECT id FROM person WHERE id = $1 AND active`, [b.acceptedBy]);
+        if (!who) bad("The accepter must be an active person in the directory");
+        patch.accepted_by = b.acceptedBy;
+        patch.accepted_on = iso(new Date());
+      }
+      if (!patch.done) { patch.accepted_by = null; patch.accepted_on = null; }
+    }
     if (b.owner !== undefined) patch.owner_id = b.owner || null;
     if (b.intrusive !== undefined) patch.intrusive = !!b.intrusive;
     /* Moving a cutover, or newly marking one as intrusive, asks the same

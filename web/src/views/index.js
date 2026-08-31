@@ -1492,6 +1492,32 @@ function advancePhase(db, p) {
   const i = PHASES.indexOf(p.phase);
   if (i >= PHASES.length - 1) return toast("Already closed", p.id + " has nowhere further to go");
   const next = PHASES[i + 1];
+
+  /* PM-08 — la marche vers Closed n'est pas une marche comme les autres :
+     clore, ce sont trois signatures. L'exploitant nommé qui reprend, le
+     propriétaire de bénéfice qui accepte le relais, et le mot de la fin. */
+  if (next === "Closed") {
+    const people = db.people.map((x) => ({ value: x.id, label: x.name + " — " + x.role }));
+    return formDialog({
+      title: t("Close this project"), kicker: p.id,
+      fields: [
+        { key: "opsAcceptedBy", label: t("Operations owner who takes it over"), type: "select",
+          required: true, value: "", options: people,
+          hint: t("The person who answers when what was delivered breaks. Without a name, the dissolved project team gets the call.") },
+        { key: "benefitsTo", label: t("Benefits owner after closure"), type: "select",
+          required: true, value: "", options: people,
+          hint: t("Benefits realise AFTER closure. Left with the project, they belong to nobody.") },
+        { key: "closureNote", label: t("The closing word"), type: "textarea", span: 2, rows: 3,
+          hint: t("What is left behind, and what was deliberately not done. Read by whoever inherits this.") },
+      ],
+      saveLabel: t("Close it"),
+      onSave: (val) => App.write("Phase advanced",
+        (a) => a.patch("/projects/" + p.id + "/phase",
+          { ...val, version: p.version }),
+        { detail: p.id + " → Closed" }),
+    });
+  }
+
   confirmDialog({
     title: "Advance to " + next + "?", confirmLabel: "Advance phase",
     message: p.name + " moves from " + p.phase + " to " + next + ".",
@@ -1624,13 +1650,24 @@ function editMilestone(db, ms) {
       { key: "date", label: "Date", type: "date", required: true, value: ms.date },
       { key: "owner", label: "Owner", type: "select", value: ms.owner ?? "",
         options: db.people.map((x) => ({ value: x.id, label: x.name })) },
+      /* PM-04 — les critères se posent d'AVANT ; sans eux, « terminé »
+         est une opinion. Avec eux, cocher exige de nommer qui a constaté. */
+      { key: "acceptanceCriteria", label: t("Acceptance criteria"), type: "textarea",
+        span: 2, rows: 2, value: ms.acceptanceCriteria ?? "",
+        hint: t("What must be TRUE for this to count as achieved — testable, written before the work. Empty means no formal acceptance.") },
       { key: "done", label: "Achieved", type: "checkbox", span: 2, value: !!ms.done },
+      { key: "acceptedBy", label: t("Checked by"), type: "select",
+        value: ms.acceptedBy ?? "",
+        hint: t("Required to mark done when criteria exist — the named person who checked them. The name stays."),
+        options: [{ value: "", label: "—" }]
+          .concat(db.people.map((x) => ({ value: x.id, label: x.name }))) },
       { key: "intrusive", label: t("Touches the plant"), type: "checkbox", span: 2, value: !!ms.intrusive,
         hint: t("A cutover, a switch-over, anything a change freeze is about") },
     ],
     saveLabel: "Save milestone",
     onSave: (v) => App.write("Milestone updated", (a) => a.patch("/milestones/" + ms.id, {
       name: v.name, date: v.date, owner: v.owner || null, done: !!v.done,
+      acceptanceCriteria: v.acceptanceCriteria, acceptedBy: v.acceptedBy || undefined,
       intrusive: !!v.intrusive, version: ms.version,
     }), { detail: v.name }),
   });

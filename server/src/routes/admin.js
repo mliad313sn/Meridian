@@ -13,6 +13,7 @@ import { buildArchive } from "../archive.js";
 import {
   SCOPES, listIntegrations, createIntegration, rotateIntegrationKey, normaliseScopes,
 } from "../integrations.js";
+import { acceptableWebhook, deliveriesOf } from "../events.js";
 
 /* Même refus qu'ailleurs : un second écrivain est prévenu, jamais écrasé. */
 function conflict(result) {
@@ -267,6 +268,17 @@ r.patch("/integrations/:id", async (req, res, next) => {
       try { patch.scopes = normaliseScopes(b.scopes); }
       catch (e) { throw new HttpError(400, e.message); }
     }
+    /* INT-04 — l'abonnement aux événements. HTTPS obligatoire hors boucle
+       locale ; le secret s'écrit et ne se relit jamais par l'API. */
+    if (b.webhookUrl !== undefined) {
+      if (!acceptableWebhook(b.webhookUrl)) {
+        throw new HttpError(400, "A webhook is HTTPS — or localhost, for a trial");
+      }
+      patch.webhook_url = b.webhookUrl;
+    }
+    if (b.webhookSecret !== undefined && b.webhookSecret !== "") {
+      patch.webhook_secret = String(b.webhookSecret);
+    }
     const out = await audited(req.user,
       { action: b.active === false ? "Integration revoked" : "Integration updated",
         entity: "integration", entityId: row.id, detail: b.name ?? row.name,
@@ -275,6 +287,17 @@ r.patch("/integrations/:id", async (req, res, next) => {
       async (t) => conflict(await updateVersioned(t, "integration", row.id,
         requiredVersion(b, "integration"), patch)));
     res.json({ version: out.version });
+  } catch (e) { next(e); }
+});
+
+/* INT-04 — le journal des livraisons : à qui on a remis quoi, signé,
+   réessayé combien de fois. Un webhook mort en silence est un abonné qui
+   croit être au courant ; ici, l'échec se lit. */
+r.get("/integrations/:id/deliveries", async (req, res, next) => {
+  try {
+    const row = await one(`SELECT id FROM integration WHERE id = $1`, [req.params.id]);
+    if (!row) throw new HttpError(404, "No such integration");
+    res.json({ deliveries: await deliveriesOf(row.id) });
   } catch (e) { next(e); }
 });
 

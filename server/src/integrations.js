@@ -92,7 +92,11 @@ async function ensureIntegrationAccount(id, name, runner) {
 export async function listIntegrations() {
   return many(
     `SELECT id, name, purpose, key_hint, scopes, active,
-            created_by, created_at, rotated_at, last_used_at, row_version
+            created_by, created_at, rotated_at, last_used_at, row_version,
+            webhook_url,
+            /* Le secret ne sort JAMAIS ; l'écran n'a besoin que de savoir
+               s'il y en a un. */
+            (webhook_secret <> '') AS webhook_secret_set
        FROM integration ORDER BY name`);
 }
 

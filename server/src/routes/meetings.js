@@ -729,14 +729,27 @@ const icsEscape = (s) => String(s ?? "").replace(/\\/g, "\\\\").replace(/;/g, "\
 const icsDate = (day, time) => String(day).replace(/-/g, "") + "T" +
   String(time ?? "09:00").replace(":", "") + "00";
 
-function icsFile(events) {
+function icsFile(events, { method = null } = {}) {
+  /* INT-08 — un fichier PUBLISH s'ajoute à l'agenda de qui l'ouvre ; un
+     METHOD:REQUEST est une INVITATION : l'agenda du destinataire propose
+     accepter/refuser, et une mise à jour (SEQUENCE supérieur) remplace
+     l'entrée au lieu d'en créer une deuxième. La RFC 5545 exige un
+     ORGANIZER pour REQUEST — on n'émet donc REQUEST que lorsqu'on sait
+     qui organise, et on reste PUBLISH sinon, plutôt que de fabriquer un
+     organisateur qui n'existe pas. */
   const L = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Meridian IT-PMO//FR", "CALSCALE:GREGORIAN"];
+  if (method) L.push("METHOD:" + method);
   for (const e of events) {
     L.push("BEGIN:VEVENT",
       "UID:" + e.uid + "@meridian",
       "DTSTART:" + e.start,
       "DURATION:PT" + (e.minutes ?? 30) + "M",
       "SUMMARY:" + icsEscape(e.summary),
+      e.sequence != null ? "SEQUENCE:" + e.sequence : null,
+      e.status ? "STATUS:" + e.status : null,
+      e.organizer ? "ORGANIZER;CN=" + icsEscape(e.organizer.name) + ":mailto:" + e.organizer.email : null,
+      ...(e.attendees ?? []).map((a) =>
+        "ATTENDEE;CN=" + icsEscape(a.name) + ";ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION:mailto:" + a.email),
       e.rrule ? "RRULE:" + e.rrule : null,
       e.description ? "DESCRIPTION:" + icsEscape(e.description) : null,
       "END:VEVENT");
@@ -745,16 +758,41 @@ function icsFile(events) {
   return L.filter(Boolean).join("\r\n") + "\r\n";
 }
 
+/* Qui organise, et qui est attendu — résolus vers de vraies adresses.
+   Une personne n'a pas d'adresse ; son COMPTE en a une. On ne prend que
+   les adresses réelles : inviter quelqu'un@integration.invalid serait
+   inviter personne en ayant l'air d'avoir invité. */
+async function icsPeople(s, occurrenceId) {
+  const chair = s.chair_id ? await one(
+    `SELECT p.name, u.email FROM person p
+       JOIN app_user u ON u.person_id = p.id AND u.active
+      WHERE p.id = $1 AND u.email NOT LIKE '%.invalid' LIMIT 1`, [s.chair_id]) : null;
+  const attendees = occurrenceId ? await many(
+    `SELECT DISTINCT p.name, u.email
+       FROM meeting_attendance a
+       JOIN person p ON p.id = a.person_id
+       JOIN app_user u ON u.person_id = p.id AND u.active
+      WHERE a.occurrence_id = $1 AND u.email NOT LIKE '%.invalid'`, [occurrenceId]) : [];
+  return { organizer: chair && chair.email ? chair : null, attendees };
+}
+
 r.get("/occurrences/:id/ics", async (req, res, next) => {
   try {
     const o = await occurrence(req.params.id);
     const s = readable(req.user, await series(o.series_id));
+    const { organizer, attendees } = await icsPeople(s, o.id);
     const body = icsFile([{
       uid: o.id, start: icsDate(o.meets_on, s.start_time), minutes: s.timebox_min,
       summary: s.name,
+      /* SEQUENCE suit la version de la ligne : une occurrence déplacée
+         réémet un numéro supérieur et l'agenda REMPLACE au lieu de
+         dupliquer. STATUS:CANCELLED quand la séance est close — le
+         calendrier du participant se range tout seul. */
+      sequence: o.row_version, status: o.status === "closed" ? "CANCELLED" : "CONFIRMED",
+      organizer, attendees,
       description: "Ordre du jour et dossier de séance dans Meridian : " +
         (process.env.MERIDIAN_PUBLIC_URL ?? "http://localhost:4173") + "/#/meetings/" + o.id,
-    }]);
+    }], { method: organizer ? "REQUEST" : null });
     res.setHeader("Content-Type", "text/calendar; charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename="${o.id}.ics"`);
     res.send(body);

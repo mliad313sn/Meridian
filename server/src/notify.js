@@ -222,18 +222,49 @@ export async function sweep({ today = new Date().toISOString().slice(0, 10), hor
  * l'un des deux canaux, la file s'accumule et se lit dans le centre —
  * ce qui reste honnête, mais n'est pas de la remise.
  */
-export async function outboundTransport() {
+/** L'hôte d'une adresse est-il dans la liste que l'administrateur a
+    nommée ? Fermé par défaut : liste vide, rien ne sort. */
+async function allowedUrl(url) {
+  if (!url) return null;
   const rows = await many(
     `SELECT value #>> '{}' AS v FROM app_setting WHERE key = 'notifyHosts'`);
   const hosts = String(rows[0]?.v ?? "")
     .split(",").map((h) => h.trim().toLowerCase()).filter(Boolean);
-  const url = process.env.MERIDIAN_NOTIFY_URL || "";
-  if (!hosts.length || !url) return null;
+  if (!hosts.length) return null;
   let u;
   try { u = new URL(url); } catch { return null; }
-  const host = u.hostname.toLowerCase();
   if (u.protocol !== "https:") return null;
-  if (!hosts.some((h) => host === h || host.endsWith("." + h))) return null;
+  const host = u.hostname.toLowerCase();
+  return hosts.some((h) => host === h || host.endsWith("." + h)) ? u : null;
+}
+
+export async function outboundTransport() {
+  /* INT-06 — Teams d'abord : les gens sont DANS Teams, l'outil est
+     ailleurs, et c'était nommé premier obstacle d'adoption, pas
+     d'intégration. Un webhook entrant de canal reçoit une carte simple ;
+     le destinataire nommé reste en tête de carte parce qu'un canal est
+     public là où un courriel était adressé. Même liste d'hôtes fermée
+     par défaut que le canal générique — le comité n'a qu'une posture. */
+  const teams = process.env.MERIDIAN_TEAMS_WEBHOOK || "";
+  if (teams && (await allowedUrl(teams))) {
+    return async ({ to, subject, body }) => {
+      const r = await fetch(teams, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          "@type": "MessageCard", "@context": "https://schema.org/extensions",
+          summary: subject, title: subject,
+          text: `**${to}**
+
+${body}`,
+        }),
+      });
+      if (!r.ok) throw new Error(`teams ${r.status}`);
+    };
+  }
+
+  const url = process.env.MERIDIAN_NOTIFY_URL || "";
+  if (!(await allowedUrl(url))) return null;
   return async ({ to, subject, body }) => {
     const r = await fetch(url, {
       method: "POST",
