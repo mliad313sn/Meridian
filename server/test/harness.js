@@ -62,6 +62,10 @@ export function client() {
     get: (p, x) => call("GET", p, undefined, x),
     post: (p, b, x) => call("POST", p, b ?? {}, x),
     patch: (p, b, x) => call("PATCH", p, b ?? {}, x),
+    /* Le client de l'application sait faire PUT depuis la fédération ; le
+       harness ne le savait pas, et une route PUT n'était donc testable
+       par personne. */
+    put: (p, b, x) => call("PUT", p, b ?? {}, x),
     del: (p, x) => call("DELETE", p, undefined, x),
     async login(email, password) {
       const r = await call("POST", "/api/auth/login", { email, password });

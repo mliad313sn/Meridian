@@ -86,7 +86,7 @@ DATABASE_URL=postgres://user:pass@host:5432/meridian npm start
 Other commands:
 
 ```bash
-npm test              # 356 tests
+npm test              # 372 tests
 npm run audit         # eight gates: routes, CRUD+audit, versions, controls, language, field help, kit imports, view render
 npm run verify        # tests + build + the eight gates + a dependency audit
 npm run sweep         # 286 use cases × 4 roles + 72 view renders, on a fresh instance
@@ -149,8 +149,8 @@ server/          src/db.js         pg | PGlite, migrations, optimistic concurren
                  src/audit.js      append-only, inside the mutation's transaction
                  src/portfolio.js  rows → the shape the engine reads
                  src/routes/       auth · portfolio · meetings · admin · import
-                 migrations/       ordered SQL (001–025, applied at boot)
-                 test/             356 tests
+                 migrations/       ordered SQL (001–026, applied at boot)
+                 test/             372 tests
 
 web/             src/ui/kit.js     h() builder, dialogs, tables, charts (from v4)
                  src/lib/          api client, state, permission mirror

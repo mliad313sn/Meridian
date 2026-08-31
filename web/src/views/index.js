@@ -1157,6 +1157,21 @@ Views.project = (db) => {
         vp.total ? vp.measured + t(" of ") + vp.live + t(" measured") : t("nothing promised yet"),
         false, valueBlock(db, p));
     })(),
+    /* PM-01 — la marge accordée, et ce qui l'a franchie. Placée juste
+       après la valeur : les deux répondent à « ce projet tient-il ce
+       qu'on lui a permis », l'une sur le résultat, l'autre sur la
+       limite. Le repli est OUVERT quand une exception attend une
+       réponse — c'est le seul état de ce projet qu'on ne doit pas avoir
+       à déplier pour voir. */
+    (() => {
+      const open = (db.exceptions ?? []).filter((e) => e.project === p.id && e.status === "Open");
+      const tol = (db.tolerances ?? []).find((x) => x.project === p.id);
+      return fold(t("Tolerance & exceptions"),
+        open.length
+          ? open.length + t(" past the margin — waiting on an answer")
+          : tol ? t("inside the margin set for it") : t("no margin set"),
+        open.length > 0, toleranceBlock(db, p));
+    })(),
     fold(t("Plant & rollout"),
       (p.plantImpact ?? "none") === "none" ? t("business systems only") : t(IMPACT_LABEL[p.plantImpact]),
       false, plantBlock(db, p)),
@@ -3199,6 +3214,126 @@ function benefitFigure(b) {
   const u = b.unit ? " " + b.unit : "";
   const n = (v) => (v == null ? "—" : String(v));
   return n(b.baseline) + " → " + n(b.target) + u;
+}
+
+/* ── PM-01 · la marge, et les dépassements ────────────────────────────
+   Ce que le comité de pilotage a accordé, ce que le projet fait de cette
+   marge, et ce qu'il faut répondre quand elle est franchie. Les nombres
+   affichés sont ceux du constat, figés à sa date — les relire six mois
+   plus tard sur les chiffres du jour ne dirait rien de la décision. */
+
+const DIM_LABEL = { schedule: "Schedule", cost: "Cost", benefit: "Benefit" };
+const ANSWER_KINDS = ["Tolerance raised", "Plan revised", "Accepted", "Stopped"];
+
+function setTolerance(db, p, tol) {
+  formDialog({
+    title: t("Set the margin for this project"), kicker: p.id,
+    fields: [
+      { key: "scheduleDays", label: t("Schedule (days past the baseline)"), type: "number",
+        min: 0, value: tol && tol.scheduleDays != null ? tol.scheduleDays : "",
+        hint: t("Measured against the baseline finish, never against the current plan — otherwise moving the date would clear the breach.") },
+      { key: "costPct", label: t("Cost (% over budget)"), type: "number", min: 0, step: 0.5,
+        value: tol && tol.costPct != null ? tol.costPct : "",
+        hint: t("Compares the estimate at completion with the budget.") },
+      { key: "benefitPct", label: t("Benefit (points below target)"), type: "number", min: 0,
+        value: tol && tol.benefitPct != null ? tol.benefitPct : "",
+        hint: t("Watches the weakest benefit on the project, not the average — one missed benefit must not hide behind one exceeded.") },
+      { key: "note", label: t("Scope, quality and risk — in words"), type: "textarea", span: 2, rows: 2,
+        value: tol ? tol.note : "",
+        hint: t("These three cannot be measured here. Stating them is honest; pretending to compute them would not be.") },
+    ],
+    saveLabel: t("Set the margin"),
+    onSave: (v) => App.write("Tolerance set",
+      (a) => a.put("/projects/" + p.id + "/tolerance", v)),
+  });
+}
+
+function answerException(db, p, e) {
+  formDialog({
+    title: t("Answer this exception"), kicker: e.id,
+    extra: h("div", { class: "small muted", style: "max-width:60ch" }, e.detail),
+    fields: [
+      { key: "kind", label: t("What was decided"), type: "select", span: 2, value: "Plan revised",
+        hint: t("The four answers the level that delegated the margin may give."),
+        options: ANSWER_KINDS.map((k) => ({ value: k, label: t(k) })) },
+      { key: "answer", label: t("Why"), type: "textarea", span: 2, rows: 3, required: true,
+        hint: t("Read back by a committee months later. Say what was decided, not that a decision happened.") },
+    ],
+    saveLabel: t("Record the answer"),
+    onSave: (v) => App.write("Exception answered",
+      (a) => a.post("/exceptions/" + e.id + "/answer", { ...v, version: e.version })),
+  });
+}
+
+function toleranceBlock(db, p) {
+  const tol = (db.tolerances ?? []).find((x) => x.project === p.id);
+  const excs = (db.exceptions ?? []).filter((x) => x.project === p.id);
+  const open = excs.filter((x) => x.status === "Open");
+  const state = tol ? Engine.tolerance(db, p, tol) : null;
+  /* `may()` au point de dessin plutôt qu'une variable maison : la porte
+     des contrôles le reconnaît comme une garde d'autorité, et une garde
+     qu'un outil ne sait pas lire ne protège que par accident. */
+
+  const dimRow = (key) => {
+    const s = state && state[key];
+    if (!s) {
+      return h("div", { class: "xs muted" },
+        t(DIM_LABEL[key]) + " — " + t("no limit set"));
+    }
+    return h("div", { class: "small" },
+      h("span", { class: "strong" }, t(DIM_LABEL[key])), " ",
+      h("span", { class: "mono" }, String(s.measured) + " " + t(s.unit)),
+      h("span", { class: "xs muted" }, " " + t("of") + " " + s.allowed + " " + t("allowed")),
+      s.breached ? h("span", { class: "xs", style: "color:var(--sig-red);margin-left:6px" },
+        t("past the margin")) : null);
+  };
+
+  return h("div", null,
+    sectionHead(t("The margin this project works inside"),
+      tol ? t("set on ") + fmtDate(tol.setOn) : t("nobody has set one"),
+      may("tolerance.set", p)
+        ? h("button", { class: "btn btn-sm", onClick: () => setTolerance(db, p, tol) },
+            icon("pencil", 12), tol ? t("Change the margin") : t("Set a margin"))
+        : null),
+
+    tol
+      ? h("div", { style: "display:flex;flex-direction:column;gap:4px;margin-bottom:14px" },
+          dimRow("schedule"), dimRow("cost"), dimRow("benefit"),
+          tol.note ? h("div", { class: "xs muted", style: "margin-top:4px;max-width:60ch" },
+            t("Stated, not measured: ") + tol.note) : null)
+      : h("p", { class: "xs muted", style: "max-width:62ch;margin:0 0 14px" },
+          t("Without a margin, authority is delegated without a bound: this project can drift and nothing will say so on its own. Only the programme office can set one.")),
+
+    sectionHead(t("Exceptions"),
+      open.length ? open.length + t(" waiting on an answer") : t("none open")),
+
+    excs.length
+      ? table({
+          cols: [
+            { key: "d", label: t("Dimension"), get: (e) => h("div", null,
+                h("div", { class: "strong small" }, t(DIM_LABEL[e.dimension] ?? e.dimension)),
+                h("div", { class: "xs muted" }, fmtDate(e.raisedOn))) },
+            { key: "n", label: t("Measured / allowed"), align: "c",
+              get: (e) => h("span", { class: "mono small" },
+                e.measured + " / " + e.allowed) },
+            { key: "w", label: t("What was found"),
+              get: (e) => h("div", { class: "xs muted", style: "max-width:46ch" }, e.detail) },
+            { key: "s", label: t("Status"), align: "c",
+              get: (e) => e.status === "Open"
+                ? tag(t("Open"), "tag-amber")
+                : h("div", null, tag(t(e.answerKind ?? "Answered"), "tag-green"),
+                    h("div", { class: "xs muted", style: "max-width:36ch;margin-top:3px" }, e.answer)) },
+            { key: "do", label: "", align: "r",
+              get: (e) => may("exception.answer", p) && e.status === "Open"
+                ? h("button", { class: "btn btn-xs", onClick: () => answerException(db, p, e) },
+                    t("Answer"))
+                : null },
+          ],
+          rows: excs,
+        })
+      : h("p", { class: "xs muted" },
+          tol ? t("Nothing has gone past the margin. The hourly sweep checks on its own.")
+              : t("No margin, so nothing to exceed.")));
 }
 
 function valueBlock(db, p) {

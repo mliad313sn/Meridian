@@ -47,6 +47,11 @@ export const ACTIONS = [
   /* R-02 : déclarer une absence et son suppléant est un fait du site,
      comme le calendrier des arrêts. */
   "absence.write",
+  /* PM-01 : poser la marge dans laquelle un projet peut travailler, et
+     répondre quand elle est franchie. Les deux appartiennent au niveau
+     qui a délégué — un chef de site qui fixe sa propre tolérance ne fixe
+     pas une tolérance, il énonce une intention. */
+  "tolerance.set", "exception.answer",
   /* PM-02 : relever un enseignement est le travail de qui l'a vécu ;
      décider qu'il vaut pour les huit sites ne l'est pas. L'adoption est
      ce qui rend l'enseignement visible AILLEURS — sans elle, un registre
@@ -84,6 +89,11 @@ const GROUP_ONLY_WRITES = new Set([
      lived it proposes; the programme office decides it holds beyond the
      project that produced it. Same independence as benefit.review. */
   "lesson.adopt",
+  /* PM-01: a tolerance is granted by the level above, and the exception
+     it raises is answered by the same level. The delivery team lives
+     inside the margin; it does not set it, and it does not get to rule
+     that going past it was fine. */
+  "tolerance.set", "exception.answer",
 ]);
 
 /** Admin-only, full stop. */

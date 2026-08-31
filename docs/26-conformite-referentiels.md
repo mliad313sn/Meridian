@@ -26,6 +26,7 @@ ISO 10006 (qualité en projet).
 
 | Ligne | État | Mesure |
 |---|---|---|
+| **PM-01** | **LEVÉE le 31/08/2026** | Migration `026`, `Engine.tolerance`/`breaches`, balayage horaire `sweepExceptions()`, bloc « Tolérance et exceptions » sur le projet. Exercé au navigateur : marge posée à 0 jour, constat automatique « 20 jours au-delà de la référence, 0 permis », réponse « Plan révisé » — les deux dans la piste. |
 | **PM-02** | **LEVÉE le 31/08/2026** | Migration `024_lessons.sql`, écran « Enseignements », route `/lessons/:id/adopt` réservée au groupe, 9 tests. Exercé au navigateur : São Paulo propose, Digital Channels adopte, **Toronto lit l'enseignement et reçoit toujours 404 sur le projet d'origine**, qui n'est pas nommé. |
 
 ---
@@ -90,7 +91,7 @@ conséquence nommée est une case à cocher, pas un manque — et l'effort.
 
 | # | Manque | Exigé par | Ce que ça coûte aujourd'hui | Effort |
 |--:|---|---|---|---|
-| **PM-01** | **Tolérances et gestion par exception.** Le niveau supérieur ne peut fixer aucune tolérance (délai, coût, bénéfice) et rien ne remonte quand une prévision la franchit. | PRINCE2 « Progress » · ISO 21502 §6.5 · PMBOK « Measurement » | L'autorité est déléguée **sans borne**. Un projet vire à l'orange et quelqu'un doit le remarquer. Le comité découvre le dépassement quand il est consommé, jamais quand il est prévu. | 1 sem |
+| ~~**PM-01**~~ **LEVÉE 31/08** | **Tolérances et gestion par exception.** Le niveau supérieur ne peut fixer aucune tolérance (délai, coût, bénéfice) et rien ne remonte quand une prévision la franchit. | PRINCE2 « Progress » · ISO 21502 §6.5 · PMBOK « Measurement » | L'autorité est déléguée **sans borne**. Un projet vire à l'orange et quelqu'un doit le remarquer. Le comité découvre le dépassement quand il est consommé, jamais quand il est prévu. | 1 sem |
 | ~~**PM-02**~~ | **LEVÉE le 31/08/2026.** Registre des enseignements — migration 024, écran « Enseignements », 9 tests. | ISO 21502 §7.17 · PRINCE2 « apprendre de l'expérience » | Le jalon 4 du produit **exige** cette preuve (§1). Et huit sites répètent la même erreur parce que rien ne la porte d'un projet au suivant. | 3 j |
 | **PM-03** | **Cas d'affaire tenu comme un enregistrement.** Il n'existe que comme type de document : ni chiffres, ni reconfirmation aux jalons. | PRINCE2 pratique 1 · ISO 21502 §7.2 | La chaîne demande → cas d'affaire → bénéfice → revue est **rompue en son milieu**. Personne ne peut répondre « la justification tient-elle encore ? », qui est la question que le principe de justification continue existe pour poser. | 1 sem |
 | **PM-06** | **Risque résiduel et lien risque ↔ provision.** La probabilité, l'impact et la stratégie existent ; ce que la réponse est censée OBTENIR, non. La provision se tire sans nommer le risque à laquelle elle répond. | ISO 31000 §6.5 · ISO 21502 §7.9 | On ne peut pas savoir si une mitigation a servi. La provision se consomme sans qu'on puisse dire contre quoi. | 3 j |

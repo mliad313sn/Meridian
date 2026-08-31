@@ -100,7 +100,7 @@ Tenu à jour par la boucle, à la source, comme le relevé de clôture de
 |---|:--:|---|---|
 | PM-02 | R3 | **close 31/08** | 024 · écran · 9 tests · adopté par le groupe, lu depuis un autre site, projet d'origine non nommé |
 | INT-02 | R3 | **close 31/08** | 025 · une clé par système, portées vérifiées, nom dans la piste, rotation · surface /api/v1 · 13 tests |
-| PM-01 | R3 | ouverte | — |
+| PM-01 | R3 | **close 31/08** | 026 · moteur · balayage horaire · écran · 15 tests · constat et réponse exercés au navigateur |
 | INT-01 | R3 | ouverte | — |
 | PM-03 | R3 | ouverte | — |
 | INT-05 | R3 | ouverte | — |

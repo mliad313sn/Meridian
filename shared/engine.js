@@ -487,6 +487,88 @@ export const Engine = {
      beaten, below 0 is worse than the day the project started. Null when
      the three numbers are not all present — an unmeasured benefit is not
      a zero, and showing it as one is how a portfolio lies. */
+  /* PM-01 — la marge accordée, et ce qui en reste.
+   *
+   * Rend, pour chacune des trois dimensions mesurables, ce qui est
+   * mesuré, ce qui était permis, et si la limite est franchie. Rien de
+   * neuf n'est calculé ici : `metrics()` produit déjà la fin prévue et le
+   * coût final estimé, `attainment()` déjà l'atteinte d'un bénéfice.
+   * Cette fonction ne fait que les CONFRONTER à une borne — ce que
+   * personne ne faisait.
+   *
+   * Une dimension sans borne rend `null` plutôt que « non franchie » : ne
+   * pas avoir posé de limite n'est pas la même chose que la respecter, et
+   * l'écran doit pouvoir dire laquelle des deux.
+   *
+   * Le délai se mesure contre la LIGNE DE RÉFÉRENCE, jamais contre le
+   * plan courant. Contre le plan courant, la tolérance serait inopérante :
+   * il suffirait de repousser la date pour n'être jamais en dépassement,
+   * ce qui est précisément le geste que la re-planification sous contrôle
+   * du groupe existe pour encadrer.
+   */
+  tolerance(db, p, tol, m) {
+    if (!p || !tol) return null;
+    /* `metrics()` rend null pour un projet sans activité : il n'y a alors
+       rien à confronter. Une marge sur un projet qu'on ne sait pas encore
+       mesurer n'est pas franchie — elle est en attente, et le dire null
+       vaut mieux que de déclarer un dépassement sur du vide. */
+    /* `metrics()` prend un IDENTIFIANT, pas un objet projet — lui passer
+       l'objet rend null en silence, et la tolérance ne mesure alors plus
+       rien du tout sans que rien ne le dise. */
+    const mm = m ?? Engine.metrics(db, p.id);
+    if (!mm) return null;
+    const out = { schedule: null, cost: null, benefit: null };
+
+    if (tol.scheduleDays != null && p.baselineFinish) {
+      const measured = days(p.baselineFinish, mm.forecastFinish);
+      out.schedule = {
+        measured, allowed: Number(tol.scheduleDays),
+        breached: measured > Number(tol.scheduleDays),
+        unit: "days", what: "forecast finish against the baseline",
+      };
+    }
+
+    if (tol.costPct != null && mm.bac > 0) {
+      const over = ((mm.eac - mm.bac) / mm.bac) * 100;
+      const measured = Math.round(over * 100) / 100;
+      out.cost = {
+        measured, allowed: Number(tol.costPct),
+        breached: measured > Number(tol.costPct),
+        unit: "%", what: "estimate at completion against budget",
+      };
+    }
+
+    if (tol.benefitPct != null) {
+      /* L'atteinte la plus BASSE du projet : une tolérance de bénéfice
+         qui se contenterait de la moyenne laisserait un bénéfice manqué
+         se cacher derrière un bénéfice dépassé. */
+      const scores = (db.benefits ?? [])
+        .filter((b) => b.project === p.id)
+        .map((b) => Engine.attainment(b))
+        .filter((x) => x != null);
+      if (scores.length) {
+        const worst = Math.min(...scores);
+        const shortfall = Math.round((1 - worst) * 100 * 100) / 100;
+        out.benefit = {
+          measured: shortfall, allowed: Number(tol.benefitPct),
+          breached: shortfall > Number(tol.benefitPct),
+          unit: "points below target", what: "the weakest benefit on the project",
+        };
+      }
+    }
+
+    return out;
+  },
+
+  /** Les dimensions réellement franchies, prêtes à devenir des exceptions. */
+  breaches(db, p, tol, m) {
+    const t = Engine.tolerance(db, p, tol, m);
+    if (!t) return [];
+    return Object.entries(t)
+      .filter(([, v]) => v && v.breached)
+      .map(([dimension, v]) => ({ dimension, ...v }));
+  },
+
   attainment(b) {
     if (b == null) return null;
     const { baseline, target, actual } = b;

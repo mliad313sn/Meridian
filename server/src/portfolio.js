@@ -105,7 +105,7 @@ export async function loadPortfolio(user) {
   const [
     activities, deps, milestones, ledger, raidRows, crRows, stepRows,
     allocations, docs, columns, items, crossDeps, narrativeRows, extLinks,
-    benefits, waves, commitments, timesheets, lessonRows,
+    benefits, waves, commitments, timesheets, lessonRows, tolerances, exceptions,
   ] = await Promise.all([
     inScope(`SELECT * FROM activity WHERE project_id = ANY($1) ORDER BY project_id, stage`),
     inScope(`SELECT d.* FROM activity_dep d JOIN activity a ON a.id = d.activity_id
@@ -155,6 +155,11 @@ export async function loadPortfolio(user) {
     many(`SELECT * FROM lesson
            WHERE status = 'Adopted' OR project_id = ANY($1)
            ORDER BY raised_on DESC, id`, [ids]),
+    /* PM-01 — la marge accordée, et les dépassements constatés. */
+    inScope(`SELECT * FROM project_tolerance
+              WHERE project_id = ANY($1) AND active ORDER BY project_id`),
+    inScope(`SELECT * FROM project_exception
+              WHERE project_id = ANY($1) ORDER BY raised_on DESC, id`),
   ]);
 
   const depsByActivity = new Map();
@@ -294,6 +299,27 @@ export async function loadPortfolio(user) {
       id: String(x.id), person: x.person_id, project: x.project_id,
       week: x.week_start, days: Number(x.days), enteredBy: x.entered_by,
       version: x.row_version,
+    })),
+
+    /* PM-01 — la marge dans laquelle chaque projet peut travailler.
+       Une seule active par projet ; les précédentes restent en base pour
+       qu'on puisse relire sous quelle marge une décision a été prise. */
+    tolerances: tolerances.map((x) => ({
+      id: x.id, project: x.project_id,
+      scheduleDays: x.schedule_days, costPct: x.cost_pct == null ? null : Number(x.cost_pct),
+      benefitPct: x.benefit_pct == null ? null : Number(x.benefit_pct),
+      note: x.note, setBy: x.set_by, setOn: x.set_on, version: x.row_version,
+    })),
+
+    /* Les dépassements constatés. Une exception ne se referme jamais
+       toute seule : la prévision peut repasser sous la limite, elle reste
+       ouverte tant que personne n'a dit ce qu'il en faisait. */
+    exceptions: exceptions.map((x) => ({
+      id: x.id, project: x.project_id, tolerance: x.tolerance_id,
+      dimension: x.dimension, raisedOn: x.raised_on,
+      measured: Number(x.measured), allowed: Number(x.allowed), detail: x.detail,
+      status: x.status, answerKind: x.answer_kind, answer: x.answer,
+      answeredBy: x.answered_by, answeredOn: x.answered_on, version: x.row_version,
     })),
 
     /* PM-02 — ce qu'on a appris, et qui doit survivre au projet.

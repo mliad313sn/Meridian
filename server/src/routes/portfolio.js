@@ -1831,6 +1831,102 @@ r.patch("/projects/:id/review", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+/* ── tolerance and exception (PM-01) ──────────────────────────────────
+ *
+ * L'autorité était déléguée sans borne. Le produit savait dire qu'un
+ * projet virait à l'orange ; il ne savait pas dire qu'il avait franchi
+ * une limite que quelqu'un avait fixée — et la différence est tout le
+ * mécanisme. Dans le premier cas il faut que quelqu'un remarque et
+ * accepte de porter la mauvaise nouvelle ; dans le second, le
+ * dépassement remonte tout seul à celui qui a accordé la marge.
+ *
+ * PRINCE2 « Progress » et ISO 21502 §6.5. La marge est posée par le
+ * niveau AU-DESSUS (`tolerance.set` est une écriture de groupe) et
+ * l'exception est répondue par le même niveau : celui qui livre vit dans
+ * la marge, il ne la fixe pas et il ne statue pas sur son dépassement.
+ */
+
+r.put("/projects/:id/tolerance", async (req, res, next) => {
+  try {
+    const p = await project(req.params.id, req.user);
+    gate(req.user, "tolerance.set", { project: p });
+    const b = req.body ?? {};
+
+    const bound = (v, what) => {
+      if (v === undefined || v === null || v === "") return null;
+      const n = Number(v);
+      if (!Number.isFinite(n) || n < 0) bad(`${what} must be zero or more`);
+      return n;
+    };
+    const schedule = bound(b.scheduleDays, "A schedule tolerance");
+    const cost = bound(b.costPct, "A cost tolerance");
+    const benefit = bound(b.benefitPct, "A benefit tolerance");
+    const note = String(b.note ?? "").slice(0, 1000);
+
+    /* Une tolérance qui ne borne rien et ne dit rien n'est pas une
+       tolérance : c'est un formulaire vide qu'on prendra plus tard pour
+       une marge accordée. */
+    if (schedule === null && cost === null && benefit === null && !note) {
+      bad("A tolerance has to bound something, or say in words what it bounds");
+    }
+
+    let id = null;
+    await audited(req.user,
+      () => ({ action: "Tolerance set", entity: "project_tolerance", entityId: id,
+               detail: `${p.id} — ` + ([
+                 schedule !== null ? `${schedule} days` : null,
+                 cost !== null ? `${cost}% cost` : null,
+                 benefit !== null ? `${benefit}pt benefit` : null,
+               ].filter(Boolean).join(", ") || "stated in words only") }),
+      async (t) => {
+        /* La précédente est désactivée, pas écrasée : on doit pouvoir
+           relire plus tard sous quelle marge une décision a été prise. */
+        await t.query(
+          `UPDATE project_tolerance SET active = false, row_version = row_version + 1
+            WHERE project_id = $1 AND active`, [p.id]);
+        id = await allocateId(t, "TOL", { pad: 3 });
+        return t.query(
+          `INSERT INTO project_tolerance
+             (id, project_id, schedule_days, cost_pct, benefit_pct, note, set_by)
+           VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+          [id, p.id, schedule, cost, benefit, note, req.user.id]);
+      });
+    res.status(201).json({ id });
+  } catch (e) { next(e); }
+});
+
+/**
+ * Répondre à une exception. Quatre réponses, celles que PRINCE2 laisse au
+ * niveau qui a délégué : relever la tolérance, réviser le plan, accepter
+ * le dépassement, arrêter. Chacune demande une phrase — une exception
+ * close sans raison écrite ne se relit pas, et c'est précisément ce
+ * qu'un comité viendra relire.
+ */
+r.post("/exceptions/:id/answer", async (req, res, next) => {
+  try {
+    const row = await one(`SELECT * FROM project_exception WHERE id = $1`, [req.params.id]);
+    if (!row) throw new HttpError(404, "No such exception");
+    const p = await project(row.project_id, req.user);
+    gate(req.user, "exception.answer", { project: p });
+
+    const KINDS = ["Tolerance raised", "Plan revised", "Accepted", "Stopped"];
+    const kind = req.body?.kind;
+    if (!KINDS.includes(kind)) bad(`An answer is one of: ${KINDS.join(", ")}`);
+    const answer = String(req.body?.answer ?? "").trim().slice(0, 2000);
+    if (!answer) bad("Say what was decided — a committee will read this back");
+
+    const out = await audited(req.user,
+      { action: "Exception answered", entity: "project_exception", entityId: row.id,
+        detail: `${row.project_id} ${row.dimension} — ${kind}: ${answer.slice(0, 120)}`,
+        before: { status: row.status }, after: { status: "Answered", kind } },
+      async (t) => conflict(await updateVersioned(t, "project_exception", row.id,
+        requiredVersion(req.body, "exception"),
+        { status: "Answered", answer_kind: kind, answer,
+          answered_by: req.user.id, answered_on: iso(new Date()) })));
+    res.json({ version: out.version });
+  } catch (e) { next(e); }
+});
+
 /* ── lessons (PM-02) ──────────────────────────────────────────────────
  *
  * Le jalon 4 du produit exige comme preuve « Realisation report, lessons

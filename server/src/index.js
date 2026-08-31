@@ -17,6 +17,7 @@ import { existsSync } from "node:fs";
 import { connect, migrate, engine, close, many, query } from "./db.js";
 import { sweep as notifySweep, purge, escalate, deliver, outboundTransport } from "./notify.js";
 import { probeEvidence } from "./probe.js";
+import { sweepExceptions } from "./exceptions.js";
 import { countUsage } from "./adoption.js";
 import { attachUser, requireUser, requirePasswordChanged, sweepSessions, HttpError } from "./auth.js";
 import authRoutes from "./routes/auth.js";
@@ -290,6 +291,11 @@ export async function start({ port = process.env.PORT || 4173 } = {}) {
       const got = await many(`SELECT pg_try_advisory_lock($1) AS ok`, [LOCK]).catch(() => [{ ok: true }]);
       if (!got[0]?.ok) return;
       try {
+        /* PM-01 — d'abord constater les dépassements de tolérance,
+           ENSUITE balayer les notifications : une exception ouverte à ce
+           tour doit pouvoir partir au même tour, sans attendre une heure
+           de plus pour être annoncée à qui a accordé la marge. */
+        await sweepExceptions().catch(() => {});
         await escalate();
         await notifySweep();
         /* Et la file part enfin. Elle se remplissait, la cadence était

@@ -18,8 +18,26 @@ Unreleased work sits under `## [Unreleased]` until it is tagged.
 
 ## [Unreleased]
 
+Nothing yet.
+
+---
+
+## [5.2.0] — 2026-08-31
+
 ### Added
 
+- **Tolerances and exception management** (PM-01, migration `026`). The
+  heaviest governance gap in the product, and the quietest: authority was
+  delegated **without a bound**. Meridian could say a project had turned
+  amber; it could not say it had gone past a limit somebody set. In the
+  first case a person has to notice and be willing to carry bad news; in
+  the second it comes up on its own, to whoever granted the margin, who
+  must answer it. Schedule, cost and benefit are measured; scope, quality
+  and risk are stated in words rather than pretended to be computed.
+  The schedule is measured against the baseline, never the current plan —
+  otherwise moving the date would clear the breach. An exception never
+  closes by itself: the forecast may come back inside the margin, and the
+  overrun still happened.
 - Screen for the connected systems (INT-02): issue a key, change what it
   may do, rotate it, revoke it. Without it, connecting a system meant an
   HTTP call by hand — which guarantees nobody ever rotates a key, and a
