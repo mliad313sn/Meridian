@@ -112,6 +112,24 @@ const FR_NOTIFY = {
   " cannot pass its next gate while ": " ne peut pas franchir son prochain jalon tant que ",
   " evidence document(s) remain unapproved.": " document(s) de preuve restent non approuvés.",
   "Open the project's document list in Meridian.": "Ouvrez la liste des documents du projet dans Meridian.",
+  /* O-2 — les cinq natures enfin émises. */
+  "Decision owed: ": "Décision due : ",
+  "Referred up from ": "Renvoyée au niveau supérieur depuis ",
+  ", and not yet answered. It heads the agenda of ": ", et toujours sans réponse. Elle ouvre l'ordre du jour de ",
+  " until a decision there answers it.": " jusqu'à ce qu'une décision y réponde.",
+  "Concern from ": "Préoccupation de ",
+  " raised this concern on ": " a signalé cette préoccupation sur ",
+  ". It appears on your next agenda; the register holds the detail.": ". Elle paraît à votre prochain ordre du jour ; le registre porte le détail.",
+  ": no progress recorded for 30 days": " : aucun avancement consigné depuis 30 jours",
+  " has recorded no stage update, milestone or status call in thirty days. A quiet book usually means the tool has drifted, not the site.":
+    " n'a consigné ni mise à jour d'étape, ni jalon, ni statut depuis trente jours. Un livre silencieux dit d'ordinaire que l'outil a décroché, pas le site.",
+  "Open Adoption to see the site's indicators.": "Ouvrez Adoption pour lire les indicateurs du site.",
+  "Last week's effort is not recorded": "L'effort de la semaine passée n'est pas consigné",
+  "You were allocated to project work last week and no days are recorded. Four fields, once a week — the real sits beside the plan, and the gap is the point.":
+    "Vous étiez affecté à du travail projet la semaine passée et aucun jour n'est consigné. Quatre champs, une fois par semaine — le réel s'affiche à côté du plan, et c'est l'écart qui compte.",
+  "Your Meridian digest is ready": "Votre digest Meridian est prêt",
+  "Everything that changed in your scope, in one page: open Reports, then the digest.":
+    "Tout ce qui a changé dans votre périmètre, en une page : ouvrez Rapports, puis le digest.",
 };
 Object.assign(FR, FR_NOTIFY);
 

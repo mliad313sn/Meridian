@@ -399,7 +399,10 @@ r.get("/notifications", async (req, res, next) => {
               count(*) FILTER (WHERE state='failed')::int AS failed
          FROM notification`);
     res.json({
-      transport: process.env.MERIDIAN_SMTP_URL ? "configured" : "none",
+      /* docs/32 — the flag used to read MERIDIAN_SMTP_URL, a transport
+         this product does not carry; the real one is the outbound
+         webhook, and "configured" must mean it would actually send. */
+      transport: (await (await import("../notify.js")).outboundTransport()) ? "configured" : "none",
       counts,
       notifications: rows.map((n) => ({
         id: String(n.id), at: n.at, email: n.email, kind: n.kind, subject: n.subject,

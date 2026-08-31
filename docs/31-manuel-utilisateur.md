@@ -96,15 +96,14 @@ consignée.
 
 ## 3 · Comprendre ce que vous pouvez faire, et pourquoi
 
-Quatre rôles existent (les identifiants ci-dessous sont ceux
-qu'affiche l'Administration) :
+Quatre rôles existent :
 
 | Rôle | En bref |
 |---|---|
 | **admin** | Tout, y compris les comptes, les habilitations et les réglages. |
-| **group** | Lit tout le portefeuille ; écrit dans les programmes qui lui sont accordés. Le rôle de gouvernance : décide les changements, approuve les preuves, clôture les périodes, pose les tolérances. |
+| **groupe** (`group`) | Lit tout le portefeuille ; écrit dans les programmes qui lui sont accordés. Le rôle de gouvernance : décide les changements, approuve les preuves, clôture les périodes, pose les tolérances. |
 | **site** | Lit ses sites plus les projets groupe qui y sont livrés ; n'écrit que les projets **gouvernés au site** dans ses sites accordés. |
-| **viewer** | Lecture seule sur son périmètre. N'écrit rien, jamais. |
+| **lecteur** (`viewer`) | Lecture seule sur son périmètre. N'écrit rien, jamais. |
 
 Chaque projet est gouverné au niveau **groupe** ou au niveau **site**,
 et ce seul fait — pas qui l'a créé, pas où il s'exécute — décide qui
@@ -188,11 +187,10 @@ indices » retire le forçage.
 
 Les étapes ont des dates, des dates de référence et des liens
 fin-début ; le chemin critique et la marge de chaque étape sont
-calculés sur le projet. À l'intérieur d'un projet, une étape qui mord
-sur sa précédente de plus de cinq jours au-delà de ce que la référence
-admettait déjà se signale sur le **Planning**. Les dépendances entre
-projets se tracent sur le planning directeur intégré pour que la
-collision se voie — elles ne sont pas contrôlées en tolérance.
+calculés sur le projet. Une étape qui mord sur sa précédente de plus
+de cinq jours au-delà de ce que la référence admettait déjà se signale
+sur le **Planning** — à l'intérieur d'un projet comme à travers les
+liens inter-projets du planning directeur intégré.
 **Re-référencer est un acte de niveau groupe** — cela déplace les
 dates sur lesquelles le groupe s'est engagé.
 
@@ -200,8 +198,7 @@ dates sur lesquelles le groupe s'est engagé.
 
 Tout ce qui pourrait coûter du temps ou de l'argent appartient à
 **Risques & problèmes** avant que cela n'arrive — comme risque,
-problème, hypothèse ou dépendance (les quatre natures RAID, affichées
-en anglais : *Risk, Issue, Assumption, Dependency*). Probabilité ×
+problème, hypothèse ou dépendance (les quatre natures RAID). Probabilité ×
 impact (1–5 chacun) situe l'exposition par paliers ; les éléments à
 forte exposition remontent d'eux-mêmes aux ordres du jour de pilotage.
 Les éléments de portée portefeuille (un manque de ressources
@@ -307,9 +304,11 @@ post-mise en œuvre** du projet se consigne de la même façon.
 Qui l'a vécu le consigne — ce qui s'est passé, pourquoi, quoi faire
 autrement, dans l'une des onze catégories ISO 21502, les issues
 positives comprises. **Adopter** un enseignement est un acte de niveau
-groupe : l'adoption est ce qui le rend visible aux autres sites. Avant
-de démarrer un projet, lisez le registre des **Enseignements** filtré
-par votre programme et votre site — c'est à cela qu'il sert.
+groupe : l'adoption est ce qui le rend visible aux autres sites — et
+ce qui fait que Meridian les propose, sans qu'on le demande, à
+l'instant où un nouveau projet se crée dans le même programme ou sur
+le même site. Le registre des **Enseignements** se filtre par
+pertinence à tout moment.
 
 ### Les rapports, et la clôture de période
 
@@ -360,28 +359,33 @@ un périmètre (groupe / programme / site) ; chaque tenue est une
 
 ## 7 · Les notifications
 
-Meridian va trouver les gens plutôt que d'attendre leur visite.
-Quatre choses sont émises aujourd'hui : une action qui arrive à
-échéance ou en retard, un jalon de contrôle bloqué, un lien de preuve
-approuvé qui ne répond plus, et un franchissement de tolérance. (Le
-vocabulaire en réserve d'autres — décision due, préoccupation
-signalée, site silencieux, semaine d'effort manquante, un digest par
-courriel — définis mais pas encore alimentés ; le digest à l'écran,
-dans les Rapports, couvre ce terrain entre-temps.)
+Meridian va trouver les gens plutôt que d'attendre leur visite : une
+action qui arrive à échéance ou en retard, un jalon de contrôle
+bloqué, une décision renvoyée au niveau supérieur et toujours sans
+réponse (à qui préside la salle visée), une préoccupation signalée
+par un site sur un projet groupe (au chef de ce projet), un site
+silencieux depuis trente jours (à son référent), une semaine d'effort
+non consignée (à la personne, jamais à son chef), un lien de preuve
+approuvé qui ne répond plus, un franchissement de tolérance (à qui a
+posé la marge), et un digest quotidien ou hebdomadaire pour les
+comptes à cette cadence.
 
 Le **centre de notification** (Livrer → Notifications) est votre
 boîte : tout ce qui vous est adressé y arrive, toujours, avec l'état
 lu et traité. Sous l'icône de cloche, **les préférences de
-notification** règlent la langue de vos courriels et votre cadence
-(immédiat, quotidien, hebdomadaire, coupé). Les abonnements plus
-fins — par nature et gravité minimale — et les heures de silence,
-lues dans le fuseau de *votre site*, existent dans l'API avant leur
-écran ; un administrateur ou une intégration peut les poser pour
-vous. Les messages ne quittent le bâtiment que par le webhook sortant
-qu'un administrateur configure (`MERIDIAN_NOTIFY_URL`, borné par la
-liste des hôtes de destination autorisés — fermée par défaut) ;
-jusque-là, l'Administration montre la file de ce qui aurait été
-envoyé.
+notification** portent tout : la langue de vos courriels, votre
+cadence (immédiat, quotidien, hebdomadaire, coupé), vos **heures de
+silence** — lues dans le fuseau de *votre site* ; rien n'est perdu,
+les messages attendent le matin, l'urgent passe — et vos **abonnements
+fins** : nature × périmètre (tout le portefeuille, un programme, un
+site, un projet) × gravité minimale × cadence. Sans aucun, votre
+cadence gouverne tout ; avec, seul ce qu'un abonnement couvre part
+par courriel — le centre, lui, reçoit toujours tout : se désabonner
+ne rend jamais aveugle. Les messages ne quittent le bâtiment que par
+le webhook sortant qu'un administrateur configure
+(`MERIDIAN_NOTIFY_URL`, borné par la liste des hôtes de destination
+autorisés — fermée par défaut) ; jusque-là, l'Administration montre
+la file de ce qui aurait été envoyé.
 
 ---
 

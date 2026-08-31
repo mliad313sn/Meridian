@@ -131,7 +131,7 @@ async function loadAccounts(host, pick) {
         currentRole = a.role;
         host.appendChild(h("div", { style: "margin:18px 0 6px" },
           h("div", { class: "kicker-lg", style: "color:var(--color-accent)" }, currentRole.toUpperCase()),
-          h("div", { class: "xs muted" }, ROLE_NOTE[currentRole] ?? "")));
+          h("div", { class: "xs muted" }, t(ROLE_NOTE[currentRole] ?? ""))));
         host.appendChild(h("hr", { class: "hr" }));
       }
       host.appendChild(

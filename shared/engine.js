@@ -237,6 +237,35 @@ export const Engine = {
     return out;
   },
 
+  /* O-7 (docs/32) — the same five-day rule, applied to the edges BETWEEN
+     projects. The integrated master schedule drew these links and never
+     checked them, so a feeding project could slide under its dependent
+     with nothing said. Additive: the in-project arithmetic above is
+     untouched. A stage is bounded by its activities' extremes, because a
+     cross_dep names a stage, not an activity. */
+  crossDepBreaches(db, projects) {
+    const ids = new Set((projects ?? db.projects).map(p => p.id));
+    const out = [];
+    (db.crossDeps ?? []).forEach(cd => {
+      if (!ids.has(cd.from) || !ids.has(cd.to)) return;
+      const fromActs = Engine.activities(db, cd.from).filter(a => a.stage === cd.fromStage);
+      const toActs   = Engine.activities(db, cd.to).filter(a => a.stage === cd.toStage);
+      if (!fromActs.length || !toActs.length) return;
+      const feedEnd   = fromActs.map(a => a.end).sort().pop();
+      const fedStart  = toActs.map(a => a.start).sort()[0];
+      const baseEnd   = fromActs.map(a => a.baseEnd).filter(Boolean).sort().pop();
+      const baseStart = toActs.map(a => a.baseStart).filter(Boolean).sort()[0];
+      const now = days(feedEnd, fedStart);
+      const agreed = (baseEnd && baseStart) ? days(baseEnd, baseStart) : 0;
+      if (now < Math.min(0, agreed) - 5) {
+        out.push({ dep: cd,
+          fromProject: Engine.project(db, cd.from), toProject: Engine.project(db, cd.to),
+          overlap: -now, agreed: -Math.min(0, agreed) });
+      }
+    });
+    return out;
+  },
+
   /* ── gates ──────────────────────────────────────────────────────── */
   /* R-01 — evidence is an approved document THAT POINTS AT SOMETHING.
      An approved row with no artefact behind it is a label, and counting
@@ -423,7 +452,11 @@ export const Engine = {
     };
   },
 
-  /** V-09 — what a person is actually available for, after rotation. */
+  /** V-09 — what a person is actually available for. `availability` is
+      DEFINED (migration 012) as the fraction of a year left after
+      rotation, leave and the day job, so it is the whole input here:
+      folding `rotation` in as well would double-count it. The rotation
+      string is directory information for the planner's eye. */
   effectiveFte(person) {
     if (!person) return 0;
     return Math.max(0, Math.min(100, Number(person.availability ?? 100))) / 100;

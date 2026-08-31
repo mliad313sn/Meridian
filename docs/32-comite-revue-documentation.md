@@ -155,21 +155,32 @@ vocabulaire que personne ne verra à l'écran ; « jalon de contrôle »
 fait l'aide du produit. Trois calques de l'anglais réécrits, et un
 contresens (« borne l'exposition » pour *bands*) corrigé.
 
-## 6 · Ce qui reste ouvert, et à qui
+## 6 · Le registre produit du comité — ouvert le 31/08, clos le 31/08
 
 Constats **produit** relevés par le comité, hors du pouvoir d'une
-correction documentaire, versés au registre produit
-([`23-comite-produit.md`](23-comite-produit.md)) :
+correction documentaire. La campagne de clôture les a tous levés le
+jour même ; chaque levée est vérifiée par `npm run verify` (381 tests,
+neuf portes) et, pour la remise, par les six tests de
+`server/test/outreach.test.js`.
 
-| # | Constat | Où |
+| # | Constat | Levée |
 |---|---|---|
-| O-1 | Les abonnements de notification et les heures de silence n'ont pas d'écran ; le périmètre et la cadence par abonnement sont stockés mais ignorés à la remise | `routes/auth.js`, `notify.js` |
-| O-2 | Cinq natures de notification définies jamais émises (`decision-owed`, `concern-raised`, `site-quiet`, `timesheet-missing`, `digest`) ; le panneau d'administration parle de SMTP qu'aucun client ne porte | `notify.js`, migration 018 |
-| O-3 | `GET /projects/:id/lessons/relevant` n'a aucun appelant hors tests — l'enseignement adopté n'est pas proposé au démarrage d'un projet | `routes/portfolio.js:2084` |
-| O-4 | La rotation (« 4/2 », « 14/14 ») n'entre pas dans `effectiveFte` malgré le commentaire de la fonction, et rotation/disponibilité/prestataire n'ont pas de champ dans le formulaire personne | `shared/engine.js:426`, `administration.js` |
-| O-5 | La visibilité du bouton « Nouveau projet » est sondée contre `db.programmes[0]`/`db.sites[0]` : un chef de site dont le site accordé n'est pas le premier de la liste ne voit pas le bouton | `views/index.js:4881` |
-| O-6 | Les libellés de rôle (« Viewer ») et les natures RAID restent en anglais dans une interface par ailleurs traduite | `administration.js`, `login.js` |
-| O-7 | Les liens inter-projets du planning directeur sont tracés mais jamais contrôlés en tolérance | `engine.js:225` |
+| O-1 | Les abonnements et les heures de silence n'avaient pas d'écran ; le périmètre et la cadence par abonnement étaient stockés mais ignorés à la remise | **Levé.** Les préférences de notification (icône de cloche) portent les heures de silence et les abonnements fins ; `deliver()` honore les quatre réglages — nature, gravité, périmètre (l'entité ramenée à son projet, puis au programme et au site), cadence par abonnement — un lot par période, jamais le premier message et le silence pour le reste. |
+| O-2 | Cinq natures définies jamais émises ; le panneau parlait d'un SMTP qu'aucun client ne porte | **Levé.** Le balayage émet `decision-owed` (au président de la salle visée), `concern-raised` (au chef du projet groupe), `site-quiet` (au référent du site — A-12 sert enfin), `timesheet-missing` (à la personne, jamais à son chef) et `digest` (à la cadence du compte). Le panneau nomme le vrai transport, et le drapeau « configured » dit que l'envoi partirait vraiment. |
+| O-3 | L'enseignement adopté n'était pas proposé au démarrage d'un projet | **Levé.** À la création, les enseignements adoptés du même programme ou du même site s'affichent — au seul moment où ils peuvent encore changer le plan. |
+| O-4 | Rotation/disponibilité/prestataire sans champ dans la fiche personne ; le commentaire d'`effectiveFte` promettait la rotation | **Levé.** La fiche et l'annuaire portent les quatre champs de V-09. L'arithmétique ne change pas — la migration 012 définit la disponibilité comme DÉJÀ nette de rotation ; la replier dedans l'aurait comptée deux fois. Le commentaire le dit désormais. |
+| O-5 | Le bouton « Nouveau projet » sondé contre le premier programme/site de la liste | **Levé.** La sonde interroge toutes les combinaisons ; un chef de site voit son bouton quel que soit le rang de son site. |
+| O-6 | Libellés de rôle et natures RAID non traduits | **Levé.** Lecteur, Groupe, les quatre natures RAID et les descriptions de niveau parlent la langue de l'interface ; les valeurs stockées restent anglaises, comme partout. |
+| O-7 | Les liens inter-projets tracés mais jamais contrôlés en tolérance | **Levé.** `Engine.crossDepBreaches` (ajout — l'arithmétique gelée n'est pas touchée) applique la même règle des cinq jours contre la référence, et le bandeau du Planning les compte avec les manquements internes. |
+
+**Et un huitième, trouvé en levant les sept.** La migration 026
+faisait émettre `tolerance-breached` — une nature que le CHECK de 018
+refusait, dans un appel qui omettait aussi `dedupe_key` (NOT NULL), le
+tout avalé par le `catch` qui protège le constat : **celui qui avait
+posé la marge n'a jamais été prévenu, et rien ne l'a dit.** La
+migration 027 élargit la contrainte, l'appel porte sa clé, et un test
+tient l'insertion. Un catch qui protège un flux ne doit jamais
+protéger une contrainte.
 
 Et une décision d'écriture, consignée pour la suite : le CHANGELOG
 range désormais le travail documentaire sous **Documentation**, pas
@@ -178,13 +189,14 @@ corrigé » est du PATCH) le demandait déjà.
 
 ## 7 · Verdict
 
-Levée des 71 constats : **68 par correction** (documentation ou
-produit), **3 convertis en constats produit ouverts** portés au
-registre (O-1 à O-7 regroupent aussi les observations annexes des
-sièges). La documentation relue dit ce que le produit fait — y compris
-ce qu'il ne fait pas encore — et le produit fait désormais ce que son
-démarrage rapide, son forçage de statut et sa preuve de jalon
-promettaient. La leçon du jour est celle que ce dépôt connaît déjà :
-**une affirmation n'est vraie que vérifiée en l'exécutant** — deux des
-trois défauts produit ne se voyaient qu'en lançant réellement la
-séquence documentée.
+Levée des 71 constats du comité : **68 par correction immédiate**
+(documentation ou produit) et **7 constats produit** (O-1 à O-7,
+regroupant les observations annexes) **levés par la campagne du même
+jour** — plus un huitième défaut (le CHECK de `tolerance-breached`)
+trouvé en la menant. La documentation dit ce que le produit fait, et
+le produit fait ce qu'elle dit : démarrage rapide, forçage de statut,
+preuve de jalon, remise des notifications de bout en bout. La leçon
+du jour est celle que ce dépôt connaît déjà : **une affirmation n'est
+vraie que vérifiée en l'exécutant** — trois des quatre défauts
+produit ne se voyaient qu'en lançant réellement la séquence
+documentée, et le quatrième dormait sous un `catch`.

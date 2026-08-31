@@ -18,7 +18,54 @@ Unreleased work sits under `## [Unreleased]` until it is tagged.
 
 ## [Unreleased]
 
+### Added
+
+- **The notification module keeps its whole promise** (O-1, O-2 —
+  `docs/32`). Five kinds were defined and never emitted; the hourly
+  sweep now sends them all: a referred decision still unanswered (to
+  whoever chairs the room it was referred to), a concern a site raised
+  on a group project (to that project's manager), a site quiet for
+  thirty days (to its champion — A-12 finally has a duty, not just a
+  name), a week of effort not recorded (to the person, never their
+  manager), and the daily/weekly digest. The bell-icon preferences now
+  carry the quiet hours and the fine-grained subscriptions the API held
+  with no screen — and delivery honours all four subscription settings:
+  kind, minimum severity, **scope** (the message's entity resolved to
+  its project, programme and site) and **per-subscription cadence**,
+  one batch per period. Six tests hold it
+  (`server/test/outreach.test.js`).
+- **Adopted lessons are offered at project creation** (O-3): the
+  relevant-lessons endpoint finally has a caller — the moment a project
+  is created, at the one point a lesson can still change the plan.
+- **The person form carries what V-09 promised** (O-4): employment,
+  supplier, rotation and availability, editable and shown in the
+  directory. The capacity arithmetic is deliberately untouched —
+  migration 012 defines availability as already net of rotation, and
+  folding rotation in again would double-count it; the engine comment
+  now says so instead of promising otherwise.
+- **Cross-project links are tolerance-checked** (O-7):
+  `Engine.crossDepBreaches` — additive, the frozen arithmetic untouched
+  — applies the same five-day-past-baseline rule to the edges of the
+  integrated master schedule, and the Schedule banner counts them.
+
 ### Fixed
+
+- **Nobody was ever told a tolerance was breached.** Migration 026's
+  sweep queued `tolerance-breached` — a kind migration 018's CHECK
+  refused, in a call that also omitted the NOT NULL `dedupe_key`, all
+  swallowed by the catch that protects the sweep: the whole
+  management-by-exception mechanism stopped at its last link,
+  silently. Migration 027 admits the kind, the call carries its key,
+  and a test holds the insertion. A catch that protects a flow must
+  never protect a constraint.
+- **A site lead whose granted site was not first in the list saw no
+  "New project" button** (O-5): the visibility probe asked about
+  `programmes[0]`/`sites[0]` only; it now asks about every
+  combination.
+- **Role labels and RAID natures now speak the interface's language**
+  (O-6): Lecteur, Groupe, the four RAID natures and the level
+  descriptions are translated; stored values stay English, as
+  everywhere.
 
 - **The documented quick start silently discarded the book.**
   `npm run seed && npm run dev` — the README's first three commands —

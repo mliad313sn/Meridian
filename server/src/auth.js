@@ -68,7 +68,7 @@ export function publicUser(row, grants = []) {
 async function loadUser(userId, actingForId = null) {
   const row = await one(
     `SELECT id, email, display_name, person_id, role, active, last_login_at, must_change_password,
-            locale, notify_pref
+            locale, notify_pref, quiet_from, quiet_to
        FROM app_user WHERE id = $1`,
     [userId]
   );
@@ -115,6 +115,8 @@ async function loadUser(userId, actingForId = null) {
     mustChangePassword: row.must_change_password === true,
     locale: row.locale ?? "",
     notifyPref: row.notify_pref ?? "immediate",
+    quietFrom: row.quiet_from ?? null,
+    quietTo: row.quiet_to ?? null,
     grants: normaliseGrants(grants),
     grantRows: grants,
     _row: row,

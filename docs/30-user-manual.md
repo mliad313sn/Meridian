@@ -216,12 +216,11 @@ and switching back to *Derived from SPI and CPI* removes the override.
 
 Stages have dates, baseline dates and finish-to-start links; the
 critical path and each stage's float are computed on the project.
-Within a project, a stage that bites more than five days deeper into
-its predecessor than the baseline already allowed is flagged on
-**Schedule**. Cross-project dependencies are drawn on the integrated
-master schedule so the collision is visible — they are not
-tolerance-checked. **Re-baselining is a group act** — it moves the
-dates the group committed to.
+A stage that bites more than five days deeper into its predecessor
+than the baseline already allowed is flagged on **Schedule** — inside a
+project, and across the cross-project links of the integrated master
+schedule alike. **Re-baselining is a group act** — it moves the dates
+the group committed to.
 
 ### Risks, issues, and the RAID register
 
@@ -320,9 +319,10 @@ same way.
 Whoever lived it records it — what happened, why, what to do
 differently, in one of the eleven ISO 21502 categories, positive
 outcomes included. **Adopting** a lesson is a group act: adoption is
-what makes it visible to the other sites. Before starting a project,
-read the **Lessons** register filtered by your programme and your site
-— that is what the register is for.
+what makes it visible to the other sites — and what makes Meridian
+offer them, unasked, the moment a new project is created in the same
+programme or at the same site. The **Lessons** register itself filters
+by relevance at any time.
 
 ### Reporting, and the period close
 
@@ -366,25 +366,31 @@ The module the rest exists for. A **series** has a cadence and a scope
 
 ## 7 · Notifications
 
-Meridian goes out to find people rather than waiting to be visited.
-Today four things are emitted: an action falling due or overdue, a gate
-blocked at its milestone, an approved evidence link that stopped
-answering, and a tolerance breach. (The vocabulary reserves more —
-decision owed, concern raised, site quiet, timesheet missing, an
-emailed digest — defined but not yet fed; the on-screen digest on
-Reports covers that ground meanwhile.)
+Meridian goes out to find people rather than waiting to be visited:
+an action falling due or overdue, a gate blocked at its milestone, a
+referred decision still unanswered (to whoever chairs the room it was
+referred to), a concern a site raised on a group project (to that
+project's manager), a site quiet for thirty days (to its champion), a
+week of effort not recorded (to the person, never their manager), an
+approved evidence link that stopped answering, a tolerance breach (to
+whoever set the margin), and a daily or weekly digest for accounts on
+that cadence.
 
 The **Notification centre** (Deliver → Notifications) is your inbox:
 everything addressed to you lands there, always, with read and acted
-state. Under the bell icon, **Notification preferences** set the
-language of your emails and your cadence (immediate, daily, weekly,
-off). Finer subscriptions — by kind and minimum severity — and quiet
-hours held in *your site's* timezone exist in the API ahead of their
-screen; an administrator or an integration can set them for you.
-Messages leave the building only through the outbound webhook an
-administrator configures (`MERIDIAN_NOTIFY_URL`, gated by the trusted
-webhook hosts list — closed by default); until then, Administration
-shows the queue of exactly what would have been sent.
+state. Under the bell icon, **Notification preferences** hold all of
+it: the language of your emails, your cadence (immediate, daily,
+weekly, off), your **quiet hours** — read in *your site's* timezone;
+nothing is lost, messages wait for morning, urgent passes — and your
+**fine-grained subscriptions**: kind × scope (whole portfolio, a
+programme, a site, one project) × minimum severity × cadence. With
+none, your cadence governs everything; with any, only what a
+subscription covers goes out by email — the centre always receives
+everything, so unsubscribing never blinds you. Messages leave the
+building only through the outbound webhook an administrator configures
+(`MERIDIAN_NOTIFY_URL`, gated by the trusted webhook hosts list —
+closed by default); until then, Administration shows the queue of
+exactly what would have been sent.
 
 ---
 

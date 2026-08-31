@@ -3,7 +3,7 @@
 **As at v5.3.0 · 2026-08-31.** This document is the current-state map of
 the product: what it is, the modules it is made of, every table in the
 database, and every capability the code actually carries. It was produced
-from a full read of the source — the 26 migrations, the shared engine,
+from a full read of the source — the migrations, the shared engine,
 the route surface, and the 21 screens — not from the earlier design
 documents. Where it disagrees with [`03-target-architecture.md`](03-target-architecture.md),
 this document describes what shipped; `03` remains the record of what was
@@ -114,7 +114,7 @@ training instance, the archive restore, and the admin handover.
 
 ## 3 · Database schema
 
-46 tables, built by 26 ordered migrations (`server/migrations/001–026`)
+46 tables, built by 27 ordered migrations (`server/migrations/001–027`)
 applied automatically at boot. Identical SQL on PostgreSQL and PGlite.
 
 ### Cross-cutting conventions
@@ -201,11 +201,11 @@ applied automatically at boot. Identical SQL on PostgreSQL and PGlite.
 | `meeting_decision` | Immutable once the occurrence closes. `referred_to_scope` escalates a decision up a level; it headlines the broader series' agenda until an `answered_by` decision there resolves it. |
 | `meeting_action` | Actions outlive their occurrence and chase the owner onto every subsequent agenda until closed; cross-level tasking flows down tagged with its origin. |
 
-### Notifications (013, 018, 019)
+### Notifications (013, 018, 019, 027)
 
 | Table | Purpose · notable columns |
 |---|---|
-| `notification` | A queue, never a direct send: kind (9 kinds — action due/overdue, gate blocked, decision owed, digest, concern raised, site quiet, timesheet missing, evidence unreachable), severity (computed, never hand-set), subject/body in the recipient's locale, delivery state (queued/sent/failed/suppressed), **`read_at` separate from delivery**, `dedupe_key` (unique) and `group_key` (one message per object per day), `on_behalf_of` for deputies, `expires_on` retention date — the purge refuses to run until a retention period is configured. |
+| `notification` | A queue, never a direct send: kind (10 kinds — action due/overdue, gate blocked, decision owed, digest, concern raised, site quiet, timesheet missing, evidence unreachable, tolerance breached — the last admitted by 027, which found 026 emitting a kind the CHECK refused, silently), severity (computed, never hand-set), subject/body in the recipient's locale, delivery state (queued/sent/failed/suppressed), **`read_at` separate from delivery**, `dedupe_key` (unique) and `group_key` (one message per object per day), `on_behalf_of` for deputies, `expires_on` retention date — the purge refuses to run until a retention period is configured. |
 | `notification_subscription` | Fine-grained outbound preferences: kind × scope (portfolio/programme/site/project) × minimum severity × channel × cadence. The in-app centre is deliberately not subscribable — everything addressed to you always lands there. |
 
 ### Federation (005)
@@ -266,9 +266,10 @@ closes only by an answer (tolerance raised, plan revised, accepted,
 stopped), never by the forecast drifting back.
 
 **Lessons learned.** Proposed by whoever lived it, adopted by group —
-adoption is what makes a lesson visible beyond its site; a
-relevance-filtered read (programme/site) exists in the API; positive
-lessons recorded alongside failures.
+adoption is what makes a lesson visible beyond its site; the adopted
+lessons relevant to a new project (same programme or site) are offered
+right after it is created, at the one moment they can still change the
+plan; positive lessons recorded alongside failures.
 
 **Meetings.** Weekly exception-only agendas and monthly steering packs,
 generated from live state and frozen at close; decisions (immutable once
@@ -281,15 +282,20 @@ plant/safety classification of projects with an independent MoC
 signature; intrusive milestones checked against windows; site readiness
 and link quality; rollout waves per site.
 
-**Notifications.** Nine kinds in the vocabulary; four are emitted today
-(action due/overdue, gate blocked, evidence unreachable) plus the
-tolerance breach — the rest are defined but not yet fed. Queued rather
-than sent, deduplicated and grouped, severity computed; an in-app centre
-with read/acted state; per-user locale (EN/FR) and cadence; quiet hours
-in the site's timezone (urgent pierces). Outbound delivery is an HTTPS
-webhook (`MERIDIAN_NOTIFY_URL` + the `notifyHosts` allow-list); the
-subscription and quiet-hours API exists ahead of its screen; retention
-purge refuses to run unconfigured.
+**Notifications.** Ten kinds, all emitted: action due and overdue, gate
+blocked, decision owed (an unanswered referral, to the chair of the room
+it was referred to), concern raised (to the group project's PM), site
+quiet for thirty days (to the site's champion), a week of effort
+missing (to the person, never their manager), evidence unreachable,
+tolerance breached (to whoever set the margin), and the daily/weekly
+digest. Queued rather than sent, deduplicated and grouped, severity
+computed; an in-app centre with read/acted state; per-user locale
+(EN/FR) and cadence. The bell-icon preferences carry quiet hours (held
+in the *site's* timezone; urgent pierces) and fine-grained
+subscriptions — kind × scope (portfolio/programme/site/project) ×
+minimum severity × cadence, all four honoured at delivery. Outbound
+delivery is an HTTPS webhook (`MERIDIAN_NOTIFY_URL` + the `notifyHosts`
+allow-list); retention purge refuses to run unconfigured.
 
 **Reporting & period close.** Live dashboards plus closed periods: a
 close freezes per-project snapshots (append-only), a correction is a new

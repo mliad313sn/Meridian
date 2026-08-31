@@ -99,6 +99,7 @@ r.get("/bootstrap", async (req, res, next) => {
         actingFor: req.user.actingForUserId ?? null,
         actingForPersonId: req.user.actingForPersonId ?? null,
         locale: req.user.locale ?? "", notifyPref: req.user.notifyPref ?? "immediate",
+        quietFrom: req.user.quietFrom ?? null, quietTo: req.user.quietTo ?? null,
         unread: unread[0]?.n ?? 0,
         /* A-11 — le client dessine un bandeau permanent quand ceci est
            vrai : personne ne doit confondre un exercice avec le livre. */

@@ -189,7 +189,7 @@ server/          src/db.js         pg | PGlite, migrations, optimistic concurren
                  src/portfolio.js  rows → the shape the engine reads
                  src/routes/       auth · portfolio · meetings · admin ·
                                    import · federation · v1 (integrations)
-                 migrations/       ordered SQL (001–026, applied at boot)
+                 migrations/       ordered SQL (001–027, applied at boot)
                  test/             375 tests
 
 web/             src/ui/kit.js     h() builder, dialogs, tables, charts (from v4)
@@ -244,7 +244,7 @@ writer gets a 409, never a silent overwrite.
 | [`docs/29-technical-reference.md`](docs/29-technical-reference.md) | Current-state reference — project description, the 46-table database schema, every functionality, and the module map |
 | [`docs/30-user-manual.md`](docs/30-user-manual.md) | User manual (EN) — role by role, workflow by workflow, with the product description in five languages |
 | [`docs/31-manuel-utilisateur.md`](docs/31-manuel-utilisateur.md) | Manuel utilisateur (FR) — rôle par rôle, processus par processus |
-| [`docs/32-comite-revue-documentation.md`](docs/32-comite-revue-documentation.md) | Documentation review committee (FR) — four seats, 71 findings, three product defects found by running what the docs promised |
+| [`docs/32-comite-revue-documentation.md`](docs/32-comite-revue-documentation.md) | Documentation review committee (FR) — four seats, 71 findings, every product defect it surfaced fixed the same day, its O-register closed by the follow-up campaign |
 
 ---
 

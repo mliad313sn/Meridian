@@ -200,7 +200,165 @@ export async function sweep({ today = new Date().toISOString().slice(0, 10), hor
     }) ? 1 : 0;
   }
 
-  return { queued, considered: actions.length + blocked.length };
+  /* ── O-2 (docs/32) — the kinds the vocabulary promised and nothing
+     fed. Five emitters, same shape as the two above: read wide, address
+     narrowly, dedupe by what it is about. ─────────────────────────── */
+  const weekBucket = `${day.slice(0, 7)}:${Math.floor(Number(day.slice(8, 10)) / 7)}`;
+
+  /* A decision referred upward and still unanswered is OWED. It belongs
+     to whoever chairs the room it was referred to, and it nags weekly —
+     a standing condition, like a blocked gate, not an event. */
+  const owed = await many(
+    `SELECT d.id, d.headline, so.name AS origin_room, s2.name AS room,
+            u.id AS user_id, u.email, u.locale, u.notify_pref, u.person_id,
+            ch.name AS owner_name
+       FROM meeting_decision d
+       JOIN meeting_occurrence o ON o.id = d.occurrence_id
+       JOIN meeting_series so ON so.id = o.series_id
+       LEFT JOIN project p ON p.id = d.project_id
+       JOIN meeting_series s2 ON s2.active AND s2.scope_kind = d.referred_to_scope
+        AND (d.referred_to_scope = 'group'
+             OR s2.programme_id = coalesce(p.programme_id, so.programme_id))
+       LEFT JOIN person ch ON ch.id = s2.chair_id
+       LEFT JOIN app_user u ON u.person_id = s2.chair_id AND u.active
+      WHERE d.referred_to_scope IS NOT NULL AND d.answered_by IS NULL`);
+  for (const d of owed) {
+    const to = await resolveRecipient(d);
+    if (!to || to.off || !to.email) continue;
+    const loc = to.locale;
+    const forPrefix = to.forWhom ? inLocale("Covering for ", loc) + to.forWhom + " — " : "";
+    queued += await queue({
+      userId: to.user_id, email: to.email, kind: "decision-owed", severity: "attention",
+      subject: forPrefix + inLocale("Decision owed: ", loc) + d.headline,
+      body: d.headline + "\n\n" +
+            inLocale("Referred up from ", loc) + d.origin_room +
+            inLocale(", and not yet answered. It heads the agenda of ", loc) + d.room +
+            inLocale(" until a decision there answers it.", loc),
+      entity: "meeting_decision", entityId: d.id,
+      dedupeKey: `owed:${d.id}:${to.user_id}:${weekBucket}`,
+    }) ? 1 : 0;
+  }
+
+  /* A site's formal voice on a group project must reach the programme
+     office once, and stay in the box until read — the escalator raises
+     what is ignored; repeating it would teach people to filter it. */
+  const concerns = await many(
+    `SELECT r.id, r.title, st.city, p2.name AS project_name,
+            u.id AS user_id, u.email, u.locale, u.notify_pref, u.person_id,
+            per.name AS owner_name
+       FROM raid_item r
+       JOIN project p2 ON p2.id = r.project_id AND p2.governance_level = 'group'
+       JOIN site st ON st.id = r.origin_site
+       LEFT JOIN person per ON per.id = p2.pm_id
+       LEFT JOIN app_user u ON u.person_id = p2.pm_id AND u.active
+      WHERE r.origin_site IS NOT NULL AND r.status = 'Open'`);
+  for (const r of concerns) {
+    const to = await resolveRecipient(r);
+    if (!to || to.off || !to.email) continue;
+    const loc = to.locale;
+    const forPrefix = to.forWhom ? inLocale("Covering for ", loc) + to.forWhom + " — " : "";
+    queued += await queue({
+      userId: to.user_id, email: to.email, kind: "concern-raised", severity: "attention",
+      subject: forPrefix + inLocale("Concern from ", loc) + r.city + ": " + r.title,
+      body: r.title + "\n\n" + r.city +
+            inLocale(" raised this concern on ", loc) + r.project_name +
+            inLocale(". It appears on your next agenda; the register holds the detail.", loc),
+      entity: "raid_item", entityId: r.id,
+      dedupeKey: `concern:${r.id}`,
+    }) ? 1 : 0;
+  }
+
+  /* A-08 — a book nobody has touched in thirty days. Addressed to the
+     site's named champion (A-12): the person you call first is also the
+     person told first. Same progress signal the Adoption screen reads. */
+  const quiet = await many(
+    `WITH progress AS (
+       SELECT pr.site_id, max(a.at) AS last_at
+         FROM audit_event a
+         JOIN project pr ON pr.id = a.entity_id
+        WHERE a.entity = 'project'
+           OR a.action IN ('Stage updated', 'Phase advanced', 'Milestone met', 'Health overridden')
+        GROUP BY pr.site_id
+     )
+     SELECT s.id AS site_id, s.city, g.last_at,
+            u.id AS user_id, u.email, u.locale, u.notify_pref, u.person_id,
+            ch.name AS owner_name
+       FROM site s
+       JOIN project p3 ON p3.site_id = s.id AND NOT p3.closed
+       LEFT JOIN progress g ON g.site_id = s.id
+       LEFT JOIN person ch ON ch.id = s.champion_id
+       LEFT JOIN app_user u ON u.person_id = s.champion_id AND u.active
+      WHERE s.active
+      GROUP BY s.id, s.city, g.last_at, u.id, u.email, u.locale, u.notify_pref, u.person_id, ch.name
+     HAVING g.last_at IS NULL OR g.last_at < now() - interval '30 days'`);
+  for (const s of quiet) {
+    const to = await resolveRecipient(s);
+    if (!to || to.off || !to.email) continue;
+    const loc = to.locale;
+    const forPrefix = to.forWhom ? inLocale("Covering for ", loc) + to.forWhom + " — " : "";
+    queued += await queue({
+      userId: to.user_id, email: to.email, kind: "site-quiet", severity: "attention",
+      subject: forPrefix + s.city + inLocale(": no progress recorded for 30 days", loc),
+      body: s.city + inLocale(" has recorded no stage update, milestone or status call in thirty days. A quiet book usually means the tool has drifted, not the site.", loc) +
+            "\n\n" + inLocale("Open Adoption to see the site's indicators.", loc),
+      entity: "site", entityId: s.site_id,
+      dedupeKey: `quiet:${s.site_id}:${weekBucket}`,
+    }) ? 1 : 0;
+  }
+
+  /* R-03 — a completed week with an allocation and no recorded days.
+     Once per week, to the person, never to their manager: the entry is
+     theirs to make, and a nag that goes over someone's head is a
+     surveillance tool, not a reminder. */
+  const noWeek = await many(
+    `SELECT per.id AS pid, per.name AS owner_name,
+            u.id AS user_id, u.email, u.locale, u.notify_pref, u.person_id,
+            (date_trunc('week', CURRENT_DATE)::date - 7)::text AS wk
+       FROM person per
+       JOIN app_user u ON u.person_id = per.id AND u.active
+      WHERE per.active
+        AND EXISTS (SELECT 1 FROM allocation al
+                     WHERE al.person_id = per.id
+                       AND al.from_date <= date_trunc('week', CURRENT_DATE)::date - 1
+                       AND al.to_date   >= date_trunc('week', CURRENT_DATE)::date - 7)
+        AND NOT EXISTS (SELECT 1 FROM timesheet ts
+                     WHERE ts.person_id = per.id
+                       AND ts.week_start = date_trunc('week', CURRENT_DATE)::date - 7)`);
+  for (const w of noWeek) {
+    const to = await resolveRecipient(w);
+    if (!to || to.off || !to.email) continue;
+    const loc = to.locale;
+    queued += await queue({
+      userId: to.user_id, email: to.email, kind: "timesheet-missing", severity: "info",
+      subject: inLocale("Last week's effort is not recorded", loc),
+      body: inLocale("You were allocated to project work last week and no days are recorded. Four fields, once a week — the real sits beside the plan, and the gap is the point.", loc),
+      entity: "person", entityId: w.pid,
+      dedupeKey: `week:${w.pid}:${w.wk}`,
+    }) ? 1 : 0;
+  }
+
+  /* The digest, for whoever asked to be written to at a rhythm rather
+     than at each event. Daily or weekly by the account's own cadence;
+     the body points at the screen, which scopes itself to the reader. */
+  const readers = await many(
+    `SELECT u.id AS user_id, u.email, u.locale, u.notify_pref
+       FROM app_user u
+      WHERE u.active AND u.notify_pref IN ('daily', 'weekly')`);
+  for (const u of readers) {
+    const loc = u.locale;
+    const bucket = u.notify_pref === "daily" ? day : day.slice(0, 4) + "-w" + weekBucket;
+    queued += await queue({
+      userId: u.user_id, email: u.email, kind: "digest", severity: "info",
+      subject: inLocale("Your Meridian digest is ready", loc),
+      body: inLocale("Everything that changed in your scope, in one page: open Reports, then the digest.", loc),
+      entity: "digest", entityId: bucket,
+      dedupeKey: `digest:${u.user_id}:${bucket}`,
+    }) ? 1 : 0;
+  }
+
+  return { queued,
+    considered: actions.length + blocked.length + owed.length + concerns.length
+              + quiet.length + noWeek.length + readers.length };
 }
 
 /**
@@ -279,19 +437,15 @@ export async function deliver(send, { limit = 50 } = {}) {
          LEFT JOIN person p ON p.id = u.person_id
          LEFT JOIN site   s ON s.id = p.site_id
      )
-     SELECT n.id, n.email, n.subject, n.body
+     SELECT n.id, n.email, n.subject, n.body, n.kind, n.severity, n.user_id,
+            n.entity, n.entity_id,
+            coalesce(u.notify_pref, 'immediate') AS pref, l.at AS last_at
        FROM notification n
        LEFT JOIN app_user u ON u.id = n.user_id
        LEFT JOIN last_sent l ON l.user_id = n.user_id
        LEFT JOIN local q ON q.user_id = n.user_id
       WHERE n.state = 'queued'
         AND coalesce(u.notify_pref, 'immediate') <> 'off'
-        AND (
-          coalesce(u.notify_pref, 'immediate') = 'immediate'
-          OR l.at IS NULL
-          OR (u.notify_pref = 'daily'  AND l.at < now() - interval '1 day')
-          OR (u.notify_pref = 'weekly' AND l.at < now() - interval '7 days')
-        )
         AND (
           n.severity = 'urgent'
           OR q.quiet_from IS NULL
@@ -301,34 +455,103 @@ export async function deliver(send, { limit = 50 } = {}) {
                       ELSE q.hour >= q.quiet_from OR  q.hour < q.quiet_to
                  END
         )
-        /* Les abonnements décident enfin de quelque chose.
-           La table de 019 était écrite par l'écran et lue par personne :
-           un réglage qu'on offre sans le tenir coûte plus cher que de ne
-           pas l'offrir. La règle est celle que le comité a posée — un
-           abonnement règle ce qui SORT, jamais ce qu'on peut venir
-           chercher — donc le centre continue de tout recevoir, et seule
-           la remise se laisse filtrer.
-
-           Sans aucun abonnement, la préférence globale du compte
-           gouverne, comme avant : la finesse s'ajoute, elle ne devient
-           pas une obligation de configurer. */
-        AND (
-          NOT EXISTS (SELECT 1 FROM notification_subscription s0
-                       WHERE s0.user_id = n.user_id AND s0.active)
-          OR EXISTS (
-            SELECT 1 FROM notification_subscription s
-             WHERE s.user_id = n.user_id AND s.active
-               AND (s.kind = '*' OR s.kind = n.kind)
-               AND CASE s.min_severity
-                     WHEN 'urgent'    THEN n.severity = 'urgent'
-                     WHEN 'attention' THEN n.severity IN ('attention', 'urgent')
-                     ELSE true
-                   END
-          )
-        )
       ORDER BY n.at LIMIT $1`, [limit]);
+  if (!rows.length) return { sent: 0, failed: 0 };
+
+  /* Les abonnements décident enfin de TOUT ce qu'ils promettent.
+     La table de 019 offrait quatre réglages ; la remise n'en lisait que
+     deux — la nature et la gravité — et ignorait la portée et la cadence
+     par abonnement (O-1, docs/32). La règle du comité tient : un
+     abonnement règle ce qui SORT, jamais ce qu'on peut venir chercher —
+     le centre continue de tout recevoir. Sans aucun abonnement, la
+     préférence globale du compte gouverne, comme avant. */
+  const userIds = [...new Set(rows.map((r) => r.user_id).filter(Boolean))];
+  const subs = userIds.length ? await many(
+    `SELECT user_id, kind, scope_kind, scope_id, min_severity, cadence
+       FROM notification_subscription WHERE active AND user_id = ANY($1)`, [userIds]) : [];
+  const subsBy = new Map();
+  for (const s of subs) {
+    if (!subsBy.has(s.user_id)) subsBy.set(s.user_id, []);
+    subsBy.get(s.user_id).push(s);
+  }
+
+  /* La portée d'un message se lit sur ce dont il parle : l'entité est
+     ramenée à son projet, puis au programme et au site de celui-ci. Un
+     message sans projet (le digest, une relance de saisie) n'a pas de
+     portée : seule une portée « portefeuille » peut le couvrir. */
+  const ctx = new Map();   // notification id -> { project, programme, site }
+  const byEntity = {};
+  for (const r of rows) (byEntity[r.entity] ??= []).push(r);
+  const projectFor = new Map();   // notification id -> project id
+  const lookups = {
+    project: null,
+    meeting_action: "SELECT id, project_id FROM meeting_action WHERE id = ANY($1)",
+    meeting_decision: "SELECT id, project_id FROM meeting_decision WHERE id = ANY($1)",
+    raid_item: "SELECT id, project_id FROM raid_item WHERE id = ANY($1)",
+    document: "SELECT id, project_id FROM document WHERE id = ANY($1)",
+    project_exception: "SELECT id, project_id FROM project_exception WHERE id = ANY($1)",
+  };
+  for (const [entity, list] of Object.entries(byEntity)) {
+    if (entity === "project") { list.forEach((r) => projectFor.set(r.id, r.entity_id)); continue; }
+    if (entity === "site") { list.forEach((r) => ctx.set(r.id, { site: r.entity_id })); continue; }
+    const sql = lookups[entity];
+    if (!sql) continue;
+    const found = await many(sql, [[...new Set(list.map((r) => r.entity_id))]]);
+    const byId = new Map(found.map((f) => [String(f.id), f.project_id]));
+    list.forEach((r) => { const p = byId.get(String(r.entity_id)); if (p) projectFor.set(r.id, p); });
+  }
+  const projIds = [...new Set(projectFor.values())];
+  if (projIds.length) {
+    const projs = await many(
+      `SELECT id, programme_id, site_id FROM project WHERE id = ANY($1)`, [projIds]);
+    const byId = new Map(projs.map((p) => [p.id, p]));
+    for (const [nId, pId] of projectFor) {
+      const p = byId.get(pId);
+      if (p) ctx.set(nId, { project: p.id, programme: p.programme_id, site: p.site_id });
+    }
+  }
+
+  const sevOk = (min, sev) =>
+    min === "urgent" ? sev === "urgent"
+    : min === "attention" ? sev === "attention" || sev === "urgent"
+    : true;
+  const scopeMatch = (s, c) =>
+    s.scope_kind === "portfolio" ? true
+    : s.scope_kind === "project" ? c?.project === s.scope_id
+    : s.scope_kind === "site" ? c?.site === s.scope_id
+    : s.scope_kind === "programme" ? c?.programme === s.scope_id
+    : false;
+  const specificity = { project: 3, site: 2, programme: 2, portfolio: 1 };
+
+  /* La cadence se juge une fois par compte et par rythme, pour tout le
+     tour : un destinataire en différé reçoit un LOT par période, pas le
+     premier message de la file et le silence pour le reste. */
+  const allow = new Map();   // `${user}:${cadence}` -> boolean
+  const cadenceOk = (r, cadence) => {
+    if (cadence === "immediate") return true;
+    const key = `${r.user_id}:${cadence}`;
+    if (!allow.has(key)) {
+      const age = r.last_at ? Date.now() - new Date(r.last_at).getTime() : Infinity;
+      allow.set(key, age >= (cadence === "daily" ? 1 : 7) * 86400000);
+    }
+    return allow.get(key);
+  };
+
   let sent = 0, failed = 0;
   for (const m of rows) {
+    const mine = subsBy.get(m.user_id) ?? [];
+    let cadence = m.pref === "daily" || m.pref === "weekly" ? m.pref : "immediate";
+    if (mine.length) {
+      const c = ctx.get(m.id);
+      const matched = mine
+        .filter((s) => (s.kind === "*" || s.kind === m.kind)
+                    && sevOk(s.min_severity, m.severity)
+                    && scopeMatch(s, c))
+        .sort((a, b) => (specificity[b.scope_kind] ?? 0) - (specificity[a.scope_kind] ?? 0));
+      if (!matched.length) continue;   // abonné, et rien ne couvre ceci : ça reste au centre
+      cadence = matched[0].cadence ?? "immediate";
+    }
+    if (!cadenceOk(m, cadence)) continue;   // le lot de cette période est déjà parti
     try {
       await send({ to: m.email, subject: m.subject, body: m.body });
       await query(`UPDATE notification SET state='sent', sent_at=now() WHERE id=$1`, [m.id]);

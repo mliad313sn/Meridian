@@ -114,11 +114,17 @@ export async function sweepExceptions() {
          nous ramènerait exactement au problème de départ. */
       const to = setters.get(tol.setBy);
       if (to) {
+        /* docs/32 — cet appel a violé DEUX contraintes pendant tout le
+           temps où le catch le protégeait : la nature absente du CHECK
+           de 018 (élargie par 027) et dedupe_key NOT NULL, jamais
+           fournie. Personne n'a jamais été prévenu, et rien ne l'a dit. */
         await queue({
           userId: tol.setBy, email: to, kind: "tolerance-breached", severity: "attention",
           subject: `${p.name} has gone past the tolerance you set`,
           body: `${detail}.\n\nAnswer it: raise the tolerance, revise the plan, ` +
                 `accept the overrun, or stop the project.`,
+          entity: "project_exception", entityId: id,
+          dedupeKey: `exception:${id}`,
           groupKey: `exception:${id}`,
         }).catch(() => { /* la file ne doit jamais faire tomber le constat */ });
       }

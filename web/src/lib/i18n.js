@@ -877,6 +877,70 @@ export const FR = {
   "Restore": "Restaurer",
   "Restored from the trail": "Restauré depuis la piste",
   "Risk": "Risque",
+  /* O-6 (docs/32) — les natures RAID et les libellés de rôle, enfin
+     traduits. Les VALEURS stockées restent anglaises ; seul l'affichage
+     se traduit, comme partout ailleurs. */
+  "Issue": "Problème",
+  "Assumption": "Hypothèse",
+  "Dependency": "Dépendance",
+  "Viewer": "Lecteur",
+  "read-only": "lecture seule",
+  "no grants held": "aucune habilitation",
+  "Read-only": "Lecture seule",
+  "Read-only, inside the granted scope": "Lecture seule, dans le périmètre accordé",
+  "Everything, including users, grants and global settings":
+    "Tout, y compris les comptes, les habilitations et les réglages globaux",
+  "Portfolio-wide read; write inside the granted programmes":
+    "Lecture sur tout le portefeuille ; écriture dans les programmes accordés",
+  "Portfolio-wide read; write inside the granted programmes; money and baselines":
+    "Lecture sur tout le portefeuille ; écriture dans les programmes accordés ; l'argent et les références",
+  "Own sites plus group projects read-only; write own site projects":
+    "Ses sites plus les projets groupe en lecture seule ; écrit les projets de son site",
+  "Own sites plus group projects read-only; write site-governed projects only":
+    "Ses sites plus les projets groupe en lecture seule ; n'écrit que les projets gouvernés au site",
+  "Admin": "Admin",
+
+  /* O-1 (docs/32) — les heures de silence et les abonnements fins,
+     enfin à l'écran. */
+  "Quiet from (hour)": "Silence à partir de (heure)",
+  "Quiet until (hour)": "Silence jusqu'à (heure)",
+  "Read in your site's timezone. Nothing is lost — messages wait for morning; urgent passes.":
+    "Lues dans le fuseau de votre site. Rien n'est perdu — les messages attendent le matin ; l'urgent passe.",
+  "Quiet hours need both ends, or neither": "Les heures de silence exigent les deux bornes, ou aucune",
+  "Fine-grained subscriptions": "Abonnements fins",
+  "With none, the cadence above governs everything. With any, only what a subscription covers goes out by email — the centre always receives everything.":
+    "Sans aucun, la cadence ci-dessus gouverne tout. Avec, seul ce qu'un abonnement couvre part par courriel — le centre, lui, reçoit toujours tout.",
+  "Whole portfolio": "Tout le portefeuille",
+  "Everything": "Tout",
+  "Subscriptions": "Abonnements",
+
+  /* O-2 (docs/32) — le panneau des notifications nomme le vrai transport. */
+  "Queued messages are handed to the outbound webhook.":
+    "Les messages en file sont remis au webhook sortant.",
+  "Nothing is sent until the outbound webhook is configured: MERIDIAN_NOTIFY_URL, plus its host in the trusted webhook hosts setting. Until then this is what people would have been told — deliberately visible rather than silent.":
+    "Rien ne part tant que le webhook sortant n'est pas configuré : MERIDIAN_NOTIFY_URL, plus son hôte dans les hôtes de destination autorisés. D'ici là, voici ce que les gens auraient reçu — délibérément visible plutôt que silencieux.",
+
+  /* O-3 (docs/32) — les enseignements pertinents, proposés à la création. */
+  "Before you plan": "Avant de planifier",
+  "Adopted lessons from this programme and this site. Two minutes here is what the register is for.":
+    "Les enseignements adoptés de ce programme et de ce site. Deux minutes ici, c'est la raison d'être du registre.",
+  "Open the register": "Ouvrir le registre",
+  "Noted": "Bien noté",
+
+  /* O-4 (docs/32) — la fiche personne porte enfin la rotation et la
+     disponibilité que l'API acceptait depuis V-09. */
+  "Employment": "Statut",
+  "Staff": "Salarié",
+  "Contractor": "Prestataire",
+  "Rotation": "Rotation",
+  "Availability (%)": "Disponibilité (%)",
+  "Avail.": "Dispo.",
+  "Contractors only — who the day rate is paid to.":
+    "Prestataires seulement — à qui le taux journalier est versé.",
+  "\"4/2\", \"14/14\" — blank for an ordinary office roster. Informative: the capacity number below is what counts.":
+    "« 4/2 », « 14/14 » — vide pour un régime de bureau ordinaire. Informatif : c'est le nombre de disponibilité ci-dessous qui compte.",
+  "The fraction of a year actually available for project work, after rotation, leave and the day job. This is what the capacity arithmetic uses.":
+    "La fraction d'une année réellement disponible pour le travail projet, après rotation, congés et poste courant. C'est ce que l'arithmétique de capacité utilise.",
   "Risks": "Risques",
   "Rough cost (M)": "Coût approximatif (M)",
   "Score ": "Score ",
