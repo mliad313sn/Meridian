@@ -47,6 +47,11 @@ export const ACTIONS = [
   /* R-02 : déclarer une absence et son suppléant est un fait du site,
      comme le calendrier des arrêts. */
   "absence.write",
+  /* PM-02 : relever un enseignement est le travail de qui l'a vécu ;
+     décider qu'il vaut pour les huit sites ne l'est pas. L'adoption est
+     ce qui rend l'enseignement visible AILLEURS — sans elle, un registre
+     par site n'apprend rien à personne. */
+  "lesson.write", "lesson.adopt",
   // money
   "cost.write", "contingency.release",
   // change control
@@ -75,6 +80,10 @@ const GROUP_ONLY_WRITES = new Set([
   /* V-02: a period close is a portfolio-wide statement of what was
      reported. A site lead closes nothing on the group's behalf. */
   "period.close",
+  /* PM-02: adopting a lesson publishes it to all eight sites. Whoever
+     lived it proposes; the programme office decides it holds beyond the
+     project that produced it. Same independence as benefit.review. */
+  "lesson.adopt",
 ]);
 
 /** Admin-only, full stop. */
@@ -379,6 +388,13 @@ export function can(user, action, resource = {}) {
          portfolio-wide action with no resource.project fell through to
          the project-scoped default and was denied even for group. */
     case "period.close":
+    /* PM-02 — adopting a lesson publishes it portfolio-wide, and the
+       lesson may already have outlived its project (`ON DELETE SET
+       NULL`). Like `period.close`, it needs its own case: the
+       project-scoped default would refuse it for having no project in
+       scope. This is the latent trap the V-02 work named and that
+       `data.import` still carries. */
+    case "lesson.adopt":
       /* Portfolio-wide: there is no project to check, and the
          GROUP_ONLY_WRITES test above has already established group level
          or admin. Without this case it would fall to the project-scoped

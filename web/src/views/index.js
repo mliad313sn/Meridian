@@ -21,7 +21,7 @@ import { t, tData } from "../lib/i18n.js";
 import {
   Engine, D, iso, days, addDays, addMonths, workdays, startOfWeek, isoWeek,
   fmtDate, fmtDateLong, fmtMon, monthKey, money, signedMoney, cash, pct, idx,
-  clamp, sum, uniq, by, GATES, PHASES, RAID_TYPES, RESPONSES, DOC_TYPES,
+  clamp, sum, uniq, by, GATES, PHASES, RAID_TYPES, RESPONSES, DOC_TYPES, LESSON_CATEGORIES,
   RAG_LABEL, MONTHS, DAY,
 } from "../../../shared/engine.js";
 
@@ -342,6 +342,178 @@ Views.portfolio = (db) => {
 
    Rien ici n'est nominatif : des agrégats par site, jamais une personne.
    Mesurer l'usage d'un outil n'est pas surveiller ceux qui s'en servent. */
+/* ── PM-02 · le registre des enseignements ────────────────────────────
+   Le jalon 4 du produit exige comme preuve « lessons learned » et le
+   produit n'avait aucun endroit où les mettre. Cet écran est cet
+   endroit — et il est lisible par TOUT LE MONDE, y compris un lecteur
+   sans droit d'écriture, parce qu'un registre qu'on ne peut pas
+   consulter n'apprend rien à personne.
+
+   La colonne qui compte est la recommandation, pas le récit : c'est la
+   seule qu'on lit avant de recommencer la même erreur. */
+
+const lessonFilter = { category: "all", status: "all", q: "" };
+
+function lessonFields(db, l) {
+  const projects = App.scopedProjects().filter(mayWrite);
+  return [
+    { key: "project", label: t("Project"), type: "select", required: true,
+      /* Le projet ouvert n'est pas forcément un projet que ce compte peut
+         ÉCRIRE — un chef de site lit neuf projets et n'en écrit qu'un. Se
+         rabattre dessus laissait la liste sur une valeur absente de ses
+         options, donc un champ obligatoire vide qu'on ne pouvait pas
+         remplir sans comprendre pourquoi. */
+      value: l ? l.project
+        : (projects.some((p) => p.id === App.ui.project) ? App.ui.project : projects[0]?.id) ?? "",
+      hint: t("The project that lived it. The lesson keeps its programme and site even after that project is gone."),
+      options: projects.map((p) => ({ value: p.id, label: p.name })) },
+    { key: "category", label: t("Category"), type: "select", value: l ? l.category : "Governance",
+      hint: t("Where it will be looked for later — the area the next project will be worrying about."),
+      options: LESSON_CATEGORIES.map((c) => ({ value: c, label: t(c) })) },
+    { key: "outcome", label: t("What kind"), type: "select", value: l ? l.outcome : "Negative",
+      hint: t("What worked is worth recording as much as what failed — a register of failures alone is never re-read."),
+      options: [{ value: "Negative", label: t("Something to avoid") },
+                { value: "Positive", label: t("Something to repeat") }] },
+    { key: "gate", label: t("Raised at gate"), type: "select", value: l && l.gate ? String(l.gate) : "",
+      hint: t("Leave empty if it came up outside a gate, or at closure."),
+      options: [{ value: "", label: t("Not at a gate") },
+                ...GATES.map((g) => ({ value: String(g.n), label: g.name }))] },
+    { key: "title", label: t("In one sentence"), span: 2, required: true, value: l ? l.title : "",
+      hint: t("What someone scanning the register needs to recognise it by."),
+      placeholder: t("The local supplier delivers in eight weeks, not four") },
+    { key: "whatHappened", label: t("What happened"), type: "textarea", span: 2, rows: 2,
+      value: l ? l.whatHappened : "",
+      hint: t("The facts, dated where you can. Not who is to blame.") },
+    { key: "why", label: t("Why it happened"), type: "textarea", span: 2, rows: 2,
+      value: l ? l.why : "",
+      hint: t("The cause, not the symptom — this is the part that transfers to another site.") },
+    { key: "recommendation", label: t("What to do differently"), type: "textarea", span: 2, rows: 2,
+      value: l ? l.recommendation : "",
+      hint: t("Required before the group can adopt it. Without this, it is an anecdote.") },
+  ];
+}
+
+function newLesson(db) {
+  formDialog({
+    title: t("Record a lesson"), kicker: t("Lessons learned"),
+    fields: lessonFields(db, null), saveLabel: t("Record it"),
+    onSave: (v) => App.write("Lesson raised", (a) => a.post("/lessons", v)),
+  });
+}
+
+function editLesson(db, l) {
+  formDialog({
+    title: t("Correct a lesson"), kicker: l.id,
+    fields: lessonFields(db, l).filter((f) => f.key !== "project"),
+    saveLabel: t("Save"),
+    onSave: (v) => App.write("Lesson updated",
+      (a) => a.patch("/lessons/" + l.id, { ...v, version: l.version })),
+  });
+}
+
+async function adoptLesson(l, status) {
+  const ok = status !== "Adopted" || await confirmDialog({
+    title: t("Adopt this lesson?"),
+    message: t("It becomes readable at every site, including sites that cannot see the project it came from."),
+    detail: t("That is the point of adopting it — and it is why only the programme office can."),
+    confirmLabel: t("Adopt it"),
+  });
+  if (!ok) return;
+  await App.write("Lesson adopted",
+    (a) => a.post("/lessons/" + l.id + "/adopt", { status, version: l.version }));
+}
+
+Views.lessons = (db) => {
+  const all = db.lessons ?? [];
+  const q = lessonFilter.q.trim().toLowerCase();
+  const rows = all.filter((l) =>
+    (lessonFilter.category === "all" || l.category === lessonFilter.category) &&
+    (lessonFilter.status === "all" || l.status === lessonFilter.status) &&
+    (!q || (l.title + " " + l.recommendation + " " + l.why).toLowerCase().includes(q)));
+
+  const adopted = all.filter((l) => l.status === "Adopted");
+  const proposed = all.filter((l) => l.status === "Proposed");
+  const mayAdopt = App.can("lesson.adopt", {});
+
+  return h("div", null,
+    kpiStrip([
+      { label: t("Adopted"), value: String(adopted.length),
+        note: t("readable at every site") },
+      { label: t("Waiting on the programme office"), value: String(proposed.length),
+        note: proposed.length ? t("proposed, not yet published") : t("nothing waiting"),
+        accent: proposed.length > 0 },
+      { label: t("Worth repeating"), value: String(adopted.filter((l) => l.outcome === "Positive").length),
+        note: t("of the adopted ones") },
+    ]),
+
+    sectionHead(t("Lessons learned"),
+      t("Gate 4 asks for these as evidence. This is where they live."),
+      App.scopedProjects().some(mayWrite)
+        ? h("button", { class: "btn btn-sm", onClick: () => newLesson(db) },
+            icon("plus", 12), t("Record a lesson"))
+        : null),
+
+    h("div", { style: "display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px" },
+      selectField(t("Category"), lessonFilter.category,
+        [{ value: "all", label: t("All categories") },
+         ...LESSON_CATEGORIES.map((c) => ({ value: c, label: t(c) }))],
+        (v) => { lessonFilter.category = v; App.emit(); }),
+      selectField(t("Status"), lessonFilter.status,
+        [{ value: "all", label: t("All") },
+         { value: "Proposed", label: t("Proposed") },
+         { value: "Adopted", label: t("Adopted") },
+         { value: "Archived", label: t("Archived") }],
+        (v) => { lessonFilter.status = v; App.emit(); }),
+      searchBox(lessonFilter.q, t("Search the register"),
+        (v) => { lessonFilter.q = v; App.emit(); })),
+
+    sortableTable({
+      rows,
+      empty: all.length
+        ? t("No lesson matches those filters.")
+        : t("Nothing recorded yet. The first one usually comes out of a gate review."),
+      cols: [
+        { key: "what", label: t("Lesson"), sort: (l) => l.title,
+          get: (l) => h("div", null,
+            h("div", { class: "strong small" }, l.title),
+            h("div", { class: "xs muted" },
+              (l.project ? l.project + " · " : "") + (l.site ?? "") +
+              (l.gate ? " · " + t("gate") + " " + l.gate : ""))) },
+        { key: "category", label: t("Category"), align: "c", sort: (l) => l.category,
+          get: (l) => tag(t(l.category), "tag-ink") },
+        { key: "outcome", label: t("Kind"), align: "c", sort: (l) => l.outcome,
+          get: (l) => l.outcome === "Positive"
+            ? tag(t("Repeat"), "tag-green")
+            : tag(t("Avoid"), "tag-amber") },
+        /* La colonne qu'on lit vraiment. Elle est large à dessein. */
+        { key: "rec", label: t("What to do differently"), sort: (l) => l.recommendation,
+          get: (l) => h("div", { class: "small", style: "max-width:52ch" },
+            l.recommendation || h("span", { class: "xs muted" },
+              t("no recommendation — cannot be adopted"))) },
+        { key: "status", label: t("Status"), align: "c", sort: (l) => l.status,
+          get: (l) => l.status === "Adopted"
+            ? tag(t("Adopted"), "tag-green")
+            : l.status === "Archived" ? tag(t("Archived"), "tag-out")
+            : tag(t("Proposed"), "tag-amber") },
+        { key: "do", label: "", align: "r", get: (l) => h("div", { class: "btn-row" },
+            /* Le projet d'origine n'est nommé que s'il est visible ;
+               hors périmètre il vaut null, et il n'y a rien à corriger. */
+            l.project && mayWrite(db.projects.find((p) => p.id === l.project) ?? {})
+              ? h("button", { class: "btn btn-xs", onClick: () => editLesson(db, l) },
+                  icon("pencil", 11))
+              : null,
+            mayAdopt && l.status === "Proposed"
+              ? h("button", { class: "btn btn-xs", onClick: () => adoptLesson(l, "Adopted") },
+                  t("Adopt"))
+              : null,
+            mayAdopt && l.status === "Adopted"
+              ? h("button", { class: "btn btn-xs", onClick: () => adoptLesson(l, "Archived") },
+                  t("Archive"))
+              : null) },
+      ],
+    }));
+};
+
 const adoptionData = () => liveFetch("adoption", () => api.get("/adoption?days=30"), (r) => [r]);
 
 Views.adoption = () => {

@@ -189,6 +189,10 @@ export const App = {
     "Document approved": ["docs"], "Document in review": ["docs"],
     "Absence declared": ["absences"], "Absence withdrawn": ["absences"],
     "Window declared": ["windows"], "Window withdrawn": ["windows"],
+    /* PM-02 — le registre est une collection comme une autre ; adopter
+       change une ligne, pas le portefeuille. */
+    "Lesson raised": ["lessons"], "Lesson updated": ["lessons"],
+    "Lesson removed": ["lessons"], "Lesson adopted": ["lessons"],
   },
 
   async write(label, work, { detail, quiet, refresh = true, touch = null, rethrow = false } = {}) {
@@ -351,7 +355,7 @@ export function reportError(e, context) {
 export const ROUTES = [
   "my", "inbox", "portfolio", "roadmap", "pipeline", "programmes", "mysite", "project",
   "schedule", "board", "risk", "budget", "change", "resources", "meetings",
-  "documents", "reports", "locations", "adoption", "admin",
+  "documents", "reports", "lessons", "locations", "adoption", "admin",
 ];
 
 /* Views an account has no use for are absent from the navigation (R7.3),

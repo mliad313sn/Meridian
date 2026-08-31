@@ -16,7 +16,7 @@ import { audited, readAudit, record } from "../audit.js";
 import { HttpError } from "../auth.js";
 import { loadPortfolio, projectFor, fromM, toM, loadSettings } from "../portfolio.js";
 import { adoptionBySite } from "../adoption.js";
-import { Engine, GATES, PHASES, iso, addDays, days, D } from "../../../shared/engine.js";
+import { Engine, GATES, PHASES, LESSON_CATEGORIES, iso, addDays, days, D } from "../../../shared/engine.js";
 import { scaffoldProject, reschedule, phaseFor } from "../wbs.js";
 
 
@@ -1828,6 +1828,183 @@ r.patch("/projects/:id/review", async (req, res, next) => {
         { pir_verdict: verdict, pir_note: verdict ? note : "",
           pir_on: verdict ? iso(new Date()) : null })));
     res.json({ version: out.version });
+  } catch (e) { next(e); }
+});
+
+/* ── lessons (PM-02) ──────────────────────────────────────────────────
+ *
+ * Le jalon 4 du produit exige comme preuve « Realisation report, lessons
+ * learned » et le produit n'avait aucun endroit où mettre un
+ * enseignement : il réclamait une pièce qu'il rendait impossible à
+ * fournir. ISO 21502 §7.17 et PRINCE2 « apprendre de l'expérience »
+ * demandent la même chose, pour la raison que huit sites connaissent —
+ * sans registre, la même erreur se paie une fois par site.
+ *
+ * Qui l'a vécu propose ; le groupe adopte. L'adoption n'est pas une
+ * formalité : c'est elle qui rend l'enseignement visible AUX AUTRES
+ * sites, et un registre qui ne sort pas de son projet n'apprend rien à
+ * personne.
+ */
+
+r.post("/lessons", async (req, res, next) => {
+  try {
+    const b = req.body ?? {};
+    const p = await project(b.project, req.user);
+    gate(req.user, "lesson.write", { project: p });
+    assertLocalOrigin(p, "project");
+    if (!b.title) bad("A lesson needs a title");
+    if (b.category && !LESSON_CATEGORIES.includes(b.category)) bad("That is not a lesson category");
+    const gateN = b.gate === undefined || b.gate === null || b.gate === "" ? null : Number(b.gate);
+    if (gateN !== null && !(gateN >= 1 && gateN <= 4)) bad("A gate is 1, 2, 3 or 4");
+
+    let id = null;
+    await audited(req.user,
+      () => ({ action: "Lesson raised", entity: "lesson", entityId: id,
+               detail: `${b.category ?? "Governance"} — ${b.title}` }),
+      async (t) => {
+        id = await allocateId(t, "LSN", { pad: 3 });
+        /* Le programme et le site sont COPIÉS depuis le projet, pas lus
+           par jointure : l'enseignement doit rester classable le jour où
+           le projet n'est plus là. C'est sa seule raison d'être. */
+        return t.query(
+          `INSERT INTO lesson
+             (id, project_id, programme_id, site_id, gate_n, category, title,
+              what_happened, why, recommendation, outcome, raised_by)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+          [id, p.id, p.programme_id, p.site_id, gateN,
+           b.category ?? "Governance", b.title,
+           b.whatHappened ?? "", b.why ?? "", b.recommendation ?? "",
+           b.outcome === "Positive" ? "Positive" : "Negative",
+           req.user.personId ?? null]);
+      });
+    res.status(201).json({ id });
+  } catch (e) { next(e); }
+});
+
+r.patch("/lessons/:id", async (req, res, next) => {
+  try {
+    const row = await one(`SELECT * FROM lesson WHERE id = $1`, [req.params.id]);
+    if (!row) throw new HttpError(404, "No such lesson");
+    const p = await project(row.project_id, req.user);
+    gate(req.user, "lesson.write", { project: p });
+    const b = req.body ?? {};
+
+    const patch = {};
+    if (b.category !== undefined) {
+      if (!LESSON_CATEGORIES.includes(b.category)) bad("That is not a lesson category");
+      patch.category = b.category;
+    }
+    if (b.title !== undefined) patch.title = b.title;
+    if (b.whatHappened !== undefined) patch.what_happened = b.whatHappened;
+    if (b.why !== undefined) patch.why = b.why;
+    if (b.recommendation !== undefined) patch.recommendation = b.recommendation;
+    if (b.outcome !== undefined) patch.outcome = b.outcome === "Positive" ? "Positive" : "Negative";
+    if (b.gate !== undefined) {
+      const g = b.gate === null || b.gate === "" ? null : Number(b.gate);
+      if (g !== null && !(g >= 1 && g <= 4)) bad("A gate is 1, 2, 3 or 4");
+      patch.gate_n = g;
+    }
+    /* `status` n'entre pas par ici. Adopter est un acte du groupe et il a
+       sa route ; laisser une modification ordinaire changer le statut,
+       c'est laisser celui qui a écrit l'enseignement décider qu'il vaut
+       pour les huit sites. */
+    if (b.status !== undefined) {
+      bad("A lesson is adopted or archived through its own route, not by editing it");
+    }
+
+    const out = await audited(req.user,
+      { action: "Lesson updated", entity: "lesson", entityId: row.id,
+        detail: b.title ?? row.title,
+        before: { title: row.title, recommendation: row.recommendation },
+        after: { title: patch.title ?? row.title,
+                 recommendation: patch.recommendation ?? row.recommendation } },
+      async (t) => conflict(await updateVersioned(t, "lesson", row.id,
+        requiredVersion(b, "lesson"), patch)));
+    res.json({ version: out.version });
+  } catch (e) { next(e); }
+});
+
+/**
+ * Adoption — l'acte qui publie l'enseignement au groupe entier, ou qui
+ * le range. Réservé au niveau groupe (`lesson.adopt` est dans
+ * GROUP_ONLY_WRITES) : la même indépendance que la revue de bénéfice.
+ * Celui qui a vécu la chose la raconte ; quelqu'un d'autre décide
+ * qu'elle vaut au-delà de son projet.
+ */
+r.post("/lessons/:id/adopt", async (req, res, next) => {
+  try {
+    const row = await one(`SELECT * FROM lesson WHERE id = $1`, [req.params.id]);
+    if (!row) throw new HttpError(404, "No such lesson");
+    gate(req.user, "lesson.adopt", {});
+
+    const status = req.body?.status ?? "Adopted";
+    if (!["Adopted", "Archived", "Proposed"].includes(status)) {
+      bad("A lesson is Proposed, Adopted or Archived");
+    }
+    if (status === "Adopted" && !row.recommendation) {
+      /* Un enseignement sans recommandation est une anecdote. On peut la
+         garder au projet ; on ne la publie pas aux huit sites. */
+      bad("A lesson without a recommendation cannot be adopted — say what someone should do differently");
+    }
+
+    const out = await audited(req.user,
+      { action: status === "Adopted" ? "Lesson adopted" : `Lesson set to ${status.toLowerCase()}`,
+        entity: "lesson", entityId: row.id, detail: row.title,
+        before: { status: row.status }, after: { status } },
+      async (t) => conflict(await updateVersioned(t, "lesson", row.id,
+        requiredVersion(req.body, "lesson"),
+        { status,
+          adopted_by: status === "Adopted" ? req.user.id : null,
+          adopted_on: status === "Adopted" ? iso(new Date()) : null })));
+    res.json({ version: out.version });
+  } catch (e) { next(e); }
+});
+
+r.delete("/lessons/:id", async (req, res, next) => {
+  try {
+    const row = await one(`SELECT * FROM lesson WHERE id = $1`, [req.params.id]);
+    if (!row) throw new HttpError(404, "No such lesson");
+    gate(req.user, "lesson.write", { project: await project(row.project_id, req.user) });
+    /* Un enseignement adopté a été publié au groupe : on l'archive, on ne
+       l'efface pas. Effacer ce que d'autres ont lu et appliqué serait
+       réécrire l'histoire, ce que ce produit refuse partout ailleurs. */
+    if (row.status === "Adopted") {
+      bad("An adopted lesson is archived, not deleted — others have read it");
+    }
+    await audited(req.user,
+      { action: "Lesson removed", entity: "lesson", entityId: row.id,
+        detail: row.title, before: { ...row } },
+      async (t) => t.query(`DELETE FROM lesson WHERE id = $1`, [row.id]));
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
+/**
+ * « Qu'a-t-on appris qui vaille pour CE projet ? » — la question qui
+ * justifie le registre. Les enseignements adoptés du même programme ou
+ * du même site, le projet lui-même exclu. Sans cette route, le registre
+ * serait une archive que personne n'ouvre au bon moment.
+ */
+r.get("/projects/:id/lessons/relevant", async (req, res, next) => {
+  try {
+    const p = await project(req.params.id, req.user);
+    const rows = await many(
+      `SELECT * FROM lesson
+        WHERE status = 'Adopted'
+          AND project_id IS DISTINCT FROM $1
+          AND (programme_id = $2 OR site_id = $3)
+        ORDER BY outcome, raised_on DESC
+        LIMIT 25`,
+      [p.id, p.programme_id, p.site_id]);
+    res.json({
+      lessons: rows.map((l) => ({
+        id: l.id, category: l.category, title: l.title, outcome: l.outcome,
+        recommendation: l.recommendation, why: l.why,
+        programme: l.programme_id, site: l.site_id, raisedOn: l.raised_on,
+        sameProgramme: l.programme_id === p.programme_id,
+        sameSite: l.site_id === p.site_id,
+      })),
+    });
   } catch (e) { next(e); }
 });
 

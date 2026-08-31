@@ -82,6 +82,11 @@ export const GATES = [
 export const PHASES = ["Initiation", "Design", "Execution", "Transition", "Closure", "Closed"];
 export const RAID_TYPES = ["Risk", "Issue", "Assumption", "Dependency"];
 export const RESPONSES = ["Mitigate", "Avoid", "Transfer", "Accept", "Monitor", "Fix"];
+/* PM-02 — où l'on ira CHERCHER un enseignement plus tard. Les onze
+   domaines d'ISO 21502 §7, parce que c'est le vocabulaire dans lequel la
+   question se posera : « qu'a-t-on appris sur les achats ? ». */
+export const LESSON_CATEGORIES = ["Scope", "Schedule", "Cost", "Risk", "Quality",
+  "Resources", "Stakeholders", "Procurement", "Governance", "Technical", "Transition"];
 export const DOC_TYPES = ["Charter","Business case","Design","Assurance","Quality","Operations","Compliance","Closure","Finance"];
 export const RAG_LABEL = { G: "Green", A: "Amber", R: "Red" };
 

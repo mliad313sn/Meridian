@@ -58,8 +58,8 @@ const NAV = [
     ["change", "Change requests"], ["resources", "Resources"]] },
   { label: "Govern", items: [["meetings", "Meetings"]] },
   { label: "Record", items: [
-    ["documents", "Documents"], ["reports", "Reports"], ["locations", "Locations"],
-    ["adoption", "Adoption"]] },
+    ["documents", "Documents"], ["reports", "Reports"], ["lessons", "Lessons"],
+    ["locations", "Locations"], ["adoption", "Adoption"]] },
   { label: "System", items: [["admin", "Administration"]] },
 ];
 
@@ -82,6 +82,7 @@ const TITLES = {
   documents: ["Record", "Document library"],
   reports: ["Record", "Status reporting"],
   locations: ["Record", "Delivery locations"],
+  lessons: ["Record", "Lessons learned"],
   adoption: ["Record", "How the tool is used"],
   admin: ["System", "Governance & administration"],
 };

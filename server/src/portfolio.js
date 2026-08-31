@@ -105,7 +105,7 @@ export async function loadPortfolio(user) {
   const [
     activities, deps, milestones, ledger, raidRows, crRows, stepRows,
     allocations, docs, columns, items, crossDeps, narrativeRows, extLinks,
-    benefits, waves, commitments, timesheets,
+    benefits, waves, commitments, timesheets, lessonRows,
   ] = await Promise.all([
     inScope(`SELECT * FROM activity WHERE project_id = ANY($1) ORDER BY project_id, stage`),
     inScope(`SELECT d.* FROM activity_dep d JOIN activity a ON a.id = d.activity_id
@@ -144,6 +144,17 @@ export async function loadPortfolio(user) {
     inScope(`SELECT * FROM commitment WHERE project_id = ANY($1) ORDER BY raised_on DESC, id`),
     // the actual effort, one number a week (016 / R-03)
     inScope(`SELECT * FROM timesheet WHERE project_id = ANY($1) ORDER BY week_start DESC`),
+    /* PM-02 — les enseignements. Seule collection du livre qui n'est PAS
+       bornée aux projets visibles, et c'est délibéré : un enseignement
+       ADOPTÉ est une connaissance de groupe, sinon un site n'apprend
+       jamais de ce qu'un autre a vécu et le registre ne sert à rien.
+       Ce qui reste borné, c'est ce qu'il RÉVÈLE : hors périmètre,
+       l'enseignement se lit et le projet dont il vient ne se nomme pas
+       (voir le sérialiseur). R1.10 tient : l'existence d'un projet
+       hors périmètre n'est toujours pas divulguée. */
+    many(`SELECT * FROM lesson
+           WHERE status = 'Adopted' OR project_id = ANY($1)
+           ORDER BY raised_on DESC, id`, [ids]),
   ]);
 
   const depsByActivity = new Map();
@@ -283,6 +294,24 @@ export async function loadPortfolio(user) {
       id: String(x.id), person: x.person_id, project: x.project_id,
       week: x.week_start, days: Number(x.days), enteredBy: x.entered_by,
       version: x.row_version,
+    })),
+
+    /* PM-02 — ce qu'on a appris, et qui doit survivre au projet.
+       `project` n'est renseigné que si le lecteur voit déjà ce projet :
+       un enseignement adopté circule dans tout le groupe, mais il ne
+       sert pas de canal pour apprendre l'existence d'un projet qu'on
+       n'a pas le droit de voir (R1.10). Le programme et le site, eux,
+       sont de la donnée de référence que tout le monde lit déjà. */
+    lessons: lessonRows.map((l) => ({
+      id: l.id,
+      project: idSet.has(l.project_id) ? l.project_id : null,
+      programme: l.programme_id, site: l.site_id, gate: l.gate_n,
+      category: l.category, title: l.title,
+      whatHappened: l.what_happened, why: l.why,
+      recommendation: l.recommendation, outcome: l.outcome,
+      raisedBy: l.raised_by, raisedOn: l.raised_on,
+      status: l.status, adoptedBy: l.adopted_by, adoptedOn: l.adopted_on,
+      version: l.row_version,
     })),
 
     /* Money promised and not yet spent (V-05). */
