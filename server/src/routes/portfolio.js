@@ -473,6 +473,26 @@ r.post("/cost", async (req, res, next) => {
 
     if (b.fromContingency) gate(req.user, "contingency.release", { project: p });
 
+    /* PM-06 — la provision est, comptablement, la somme des risques qu'on
+       a accepté de porter. Un tirage nomme donc le risque qu'il finance,
+       DÈS QU'il y a un risque ouvert à nommer : on ne bloque pas le
+       projet sans registre, on bloque le tirage qui refuse de dire son
+       nom quand il le pourrait. */
+    let riskId = null;
+    if (b.fromContingency) {
+      const openRisks = await many(
+        `SELECT id, title FROM raid_item
+          WHERE project_id = $1 AND kind = 'Risk' AND status = 'Open'`, [p.id]);
+      if (b.risk) {
+        const hit = openRisks.find((r) => r.id === b.risk);
+        if (!hit) bad("That risk is not an open risk on this project");
+        riskId = hit.id;
+      } else if (openRisks.length) {
+        bad("A contingency draw names the risk it answers — this project has " +
+            openRisks.length + " open risk(s) to choose from");
+      }
+    }
+
     await audited(req.user,
       { action: b.fromContingency ? "Contingency released" : "Cost booked",
         entity: "project", entityId: p.id,
@@ -480,8 +500,8 @@ r.post("/cost", async (req, res, next) => {
       async (t) => {
         await t.query(
           `INSERT INTO cost_line (project_id, period, booked_on, amount, category, note,
-                                  from_contingency, created_by, kind, currency, fx_rate, amount_local)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+                                  from_contingency, created_by, kind, currency, fx_rate, amount_local, risk_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
           [p.id, period, b.date ?? period + "-01", fromM(amount),
            b.category ?? "Labour", b.note ?? "", !!b.fromContingency, req.user.id,
            /* V-05 — capex or opex, and the currency it was actually spent
@@ -489,7 +509,8 @@ r.post("/cost", async (req, res, next) => {
               history cannot be reconciled to anything. */
            b.kind === "opex" ? "opex" : "capex",
            (b.currency || "USD").toUpperCase(), num(b.fx, 1),
-           b.amountLocal === undefined || b.amountLocal === "" ? null : fromM(num(b.amountLocal))]);
+           b.amountLocal === undefined || b.amountLocal === "" ? null : fromM(num(b.amountLocal)),
+           riskId]);
         if (b.fromContingency) {
           const row = await t.query(
             `SELECT contingency, contingency_used FROM project WHERE id = $1`, [p.id]);
@@ -751,11 +772,15 @@ r.post("/raid", async (req, res, next) => {
         id = await allocateId(t, prefix, { pad: 2 });
         return t.query(
           `INSERT INTO raid_item
-             (id, project_id, kind, title, detail, probability, impact, status, response, owner_id, opened_on, review_on, origin_site)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,'Open',$8,$9,CURRENT_DATE,$10,$11)`,
+             (id, project_id, kind, title, detail, probability, impact, status, response, owner_id, opened_on, review_on, origin_site,
+              target_probability, target_impact)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,'Open',$8,$9,CURRENT_DATE,$10,$11,$12,$13)`,
           [id, b.project || null, kind, b.title, b.detail ?? "",
            Math.max(1, Math.min(5, num(b.p, 3))), Math.max(1, Math.min(5, num(b.i, 3))),
-           b.response ?? "Monitor", b.owner ?? null, b.review ?? null, originSite]);
+           b.response ?? "Monitor", b.owner ?? null, b.review ?? null, originSite,
+           /* PM-06 — la cible résiduelle dès la levée, quand elle est connue. */
+           b.tp === undefined || b.tp === "" || b.tp === null ? null : Math.max(1, Math.min(5, num(b.tp))),
+           b.ti === undefined || b.ti === "" || b.ti === null ? null : Math.max(1, Math.min(5, num(b.ti)))]);
       });
     res.status(201).json({ id });
   } catch (e) { next(e); }
@@ -777,6 +802,12 @@ r.patch("/raid/:id", async (req, res, next) => {
     if (b.detail !== undefined) patch.detail = b.detail;
     if (b.p !== undefined) patch.probability = Math.max(1, Math.min(5, num(b.p)));
     if (b.i !== undefined) patch.impact = Math.max(1, Math.min(5, num(b.i)));
+    /* PM-06 — la cible résiduelle, sur la même échelle que le constat :
+       comparer exige la même règle. Vide = pas de cible, jamais zéro. */
+    if (b.tp !== undefined) patch.target_probability =
+      b.tp === "" || b.tp === null ? null : Math.max(1, Math.min(5, num(b.tp)));
+    if (b.ti !== undefined) patch.target_impact =
+      b.ti === "" || b.ti === null ? null : Math.max(1, Math.min(5, num(b.ti)));
     if (b.status !== undefined) patch.status = b.status === "Closed" ? "Closed" : "Open";
     if (b.response !== undefined) patch.response = b.response;
     if (b.owner !== undefined) patch.owner_id = b.owner || null;

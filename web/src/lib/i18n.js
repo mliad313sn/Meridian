@@ -154,6 +154,15 @@ export const FR = {
   "Locations": "Sites",
   "Administration": "Administration",
 
+  /* PM-06 · le risque résiduel et la provision nommée */
+  "Required for a contingency draw when the project has open risks — the committee reads what the reserve was spent against.": "Exigé pour un tirage de provision quand le projet a des risques ouverts — le comité lit contre quoi la réserve a été dépensée.",
+  "Risk this draw answers": "Risque que ce tirage finance",
+  "Target impact (1–5)": "Impact cible (1–5)",
+  "Target probability (1–5)": "Probabilité cible (1–5)",
+  "Where the response is meant to take the probability. Leave empty for Accept or Monitor.": "Là où la réponse doit amener la probabilité. Vide pour Accepter ou Surveiller.",
+  "Without a target, whether the mitigation worked is a matter of memory.": "Sans cible, savoir si la mitigation a servi est une affaire de mémoire.",
+  "— not a contingency draw, or no open risk —": "— pas un tirage de provision, ou aucun risque ouvert —",
+
   /* PM-03 · le cas d'affaire */
   ", revised ": ", révisé le ",
   "A figure with its basis can be checked; a figure without one can only be argued with.": "Un chiffre avec sa base se vérifie ; un chiffre sans base ne peut que se discuter.",

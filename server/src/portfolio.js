@@ -116,7 +116,7 @@ export async function loadPortfolio(user) {
        mis-posting could not be corrected, which is the whole reason the
        ledger is append-only in the first place. */
     inScope(`SELECT id, project_id, period, booked_on, amount, category, note,
-                    from_contingency, created_by, kind, currency, fx_rate, amount_local
+                    from_contingency, created_by, kind, currency, fx_rate, amount_local, risk_id
                FROM cost_line WHERE project_id = ANY($1)
               ORDER BY period, id`),
     // portfolio-wide RAID (project_id NULL) is visible to everyone in the book
@@ -294,6 +294,8 @@ export async function loadPortfolio(user) {
       bookedOn: l.booked_on, amount: toM(l.amount),
       category: l.category, note: l.note,
       fromContingency: l.from_contingency, createdBy: l.created_by,
+      /* PM-06 — le risque que ce tirage finance. */
+      risk: l.risk_id ?? null,
       // capex or opex, and what was actually spent before conversion (V-05)
       kind: l.kind ?? "capex", currency: l.currency ?? "USD",
       fx: l.fx_rate === null ? 1 : Number(l.fx_rate),
@@ -378,6 +380,11 @@ export async function loadPortfolio(user) {
       .map((r) => ({
         id: r.id, project: r.project_id, type: r.kind, title: r.title, detail: r.detail,
         p: r.probability, i: r.impact, status: r.status, response: r.response,
+        /* PM-06 — ce que la réponse est censée OBTENIR. Nul quand la
+           stratégie est Accept/Monitor : un constat assumé n'a pas de
+           cible, et forcer un chiffre inventé serait une fausse
+           assurance. */
+        tp: r.target_probability, ti: r.target_impact,
         owner: r.owner_id, opened: r.opened_on, review: r.review_on,
         originSite: r.origin_site ?? null,   // a site concern names its raising site
         version: r.row_version,

@@ -121,6 +121,7 @@ Tenu à jour par la boucle, à la source, comme le relevé de clôture de
 | I18N-01 | 29 | **close 31/08** | registre de langues client+serveur, contrainte de forme (027), cycle exercé au navigateur |
 | MC-01 | 29 | **close 31/08** | pays ISO + entité légale sur le site, 027, dialogue exercé (« br » → BR) |
 | SaaS-02 | 29 | **close 31/08** | migrate() refuse une base plus récente que le binaire, en nommant les migrations inconnues — le piège 023, fermé à la racine |
+| PM-06 | R4 | **close 31/08** | 030 · cible résiduelle sur le RAID · le tirage de provision nomme son risque · 6 tests · deux tests d'ancien monde mis au niveau, en le disant |
 
 *(les lignes de R4 et R5 sont reportées ici au fur et à mesure qu'elles
 entrent en travail)*

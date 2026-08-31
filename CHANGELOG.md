@@ -22,6 +22,31 @@ Nothing yet.
 
 ---
 
+## [5.6.0] — 2026-08-31
+
+### Added
+
+- **Residual risk, and contingency that names its risk** (PM-06,
+  migration `030`). The RAID register held probability, impact and the
+  response *strategy* — never what the response is meant to **achieve**.
+  Without a residual target, "did the mitigation work?" is answered from
+  memory. And contingency was drawn anonymously: a committee asking "what
+  was the reserve spent against?" had nothing to read. Now every risk may
+  carry a target P×I on the same 1–5 scale (nullable — Accept has no
+  target, it has an accepted finding, and forcing an invented number
+  would be false assurance), and a contingency draw **must name the open
+  risk it answers** whenever there is one to name. The ledger keeps the
+  link line by line.
+
+### Changed
+
+- Two existing tests drew contingency without naming a risk. That was
+  the old world; the rule is deliberate, so the tests were brought up to
+  it — openly, not weakened: what they verified (reversal, the ceiling)
+  is intact, they simply draw the way the product now accepts.
+
+---
+
 ## [5.5.0] — 2026-08-31
 
 **R3 — “conformant, and connectable” — is pronounced.** All six lines of

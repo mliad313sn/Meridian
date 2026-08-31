@@ -2364,6 +2364,15 @@ function raidFields(db, r, projectId) {
     { hint: t("What somebody picking this up would need to know before starting."),
       key: "detail", label: "Detail", type: "textarea", span: 2, rows: 3, value: r ? r.detail : "", advanced: true },
     { key: "response", label: "Response", type: "select", value: r ? r.response : "Mitigate", options: RESPONSES, advanced: true },
+    /* PM-06 — ce que la réponse est censée OBTENIR, sur la même échelle
+       que le constat. Vide pour Accept/Monitor : un constat assumé n'a
+       pas de cible, et un chiffre inventé serait une fausse assurance. */
+    { key: "tp", label: t("Target probability (1–5)"), type: "number", min: 1, max: 5,
+      value: r && r.tp != null ? r.tp : "", advanced: true,
+      hint: t("Where the response is meant to take the probability. Leave empty for Accept or Monitor.") },
+    { key: "ti", label: t("Target impact (1–5)"), type: "number", min: 1, max: 5,
+      value: r && r.ti != null ? r.ti : "", advanced: true,
+      hint: t("Without a target, whether the mitigation worked is a matter of memory.") },
     { key: "owner", label: "Owner", type: "select", value: r ? r.owner : db.currentUser, options: db.people.map(p => ({ value: p.id, label: p.name })), advanced: true },
     { key: "review", label: "Next review", type: "date", value: r ? r.review : iso(addDays(db.statusDate, 14)), span: 2, advanced: true },
   ];
@@ -3780,13 +3789,23 @@ function bookCost(db, p) {
       { key: "amount", label: "Amount ($M)", type: "number", step: 0.01, required: true, value: 0.1 },
       { key: "contingency", label: "Draw from contingency", type: "checkbox", span: 2,
         hint: t("Contingency draws are reported separately from the approved envelope.") },
+      /* PM-06 — la provision est la somme des risques qu'on a accepté de
+         porter ; un tirage anonyme casse ce lien. Le serveur l'exige dès
+         qu'un risque ouvert existe. */
+      { key: "risk", label: t("Risk this draw answers"), type: "select", span: 2,
+        value: "",
+        hint: t("Required for a contingency draw when the project has open risks — the committee reads what the reserve was spent against."),
+        options: [{ value: "", label: t("— not a contingency draw, or no open risk —") }]
+          .concat((db.raid ?? [])
+            .filter((x) => x.project === p.id && x.type === "Risk" && x.status === "Open")
+            .map((x) => ({ value: x.id, label: x.id + " · " + x.title }))) },
       { hint: t("The committee reads this back when it asks why the figure moved."),
         key: "note", label: "Note", span: 2, value: "" },
     ],
     saveLabel: "Book cost",
     onSave: (v) => App.write("Cost booked", (a) => a.post("/cost", {
       project: p.id, amount: +v.amount, period: v.period,
-      note: v.note, fromContingency: !!v.contingency,
+      note: v.note, fromContingency: !!v.contingency, risk: v.risk || undefined,
     }), { detail: cash(+v.amount) + (v.contingency ? " from contingency" : "") + " on " + p.id }),
   });
 }

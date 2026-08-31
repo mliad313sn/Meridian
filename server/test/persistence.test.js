@@ -32,7 +32,7 @@ describe("schema and migrations (R2.2, R2.7)", () => {
        "016_timesheet.sql", "017_absence_minimisation.sql",
        "018_notification_centre.sql", "019_notification_subscription.sql",
        "020_evidence_probe.sql", "021_usage_counters.sql",
-       "022_site_champion.sql", "023_session_digest.sql", "024_lessons.sql", "025_integrations.sql", "026_tolerance.sql", "027_international.sql", "028_business_case.sql", "029_reporting_views.sql"]);
+       "022_site_champion.sql", "023_session_digest.sql", "024_lessons.sql", "025_integrations.sql", "026_tolerance.sql", "027_international.sql", "028_business_case.sql", "029_reporting_views.sql", "030_residual_risk.sql"]);
     const again = await migrate({ silent: true });
     assert.deepEqual(again, [], "a second run applies nothing");
   });
@@ -122,8 +122,12 @@ describe("money (R2.4)", () => {
     const before = (await admin.get("/api/bootstrap")).body.db.projects
       .find((p) => p.id === GROUP_PROJECT);
     const headroom = before.contingency - before.contingencyUsed;
+    /* PM-06 : le tirage nomme son risque — le plafond se teste au-delà. */
+    const risk = (await admin.get("/api/bootstrap")).body.db.raid.find((x) =>
+      x.project === GROUP_PROJECT && x.type === "Risk" && x.status === "Open");
     const r = await admin.post("/api/cost", {
-      project: GROUP_PROJECT, amount: headroom + 1, period: "2026-08", fromContingency: true,
+      project: GROUP_PROJECT, amount: headroom + 1, period: "2026-08",
+      fromContingency: true, risk: risk.id,
     });
     assert.equal(r.status, 409);
     assert.match(r.body.error, /more than the contingency/i);

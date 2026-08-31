@@ -102,9 +102,12 @@ describe("the ledger can be corrected (finding 6)", () => {
     const admin = await as("admin");
     const before = (await book(admin)).projects.find((p) => p.id === GROUP_PROJECT);
 
+    /* PM-06 : un tirage nomme le risque qu'il finance. */
+    const risk = (await book(admin)).raid.find((x) =>
+      x.project === GROUP_PROJECT && x.type === "Risk" && x.status === "Open");
     const drawn = await admin.post("/api/cost", {
       project: GROUP_PROJECT, amount: 0.05, period: "2026-07",
-      note: "Contingency draw in error", fromContingency: true,
+      note: "Contingency draw in error", fromContingency: true, risk: risk.id,
     });
     assert.equal(drawn.status, 201);
     const mid = (await book(admin)).projects.find((p) => p.id === GROUP_PROJECT);
