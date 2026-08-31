@@ -18,7 +18,16 @@ Unreleased work sits under `## [Unreleased]` until it is tagged.
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **`docs/29-technical-reference.md`** — the current-state map of the
+  product, written from a full read of the source rather than from the
+  design documents: the project description, the 46-table database
+  schema with its cross-cutting conventions, the functionality
+  catalogue, the module map, the API surface, the authority model as it
+  stands (the actions added since `04`), and the 21 screens. The README
+  now links it, and its routes line names the federation and
+  integration surfaces it had omitted.
 
 ---
 

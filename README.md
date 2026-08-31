@@ -149,7 +149,8 @@ server/          src/db.js         pg | PGlite, migrations, optimistic concurren
                  src/auth.js       scrypt, server-side sessions
                  src/audit.js      append-only, inside the mutation's transaction
                  src/portfolio.js  rows → the shape the engine reads
-                 src/routes/       auth · portfolio · meetings · admin · import
+                 src/routes/       auth · portfolio · meetings · admin ·
+                                   import · federation · v1 (integrations)
                  migrations/       ordered SQL (001–026, applied at boot)
                  test/             375 tests
 
@@ -202,6 +203,7 @@ never a silent overwrite.
 | [`docs/26-conformite-referentiels.md`](docs/26-conformite-referentiels.md) | Conformance to ISO 21502/21504/21505, PRINCE2, PMBOK, ISO 31000 — what is covered, and 13 gaps with what each costs |
 | [`docs/27-comite-interoperabilite.md`](docs/27-comite-interoperabilite.md) | Interoperability committee (FR) — four surfaces instead of twenty connectors, and why |
 | [`docs/28-goal-market.md`](docs/28-goal-market.md) | The single ordered backlog to a finished product, and the loop that works it |
+| [`docs/29-technical-reference.md`](docs/29-technical-reference.md) | Current-state reference — project description, the 46-table database schema, every functionality, and the module map |
 
 ---
 
