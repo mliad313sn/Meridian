@@ -28,6 +28,17 @@ Unreleased work sits under `## [Unreleased]` until it is tagged.
   stands (the actions added since `04`), and the 21 screens. The README
   now links it, and its routes line names the federation and
   integration surfaces it had omitted.
+- **Every way to deploy, in one place.** The deployment knowledge was
+  scattered: the dev commands in the README, the Windows service deep
+  in `docs/13`, the database fallback chain only in `prepare-db.ps1`'s
+  own comments. The README gains a *Deploying it* section naming the
+  four paths — evaluation from source, production from source on
+  PostgreSQL, the Windows service via `MeridianSetup.exe`, and the
+  training instance — and `docs/29` §8 walks each one end to end: what
+  `npm run package:installer` actually builds, what the setup
+  executable does step by step (elevation, upgrade-in-place, the
+  kept configuration, the PostgreSQL find-install-or-fallback chain,
+  the `MeridianITPMO` service), and how data moves between deployments.
 
 ---
 

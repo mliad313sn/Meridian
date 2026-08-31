@@ -109,6 +109,43 @@ bash scripts/restart.sh   # restart the dev server *gracefully* — see the note
 
 ---
 
+## Deploying it
+
+Four ways, same code, same migrations — they differ only in where the
+database lives and who starts the process. The full walk-through of each
+is [`docs/29-technical-reference.md` §8](docs/29-technical-reference.md);
+the Windows story in depth is
+[`docs/13-windows-service.md`](docs/13-windows-service.md).
+
+1. **Evaluation, from source** — the three commands above. PGlite,
+   nothing to install, `scripts/restart.sh` to restart.
+2. **Production, from source** — Node 24 + your PostgreSQL:
+   `DATABASE_URL=… npm run migrate && npm run seed && npm start`, under
+   your own supervisor (systemd, pm2). Set `MERIDIAN_SECURE_COOKIES=1`
+   once — and only once — it is behind HTTPS.
+3. **Windows service, one `.exe`** — for a machine with no Node and
+   possibly no internet. `npm run package:installer` produces
+   `dist/MeridianSetup.exe` (~33 MB, built with IExpress, which ships
+   with Windows). Copy it to the target and run it — double-click, or
+   `MeridianSetup.exe /quiet` unattended. It self-elevates, unpacks to
+   `C:\Apps\Meridian`, **finds or installs PostgreSQL** (falling back to
+   the embedded engine, and saying so, when neither exists), registers
+   the `MeridianITPMO` service — Automatic start, restart on failure,
+   waiting on the database service across reboots — and starts it on
+   `http://localhost:4173`. **Upgrading is running the new setup again**:
+   it stops the service, replaces the files, keeps your
+   `meridian.config.json`, and restarts. From a checkout,
+   `powershell -File scripts/deploy-local.ps1` does the whole
+   extract-install-verify cycle; `Uninstall-Service.cmd` in the install
+   directory reverses everything.
+4. **Training instance** — `npm run training`, a separate practice book
+   on `:4180` that never touches the real one.
+
+Moving between any of these — or away from Meridian entirely — is
+`npm run restore` with an exported archive.
+
+---
+
 ## Signing in
 
 Ten accounts are seeded so the access model is visible immediately. The

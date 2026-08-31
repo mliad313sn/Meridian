@@ -384,7 +384,140 @@ role is unknown to `rbac.can()`.
 
 ---
 
-## 8 · Verification
+## 8 · Deployment — every way to run it
+
+Four ways to deploy, from a laptop evaluation to a Windows service that
+survives reboots. All four run the same code and the same migrations;
+they differ only in where the database lives and who starts the process.
+
+### 8.1 · Evaluation / development — from source, zero install
+
+```bash
+npm install
+npm run seed     # migrate + build the demonstration book
+npm run dev      # http://localhost:4173
+```
+
+No `DATABASE_URL` means the server runs **PGlite** — PostgreSQL 16.4
+compiled to WebAssembly — from `server/.data/pgdata`. Nothing else to
+install, nothing listening but the app. Restart with
+`bash scripts/restart.sh`, never a hard kill: PGlite does not complete
+crash recovery the way a server does, and a `SIGKILL` mid-write can
+leave the data directory unopenable.
+
+### 8.2 · Production from source — Node + PostgreSQL
+
+For any machine (Linux, macOS, Windows) with Node 24 and a PostgreSQL
+cluster:
+
+```bash
+DATABASE_URL=postgres://user:pass@host:5432/meridian npm run migrate
+DATABASE_URL=postgres://user:pass@host:5432/meridian npm run seed   # or: npm run restore <archive>
+DATABASE_URL=postgres://user:pass@host:5432/meridian npm start      # NODE_ENV=production
+```
+
+Before it carries anything real: change the ten demonstration passwords
+from Administration, or run `npm run reset-book` to clear the
+demonstration portfolio entirely. Behind HTTPS, set
+`MERIDIAN_SECURE_COOKIES=1` — and only behind HTTPS: on plain LAN HTTP a
+`Secure` cookie is silently dropped and sign-in appears to succeed while
+every next request is anonymous. Optional integrations are environment
+variables read at start: `MERIDIAN_SMTP_URL` (notifications actually
+send), `MERIDIAN_OIDC_*` (Entra sign-in appears), and the
+`documentHosts` setting (evidence approval opens — it ships closed).
+Process supervision is the platform's own (systemd, pm2, the Windows
+service below); the app applies pending migrations itself at boot.
+
+### 8.3 · Windows service — `MeridianSetup.exe`
+
+The packaged path, for a Windows machine with **no Node, no compiler,
+and possibly no internet**. Detailed narrative in
+[`13-windows-service.md`](13-windows-service.md).
+
+**Build it** (on a Windows machine with the repo and Node):
+
+```bash
+npm run package:installer
+```
+
+This builds the client, flattens the server into one CommonJS file
+(esbuild), injects it into a copy of `node.exe` (Node SEA) as
+`dist/Meridian/Meridian.exe` (~89 MB, no Node runtime needed on the
+target), adds the winsw service wrapper, the migrations, the built
+client, `meridian.config.json` and the administrator scripts, then wraps
+the lot with IExpress — which ships with Windows — into a single
+**`dist/MeridianSetup.exe`** (~33 MB).
+
+**Install it** — copy `MeridianSetup.exe` to the target machine and run
+it (double-click, or `MeridianSetup.exe /quiet` for unattended use). It
+self-elevates through UAC and then, in order:
+
+1. stops and unregisters any running Meridian service (an upgrade, not
+   a first install);
+2. unpacks to `C:\Apps\Meridian`, **keeping any existing
+   `meridian.config.json`** — configuration belongs to the machine, not
+   the package;
+3. locks the directory down to Administrators and SYSTEM (the service
+   runs as LocalSystem; a world-writable install directory would be a
+   privilege escalation);
+4. prepares a database, in this order: an existing usable PostgreSQL is
+   used as-is → none, but the network answers: the official binaries
+   are downloaded, an instance owned by Meridian is initialised with a
+   generated password and registered as a service → neither: it falls
+   back to the embedded PGlite engine and says so plainly. The outcome
+   is written into `meridian.config.json`;
+5. registers the **`MeridianITPMO`** service ("Meridian IT-PMO"):
+   LocalSystem, start type Automatic, dependent on whatever PostgreSQL
+   service actually exists so a reboot never races the database, restart
+   on failure after 10 s / 60 s / 120 s, logs in `C:\Apps\Meridian\logs`
+   rolled at 10 MB;
+6. starts it and waits — up to thirty seconds — for the service manager
+   to report RUNNING, then checks `/api/health`.
+
+The app is then at `http://localhost:4173`.
+
+**From a development checkout**, one command does the whole
+extract-install-verify cycle (a UAC prompt is expected and deliberate):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\deploy-local.ps1
+```
+
+**Configure it** — `C:\Apps\Meridian\meridian.config.json` is the whole
+of it (`DATABASE_URL`, `PORT`, `MERIDIAN_SECURE_COOKIES`, …); a real
+environment variable always beats the file.
+
+**Upgrade it** — run the new `MeridianSetup.exe` again. It stops the
+service, replaces the files, keeps the configuration, and starts it
+again. Migrations apply at the next boot.
+
+**Without the installer** — copy the `dist/Meridian/` folder anywhere
+and right-click `Install-Service.cmd` → *Run as administrator*;
+`Uninstall-Service.cmd` reverses it. This is also the uninstall path for
+an installer-based deployment.
+
+### 8.4 · Training instance — practice without consequence
+
+```bash
+npm run training              # a separate instance on :4180
+npm run training -- --reset   # put it back to how it started
+npm run training -- --drop    # erase it
+```
+
+A completely separate database directory; it never touches the real
+book.
+
+### Getting data in and out
+
+- `npm run restore <archive>` — reload a full export archive into an
+  empty instance (M-01): the migration path between any two deployments
+  above, and the exit path away from Meridian entirely.
+- Administration → export, CSV import with preview, and the v4-book
+  JSON import cover partial moves.
+- `npm run admin:handover` — transfer the administrator account when
+  the machine changes hands.
+
+## 9 · Verification
 
 - `npm test` — 375 tests, 53 suites (all green as at this document).
 - `npm run audit` — the nine static gates.
