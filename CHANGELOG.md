@@ -39,6 +39,16 @@ Unreleased work sits under `## [Unreleased]` until it is tagged.
   executable does step by step (elevation, upgrade-in-place, the
   kept configuration, the PostgreSQL find-install-or-fallback chain,
   the `MeridianITPMO` service), and how data moves between deployments.
+- **The written user manual, in both languages** (`docs/30` EN,
+  `docs/31` FR). The living manual stays where the adoption committee
+  put it — inside the product, by task, self-ticking — and these are
+  its written companion: for whoever evaluates Meridian without an
+  account, for training, and for reading a workflow end to end before
+  doing it. Role by role and workflow by workflow, from first sign-in
+  to period close, each written in the product's own vocabulary in its
+  language. The English one opens with the product description in five
+  languages (EN, FR, PT, ES, DE) for sites and sponsors reading in
+  others — the interface itself speaks English and French.
 
 ---
 

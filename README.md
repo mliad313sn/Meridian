@@ -241,6 +241,8 @@ never a silent overwrite.
 | [`docs/27-comite-interoperabilite.md`](docs/27-comite-interoperabilite.md) | Interoperability committee (FR) — four surfaces instead of twenty connectors, and why |
 | [`docs/28-goal-market.md`](docs/28-goal-market.md) | The single ordered backlog to a finished product, and the loop that works it |
 | [`docs/29-technical-reference.md`](docs/29-technical-reference.md) | Current-state reference — project description, the 46-table database schema, every functionality, and the module map |
+| [`docs/30-user-manual.md`](docs/30-user-manual.md) | User manual (EN) — role by role, workflow by workflow, with the product description in five languages |
+| [`docs/31-manuel-utilisateur.md`](docs/31-manuel-utilisateur.md) | Manuel utilisateur (FR) — rôle par rôle, processus par processus |
 
 ---
 
