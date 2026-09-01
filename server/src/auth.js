@@ -263,11 +263,15 @@ export function attachUser() {
   };
 }
 
-/** R1.1 — everything behind this returns 401 without a session. */
+/** R1.1 — everything behind this returns 401 without a session.
+ * Refusals go through next(), not res.json(): the global handler is the
+ * ONLY place say() runs, and a refusal answered here directly stays in
+ * English whatever the reader's language (found live on 5.8.0 — the very
+ * first sentence an unauthenticated API caller reads was untranslated). */
 export function requireUser() {
   return (req, res, next) => {
-    if (!req.user) return res.status(401).json({ error: "Sign in to continue" });
-    if (!req.user.active) return res.status(403).json({ error: "This account has been disabled" });
+    if (!req.user) return next(new HttpError(401, "Sign in to continue"));
+    if (!req.user.active) return next(new HttpError(403, "This account has been disabled"));
     next();
   };
 }
@@ -283,9 +287,9 @@ export function requirePasswordChanged() {
   return (req, res, next) => {
     if (!req.user?.mustChangePassword) return next();
     if (req.method === "GET" || req.method === "HEAD") return next();
-    return res.status(403).json({
-      error: "Choose your own password first — until you do, the trail cannot say this was you",
-    });
+    /* Through next() so the refusal is translated — same reason as requireUser(). */
+    return next(new HttpError(403,
+      "Choose your own password first — until you do, the trail cannot say this was you"));
   };
 }
 

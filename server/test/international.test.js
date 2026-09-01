@@ -12,7 +12,7 @@
 
 import { test, before, after, describe } from "node:test";
 import assert from "node:assert/strict";
-import { boot, shutdown, as } from "./harness.js";
+import { boot, shutdown, as, client } from "./harness.js";
 import { one, query, migrate } from "../src/db.js";
 import { engineRefusal } from "../src/index.js";
 import { localeOf, say, SERVER_LANGS } from "../src/i18n.js";
@@ -66,6 +66,21 @@ describe("I18N-01 · la langue est un registre, pas une condition", () => {
       "le portugais attend son dictionnaire serveur (I18N-03) — d'ici là, anglais");
     assert.equal(localeOf({ headers: { "x-lang": "fr" }, query: {} }), "fr");
     assert.equal(localeOf({ headers: { "x-lang": "es" }, query: {} }), "es");
+  });
+
+  test("le refus 401 traverse say() sur la VRAIE route — trouvé en anglais sur la 5.8.0 vivante", async () => {
+    /* requireUser() répondait par res.json() direct : le gestionnaire
+       global est le SEUL endroit où say() tourne, donc la toute première
+       phrase qu'un appelant non authentifié lisait restait en anglais,
+       quelle que soit sa langue. */
+    const anon = client();
+    const es = await anon.get("/api/bootstrap", { "X-Lang": "es" });
+    assert.equal(es.status, 401);
+    assert.equal(es.body.error, "Inicie sesión para continuar");
+    const fr = await anon.get("/api/bootstrap", { "X-Lang": "fr" });
+    assert.equal(fr.body.error, "Connectez-vous pour continuer");
+    const en = await anon.get("/api/bootstrap");
+    assert.equal(en.body.error, "Sign in to continue");
   });
 
   test("I18N-02 · l'espagnol répond en espagnol — refus exact et préfixe porteur de données", () => {

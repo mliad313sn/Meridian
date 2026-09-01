@@ -140,7 +140,7 @@ r.post("/logout", async (req, res, next) => {
 
 r.get("/me", async (req, res, next) => {
   try {
-    if (!req.user) return res.status(401).json({ error: "Not signed in" });
+    if (!req.user) throw new HttpError(401, "Sign in to continue");
     /* While deputising, what the client mirrors is the EFFECTIVE
        authority — role and grants of the absent person — plus who is
        being covered, so the screen can say so out loud. */

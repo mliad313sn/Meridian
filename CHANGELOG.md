@@ -22,6 +22,23 @@ Nothing yet.
 
 ---
 
+## [5.8.1] — 2026-09-01
+
+### Fixed
+
+- **The 401 nobody translated.** `requireUser()` answered with
+  `res.json()` directly, but the global error handler is the only place
+  `say()` runs — so “Sign in to continue”, the very first sentence an
+  unauthenticated caller reads, stayed in English whatever the reader's
+  language. Found by probing the live 5.8.0 service with `X-Lang: es`
+  minutes after deploying it. All session refusals in `auth.js` (and
+  `/api/auth/me`) now travel through the handler; a test exercises the
+  real route in the three languages. The machine-to-machine surfaces
+  (`/api/v1`, federation) keep their English `unauthorized` by design —
+  an API contract, not a sentence for a person.
+
+---
+
 ## [5.8.0] — 2026-09-01
 
 R4 — “present where people work” — pronounced. Spanish (I18N-02) was the
