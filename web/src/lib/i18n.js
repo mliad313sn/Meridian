@@ -18,6 +18,8 @@
  *     server-rendered minutes/packs, which carry no user locale)
  */
 
+import { ES, ES_FRAG } from "./es.js";
+
 const KEY = "meridian-lang";
 
 /* ── le registre des langues (I18N-01, comité 29 §4) ──────────────────
@@ -37,6 +39,11 @@ const KEY = "meridian-lang";
 export const LANGS = [
   { code: "en", name: "English", draft: false },
   { code: "fr", name: "Français", draft: false },
+  /* I18N-02 — brouillon TANT QU'un locuteur natif du métier n'a pas relu
+     (politique du comité 29 §4). Le commutateur l'affiche : « Español
+     (draft) ». La marque ne se lève que par la relecture, jamais par le
+     temps qui passe. */
+  { code: "es", name: "Español", draft: true },
 ];
 const DICTS = {};   // code → { dict, frag } ; l'anglais est la clé elle-même
 
@@ -74,7 +81,7 @@ export function t(s) {
    which is exactly how a tile ends up half-French. tData() translates the
    FRAGMENTS by pattern, leaving the numbers alone. Applied to composed
    notes and to server-composed agenda text at render time. */
-const FRAG = [
+export const FRAG = [
   [/\bbehind the plan\b/g, "en retard sur le plan"],
   [/\bahead of plan\b/g, "en avance sur le plan"],
   [/\bspending faster than earning\b/g, "dépense plus vite que la valeur acquise"],
@@ -422,6 +429,34 @@ export const FR = {
   "Accounts on this instance": "Comptes de cette instance",
   "Who can sign in": "Qui peut se connecter",
   "Could not reach the server": "Impossible de joindre le serveur",
+  /* I18N-02 — le tour au navigateur a montré que la porte d'entrée gardait
+     de l'anglais nu : annuaire, niveaux d'accès, notes de rôle. La partie
+     du produit qu'on lit AVANT d'être connecté était la moins traduite. */
+  "Email address": "Adresse e-mail",
+  "Your password": "Votre mot de passe",
+  "Loading the directory…": "Chargement de l'annuaire…",
+  "unrestricted": "sans restriction",
+  "Four levels of access, agreed at the constitutive committee: administrator, group, site and viewer. Group and site accounts are scoped by the grants named beside them — a grant list is never implicitly “all”.":
+    "Quatre niveaux d'accès, arrêtés au comité constitutif : administrateur, groupe, site et lecteur. Les comptes groupe et site sont limités aux habilitations nommées à côté d'eux — une liste d'habilitations n'est jamais implicitement « tout ».",
+  "Four levels of access are enforced: administrator, group, site and viewer. Group and site accounts are scoped by grants — a grant list is never implicitly “all”. Accounts and grants are managed by an administrator.":
+    "Quatre niveaux d'accès s'appliquent : administrateur, groupe, site et lecteur. Les comptes groupe et site sont limités par des habilitations — une liste d'habilitations n'est jamais implicitement « tout ». Les comptes et habilitations sont gérés par un administrateur.",
+  "Selecting a name fills the address in. Passwords are set at seed time and listed in the README; change them from Administration before this instance carries anything real.":
+    "Choisir un nom remplit l'adresse. Les mots de passe sont posés à l'amorçage et listés dans le README ; changez-les depuis Administration avant que cette instance ne porte quoi que ce soit de réel.",
+  "Selecting a name fills the address in. Forgotten your password? Any administrator can reset it — you will choose a new one at your next sign-in.":
+    "Choisir un nom remplit l'adresse. Mot de passe oublié ? Tout administrateur peut le réinitialiser — vous en choisirez un nouveau à votre prochaine connexion.",
+  "The directory could not be loaded. Sign in with your address and password.":
+    "L'annuaire n'a pas pu être chargé. Connectez-vous avec votre adresse et votre mot de passe.",
+  "Your SDP sign-in reached this module, but no PMO account carries your email yet. Ask a Meridian administrator to provision you, or sign in with a module account below.":
+    "Votre connexion SDP a atteint ce module, mais aucun compte PMO ne porte encore votre adresse. Demandez à un administrateur Meridian de vous provisionner, ou connectez-vous avec un compte du module ci-dessous.",
+  "Everything, including users, grants and global settings":
+    "Tout, y compris les comptes, les habilitations et les réglages globaux",
+  "Portfolio-wide read; write inside the granted programmes":
+    "Lecture sur tout le portefeuille ; écriture dans les programmes habilités",
+  "Own sites plus group projects read-only; write own site projects":
+    "Ses sites, plus les projets groupe en lecture seule ; écriture sur les projets de son site",
+  "Read-only": "Lecture seule",
+  "Access model": "Modèle d'accès",
+  "administrator only": "réservé à l'administrateur",
   "Choose your own password": "Choisissez votre propre mot de passe",
   "First sign-in": "Première connexion",
   "The password you were given": "Le mot de passe qui vous a été remis",
@@ -1470,3 +1505,4 @@ export const FR = {
    temporelle. Une langue nouvelle s'ajoute par une ligne LANGS et une
    ligne ici — rien d'autre (comité 29, I18N-01). */
 DICTS.fr = { dict: FR, frag: FRAG };
+DICTS.es = { dict: ES, frag: ES_FRAG };

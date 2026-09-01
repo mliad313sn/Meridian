@@ -209,9 +209,7 @@ export function accessPanel(db) {
     return h("div", null,
       sectionHead("Access model", "administrator only"),
       h("p", { class: "small muted", style: "max-width:64ch" },
-        "Four levels of access are enforced: administrator, group, site and viewer. " +
-        "Group and site accounts are scoped by grants — a grant list is never implicitly “all”. " +
-        "Accounts and grants are managed by an administrator."),
+        t("Four levels of access are enforced: administrator, group, site and viewer. Group and site accounts are scoped by grants — a grant list is never implicitly “all”. Accounts and grants are managed by an administrator.")),
       levelTable(db, null));
   }
 

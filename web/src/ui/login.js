@@ -22,11 +22,11 @@ export function renderLogin(root, onSignedIn) {
 
   const emailField = h("input", {
     class: "input", type: "email", name: "email", autocomplete: "username",
-    placeholder: "you@meridian.example", required: true, "aria-label": "Email address",
+    placeholder: "you@meridian.example", required: true, "aria-label": t("Email address"),
   });
   const passwordField = h("input", {
     class: "input", type: "password", name: "password", autocomplete: "current-password",
-    placeholder: "Your password", required: true, "aria-label": "Password",
+    placeholder: t("Your password"), required: true, "aria-label": t("Password"),
   });
   const message = h("div", { class: "small", style: "min-height:20px;color:var(--sig-red)", role: "alert" });
   /* The /pmo-sso bridge lands here when the SDP account has no Meridian
@@ -34,13 +34,12 @@ export function renderLogin(root, onSignedIn) {
   if (new URLSearchParams(location.search).get("sso") === "not_provisioned") {
     message.style.color = "var(--muted)";
     message.textContent =
-      "Your SDP sign-in reached this module, but no PMO account carries your email yet. " +
-      "Ask a Meridian administrator to provision you, or sign in with a module account below.";
+      t("Your SDP sign-in reached this module, but no PMO account carries your email yet. Ask a Meridian administrator to provision you, or sign in with a module account below.");
   }
   const submit = h("button", { class: "btn btn-primary", type: "submit", style: "width:100%;justify-content:center" },
     t("Sign in"), icon("arrowRight", 13));
 
-  const accountList = h("div", { class: "small muted" }, "Loading the directory…");
+  const accountList = h("div", { class: "small muted" }, t("Loading the directory…"));
 
   async function attempt(e) {
     e.preventDefault();
@@ -115,8 +114,7 @@ export function renderLogin(root, onSignedIn) {
         h("div", { class: "kicker" }, t("Accounts on this instance")),
         h("h3", { style: "margin:6px 0 4px" }, t("Who can sign in")),
         h("p", { class: "small muted", style: "margin:0 0 18px;max-width:62ch" },
-          "Four levels of access, agreed at the constitutive committee: administrator, group, site and viewer. " +
-          "Group and site accounts are scoped by the grants named beside them — a grant list is never implicitly “all”."),
+          t("Four levels of access, agreed at the constitutive committee: administrator, group, site and viewer. Group and site accounts are scoped by the grants named beside them — a grant list is never implicitly “all”.")),
         accountList)));
 
   emailField.focus();
@@ -136,7 +134,7 @@ async function loadAccounts(host, pick) {
         currentRole = a.role;
         host.appendChild(h("div", { style: "margin:18px 0 6px" },
           h("div", { class: "kicker-lg", style: "color:var(--color-accent)" }, currentRole.toUpperCase()),
-          h("div", { class: "xs muted" }, ROLE_NOTE[currentRole] ?? "")));
+          h("div", { class: "xs muted" }, t(ROLE_NOTE[currentRole] ?? ""))));
         host.appendChild(h("hr", { class: "hr" }));
       }
       host.appendChild(
@@ -150,19 +148,17 @@ async function loadAccounts(host, pick) {
             h("div", { class: "xs muted truncate" }, a.email)),
           a.scope
             ? h("span", { class: "tag tag-out" }, a.scope)
-            : h("span", { class: "xs muted" }, a.role === "admin" ? "unrestricted" : "—")));
+            : h("span", { class: "xs muted" }, a.role === "admin" ? t("unrestricted") : "—")));
     }
     /* The README-passwords sentence is demo-ware and must never render
        on a production book (adoption committee I4). */
     host.appendChild(h("p", { class: "xs muted", style: "margin-top:20px;max-width:60ch" },
       seeded
-        ? "Selecting a name fills the address in. Passwords are set at seed time and listed in the README; " +
-          "change them from Administration before this instance carries anything real."
-        : "Selecting a name fills the address in. Forgotten your password? Any administrator can reset it — " +
-          "you will choose a new one at your next sign-in."));
+        ? t("Selecting a name fills the address in. Passwords are set at seed time and listed in the README; change them from Administration before this instance carries anything real.")
+        : t("Selecting a name fills the address in. Forgotten your password? Any administrator can reset it — you will choose a new one at your next sign-in.")));
   } catch {
     clear(host);
     host.appendChild(h("p", { class: "small muted" },
-      "The directory could not be loaded. Sign in with your address and password."));
+      t("The directory could not be loaded. Sign in with your address and password.")));
   }
 }

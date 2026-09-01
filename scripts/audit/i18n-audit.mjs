@@ -18,7 +18,15 @@
  *   node scripts/audit/i18n-audit.mjs
  */
 
-import { tData, setLang, FR } from "../../web/src/lib/i18n.js";
+import { tData, setLang, FR, FRAG, LANGS } from "../../web/src/lib/i18n.js";
+import { ES, ES_FRAG } from "../../web/src/lib/es.js";
+
+/* I18N-02 — la porte vaut pour CHAQUE langue du registre, pas pour le
+   seul français : le comité a refusé les langues à moitié traduites, et
+   une porte qui ne surveillerait que FR laisserait ES se périmer en
+   silence exactement comme la couche pédagogique avant F5. */
+const DICT_BY_LANG = { fr: FR, es: ES };
+const FRAG_BY_LANG = { fr: FRAG, es: ES_FRAG };
 import fs from "node:fs";
 
 setLang("fr");
@@ -47,6 +55,39 @@ for (const n of NEEDLES) {
   }
 }
 if (!problems) console.log(`  · ${NEEDLES.length} aiguilles couvertes par tData()`);
+
+/* ── 1b · le miroir des fragments est complet, langue par langue ─────
+   Le tour au navigateur (I18N-02) a montré « above the escalation
+   threshold » traduit en français et affiché en anglais en espagnol :
+   ES_FRAG ne portait que 18 des 47 motifs de FRAG. Les motifs sont
+   comparés par leur SOURCE et dans le MÊME ORDRE — l'ordre fait partie
+   du contrat, le motif précis doit passer avant le mot générique. */
+const REF_SRC = FRAG.map(([re]) => re.source);
+for (const L of LANGS) {
+  if (L.code === "en" || L.code === "fr") continue;
+  const frag = FRAG_BY_LANG[L.code];
+  if (!frag) {
+    console.log(`  ✖ la langue ${L.code} est au registre sans table de fragments`);
+    problems++; continue;
+  }
+  const src = frag.map(([re]) => re.source);
+  if (src.length !== REF_SRC.length || src.some((s, i) => s !== REF_SRC[i])) {
+    for (const s of REF_SRC) if (!src.includes(s)) {
+      console.log(`  ✖ fragment absent du miroir ${L.code.toUpperCase()} : /${s}/`);
+      problems++;
+    }
+    for (const s of src) if (!REF_SRC.includes(s)) {
+      console.log(`  ✖ fragment orphelin dans le miroir ${L.code.toUpperCase()} : /${s}/`);
+      problems++;
+    }
+    if (src.length === REF_SRC.length && [...src].sort().join("\n") === [...REF_SRC].sort().join("\n")) {
+      console.log(`  ✖ le miroir ${L.code.toUpperCase()} a les mêmes motifs dans un AUTRE ordre — l'ordre est le contrat`);
+      problems++;
+    }
+  } else {
+    console.log(`  · miroir de fragments ${L.code.toUpperCase()} : ${src.length}/${REF_SRC.length} motifs, même ordre`);
+  }
+}
 
 /* ── 2 · les tuiles ne portent pas d'anglais nu hors du canal ──────
    kpiStrip traduit `label` et `note` quand ce sont des chaînes. Un
@@ -87,13 +128,26 @@ for (const f of walk("web/src", [])) {
   for (const m of src.matchAll(T_CALL)) {
     const q = m[1];
     const lit = q[0] === '"' ? JSON.parse(q) : q.slice(1, -1).replace(/\\'/g, "'");
-    if (lit && /[A-Za-z]{2}/.test(lit) && !(lit in FR)) {
-      console.log(`  ✖ ${f}: t(${JSON.stringify(lit)}) sans entrée au dictionnaire FR`);
-      problems++; missing++;
+    if (lit && /[A-Za-z]{2}/.test(lit)) {
+      /* I18N-02 — chaque langue du registre, pas le seul français : le
+         comité a refusé les langues à moitié traduites, et une porte qui
+         ne surveillerait que FR laisserait ES se périmer en silence
+         exactement comme la couche pédagogique avant F5. */
+      for (const L of LANGS) {
+        if (L.code === "en") continue;
+        const dict = DICT_BY_LANG[L.code];
+        if (!dict) {
+          console.log(`  ✖ la langue ${L.code} est au registre sans dictionnaire branché à cette porte`);
+          problems++; missing++; continue;
+        }
+        if (lit in dict) continue;
+        console.log(`  ✖ ${f}: t(${JSON.stringify(lit)}) sans entrée au dictionnaire ${L.code.toUpperCase()}`);
+        problems++; missing++;
+      }
     }
   }
 }
-if (!missing) console.log("  · chaque libellé t() du client a son entrée FR");
+if (!missing) console.log(`  · chaque libellé t() du client a son entrée dans les ${LANGS.length - 1} langues du registre`);
 
 /* ── 4 · la couche qui ENSEIGNE ne reste pas en anglais (A-04) ──────
    Le comité d'adoption a mesuré que la porte précédente ne regardait ni

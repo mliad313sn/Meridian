@@ -128,7 +128,13 @@ Tenu à jour par la boucle, à la source, comme le relevé de clôture de
 | PM-04 | R4 | **close 31/08** | 032 · critères posés d'avance ; cocher exige de nommer qui a constaté |
 | INT-08 | R4 | **close 31/08** | ICS METHOD:REQUEST avec ORGANIZER résolu, ATTENDEE réels, SEQUENCE, STATUS:CANCELLED à la clôture |
 | INT-09 | R4 | **close 31/08** | docs/31 — la recette, ce que le cadenas garantit et ne garantit pas, la sonde Graph différée AVEC sa raison |
-| I18N-02 | R4 | ouverte | l'espagnol — la seule ligne qui retient le prononcé de R4 |
+| I18N-02 | R4 | **close 01/09** | dictionnaire client 1053/1053 (parité FR tenue par la porte F5, désormais multilingue), miroir de fragments 47/47 tenu par F5, refus/notifications serveur (i18n-es.js, `es` dans SERVER_LANGS), cycle EN→FR→ES et écran portefeuille exercés au navigateur ; **brouillon jusqu'à relecture native** — le drapeau `(draft)` reste à l'écran. Le tour a aussi trouvé et fermé un trou commun : la porte d'entrée (annuaire, niveaux d'accès, notes de rôle) restait en anglais dans TOUTES les langues |
 
-*(les lignes de R4 et R5 sont reportées ici au fur et à mesure qu'elles
+**R4 prononcée le 01/09** — les neuf lignes closes, chacune sur mesure au
+navigateur. L'espagnol entre en tant que brouillon au sens de la
+politique du comité ([`29`](29-comite-international-saas.md) §4) : la
+relecture par un locuteur natif sur un vrai déploiement reste due, et la
+ligne qui la portera est ouverte au registre du comité.
+
+*(les lignes de R5 sont reportées ici au fur et à mesure qu'elles
 entrent en travail)*

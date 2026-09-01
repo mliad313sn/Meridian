@@ -15,7 +15,7 @@ import assert from "node:assert/strict";
 import { boot, shutdown, as } from "./harness.js";
 import { one, query, migrate } from "../src/db.js";
 import { engineRefusal } from "../src/index.js";
-import { localeOf, SERVER_LANGS } from "../src/i18n.js";
+import { localeOf, say, SERVER_LANGS } from "../src/i18n.js";
 import { LANGS, getLang, setLang, nextLang, t } from "../../web/src/lib/i18n.js";
 
 before(async () => { await boot(); });
@@ -60,10 +60,24 @@ describe("I18N-01 · la langue est un registre, pas une condition", () => {
   });
 
   test("le serveur a SA liste, et un code hors liste répond en anglais", () => {
-    assert.deepEqual(SERVER_LANGS, ["en", "fr"],
+    assert.deepEqual(SERVER_LANGS, ["en", "fr", "es"],
       "une langue n'entre ici qu'avec ses messages serveur — répondre à moitié est pire");
-    assert.equal(localeOf({ headers: { "x-lang": "es" }, query: {} }), "en");
+    assert.equal(localeOf({ headers: { "x-lang": "pt" }, query: {} }), "en",
+      "le portugais attend son dictionnaire serveur (I18N-03) — d'ici là, anglais");
     assert.equal(localeOf({ headers: { "x-lang": "fr" }, query: {} }), "fr");
+    assert.equal(localeOf({ headers: { "x-lang": "es" }, query: {} }), "es");
+  });
+
+  test("I18N-02 · l'espagnol répond en espagnol — refus exact et préfixe porteur de données", () => {
+    assert.equal(say("Sign in to continue", "es"), "Inicie sesión para continuar");
+    assert.equal(say("No such project", "es"), "Proyecto no encontrado");
+    /* Un préfixe qui porte des données : la donnée traverse intacte. */
+    assert.equal(say("The evidence link points at evil.example", "es"),
+      "El enlace de la evidencia apunta a evil.example");
+    /* Le contrat de repli tient pour chaque langue : inconnu = anglais. */
+    assert.equal(say("some unregistered sentence", "es"), "some unregistered sentence");
+    /* Et le français n'a pas bougé en généralisant say(). */
+    assert.equal(say("Sign in to continue", "fr"), "Connectez-vous pour continuer");
   });
 
   test("la base accepte désormais un code de langue par sa FORME", async () => {

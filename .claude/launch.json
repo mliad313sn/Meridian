@@ -7,6 +7,13 @@
       "runtimeArgs": ["server/src/index.js"],
       "port": 4173,
       "env": { "PGLITE_DIR": "./server/.data/pgdata" }
+    },
+    {
+      "name": "meridian-dev",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["server/src/index.js"],
+      "port": 4180,
+      "env": { "PORT": "4180", "PGLITE_DIR": "./server/.data/pgdata-dev" }
     }
   ]
 }

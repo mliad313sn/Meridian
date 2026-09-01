@@ -16,7 +16,12 @@
  *     reader's browser cannot be searched or compared.
  *   · Messages that carry data (dates, names, references) are matched on
  *     their fixed prefix, so the data passes through untouched.
+ *
+ * I18N-02 added Spanish under the same contract, in its own file so this
+ * one stays readable; say() walks a registry instead of naming French.
  */
+
+import { ES, ES_PREFIX } from "./i18n-es.js";
 
 const FR = {
   // authority
@@ -148,8 +153,17 @@ const FR_PREFIX = [
    client à dessein : une langue d'interface peut exister avant que les
    refus, aides d'agenda et notifications soient traduits, et répondre à
    moitié dans une langue est pire que répondre en anglais. Une langue
-   n'entre ici qu'avec ses messages serveur (décision du comité 29 §4). */
-export const SERVER_LANGS = ["en", "fr"];
+   n'entre ici qu'avec ses messages serveur (décision du comité 29 §4).
+   L'espagnol y entre avec i18n-es.js — refus, aides et notifications. */
+export const SERVER_LANGS = ["en", "fr", "es"];
+
+/* Une langue par entrée : la correspondance exacte, puis les préfixes.
+   say() ne connaît aucune langue par son nom — ajouter la suivante est
+   une ligne ici et un fichier de dictionnaire, rien d'autre. */
+const DICTS = {
+  fr: { exact: FR, prefix: FR_PREFIX },
+  es: { exact: ES, prefix: ES_PREFIX },
+};
 
 export function localeOf(req) {
   const match = (v) => SERVER_LANGS.find((c) => String(v ?? "").toLowerCase().startsWith(c) && c !== "en")
@@ -166,11 +180,12 @@ export function localeOf(req) {
 
 /** Translate a user-facing message. Unknown strings pass through. */
 export function say(message, locale) {
-  if (locale !== "fr" || !message) return message;
-  const exact = FR[message];
+  const d = DICTS[locale];
+  if (!d || !message) return message;
+  const exact = d.exact[message];
   if (exact) return exact;
-  for (const [en, fr] of FR_PREFIX) {
-    if (message.startsWith(en)) return fr + message.slice(en.length);
+  for (const [en, local] of d.prefix) {
+    if (message.startsWith(en)) return local + message.slice(en.length);
   }
   return message;
 }

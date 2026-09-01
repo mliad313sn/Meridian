@@ -22,6 +22,47 @@ Nothing yet.
 
 ---
 
+## [5.8.0] — 2026-09-01
+
+R4 — “present where people work” — pronounced. Spanish (I18N-02) was the
+one line holding it back; it lands here, **as a draft**: translated by
+the assistant, flagged `(draft)` on the language toggle until a native
+speaker reviews it on a real deployment (committee 29 §4 — the review is
+an open register line, I18N-02b, not a memory).
+
+### Added
+
+- **Spanish, end to end** (I18N-02). Client dictionary at full parity
+  with French (1053/1053 entries, 47/47 composed-fragment patterns), and
+  the server side that committee decision 29 §4 makes the price of
+  entry: refusals, sign-in errors and notification texts in
+  `server/src/i18n-es.js`, with `es` joining `SERVER_LANGS`. Why it was
+  wrong before: the interface could be read in Spanish only up to the
+  first refusal — and a refusal is exactly the sentence someone reads at
+  the moment they don't know what to do.
+- **The F5 gate is now multilingual.** It used to check French alone, so
+  a registered language could rot silently — and Spanish already had:
+  the fragment mirror carried 18 of 47 patterns (“above the escalation
+  threshold” rendered in French but stayed English in Spanish). The gate
+  now walks every registered language: each t() literal must exist in
+  each dictionary, and each fragment table must mirror FRAG pattern for
+  pattern, in the same order — the order is part of the contract.
+- **`say()` walks a registry** instead of naming French. Adding the next
+  server language is one line and one dictionary file.
+
+### Fixed
+
+- **The front door taught in English — in every language.** The browser
+  pass found the sign-in screen's account directory, access-level
+  paragraph, role notes, “Loading the directory…”, placeholder texts and
+  the SSO not-provisioned message all hard-coded in English — French had
+  the same hole, invisible because those strings never went through t().
+  All wrapped and translated (FR + ES), including the admin-only
+  access-model panel. The part of the product people read BEFORE they
+  can do anything was precisely the part no gate was watching.
+
+---
+
 ## [5.7.0] — 2026-08-31
 
 R4 — “present where people work” — all but one line. Spanish (I18N-02)
