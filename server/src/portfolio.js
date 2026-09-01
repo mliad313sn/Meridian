@@ -398,7 +398,7 @@ export async function loadPortfolio(user) {
 
     crs: crRows.map((c) => ({
       id: c.id, project: c.project_id, title: c.title, desc: c.description,
-      raisedBy: c.raised_by, raised: c.raised_on,
+      raisedBy: c.raised_by, raisedByUser: c.raised_by_user, raised: c.raised_on,
       cost: toM(c.cost_delta), weeks: c.weeks_delta, funding: c.funding,
       riskDelta: c.risk_delta, status: c.status, applied: c.applied,
       steps: stepsByCr.get(c.id) ?? [],

@@ -88,6 +88,8 @@ export const ES = {
     "Elija primero su propia contraseña — sin eso, la pista de auditoría no puede acreditar que fue usted",
   "Someone else changed this record — reload and try again":
     "Otra persona modificó este registro — recargue e inténtelo de nuevo",
+  "Nothing recognisable to change — check the field names":
+    "Nada reconocible que modificar — compruebe los nombres de los campos",
   "No such project": "Proyecto no encontrado",
   "No such endpoint": "Punto de acceso inexistente",
   "Something went wrong on the server": "Se produjo un error en el servidor",

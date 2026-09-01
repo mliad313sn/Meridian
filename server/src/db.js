@@ -436,7 +436,17 @@ export function requiredVersion(body, what) {
  */
 export async function updateVersioned(t, table, id, version, patch) {
   const keys = Object.keys(patch);
-  if (!keys.length) return { ok: true, skipped: true };
+  /* PR-02 (comité de recette, docs/32) : un PATCH dont aucun champ n'est
+     reconnu répondait 200 avec version undefined — et la ligne d'audit
+     « … updated », posée dans la même transaction, restait : la piste
+     affirmait un changement qui n'avait pas eu lieu. Refuser ici annule
+     TOUT (l'audit avec), et le client qui a mal épelé un champ l'apprend
+     au lieu de croire avoir agi. */
+  if (!keys.length) {
+    const e = new Error("Nothing recognisable to change — check the field names");
+    e.status = 400;
+    throw e;
+  }
   assertIdentifiers([table, ...keys]);
   const sets = keys.map((k, i) => `${k} = $${i + 1}`);
   const params = keys.map((k) => patch[k]);

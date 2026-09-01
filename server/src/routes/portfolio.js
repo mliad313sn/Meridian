@@ -901,14 +901,17 @@ r.post("/change", async (req, res, next) => {
         id = await allocateId(t, "CR");
         await t.query(
           `INSERT INTO change_request
-             (id, project_id, title, description, raised_by, raised_on, cost_delta,
+             (id, project_id, title, description, raised_by, raised_by_user, raised_on, cost_delta,
               weeks_delta, funding, risk_delta, status)
-           VALUES ($1,$2,$3,$4,$5,CURRENT_DATE,$6,$7,$8,$9,'Pending')`,
+           VALUES ($1,$2,$3,$4,$5,$6,CURRENT_DATE,$7,$8,$9,$10,'Pending')`,
           /* S-07 — who raised it is recorded, never claimed. Accepting
              b.raisedBy let a caller erase or alias the identity that the
              independence check compares against; the foreign key caught
-             it, but a control should not lean on a constraint. */
-          [id, p.id, b.title, b.desc ?? "", req.user.personId,
+             it, but a control should not lean on a constraint.
+             PR-03 — the ACCOUNT is recorded too: a raiser with no linked
+             person left raised_by NULL, and the SoD read NULL as
+             "nobody", letting them decide their own request. */
+          [id, p.id, b.title, b.desc ?? "", req.user.personId, req.user.id,
            fromM(num(b.cost)), Math.round(num(b.weeks)), b.funding ?? "Contingency",
            b.riskDelta ?? "0"]);
         for (let i = 0; i < CR_STEPS.length; i++) {
@@ -1007,6 +1010,7 @@ r.post("/change/:id/approve", async (req, res, next) => {
     gate(req.user, "change.approve", {
       project: p,
       raised_by: cr.raised_by,   // segregation of duties (I1): the raiser never decides
+      raised_by_user: cr.raised_by_user, // PR-03: the ACCOUNT too — a person link is optional
       cost_delta: Number(cr.cost_delta) / 1_000_000,
       weeks_delta: cr.weeks_delta,
       threshold: { cost: st.ccbThreshold, weeks: st.ccbWeeks },
@@ -1075,6 +1079,7 @@ r.post("/change/:id/reject", async (req, res, next) => {
     gate(req.user, "change.approve", {
       project: p,
       raised_by: cr.raised_by,   // segregation holds for reject too — deciding is deciding
+      raised_by_user: cr.raised_by_user, // PR-03: same account check as approve
       cost_delta: Number(cr.cost_delta) / 1_000_000,
       weeks_delta: cr.weeks_delta,
       threshold: { cost: st.ccbThreshold, weeks: st.ccbWeeks },

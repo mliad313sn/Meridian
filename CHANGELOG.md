@@ -22,6 +22,62 @@ Nothing yet.
 
 ---
 
+## [5.9.0] — 2026-09-01
+
+The process-acceptance committee (docs/32). Eight gates and 448 tests
+had looked at the product — almost always from a book already full: the
+demo seed provides the world, and each test exercises its own piece in
+the middle of it. Nobody had replayed, in order and in one breath, the
+life of an organisation that is just starting. The committee's
+instrument is `server/test/journey.test.js`: one ordered walk from the
+real production gesture (`resetBook()` + proven password) through
+settings, structure, accounts, demand→project, framing, money,
+tolerances, RAID, change control, evidence and gates, meeting rhythm,
+value and signed closure, lessons, frozen periods, integration key and
+archive — 34 measures, each asserting the flow AND the refusal the
+register promises. It runs in `npm test` forever.
+
+What walking the seams found (register in docs/32):
+
+### Fixed
+
+- **PR-03 — change-control segregation of duties hung on an optional
+  link** (migration `033`). `change_request.raised_by` stored the
+  raiser's *person* id; an account with no linked person raised with
+  `raised_by NULL`, and "NULL is nobody" read as "nobody ever
+  self-approves" — the inverse of the rule. **The raiser could approve
+  their own change request.** A fresh instance's admin account — the
+  production committee account included — is exactly an account with no
+  person. The request now records the raising ACCOUNT too (accounts are
+  never deleted — I-19), the rbac gate compares both, history is
+  backfilled from the audit trail, and the approve button honestly
+  disappears for the raiser.
+- **PR-02 — a PATCH with no recognisable field was a false success.**
+  It answered 200 with `version: undefined`, and the audit row
+  "… updated" — written in the same transaction — stood: the trail
+  asserted a change that never happened. Found by sending `decision:`
+  instead of `status:` on a demand. `updateVersioned()` now refuses
+  (400) and the rollback takes the lying audit row with it.
+- **PR-01 — `resetBook()`'s table list was frozen at migrations ~013.**
+  Nothing crashed (newer FKs are SET NULL/CASCADE) but demo lessons,
+  demands and notifications *survived* the production reset as orphans.
+  The list is complete again — and can no longer rot: after wiping,
+  resetBook re-reads the catalogue and FAILS loudly, inside the
+  transaction, naming any business table left non-empty and undeclared.
+
+### Register
+
+- **PR-04 (open, design decision)** — a change chain's steps are role
+  *labels*, not grants: one person may sign every step. Either each step
+  demands a distinct signatory, or the chain owns being a single-signer
+  re-reading ritual and says so on screen.
+- **PR-05 (confirmed correct)** — a contingency-funded change signs all
+  the way through and it is the LAST signature — the applying one — that
+  refuses when the held contingency cannot cover it. The control lives
+  at the moment of the act, not of the promise; now pinned by the walk.
+
+---
+
 ## [5.8.1] — 2026-09-01
 
 ### Fixed

@@ -97,6 +97,8 @@ const FR = {
     "Choisissez d'abord votre propre mot de passe — sans cela, la piste d'audit ne peut attester qu'il s'agit de vous",
   "Someone else changed this record — reload and try again":
     "Quelqu'un d'autre a modifié cet enregistrement — rechargez puis réessayez",
+  "Nothing recognisable to change — check the field names":
+    "Rien de reconnaissable à modifier — vérifiez les noms de champs",
   "No such project": "Projet introuvable",
   "No such endpoint": "Point d'accès inexistant",
   "Something went wrong on the server": "Une erreur est survenue sur le serveur",

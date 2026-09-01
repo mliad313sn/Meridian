@@ -33,15 +33,51 @@ const KEEP = process.argv
   .map((a) => a.slice("--keep-email=".length).toLowerCase());
 if (!KEEP.length) KEEP.push("admin@meridian.example");
 
-/* Children before parents; person before site (RESTRICT). ext_link goes
-   with its projects but is listed for clarity. */
+/* PR-01 (comité de recette des processus, docs/32) : cette liste était
+   FIGÉE aux migrations ~013, et chaque table née depuis y échappait —
+   les leçons, demandes et notifications de démonstration SURVIVAIENT à
+   la mise en production (leurs clés étrangères sont SET NULL : rien ne
+   casse, tout reste, en orphelin). La liste reste explicite — un geste
+   destructeur mérite d'être lisible — mais elle ne peut plus pourrir :
+   après le vidage, resetBook RELIT le catalogue et ÉCHOUE en nommant
+   toute table métier encore non vide. La migration qui crée une table
+   sans l'ajouter ici fera échouer le parcours du comité
+   (journey.test.js) au lieu de laisser des restes en production.
+
+   Ce qui est délibérément GARDÉ, avec sa raison :
+     app_user          la piste d'audit cite les comptes (I-19) — désactivés
+     app_setting       clés de fédération et réglages de gouvernance
+     audit_event       append-only par conception (R6.2)
+     board_column      référentiel de la méthode, pas de la démo
+     id_counter        prérempli par les migrations (leçon M-01)
+     integration       configuration d'exploitation, pas contenu de démo
+     report_period /   l'histoire RAPPORTÉE est append-only ; une remise à
+     report_snapshot   zéro ne réécrit pas ce qui a été présenté
+     schema_migration  jamais rejoué
+     session           vidée à part, en dernier */
+const KEEP_TABLES = new Set([
+  "app_user", "app_setting", "audit_event", "board_column", "id_counter",
+  "integration", "report_period", "report_snapshot", "schema_migration",
+  "session",
+]);
+
+/* Enfants avant parents ; toutes les FK croisées sont SET NULL ou CASCADE
+   (vérifié au catalogue le 01/09), l'ordre n'a donc qu'une exigence :
+   les tables de liaison avant leurs sujets. */
 const TABLES = [
+  "event_delivery", "notification_subscription", "notification",
+  "timesheet", "person_absence", "commitment",
   "meeting_action", "meeting_decision", "meeting_attendance", "agenda_item",
   "meeting_occurrence", "meeting_series",
   "report_narrative", "work_item", "document", "allocation",
-  "change_step", "change_request", "raid_item", "cost_line", "milestone",
-  "cross_dep", "activity_dep", "activity", "ext_link", "project",
+  "change_step", "change_request",
+  "project_exception", "project_tolerance", "business_case", "benefit",
+  "lesson", "demand",
+  "cost_line", "raid_item", "milestone",
+  "cross_dep", "activity_dep", "activity", "ext_link",
+  "site_window", "rollout_wave", "project",
   "access_grant", "programme", "person", "site",
+  "usage_daily",
 ];
 
 export async function resetBook() {
@@ -69,6 +105,23 @@ export async function resetBook() {
       `UPDATE app_user SET must_change_password = true, row_version = row_version + 1
         WHERE active AND lower(email) = ANY($1)`, [KEEP]);
     await t.query(`DELETE FROM session`);
+    /* Le garde-fou PR-01 : relire le catalogue et refuser de conclure si
+       une table métier a échappé à la liste. Échouer ICI, dans la
+       transaction, annule tout le vidage — mieux qu'une production à
+       moitié nettoyée. */
+    const inventory = await t.query(
+      `SELECT table_name AS tbl FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_type = 'BASE TABLE'`);
+    const listed = new Set(TABLES);
+    for (const { tbl } of inventory.rows) {
+      if (KEEP_TABLES.has(tbl) || listed.has(tbl)) continue;
+      const { rows: [{ n }] } = await t.query(`SELECT count(*)::int AS n FROM ${tbl}`);
+      if (n > 0) {
+        throw new Error(
+          `reset-book : la table ${tbl} (${n} ligne(s)) n'est ni vidée ni déclarée gardée — ` +
+          `une migration l'a créée sans mettre cette liste à jour. Rien n'a été vidé.`);
+      }
+    }
     await record(t, null, {
       action: "Book reset for production",
       entity: "system", entityId: "reset-book",

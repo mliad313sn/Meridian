@@ -309,6 +309,13 @@ export function can(user, action, resource = {}) {
       if (selfMatch(user, resource.raised_by)) {
         return deny("you raised this request — a second pair of eyes decides it; ask a colleague with the same authority, or your programme office");
       }
+      /* PR-03 (comité de recette, docs/32) : la comparaison de personnes
+         ne suffit pas — un compte SANS personne liée émettait avec
+         raised_by NULL, et « NULL n'est personne » se lisait « personne
+         ne s'auto-approuve ». Le COMPTE émetteur, lui, existe toujours. */
+      if (resource.raised_by_user && user.id && resource.raised_by_user === user.id) {
+        return deny("you raised this request — a second pair of eyes decides it; ask a colleague with the same authority, or your programme office");
+      }
       /* R4.5 — magnitude routes the decision, not the org chart alone.
          A MISSING threshold fails CLOSED (committee I4): un-parameterised
          governance escalates instead of silently waving everything

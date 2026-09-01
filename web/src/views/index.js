@@ -3943,6 +3943,7 @@ function crDetail(db, c) {
     c.status === "Pending" ? h("div", { class: "btn-row" },
       p && App.can("change.approve", {
         project: asRow(p),
+        raised_by: c.raisedBy, raised_by_user: c.raisedByUser,
         cost_delta: c.cost, weeks_delta: c.weeks,
         threshold: { cost: db.settings.ccbThreshold, weeks: db.settings.ccbWeeks },
       })
@@ -3951,6 +3952,7 @@ function crDetail(db, c) {
         : null,
       p && App.can("change.approve", {
         project: asRow(p),
+        raised_by: c.raisedBy, raised_by_user: c.raisedByUser,
         cost_delta: c.cost, weeks_delta: c.weeks,
         threshold: { cost: db.settings.ccbThreshold, weeks: db.settings.ccbWeeks },
       })
