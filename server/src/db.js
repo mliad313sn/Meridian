@@ -10,6 +10,7 @@
  */
 
 import { readdir, readFile } from "node:fs/promises";
+import { readFileSync, writeFileSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadEnv, resolveDataDir } from "./env.js";
@@ -133,13 +134,54 @@ async function openPg(url) {
 }
 
 /**
+ * Qui tient ce livre. PGlite écrit `postmaster.pid` DANS le bac à sable
+ * WASM : le numéro qu'on y lit n'est pas celui d'un processus de l'hôte,
+ * donc il ne dit pas si quelqu'un est vivant. Meridian pose donc sa
+ * propre marque, avec le PID de l'hôte, et la retire en s'arrêtant.
+ *
+ * C'est ce que la sauvegarde interroge. Elle demandait « est-ce qu'une
+ * santé répond sur PORT ? » — et sur un parc où chaque locataire a son
+ * port, elle interrogeait le 4173 d'un autre, ne trouvait personne,
+ * ouvrait un répertoire de données VIVANT, effaçait les verrous du
+ * serveur qui tournait dessus, puis annonçait « cette sauvegarde a été
+ * prise serveur arrêté ». C'est exactement la corruption que le garde
+ * existait pour empêcher. (Conseiller exploitation nº 1, docs/33 §5.)
+ */
+const HOLDER = "meridian.holder";
+
+export function bookHolder(dir) {
+  if (!dir) return null;
+  let pid;
+  try { pid = Number(readFileSync(join(dir, HOLDER), "utf8").trim()); } catch { return null; }
+  if (!Number.isInteger(pid) || pid <= 0) return null;
+  if (pid === process.pid) return null;
+  /* signal 0 ne tue rien : il demande « ce processus existe-t-il ? ». */
+  try { process.kill(pid, 0); return pid; } catch { return null; }
+}
+
+function claimBook(dir) {
+  if (!dir) return;
+  try { writeFileSync(join(dir, HOLDER), String(process.pid)); } catch { /* lecture seule : tant pis */ }
+  const drop = () => { try { unlinkSync(join(dir, HOLDER)); } catch { /* déjà parti */ } };
+  process.once("exit", drop);
+  for (const sig of ["SIGINT", "SIGTERM"]) process.once(sig, () => { drop(); process.exit(0); });
+}
+
+/**
  * PGlite is a single-process engine: nothing else can legitimately hold
- * its data directory. So a lock file present at startup is always stale —
- * left by a process that was killed rather than stopped — and refusing to
- * start over it just makes people delete the database by hand.
+ * its data directory. A lock file left by a process that was KILLED is
+ * stale and clearing it just saves someone deleting the database by
+ * hand — but a directory a live process still holds is not stale, and
+ * opening it anyway is the corruption this refusal exists to prevent.
  */
 async function clearStaleLocks(dataDir) {
   if (!dataDir) return;
+  const held = bookHolder(dataDir);
+  if (held) {
+    throw new Error(
+      `This book is already open: process ${held} holds ${dataDir}. PGlite is single-process — ` +
+      `stop that server first (bash scripts/restart.sh stops it gracefully), then run again.`);
+  }
   const { readdir, rm } = await import("node:fs/promises");
   let entries;
   try { entries = await readdir(dataDir); } catch { return; }
@@ -155,6 +197,7 @@ async function openPglite(dataDir) {
   await clearStaleLocks(dataDir);
   const pglite = dataDir ? new PGlite(dataDir) : new PGlite();
   await pglite.waitReady;
+  claimBook(dataDir);
 
   /* PGlite is single-connection, so a transaction has to serialise. The
      queue keeps concurrent requests from interleaving statements inside

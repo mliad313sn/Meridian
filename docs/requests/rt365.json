@@ -3,7 +3,7 @@
   "source": {
     "repository": "mliad313sn/RT365",
     "branch": "claude/project-owner-agent-setup-hi3xqu",
-    "commit": "a90b1ae",
+    "commit": "28284ac",
     "documents": [
       "docs/PMO_MERIDIAN_ASSESSMENT.md",
       "docs/PMO.md",
@@ -469,6 +469,150 @@
           "note": "found on the third re-read (a90b1ae), no id on RT365's side"
         }
       ]
+    },
+    {
+      "id": "REQ-15",
+      "origin": [
+        "integrator, third round"
+      ],
+      "issue": null,
+      "title": "Read back what you wrote: decisions and actions in the v1 portfolio read",
+      "status": "open",
+      "version": null,
+      "decidedOn": "2026-09-08",
+      "delivered": [],
+      "measure": null,
+      "remaining": [
+        "server/src/portfolio.js#loadPortfolio (decisions, actions)"
+      ],
+      "accepted": false,
+      "released": false,
+      "answerToSource": "The integrator ranked this the highest-value change of the three.",
+      "observed": "Without them, adopt on a legacy decision or action has no discovery path, no reconciliation of a room is possible without a session, and a sync reopens an action a human closed (measured: H-01 Done on the screen, reopened to Open by an unchanged re-run).",
+      "history": [
+        {
+          "at": "2026-09-08",
+          "registerVersion": 5,
+          "status": "open",
+          "note": "Opened by the third-round committee: the integrator rewrote meridian_sync.py against the published contract and measured what it still could not do."
+        }
+      ]
+    },
+    {
+      "id": "REQ-16",
+      "origin": [
+        "integrator, third round"
+      ],
+      "issue": null,
+      "title": "Raise an action into the next scheduled occurrence, without opening it",
+      "status": "open",
+      "version": null,
+      "decidedOn": "2026-09-08",
+      "delivered": [],
+      "measure": null,
+      "remaining": [
+        "server/src/v1write.js#upsertAction (series + raiseIn: next)",
+        "server/src/routes/v1.js"
+      ],
+      "accepted": false,
+      "released": false,
+      "answerToSource": "D-33.14 holds: the API still never OPENS a meeting.",
+      "observed": "Two session calls per run, every run, are the last recurring session dependency; when the chair has closed the room a human act is 409 with no public remedy, and the documented workaround moves it out of the actions register.",
+      "history": [
+        {
+          "at": "2026-09-08",
+          "registerVersion": 5,
+          "status": "open",
+          "note": "Opened by the third-round committee: the integrator rewrote meridian_sync.py against the published contract and measured what it still could not do."
+        }
+      ]
+    },
+    {
+      "id": "REQ-17",
+      "origin": [
+        "integrator, third round"
+      ],
+      "issue": null,
+      "title": "A public write for structure under a scope an administrator grants",
+      "status": "open",
+      "version": null,
+      "decidedOn": "2026-09-08",
+      "delivered": [],
+      "measure": null,
+      "remaining": [
+        "server/src/integrations.js (write:structure)",
+        "PUT /api/v1/{sites,programmes,people}",
+        "programme.gateModel on the contract"
+      ],
+      "accepted": false,
+      "released": false,
+      "answerToSource": "To be put to the interoperability committee first, as D-33.4 said.",
+      "observed": "A first load still needs an administrator's password beside the integration key, and because the gate ladder lives on the programme, REQ-03's own prerequisite is off the contract.",
+      "history": [
+        {
+          "at": "2026-09-08",
+          "registerVersion": 5,
+          "status": "open",
+          "note": "Opened by the third-round committee: the integrator rewrote meridian_sync.py against the published contract and measured what it still could not do."
+        }
+      ]
+    },
+    {
+      "id": "REQ-18",
+      "origin": [
+        "integrator, third round"
+      ],
+      "issue": null,
+      "title": "A register item records when, and by whom, it closed",
+      "status": "open",
+      "version": null,
+      "decidedOn": "2026-09-08",
+      "delivered": [],
+      "measure": null,
+      "remaining": [
+        "closedOn / closedBy on the RAID write body"
+      ],
+      "accepted": false,
+      "released": false,
+      "answerToSource": null,
+      "observed": "status: Closed answers 200 and reads back closed while closed_on stays null: the ledger's closure date is lost on every row a sync closes.",
+      "history": [
+        {
+          "at": "2026-09-08",
+          "registerVersion": 5,
+          "status": "open",
+          "note": "Opened by the third-round committee: the integrator rewrote meridian_sync.py against the published contract and measured what it still could not do."
+        }
+      ]
+    },
+    {
+      "id": "REQ-19",
+      "origin": [
+        "integrator, third round"
+      ],
+      "issue": null,
+      "title": "A project date says what it rests on, as a milestone's does",
+      "status": "open",
+      "version": null,
+      "decidedOn": "2026-09-08",
+      "delivered": [],
+      "measure": null,
+      "remaining": [
+        "project.date_basis / condition",
+        "the write API refuses unknown fields instead of accepting them silently"
+      ],
+      "accepted": false,
+      "released": false,
+      "answerToSource": null,
+      "observed": "dateBasis on a project is accepted and dropped; RT365's project finish dates are placeholders for the same reason its gate dates are (D-057). Behind it: category on a register item, sponsor and acceptanceCriteria on a project, and status: Closed on a project all answer 200 having done nothing.",
+      "history": [
+        {
+          "at": "2026-09-08",
+          "registerVersion": 5,
+          "status": "open",
+          "note": "Opened by the third-round committee: the integrator rewrote meridian_sync.py against the published contract and measured what it still could not do."
+        }
+      ]
     }
   ],
   "channel": {
@@ -494,5 +638,5 @@
       "consequence": "no line is `released` yet; pin the branch claude/meridian-rt365-feedback-d6vo3i, not the version"
     }
   },
-  "registerVersion": 4
+  "registerVersion": 5
 }

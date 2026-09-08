@@ -38,13 +38,14 @@
  */
 
 import crypto from "node:crypto";
-import { one, many, query, allocateId, updateVersioned } from "./db.js";
+import { one, many, query, allocateId, updateVersioned, assertIdentifiers } from "./db.js";
 import { audited } from "./audit.js";
 import { HttpError } from "./auth.js";
 import { fromM, loadSettings } from "./portfolio.js";
 import { scaffoldProject, reschedule, phaseFor } from "./wbs.js";
 import { iso, D } from "../../shared/engine.js";
 import { assertPlantWindow } from "./plant.js";
+import { canRatifyDecision } from "../../shared/rbac.js";
 
 const bad = (msg) => { throw new HttpError(400, msg); };
 const sha = (s) => crypto.createHash("sha256").update(s).digest("hex");
@@ -134,6 +135,12 @@ async function writeRow(t, table, id, version, patch, what) {
     return rv;
   }
   const keys = Object.keys(patch);
+  /* Le même fil-piège que `updateVersioned` : les clés sont aujourd'hui
+     des littéraux du module, mais c'est précisément pour le jour où l'une
+     viendrait d'une requête que db.js pose cette assertion — elle échoue
+     alors bruyamment plutôt que de devenir une injection en silence.
+     (Conseiller sécurité L-2, docs/33 §5.) */
+  assertIdentifiers([table, ...keys]);
   const sets = keys.map((k, i) => `${k} = $${i + 2}`);
   const r = await t.query(
     `UPDATE ${table} SET ${sets.join(", ")}, row_version = row_version + 1 WHERE id = $1 RETURNING row_version`,
@@ -156,22 +163,32 @@ const sentVersion = (b) => {
  * l'identifiant externe à cette ligne-là, une fois ; une ligne déjà liée
  * à un autre identifiant refuse.
  */
-async function adoptRow(user, table, externalId, meridianId, entity, what) {
+/**
+ * L'adoption ne s'écrit PAS ici.
+ *
+ * Elle ouvrait sa propre transaction et la validait avant que l'appelant
+ * n'ait fini de valider la requête. Entre les deux, tout ce qui pouvait
+ * échouer échouait avec la liaison déjà écrite : un PUT refusé en 400
+ * pour un `pm` inconnu saisissait définitivement un projet auquel
+ * l'intégration n'avait jamais réussi à écrire, sans aucun chemin de
+ * retour — la ligne, désormais liée, refuse toute autre adoption en 409.
+ * La frontière de transaction d'une écriture EST la requête.
+ *
+ * Donc : on valide, et on rend la liaison à poser. L'appelant la joint au
+ * `patch` de sa propre écriture, et les deux valident ou annulent
+ * ensemble. (Conseiller sécurité H-2, docs/33 §5.)
+ */
+async function planAdoption(user, table, externalId, meridianId, what) {
   const row = await one(`SELECT * FROM ${table} WHERE id = $1`, [String(meridianId)]);
   if (!row) bad(`adopt: no such ${what} ${meridianId}`);
   if (row.external_id && (row.external_source !== user.id || row.external_id !== externalId)) {
     throw new HttpError(409, `${what} ${row.id} is already bound to another external id`);
   }
   if (row.origin === "sdp") throw new HttpError(403, `This ${what} is synchronised from the SDP roadmap — it is edited there`);
-  if (!row.external_id) {
-    await audited(user,
-      { action: entity === "activity" ? "Stage linked" : "Row adopted", entity, entityId: row.id,
-        detail: `${row.name ?? row.title ?? row.headline ?? row.id} ↔ ${user.displayName} (${externalId})` },
-      async (t) => t.query(
-        `UPDATE ${table} SET external_source = $2, external_id = $3, row_version = row_version + 1 WHERE id = $1`,
-        [row.id, user.id, externalId]));
-  }
-  return one(`SELECT * FROM ${table} WHERE id = $1`, [row.id]);
+  /* Une ligne déjà liée à CETTE intégration sous CE même identifiant n'a
+     rien à poser : l'adoption est idempotente comme le reste. */
+  const binding = row.external_id ? {} : { external_source: user.id, external_id: externalId };
+  return { row, binding };
 }
 
 /** Combien de jalons l'échelle du programme de ce projet compte (I-3). */
@@ -189,7 +206,13 @@ export async function upsertProject(user, externalId, b) {
   const source = user.id;
   let existing = await one(
     `SELECT * FROM project WHERE external_source = $1 AND external_id = $2`, [source, externalId]);
-  if (!existing && b.adopt) existing = await adoptRow(user, "project", externalId, b.adopt, "project", "project");
+  let binding = {};
+  if (!existing && b.adopt) {
+    /* La liaison rejoint le `patch` ci-dessous : elle valide avec
+       l'écriture, ou elle n'a pas lieu (H-2). */
+    const plan = await planAdoption(user, "project", externalId, b.adopt, "project");
+    existing = plan.row; binding = plan.binding;
+  }
   const name = text(b.name, 300, "name", !existing);
   const pm = b.pm !== undefined ? await resolvePerson(b.pm, "pm") : undefined;
   const method = b.method === undefined ? undefined
@@ -246,6 +269,7 @@ export async function upsertProject(user, externalId, b) {
                   (patch.finish_date && patch.finish_date !== existing.finish_date);
   const statusToday = shifted ? ((await loadSettings()).statusDate ?? iso(new Date())) : null;
   const version = sentVersion(b);
+  Object.assign(patch, binding);   // H-2 — la liaison valide avec l'écriture
   if (!Object.keys(patch).length) return stamp(false, existing.id, externalId, existing.row_version);
 
   const out = await audited(user,
@@ -279,7 +303,13 @@ export async function upsertMilestone(user, externalId, b) {
   /* Adopter un jalon de GOUVERNANCE échafaudé par l'échelle (I-3) est la
      seule façon, par l'API, de consigner « la porte A est passée » sur le
      jalon que le moteur lit — et non sur un jalon ordinaire à côté (O-75). */
-  if (!existing && b.adopt) existing = await adoptRow(user, "milestone", externalId, b.adopt, "milestone", "milestone");
+  let binding = {};
+  if (!existing && b.adopt) {
+    /* La liaison rejoint le `patch` ci-dessous : elle valide avec
+       l'écriture, ou elle n'a pas lieu (H-2). */
+    const plan = await planAdoption(user, "milestone", externalId, b.adopt, "milestone");
+    existing = plan.row; binding = plan.binding;
+  }
   const p = existing ? await resolveProject(source, existing.project_id) : await resolveProject(source, b.project);
   if (!p) bad("A milestone needs a project — a Meridian id, or an external id you created");
   const name = text(b.name, 300, "name", !existing);
@@ -355,6 +385,7 @@ export async function upsertMilestone(user, externalId, b) {
     }
     if (!patch.done) { patch.accepted_by = null; patch.accepted_on = null; }
   }
+  Object.assign(patch, binding);   // H-2 — la liaison valide avec l'écriture
   if (!Object.keys(patch).length) return stamp(false, existing.id, externalId, existing.row_version);
   const version = sentVersion(b);
   const out = await audited(user,
@@ -376,7 +407,13 @@ export async function upsertRaid(user, externalId, b) {
   const source = user.id;
   let existing = await one(
     `SELECT * FROM raid_item WHERE external_source = $1 AND external_id = $2`, [source, externalId]);
-  if (!existing && b.adopt) existing = await adoptRow(user, "raid_item", externalId, b.adopt, "raid_item", "register item");
+  let binding = {};
+  if (!existing && b.adopt) {
+    /* La liaison rejoint le `patch` ci-dessous : elle valide avec
+       l'écriture, ou elle n'a pas lieu (H-2). */
+    const plan = await planAdoption(user, "raid_item", externalId, b.adopt, "register item");
+    existing = plan.row; binding = plan.binding;
+  }
   const p = existing ? (existing.project_id ? await resolveProject(source, existing.project_id) : null)
                      : await resolveProject(source, b.project);
   const title = text(b.title, 300, "title", !existing);
@@ -435,6 +472,7 @@ export async function upsertRaid(user, externalId, b) {
   if (gateN !== undefined) patch.gate = gateN;
   if (cr !== undefined) patch.cr_id = cr;
   if (status !== undefined) patch.status = status;
+  Object.assign(patch, binding);   // H-2 — la liaison valide avec l'écriture
   if (!Object.keys(patch).length) return stamp(false, existing.id, externalId, existing.row_version);
   const version = sentVersion(b);
   const out = await audited(user,
@@ -462,7 +500,13 @@ export async function upsertDecision(user, externalId, b) {
   const source = user.id;
   let existing = await one(
     `SELECT * FROM meeting_decision WHERE external_source = $1 AND external_id = $2`, [source, externalId]);
-  if (!existing && b.adopt) existing = await adoptRow(user, "meeting_decision", externalId, b.adopt, "meeting_decision", "decision");
+  let binding = {};
+  if (!existing && b.adopt) {
+    /* La liaison rejoint le `patch` ci-dessous : elle valide avec
+       l'écriture, ou elle n'a pas lieu (H-2). */
+    const plan = await planAdoption(user, "meeting_decision", externalId, b.adopt, "decision");
+    existing = plan.row; binding = plan.binding;
+  }
   const headline = text(b.headline, 1000, "headline", !existing);
   if (existing) {
     /* La SUBSTANCE est immuable (D-33.3) : un re-PUT qui la change est
@@ -476,9 +520,14 @@ export async function upsertDecision(user, externalId, b) {
       ["decidedOn", b.decidedOn === undefined ? undefined : isoDate(b.decidedOn, "decidedOn"), existing.decided_on],
       ["project", projS, existing.project_id],
       ["headline", headline, existing.headline],
-      ["rationale", b.rationale === undefined ? undefined : String(b.rationale).slice(0, 4000), existing.rationale],
-      ["alternatives", b.alternatives === undefined ? undefined : String(b.alternatives).slice(0, 4000), existing.alternatives],
-      ["dissent", b.dissent === undefined ? undefined : String(b.dissent).slice(0, 2000), existing.dissent],
+      /* Comparer EXACTEMENT ce que la création stocke : `text()` élague.
+         Comparer sans élaguer rendait tout motif à espace ou saut de ligne
+         final — une cellule markdown, un heredoc, une justification sur
+         plusieurs lignes — définitivement non idempotent : le re-PUT
+         identique repartait en 409. (Intégrateur, docs/33 §5.) */
+      ["rationale", text(b.rationale, 4000, "rationale"), existing.rationale],
+      ["alternatives", text(b.alternatives, 4000, "alternatives"), existing.alternatives],
+      ["dissent", text(b.dissent, 2000, "dissent"), existing.dissent],
     ].filter(([, sent, was]) => sent !== undefined && sent !== was).map(([k]) => k);
     if (substance.length) {
       throw new HttpError(409,
@@ -489,24 +538,37 @@ export async function upsertDecision(user, externalId, b) {
       if (!DECISION_STATUS.includes(b.status)) bad("status is Proposed or Ratified");
       patch.status = b.status;
     }
-    if (b.ratifiedBy !== undefined) patch.ratified_by = String(b.ratifiedBy ?? "").slice(0, 200);
+    if (b.ratifiedBy !== undefined) patch.ratified_by = null;   // résolu plus bas, contre l'annuaire
     const uri = evidenceUri(b.evidenceUri);
     if (uri !== undefined) patch.evidence_uri = uri;
     if (b.provenance !== undefined) patch.provenance = String(b.provenance ?? "").slice(0, 200);
     const changed = Object.fromEntries(Object.entries(patch).filter(([k, v]) => v !== existing[k]));
-    if (!Object.keys(changed).length) return stamp(false, existing.id, externalId, 1);
-    await audited(user,
+    Object.assign(changed, binding);   // H-2 — la liaison valide avec l'écriture
+    if (!Object.keys(changed).length) return stamp(false, existing.id, externalId, existing.row_version);
+    /* H-3 — ratifier n'est pas enregistrer. Qui ratifie est une personne
+       de l'annuaire, et ce n'est pas celle qui a décidé ni le compte qui
+       a consigné : sans cela une seule clé `write:meetings` proposait une
+       décision puis la ratifiait sous un ratifieur en texte libre, et
+       /api/v1 était le SEUL chemin vers cet état — donc aucun des gardes
+       d'indépendance de `change.approve`. L'autorité se décide dans
+       shared/rbac.js, comme partout ailleurs. (Conseiller sécurité H-3.) */
+    if (changed.status === "Ratified" || changed.ratified_by !== undefined) {
+      const who = await resolvePerson(b.ratifiedBy, "ratifiedBy");
+      if (!who) bad("Ratifying a decision names the person who ratified it: ratifiedBy, an active person");
+      const verdict = canRatifyDecision({ ratifier: who, decidedBy: existing.decided_by, recordedBy: existing.recorded_by });
+      if (!verdict.ok) throw new HttpError(403, verdict.why);
+      changed.ratified_by = who;
+    }
+    const version = sentVersion(b);
+    const out = await audited(user,
       { action: changed.status === "Ratified" ? "Decision ratified" : "Decision state updated",
         entity: "meeting_decision", entityId: existing.id,
         detail: `${existing.headline.slice(0, 120)} — from ${user.displayName} (${externalId})`,
         before: Object.fromEntries(Object.keys(changed).map((k) => [k, existing[k]])), after: changed },
-      async (t) => {
-        const keys = Object.keys(changed);
-        await t.query(
-          `UPDATE meeting_decision SET ${keys.map((k, i) => `${k} = $${i + 2}`).join(", ")} WHERE id = $1`,
-          [existing.id, ...keys.map((k) => changed[k])]);
-      });
-    return stamp(false, existing.id, externalId, 1);
+      /* 041 — la table porte enfin `row_version` : l'état d'une décision
+         s'écrit sous le même prédicat que toute autre ligne mutable. */
+      async (t) => writeRow(t, "meeting_decision", existing.id, version, changed, "decision"));
+    return stamp(false, existing.id, externalId, out.version);
   }
   const decidedBy = await resolvePerson(b.decidedBy, "decidedBy");
   const council = String(b.council ?? "").trim().slice(0, 200);
@@ -524,6 +586,15 @@ export async function upsertDecision(user, externalId, b) {
     if (!prev) bad("supersedes: that decision does not exist");
     supersedes = prev.id;
   }
+  /* Même règle à la création : un ratifieur est quelqu'un de l'annuaire,
+     et ce n'est pas celui qui a décidé. (Conseiller sécurité H-3.) */
+  let ratifiedBy = null;
+  if (b.ratifiedBy !== undefined && String(b.ratifiedBy ?? "") !== "") {
+    ratifiedBy = await resolvePerson(b.ratifiedBy, "ratifiedBy");
+    if (!ratifiedBy) bad("ratifiedBy names an active person");
+    const verdict = canRatifyDecision({ ratifier: ratifiedBy, decidedBy, recordedBy: user.id });
+    if (!verdict.ok) throw new HttpError(403, verdict.why);
+  }
   let id = null;
   await audited(user,
     () => ({ action: "Decision recorded", entity: "meeting_decision", entityId: id,
@@ -540,7 +611,7 @@ export async function upsertDecision(user, externalId, b) {
          text(b.dissent, 2000, "dissent") ?? "", p?.id ?? null, crId, raidId, msId, supersedes,
          decidedBy, on, user.id, source, externalId,
          council, evidenceUri(b.evidenceUri) ?? "", String(b.provenance ?? "").slice(0, 200),
-         DECISION_STATUS.includes(b.status) ? b.status : "Ratified", String(b.ratifiedBy ?? "").slice(0, 200)]);
+         DECISION_STATUS.includes(b.status) ? b.status : "Ratified", ratifiedBy ?? ""]);
     });
   return stamp(true, id, externalId, 1);
 }
@@ -551,7 +622,14 @@ export async function upsertCriterion(user, externalId, b) {
   const source = user.id;
   let existing = await one(
     `SELECT * FROM gate_criterion WHERE external_source = $1 AND external_id = $2`, [source, externalId]);
-  if (!existing && b.adopt) existing = await adoptRow(user, "gate_criterion", externalId, b.adopt, "gate_criterion", "criterion");
+  let binding = {};
+  if (!existing && b.adopt) {
+    /* La liaison rejoint le `patch` ci-dessous : elle valide avec
+       l'écriture, ou elle n'a pas lieu (H-2). */
+    const plan = await planAdoption(user, "gate_criterion", externalId, b.adopt, "criterion");
+    existing = plan.row; binding = plan.binding;
+  }
+  let born = false;
   const p = existing ? await resolveProject(source, existing.project_id) : await resolveProject(source, b.project);
   if (!p) bad("A criterion belongs to a project — a Meridian id, or an external id you created");
   const textV = text(b.text, 500, "text", !existing);
@@ -578,6 +656,11 @@ export async function upsertCriterion(user, externalId, b) {
       });
     existing = await one(`SELECT * FROM gate_criterion WHERE id = $1`, [id]);
     if (b.met === undefined) return stamp(true, id, externalId, 1);
+    /* Poser et constater d'un seul PUT reste UNE création. Sans ce drapeau
+       la ligne repartait par le chemin de mise à jour et répondait
+       `created: false` sur une ligne qui n'existait pas — un appelant qui
+       compte ses créations comptait faux. (Intégrateur, docs/33 §5.) */
+    born = true;
   }
   const patch = {};
   if (textV !== undefined) patch.text = textV;
@@ -595,7 +678,8 @@ export async function upsertCriterion(user, externalId, b) {
       patch.met = true; patch.reviewed_by = who; patch.reviewed_on = iso(new Date());
     } else { patch.met = false; patch.reviewed_by = null; patch.reviewed_on = null; }
   }
-  if (!Object.keys(patch).length) return stamp(false, existing.id, externalId, existing.row_version);
+  Object.assign(patch, binding);   // H-2 — la liaison valide avec l'écriture
+  if (!Object.keys(patch).length) return stamp(born, existing.id, externalId, existing.row_version);
   const version = sentVersion(b);
   const out = await audited(user,
     { action: patch.met === true && !existing.met ? "Gate criterion met" : patch.met === false && existing.met ? "Gate criterion reopened" : "Gate criterion updated",
@@ -604,7 +688,7 @@ export async function upsertCriterion(user, externalId, b) {
     async (t) => {
       return writeRow(t, "gate_criterion", existing.id, version, patch, "gate criterion");
     });
-  return stamp(false, existing.id, externalId, out.version);
+  return stamp(born, existing.id, externalId, out.version);
 }
 
 /* ── actions ───────────────────────────────────────────────────────── */
@@ -615,7 +699,13 @@ export async function upsertAction(user, externalId, b) {
   const source = user.id;
   let existing = await one(
     `SELECT * FROM meeting_action WHERE external_source = $1 AND external_id = $2`, [source, externalId]);
-  if (!existing && b.adopt) existing = await adoptRow(user, "meeting_action", externalId, b.adopt, "meeting_action", "action");
+  let binding = {};
+  if (!existing && b.adopt) {
+    /* La liaison rejoint le `patch` ci-dessous : elle valide avec
+       l'écriture, ou elle n'a pas lieu (H-2). */
+    const plan = await planAdoption(user, "meeting_action", externalId, b.adopt, "action");
+    existing = plan.row; binding = plan.binding;
+  }
   const title = text(b.title, 300, "title", !existing);
   const detail = text(b.detail, 2000, "detail");
   const owner = b.owner !== undefined ? await resolvePerson(b.owner, "owner") : undefined;
@@ -665,6 +755,7 @@ export async function upsertAction(user, externalId, b) {
     patch.status = status;
     if (status === "Done" || status === "Cancelled") patch.closed_at = new Date().toISOString();
   }
+  Object.assign(patch, binding);   // H-2 — la liaison valide avec l'écriture
   if (!Object.keys(patch).length) return stamp(false, existing.id, externalId, existing.row_version);
   const version = sentVersion(b);
   const out = await audited(user,

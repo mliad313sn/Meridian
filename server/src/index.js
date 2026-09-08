@@ -50,10 +50,23 @@ async function instanceIdentity() {
     const mig = await many(`SELECT count(*)::int AS n FROM schema_migration`);
     const drill = get("backup.lastDrill");
     return {
-      instance: { org: get("orgName") ?? "MERIDIAN", id: get("instanceId") ?? null,
+      /* §8 promettait un identifiant d'instance dans le `.env` du
+         locataire ; il n'existait que comme réglage d'écran, si bien que
+         chaque instance d'un parc devait être nommée à la main dans un
+         navigateur. MERIDIAN_INSTANCE_ID le pose au démarrage ; le
+         réglage d'écran reste et prime quand quelqu'un l'a écrit.
+         (Conseiller exploitation nº 11, docs/33 §5.) */
+      instance: { org: get("orgName") ?? "MERIDIAN",
+                  id: get("instanceId") || process.env.MERIDIAN_INSTANCE_ID || null,
                   migrations: mig[0]?.n ?? 0 },
-      backup: drill ? { lastDrillAt: drill.at ?? null, ok: drill.ok ?? null,
-                        restoreSeconds: drill.restoreSeconds ?? null } : { lastDrillAt: null, ok: null },
+      /* `lastDrillAt` est la dernière restauration PROUVÉE, pas la
+         dernière tentative : une épreuve ratée ne doit pas rendre une
+         instance récente à l'œil. `lastAttemptAt` dit quand on a essayé,
+         et `ok` si cet essai a tenu. (Exploitation nº 7.) */
+      backup: drill ? { lastDrillAt: drill.provenAt ?? (drill.ok ? drill.at : null) ?? null,
+                        lastAttemptAt: drill.at ?? null, ok: drill.ok ?? null,
+                        restoreSeconds: drill.restoreSeconds ?? null }
+                    : { lastDrillAt: null, lastAttemptAt: null, ok: null },
     };
   } catch { return {}; }
 }
@@ -324,8 +337,14 @@ export function productionEngineRefusal(env, engineName) {
   ].join("\n  ");
 }
 
-export async function start({ port = process.env.PORT || 4173 } = {}) {
+export async function start({ port: wanted } = {}) {
   await connect();
+  /* PORT se lit APRÈS connect(), qui charge `.env`. En paramètre par
+     défaut il s'évaluait avant : un `.env` de locataire posant PORT=4321
+     était ignoré, chaque instance se liait au 4173 et le parc du §8 —
+     un `.env` par locataire, chacun son port — ne pouvait pas tenir.
+     (Conseiller exploitation nº 4, docs/33 §5.) */
+  const port = wanted ?? process.env.PORT ?? 4173;
 
   /* PG-01 — une installation de service refuse PGlite au lieu de tourner
      en silence sur le mauvais moteur. Le refus arrive AVANT les

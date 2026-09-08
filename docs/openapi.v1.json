@@ -38,7 +38,7 @@
     }
   ],
   "paths": {
-    "/api/v1/actions/:externalId": {
+    "/api/v1/actions/{externalId}": {
       "put": {
         "summary": "Create or update an action, keyed by your own identifier",
         "description": "Creates the an action when nothing carries this externalId for your integration, updates it otherwise. The identity is (integration, externalId): two connected systems may both say \"E01\" without colliding. `version` is optional — when sent it is asserted (409 if stale); when omitted your system is the master of this row and the last write wins. Optional `Idempotency-Key` header: the same key with the same body replays the recorded answer (Idempotent-Replayed: true); the same key with another body is refused (422) — one key names ONE request, not a run. `adopt: \"<Meridian id>\"` binds your externalId to a row that already exists (created on a screen, or scaffolded) instead of creating another. The same business rules as the screens apply. An action is raised in an OPEN meeting: send `occurrence` (an open occurrence id) or `series` (the series whose open occurrence takes it). The API never opens a meeting — a chair does.",
@@ -58,6 +58,16 @@
               "maxLength": 200
             },
             "description": "Your own identifier for this row — stable across runs, unique within your integration"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "One key names ONE request. The same key with the same body replays the recorded answer (response header Idempotent-Replayed: true); the same key with a different body is refused (422)."
           }
         ],
         "requestBody": {
@@ -184,7 +194,7 @@
         }
       }
     },
-    "/api/v1/activities/:externalId": {
+    "/api/v1/activities/{externalId}": {
       "put": {
         "summary": "Create or update the link to a schedule stage, and its measured progress, keyed by your own identifier",
         "description": "Creates the the link to a schedule stage, and its measured progress when nothing carries this externalId for your integration, updates it otherwise. The identity is (integration, externalId): two connected systems may both say \"E01\" without colliding. `version` is optional — when sent it is asserted (409 if stale); when omitted your system is the master of this row and the last write wins. Optional `Idempotency-Key` header: the same key with the same body replays the recorded answer (Idempotent-Replayed: true); the same key with another body is refused (422) — one key names ONE request, not a run. `adopt: \"<Meridian id>\"` binds your externalId to a row that already exists (created on a screen, or scaffolded) instead of creating another. The same business rules as the screens apply. Stages are not created by integrations — the plan belongs to the project. The first call binds your id to an existing stage (`activity`); every call may carry `pct`, stamped with `source` and `measuredAt` so earned value reads measured, not typed, progress (I-5).",
@@ -204,6 +214,16 @@
               "maxLength": 200
             },
             "description": "Your own identifier for this row — stable across runs, unique within your integration"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "One key names ONE request. The same key with the same body replays the recorded answer (response header Idempotent-Replayed: true); the same key with a different body is refused (422)."
           }
         ],
         "requestBody": {
@@ -363,7 +383,7 @@
         }
       }
     },
-    "/api/v1/criteria/:externalId": {
+    "/api/v1/criteria/{externalId}": {
       "put": {
         "summary": "Create or update a gate criterion, keyed by your own identifier",
         "description": "Creates the a gate criterion when nothing carries this externalId for your integration, updates it otherwise. The identity is (integration, externalId): two connected systems may both say \"E01\" without colliding. `version` is optional — when sent it is asserted (409 if stale); when omitted your system is the master of this row and the last write wins. Optional `Idempotency-Key` header: the same key with the same body replays the recorded answer (Idempotent-Replayed: true); the same key with another body is refused (422) — one key names ONE request, not a run. `adopt: \"<Meridian id>\"` binds your externalId to a row that already exists (created on a screen, or scaffolded) instead of creating another. The same business rules as the screens apply. A sentence posed in advance on (project, gate — within the programme's ladder). `met: true` needs `reviewedBy`, a named person who does not own the `document` cited; the gate is ready only when every criterion is met. Adopt a scaffolded criterion with `adopt`.",
@@ -383,6 +403,16 @@
               "maxLength": 200
             },
             "description": "Your own identifier for this row — stable across runs, unique within your integration"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "One key names ONE request. The same key with the same body replays the recorded answer (response header Idempotent-Replayed: true); the same key with a different body is refused (422)."
           }
         ],
         "requestBody": {
@@ -505,7 +535,7 @@
         }
       }
     },
-    "/api/v1/decisions/:externalId": {
+    "/api/v1/decisions/{externalId}": {
       "put": {
         "summary": "Create or update a decision outside a meeting, keyed by your own identifier",
         "description": "Creates the a decision outside a meeting when nothing carries this externalId for your integration, updates it otherwise. The identity is (integration, externalId): two connected systems may both say \"E01\" without colliding. `version` is optional — when sent it is asserted (409 if stale); when omitted your system is the master of this row and the last write wins. Optional `Idempotency-Key` header: the same key with the same body replays the recorded answer (Idempotent-Replayed: true); the same key with another body is refused (422) — one key names ONE request, not a run. `adopt: \"<Meridian id>\"` binds your externalId to a row that already exists (created on a screen, or scaffolded) instead of creating another. The same business rules as the screens apply. Named by `decidedBy` (a person) or `council` (the deciding body). The substance — headline, rationale, alternatives, dissent — is immutable: a different substance answers 409 — record a new decision naming the old one in `supersedes` (I-7). The state — `status` Proposed|Ratified, `ratifiedBy`, `evidenceUri`, `provenance` — may change, and each change is audited with before/after.",
@@ -525,6 +555,16 @@
               "maxLength": 200
             },
             "description": "Your own identifier for this row — stable across runs, unique within your integration"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "One key names ONE request. The same key with the same body replays the recorded answer (response header Idempotent-Replayed: true); the same key with a different body is refused (422)."
           }
         ],
         "requestBody": {
@@ -672,7 +712,7 @@
         }
       }
     },
-    "/api/v1/milestones/:externalId": {
+    "/api/v1/milestones/{externalId}": {
       "put": {
         "summary": "Create or update a milestone, keyed by your own identifier",
         "description": "Creates the a milestone when nothing carries this externalId for your integration, updates it otherwise. The identity is (integration, externalId): two connected systems may both say \"E01\" without colliding. `version` is optional — when sent it is asserted (409 if stale); when omitted your system is the master of this row and the last write wins. Optional `Idempotency-Key` header: the same key with the same body replays the recorded answer (Idempotent-Replayed: true); the same key with another body is refused (422) — one key names ONE request, not a run. `adopt: \"<Meridian id>\"` binds your externalId to a row that already exists (created on a screen, or scaffolded) instead of creating another. The same business rules as the screens apply. `project` is a Meridian id or an externalId you created. A milestone with acceptanceCriteria cannot be marked done without acceptedBy — the person who checked them (PM-04). `dateBasis: \"placeholder\"` with a `condition` says the date is a position on the timeline, not a commitment: it is never reported missed or overdue until you make it `committed` (REQ-14).",
@@ -692,6 +732,16 @@
               "maxLength": 200
             },
             "description": "Your own identifier for this row — stable across runs, unique within your integration"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "One key names ONE request. The same key with the same body replays the recorded answer (response header Idempotent-Replayed: true); the same key with a different body is refused (422)."
           }
         ],
         "requestBody": {
@@ -920,7 +970,7 @@
         }
       }
     },
-    "/api/v1/projects/:externalId": {
+    "/api/v1/projects/{externalId}": {
       "put": {
         "summary": "Create or update a project, keyed by your own identifier",
         "description": "Creates the a project when nothing carries this externalId for your integration, updates it otherwise. The identity is (integration, externalId): two connected systems may both say \"E01\" without colliding. `version` is optional — when sent it is asserted (409 if stale); when omitted your system is the master of this row and the last write wins. Optional `Idempotency-Key` header: the same key with the same body replays the recorded answer (Idempotent-Replayed: true); the same key with another body is refused (422) — one key names ONE request, not a run. `adopt: \"<Meridian id>\"` binds your externalId to a row that already exists (created on a screen, or scaffolded) instead of creating another. The same business rules as the screens apply. Creation needs programme, site, start and finish; the schedule, the gate milestones and the evidence documents are scaffolded as when a person creates one. Money is in millions.",
@@ -940,6 +990,16 @@
               "maxLength": 200
             },
             "description": "Your own identifier for this row — stable across runs, unique within your integration"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "One key names ONE request. The same key with the same body replays the recorded answer (response header Idempotent-Replayed: true); the same key with a different body is refused (422)."
           }
         ],
         "requestBody": {
@@ -1080,7 +1140,7 @@
         }
       }
     },
-    "/api/v1/raid/:externalId": {
+    "/api/v1/raid/{externalId}": {
       "put": {
         "summary": "Create or update a register item (risk, issue, assumption, dependency), keyed by your own identifier",
         "description": "Creates the a register item (risk, issue, assumption, dependency) when nothing carries this externalId for your integration, updates it otherwise. The identity is (integration, externalId): two connected systems may both say \"E01\" without colliding. `version` is optional — when sent it is asserted (409 if stale); when omitted your system is the master of this row and the last write wins. Optional `Idempotency-Key` header: the same key with the same body replays the recorded answer (Idempotent-Replayed: true); the same key with another body is refused (422) — one key names ONE request, not a run. `adopt: \"<Meridian id>\"` binds your externalId to a row that already exists (created on a screen, or scaffolded) instead of creating another. The same business rules as the screens apply. `gate` links it to a governance gate of the project, `cr` to a change request of the same project (I-8). Omit `project` for a portfolio-wide item.",
@@ -1100,6 +1160,16 @@
               "maxLength": 200
             },
             "description": "Your own identifier for this row — stable across runs, unique within your integration"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "One key names ONE request. The same key with the same body replays the recorded answer (response header Idempotent-Replayed: true); the same key with a different body is refused (422)."
           }
         ],
         "requestBody": {
@@ -1244,7 +1314,7 @@
         }
       }
     },
-    "/api/v1/workitems/:externalId": {
+    "/api/v1/workitems/{externalId}": {
       "put": {
         "summary": "Create or update a work item on the board, keyed by your own identifier",
         "description": "Creates the a work item on the board when nothing carries this externalId for your integration, updates it otherwise. The identity is (integration, externalId): two connected systems may both say \"E01\" without colliding. `version` is optional — when sent it is asserted (409 if stale); when omitted your system is the master of this row and the last write wins. Optional `Idempotency-Key` header: the same key with the same body replays the recorded answer (Idempotent-Replayed: true); the same key with another body is refused (422) — one key names ONE request, not a run. `adopt: \"<Meridian id>\"` binds your externalId to a row that already exists (created on a screen, or scaffolded) instead of creating another. The same business rules as the screens apply. `column` is a column id or name; `assignee` an id or exact name.",
@@ -1264,6 +1334,16 @@
               "maxLength": 200
             },
             "description": "Your own identifier for this row — stable across runs, unique within your integration"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "One key names ONE request. The same key with the same body replays the recorded answer (response header Idempotent-Replayed: true); the same key with a different body is refused (422)."
           }
         ],
         "requestBody": {

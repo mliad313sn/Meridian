@@ -11,8 +11,16 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { connect, close } from "../server/src/db.js";
+import { connect, close, bookHolder } from "../server/src/db.js";
 import { counts, drill, record } from "../server/src/backup.js";
+import { loadEnv, resolveDataDir } from "../server/src/env.js";
+
+/* `.env` AVANT toute lecture d'environnement — MERIDIAN_BACKUP_DIR se lit
+   à la ligne suivante. Sans cela l'épreuve cherchait dans le répertoire
+   par défaut, ne trouvait pas la sauvegarde qui venait d'être écrite, et
+   répondait « run `npm run backup` first » à qui venait de le faire.
+   (Conseiller exploitation nº 3, docs/33 §5.) */
+loadEnv();
 
 const dir = process.env.MERIDIAN_BACKUP_DIR || path.join(process.cwd(), "server", ".data", "backups");
 let file = process.argv.slice(2).find((a) => !a.startsWith("--"));
@@ -27,14 +35,15 @@ if (!file) {
 
 /* PGlite est mono-processus : ouvrir le répertoire de données pendant que
    le serveur tourne est la corruption que restart.sh existe pour éviter.
-   Si la santé répond sur PORT et qu'aucun DATABASE_URL n'est posé, on
-   refuse — l'opérateur arrête le service, puis relance. */
+   On le demande au livre lui-même — quel processus VIVANT le tient — et
+   non à une santé sur un port deviné : sur un parc, chaque locataire a le
+   sien, et interroger 4173 revenait à demander à quelqu'un d'autre.
+   (Conseiller exploitation nº 1, docs/33 §5.) */
 if (!process.env.DATABASE_URL) {
-  const port = process.env.PORT || 4173;
-  const up = await fetch(`http://127.0.0.1:${port}/api/health`, { signal: AbortSignal.timeout(1500) })
-    .then((r) => r.ok).catch(() => false);
-  if (up) {
-    console.error(`  a Meridian server answers on :${port} and this book is PGlite — stop it first (bash scripts/restart.sh stops gracefully), then run again`);
+  const dir = resolveDataDir();
+  const held = bookHolder(dir);
+  if (held) {
+    console.error(`  process ${held} holds ${dir} and this book is PGlite — stop it first (bash scripts/restart.sh stops gracefully), then run again`);
     process.exit(2);
   }
 }

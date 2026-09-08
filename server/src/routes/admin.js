@@ -328,7 +328,19 @@ r.delete("/integrations/:id", async (req, res, next) => {
        désactivée plutôt que supprimée (I-19). */
     await audited(req.user,
       { action: "Integration removed", entity: "integration", entityId: row.id,
-        detail: row.name, before: { ...row, key_hash: "[redacted]" } },
+        /* Une image d'avant se dresse par LISTE BLANCHE sur une table qui
+           porte un secret. `{...row}` n'en cachait qu'un : depuis la 031
+           la ligne porte aussi `webhook_secret`, la clé HMAC qui signe les
+           événements sortants — écrite en clair dans une piste que rien ne
+           peut corriger, et servie par /api/audit et /api/v1/audit à tout
+           compte de groupe et à toute clé `read:audit`. (Conseiller
+           sécurité H-1, docs/33 §5.) */
+        detail: row.name, before: {
+          id: row.id, name: row.name, scopes: row.scopes, active: row.active,
+          created_at: row.created_at, created_by: row.created_by,
+          last_used_at: row.last_used_at, webhook_url: row.webhook_url,
+          key_hash: "[redacted]", webhook_secret: row.webhook_secret ? "[redacted]" : null,
+        } },
       async (t) => t.query(`DELETE FROM integration WHERE id = $1`, [row.id]));
     res.json({ ok: true });
   } catch (e) { next(e); }

@@ -162,7 +162,7 @@ server/          src/env.js        .env, the data directory, the one version num
                  src/audit.js      append-only, inside the mutation's transaction
                  src/portfolio.js  rows → the shape the engine reads
                  src/routes/       auth · portfolio · meetings · admin · import
-                 migrations/       ordered SQL (001–038, applied at boot)
+                 migrations/       ordered SQL (001–041, applied at boot)
                  test/             the suites — count in CHANGELOG.md
 
 web/             src/ui/kit.js     h() builder, dialogs, tables, charts (from v4)

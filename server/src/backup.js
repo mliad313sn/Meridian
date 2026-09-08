@@ -28,17 +28,28 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { many, one, query, engine, native, dataDir } from "./db.js";
 
-const COUNTED = [
-  "project", "activity", "milestone", "raid_item", "change_request", "cost_line", "document",
-  "meeting_series", "meeting_occurrence", "meeting_decision", "meeting_action", "audit_event",
-  "app_user", "person", "site", "programme", "benefit", "lesson", "gate_criterion",
-];
+/* L'épreuve comptait DIX-NEUF tables sur cinquante-deux, et annonçait
+   « every counted table matches ». Une sauvegarde qui avait perdu toutes
+   les affectations, toutes les feuilles de temps, tous les engagements,
+   tous les dossiers d'investissement ou tout le registre des parties
+   prenantes sortait 0 : l'épreuve disait « bonne » d'une sauvegarde
+   inexploitable. On compte donc ce que le livre contient — TOUTES ses
+   tables, découvertes à l'exécution — plutôt qu'une liste écrite une
+   fois et jamais rouverte. (Conseiller exploitation nº 10, docs/33 §5.) */
+async function countedTables(runner = { query }) {
+  const r = await runner.query(
+    `SELECT table_name FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+      ORDER BY table_name`);
+  return r.rows.map((x) => x.table_name);
+}
 
-/** Le compte de chaque table qui compte, sur la connexion courante. */
-export async function counts(runner = { query }) {
+/** Le compte de chaque table du livre, sur la connexion courante. */
+export async function counts(runner = { query }, tables = null) {
+  const list = tables ?? await countedTables(runner);
   const out = {};
-  for (const t of COUNTED) {
-    try { out[t] = (await runner.query(`SELECT count(*)::int AS n FROM ${t}`)).rows[0].n; }
+  for (const t of list) {
+    try { out[t] = (await runner.query(`SELECT count(*)::int AS n FROM "${t}"`)).rows[0].n; }
     catch { out[t] = null; }
   }
   return out;
@@ -142,8 +153,16 @@ export async function drill({ file, url = process.env.DATABASE_URL, expected = n
 
 /** Le résultat, écrit là où /api/health le lit. */
 export async function record(result) {
+  /* Une épreuve RATÉE rafraîchissait quand même la date, si bien qu'une
+     épreuve qui échouait tous les mois avait l'air saine : date récente,
+     et il fallait lire `ok` pour voir qu'elle ne prouvait rien. On garde
+     donc les deux dates — la dernière tentative, et la dernière REUSSIE,
+     qui est celle que la santé annonce comme « dernière restauration
+     prouvée ». (Conseiller exploitation nº 7, docs/33 §5.) */
+  const previous = await lastDrill();
   const value = JSON.stringify({
     at: result.at, ok: result.ok, restoreSeconds: result.restoreSeconds,
+    provenAt: result.ok ? result.at : (previous?.provenAt ?? null),
     file: path.basename(result.file ?? ""), mismatches: result.mismatches ?? [],
   });
   await query(

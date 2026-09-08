@@ -251,6 +251,14 @@ export function can(user, action, resource = {}) {
   if (!user) return deny("not authenticated — sign in again, your session may have ended");
   if (!user.active) return deny("account is disabled — an administrator can reactivate it from Administration");
   if (!ACTIONS.includes(action)) return deny(`unknown action "${action}"`);
+  /* Fermé par défaut sur le RÔLE, comme sur l'action. Un rôle non reconnu
+     tombait à travers le garde `viewer` plus bas et ramassait
+     `demand.raise`, `portfolio.read` et `data.export` au passage. Rien
+     n'y mène aujourd'hui — un principal de service n'ouvre pas de session
+     — mais c'est le SEUL fichier que le produit traite comme faisant
+     autorité, et une ouverture par défaut n'y a pas sa place.
+     (Conseiller sécurité M-4, docs/33 §5.) */
+  if (!ROLES.includes(user.role)) return deny(`unknown role "${user.role}" — no authority is granted to a role this file does not name`);
 
   if (ADMIN_ONLY.has(action)) {
     return user.role === "admin" ? allow() : deny("administrator only — ask an account marked ADMIN on the sign-in directory");
@@ -469,6 +477,38 @@ const allow = () => ({ ok: true, why: "" });
 const deny = (why) => ({ ok: false, why });
 
 /** Express guard. Resource is resolved by an earlier middleware. */
+/**
+ * Qui peut ratifier une décision (H-3).
+ *
+ * La 039 a fait vivre l'état d'une décision : Proposed → Ratified. Rien
+ * ne disait qui pouvait franchir ce pas, et /api/v1 en était le SEUL
+ * chemin — donc une clé `write:meetings` proposait une décision puis la
+ * ratifiait elle-même, sous un ratifieur en texte libre jamais confronté
+ * à l'annuaire. C'est exactement la ségrégation des tâches que
+ * `change.approve` défend depuis I1, et SECURITY.md la nomme dans le
+ * périmètre : « bypass segregation of duties on approvals, gates or
+ * change decisions ».
+ *
+ * La règle vit ici, pas dans la route, parce que c'est ici qu'on lit qui
+ * peut quoi — et parce que l'écran qui portera ce geste devra lire la
+ * même règle que le contrat.
+ */
+export function canRatifyDecision({ ratifier, decidedBy, recordedBy } = {}) {
+  if (!ratifier) {
+    return { ok: false, why: "Ratifying a decision names the person who ratified it: ratifiedBy, an active person" };
+  }
+  if (decidedBy && ratifier === decidedBy) {
+    return { ok: false, why: "the person who decided does not also ratify — a second pair of eyes ratifies, as for a change request" };
+  }
+  /* Le COMPTE qui a consigné compte autant que la personne : une clé
+     d'intégration consigne sous son propre compte, et « la personne est
+     différente » ne suffit pas quand c'est la même main qui écrit. */
+  if (recordedBy && ratifier === recordedBy) {
+    return { ok: false, why: "the account that recorded this decision does not also ratify it" };
+  }
+  return { ok: true };
+}
+
 export function require$(action, resolve) {
   return async (req, res, next) => {
     try {

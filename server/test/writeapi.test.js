@@ -56,9 +56,15 @@ describe("I-2 · la serrure avant la porte", () => {
     assert.ok(paths.includes("PUT /api/v1/projects/:externalId"));
     assert.equal(r.body.endpoints.find((e) => e.path.includes("decisions")).scope, "write:meetings");
     const doc = (await c.get("/api/v1/openapi.json", { "X-API-Key": KEY })).body;
-    const p = doc.paths["/api/v1/milestones/:externalId"].put;
+    /* OpenAPI nomme un paramètre `{nom}` ; la découverte, elle, rend les
+       routes telles que le routeur les monte. */
+    const p = doc.paths["/api/v1/milestones/{externalId}"].put;
     assert.ok(p.requestBody.content["application/json"].schema.properties.acceptanceCriteria, "le corps est décrit");
     assert.equal(p["x-required-scope"], "write:portfolio");
+    /* REQ-02 tient sur cet en-tête : il doit être DÉCLARÉ, pas seulement
+       raconté en prose, sans quoi aucun client engendré ne l'expose. */
+    assert.ok(p.parameters.some((x) => x.name === "Idempotency-Key" && x.in === "header"),
+      "l'en-tête d'idempotence est déclaré comme paramètre");
   });
 });
 
@@ -382,10 +388,17 @@ describe("second round · what the counsellors found (docs/33 §5)", () => {
     assert.equal(d.status, 201, d.text);
     const row = await one(`SELECT council, status, decided_by, evidence_uri FROM meeting_decision WHERE id = $1`, [d.body.id]);
     assert.equal(row.council, "ARB"); assert.equal(row.status, "Proposed"); assert.equal(row.decided_by, null);
-    const ratified = await c.put("/api/v1/decisions/D-052", { status: "Ratified", ratifiedBy: "Compliance Agent" }, h);
+    /* H-3 — un ratifieur en texte libre n'en est pas un : la ligne n'était
+       confrontée à rien, et une seule clé proposait puis ratifiait. */
+    const invented = await c.put("/api/v1/decisions/D-052", { status: "Ratified", ratifiedBy: "Compliance Agent" }, h);
+    assert.equal(invented.status, 400, "un ratifieur inventé est refusé");
+    assert.match(invented.body.error, /ratifiedBy/);
+    const nobody = await c.put("/api/v1/decisions/D-052", { status: "Ratified" }, h);
+    assert.equal(nobody.status, 400, "ratifier sans nommer qui ratifie est refusé");
+    const ratified = await c.put("/api/v1/decisions/D-052", { status: "Ratified", ratifiedBy: PM }, h);
     assert.equal(ratified.status, 200, ratified.text);
     const after = await one(`SELECT status, ratified_by FROM meeting_decision WHERE id = $1`, [d.body.id]);
-    assert.equal(after.status, "Ratified"); assert.equal(after.ratified_by, "Compliance Agent");
+    assert.equal(after.status, "Ratified"); assert.equal(after.ratified_by, PM);
     const audit = await one(`SELECT action, before_json, after_json FROM audit_event WHERE entity = 'meeting_decision' AND entity_id = $1 ORDER BY id DESC LIMIT 1`, [d.body.id]);
     assert.equal(audit.action, "Decision ratified");
     assert.match(JSON.stringify(audit.before_json), /Proposed/);
@@ -411,6 +424,99 @@ describe("second round · what the counsellors found (docs/33 §5)", () => {
     const stale = await put("/api/v1/projects/E01", { desc: "x", version: v });
     assert.equal(stale.status, 409);
     assert.equal((await put("/api/v1/projects/E01", { desc: "x", version: "abc" })).status, 400);
+  });
+
+  /* ── troisième tour · ce que le comité a trouvé sur la 5.10.0 bâtie ── */
+
+  test("H-2 · a refused request binds nothing: adopt commits with the write or not at all", async () => {
+    const admin = await as("admin");
+    const db = (await admin.get("/api/bootstrap")).body.db;
+    const victim = db.projects.find((x) => !x.externalId);
+    /* L'adoption ouvrait sa propre transaction et la validait avant la
+       validation de la requête : un 400 saisissait définitivement une
+       ligne à laquelle l'intégration n'avait jamais réussi à écrire. */
+    const refused = await put("/api/v1/projects/SEIZE-1", { adopt: victim.id, pm: "no-such-person-zzz" });
+    assert.equal(refused.status, 400, refused.text);
+    const row = await one(`SELECT external_source, external_id FROM project WHERE id = $1`, [victim.id]);
+    assert.equal(row.external_id, null, "la requête refusée n'a rien lié");
+    assert.equal(row.external_source, null);
+    const events = await many(
+      `SELECT id FROM audit_event WHERE entity = 'project' AND entity_id = $1 AND action = 'Row adopted'`, [victim.id]);
+    assert.equal(events.length, 0, "et n'a rien inscrit à la piste");
+    /* La même requête, valide, lie bien. */
+    const ok = await put("/api/v1/projects/SEIZE-1", { adopt: victim.id, desc: "now adopted" });
+    assert.equal(ok.status, 200, ok.text);
+    assert.equal((await one(`SELECT external_id FROM project WHERE id = $1`, [victim.id])).external_id, "SEIZE-1");
+  });
+
+  test("H-3 · the person who decided does not also ratify", async () => {
+    const h = { "X-API-Key": MEET_KEY };
+    const d = await c.put("/api/v1/decisions/D-080",
+      { headline: "Self-service ratification", decidedBy: PM, status: "Proposed" }, h);
+    assert.equal(d.status, 201, d.text);
+    const self = await c.put("/api/v1/decisions/D-080", { status: "Ratified", ratifiedBy: PM }, h);
+    assert.equal(self.status, 403, "la ségrégation des tâches vaut ici comme pour un changement");
+    assert.match(self.body.error, /second pair of eyes/);
+  });
+
+  test("M-1/M-2 · a decision is a versioned row: adopt works, and a stale version is refused", async () => {
+    const admin = await as("admin");
+    const h = { "X-API-Key": MEET_KEY };
+    /* Une décision consignée à l'écran, comme celles que le premier
+       intégrateur a déjà écrites AVANT que l'identité externe existe.
+       `adopt` dessus partait en 500 : la table n'avait pas de
+       `row_version` et l'adoption l'incrémente. */
+    const screen = await admin.post("/api/decisions",
+      { headline: "Recorded on a screen, adopted later", council: "ARB" });
+    assert.equal(screen.status, 201, screen.text);
+    const a = await c.put("/api/v1/decisions/LEG-1", { adopt: screen.body.id }, h);
+    assert.equal(a.status, 200, a.text);
+    assert.equal(a.body.id, screen.body.id, "pas de doublon");
+    assert.equal((await one(`SELECT external_id FROM meeting_decision WHERE id = $1`, [screen.body.id])).external_id, "LEG-1");
+    const made = await c.put("/api/v1/decisions/D-081",
+      { headline: "Versioned state", council: "ARB", status: "Proposed" }, h);
+    assert.equal(made.status, 201, made.text);
+    const v = made.body.version;
+    const okv = await c.put("/api/v1/decisions/D-081", { status: "Ratified", ratifiedBy: PM, version: v }, h);
+    assert.equal(okv.status, 200, okv.text);
+    assert.equal(okv.body.version, v + 1, "la version rendue est réelle, pas un 1 littéral");
+    const stale = await c.put("/api/v1/decisions/D-081", { provenance: "[late]", version: v }, h);
+    assert.equal(stale.status, 409, "deux intégrations en concurrence ne s'écrasent plus en silence");
+  });
+
+  test("integrator · a rationale with a trailing newline stays idempotent, and a created criterion says so", async () => {
+    const h = { "X-API-Key": MEET_KEY };
+    const body = { headline: "Trailing whitespace", council: "ARB", rationale: "Because of X.\n" };
+    const one_ = await c.put("/api/v1/decisions/D-082", body, h);
+    assert.equal(one_.status, 201, one_.text);
+    /* La création élaguait, la comparaison d'immuabilité non : le re-PUT
+       octet pour octet identique repartait en 409. */
+    const two = await c.put("/api/v1/decisions/D-082", body, h);
+    assert.equal(two.status, 200, two.text);
+    assert.equal(two.body.created, false);
+
+    /* Poser et constater d'un seul PUT reste UNE création. */
+    const crit = await put("/api/v1/criteria/CRIT-BORN", { project: "E01", gate: 1, text: "posed and met at once", met: false });
+    assert.equal(crit.status, 201, crit.text);
+    assert.equal(crit.body.created, true, "une ligne qui n'existait pas est créée, pas mise à jour");
+  });
+
+  test("H-1 · removing an integration does not write its signing secret into the trail", async () => {
+    const admin = await as("admin");
+    const made = await mint(admin, "Webhook holder", "read:portfolio");
+    const row0 = await one(`SELECT row_version FROM integration WHERE id = $1`, [made.id]);
+    const set = await admin.patch("/api/admin/integrations/" + made.id,
+      { webhookUrl: "https://x.example/hook", webhookSecret: "S3CRET-SIGNING-KEY", version: row0.row_version });
+    assert.equal(set.status, 200, set.text);
+    assert.equal((await one(`SELECT webhook_secret FROM integration WHERE id = $1`, [made.id])).webhook_secret,
+      "S3CRET-SIGNING-KEY", "le secret est bien posé — sans quoi l'épreuve ci-dessous ne prouve rien");
+    const gone = await admin.del("/api/admin/integrations/" + made.id);
+    assert.equal(gone.status, 200, gone.text);
+    const ev = await one(
+      `SELECT before_json FROM audit_event WHERE entity = 'integration' AND entity_id = $1 ORDER BY id DESC LIMIT 1`, [made.id]);
+    const written = JSON.stringify(ev.before_json);
+    assert.ok(!written.includes("S3CRET-SIGNING-KEY"), "le secret de signature ne part pas dans une piste que rien ne corrige");
+    assert.match(written, /redacted/);
   });
 
   test("Idempotency-Key: key order does not matter; a refused request frees its key", async () => {

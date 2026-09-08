@@ -126,8 +126,14 @@ const ENTITIES = {
   agenda_item: { c: /occurrences\/:id\/close/, u: NA("Frozen at close (R5.8)"), d: NA("Frozen at close (R5.8)") },
   meeting_attendance: { c: /occurrences\/:id\/attendance/, u: /occurrences\/:id\/attendance/,
     d: /occurrences\/:id\/attendance/ },
-  meeting_decision: { c: /occurrences\/:id\/decisions/, u: NA("Immutable once the meeting closes (R5.5)"),
-    d: NA("Immutable once the meeting closes (R5.5)") },
+  /* La 039 a fait vivre l'ÉTAT d'une décision (Proposed → Ratified, le
+     ratifieur, le lien de preuve) : « immuable une fois la séance close »
+     n'était plus vrai, et la ligne d'exemption cachait un chemin de mise à
+     jour que ni cette porte ni la F3 ne regardaient. C'est la SUBSTANCE
+     qui est immuable — le fond répond 409 — et l'état s'écrit par
+     PUT /api/v1/decisions/:externalId, sous `row_version` depuis la 041. */
+  meeting_decision: { c: /occurrences\/:id\/decisions/, u: /put\("\/decisions\/:externalId"/,
+    d: NA("A decision is superseded by a new one, never deleted (I-7)") },
   meeting_action: { c: /occurrences\/:id\/actions/, u: /patch\("\/actions\/:id"/,
     d: NA("Cancelled via status, so it stays in the minutes that raised it") },
 };

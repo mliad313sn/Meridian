@@ -136,6 +136,97 @@ verification is fixed here, not filed:
   committed and unchanged. Found by the review probe's "files changed
   since the last review" list, which is why that list exists.
 
+### Third round — the full committee, on the release as built
+
+Three counsellors reviewed 5.10.0 as a finished thing rather than as a
+diff: a security and code reviewer over the whole surface, an operator
+who built an instance from nothing on real PostgreSQL 16 and ran the
+runbook line by line, and an integrator who rewrote RT365's
+`meridian_sync.py` against the published contract and loaded the whole
+programme through it. Five findings blocked the tag; every one of them
+was in code the earlier diff reviews had already passed.
+
+- **An integration's webhook signing secret no longer reaches the audit
+  trail.** Deleting an integration wrote `webhook_secret` in clear into
+  `audit_event` — append-only, served by `/api/audit` and
+  `/api/v1/audit`, readable by every group account and every `read:audit`
+  key, and impossible to redact afterwards. Anyone who read it could forge
+  `x-meridian-signature` on delivered events. The before-image on a table
+  that holds a credential is now built by allow-list.
+- **A refused request no longer seizes a row.** `adopt` opened its own
+  transaction and committed the binding before the request had finished
+  validating, so a `PUT` that then answered 400 permanently bound a
+  project the integration had never successfully written to — with no way
+  back, since a bound row refuses every other adoption. The binding now
+  joins the caller's own write and commits or rolls back with it.
+- **Ratifying a decision is a segregated act.** One `write:meetings` key
+  could propose a decision and then ratify it, naming any free-text
+  ratifier, on the only path that reaches that state. `canRatifyDecision`
+  in `shared/rbac.js` now requires a named person of the directory who is
+  neither the decider nor the recording account, and `can()` closes by
+  default on an unrecognised role.
+- **The decision register is a versioned row** (migration 041). Its state
+  has been mutable since 040 while the table carried no `row_version`:
+  two integrations overwrote each other in silence, the caller was handed
+  a literal `version: 1` that was never true, and the documented `adopt`
+  answered 500. The F2 exemption text now says what is true — the
+  substance is immutable, the state is not.
+- **The backup and the drill ask the book who holds it.** Both probed
+  `/api/health` on a guessed port; on a fleet each tenant has its own, so
+  the probe found nobody, opened a *live* PGlite data directory, deleted
+  the running server's lock files and reported "this backup was taken
+  with the server stopped". A marker carrying the host pid, written at
+  open and removed at stop, answers the question that was actually being
+  asked.
+
+### Fixed before the tag, from the same round
+
+- `.env` is read before anything is read from the environment.
+  `loadEnv()` ran inside `connect()`, so `DATABASE_URL`, `PORT` and
+  `MERIDIAN_BACKUP_DIR` were all invisible to the module-scope code that
+  needed them: on PostgreSQL the nightly backup refused every night
+  claiming "this book is PGlite"; the drill could not find the backup it
+  had just written; and `PORT` in a tenant's `.env` was ignored, so every
+  instance bound 4173 and the fleet of §8 could not work.
+- `scripts/restart.sh` works on Linux. It found the listening process
+  through `powershell.exe`; where the fleet actually runs, the expression
+  was empty, nothing was stopped, and the script launched a *second*
+  server over the same book — the corruption it exists to prevent.
+- The restore drill counts every table the book holds, discovered at run
+  time, instead of a list of nineteen written once. A backup that had
+  lost every allocation, timesheet, commitment, business case or
+  stakeholder used to exit 0.
+- `/api/health` reports the last **proven** restore (`lastDrillAt`)
+  separately from the last attempt (`lastAttemptAt`). A drill failing
+  every month looked recent and therefore healthy.
+- `MERIDIAN_INSTANCE_ID` names an instance from its `.env`, as §8 of the
+  runbook already promised; the screen setting still overrides it.
+- The published contract speaks OpenAPI: `{externalId}`, not Express's
+  `:externalId`, so a generated client no longer sends the literal
+  parameter name — and `Idempotency-Key`, which REQ-02 rests on, is
+  declared as a header parameter rather than only described in prose.
+- A decision's substance comparison trims what the create path trims. Any
+  rationale, alternatives or dissent ending in a space or a newline — a
+  markdown cell, a heredoc, a multi-line rationale — was permanently
+  non-idempotent: the byte-identical re-`PUT` answered 409.
+- Posing and finding a criterion met in one `PUT` reports `created: true`.
+  It fell through to the update path and reported a creation as an update.
+- `writeRow`'s no-version branch asserts its identifiers again, restoring
+  the tripwire `db.js` exists to be.
+- The runbook (docs/34) no longer tells an operator things that are not
+  true: `createuser`/`createdb` run as the postgres superuser, `npm start`
+  does not return, §3b drops the database before restoring, the migration
+  count is 41, the rollback point for an upgrade from before 5.10.0 is
+  taken with `pg_dump` because that binary has no `backup` script,
+  `/api/admin/posture` needs a session, and nothing marks a restore in the
+  trail — the sentence that said it did is gone.
+
+Five gaps the integrator found that are not defects — no `decisions` or
+`actions` in the v1 read, no public write for structure, no way to raise
+an action into the next occurrence, no closure date on a register item,
+no basis on a project date — are recorded as REQ-15…REQ-19 rather than
+added to a release being tagged (D-33.27).
+
 ### Fixed
 
 - **The first hour** (I-1 · M-01..M-03): `.env` is loaded; `PGLITE_DIR`

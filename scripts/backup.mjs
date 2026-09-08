@@ -8,19 +8,28 @@
  * Schedule it (cron, Task Scheduler) and run `npm run restore-drill` on the
  * result at least monthly; /api/health reports the last proven restore.
  */
-import { connect, close, engine } from "../server/src/db.js";
+import { connect, close, engine, bookHolder } from "../server/src/db.js";
 import { backup } from "../server/src/backup.js";
+import { loadEnv, resolveDataDir } from "../server/src/env.js";
+
+/* `.env` AVANT toute lecture d'environnement. connect() le chargeait, mais
+   trop tard : le garde ci-dessous, MERIDIAN_BACKUP_DIR et PORT se lisent au
+   chargement du module. D'où « ce livre est PGlite » sur une base
+   PostgreSQL, et une sauvegarde nocturne qui sortait 2 toutes les nuits.
+   (Conseiller exploitation nº 2, docs/33 §5.) */
+loadEnv();
 
 /* PGlite est mono-processus : ouvrir le répertoire de données pendant que
    le serveur tourne est la corruption que restart.sh existe pour éviter.
-   Si la santé répond sur PORT et qu'aucun DATABASE_URL n'est posé, on
-   refuse — l'opérateur arrête le service, puis relance. */
+   On le demande au livre lui-même — quel processus VIVANT le tient — et
+   non à une santé sur un port deviné : sur un parc, chaque locataire a le
+   sien, et interroger 4173 revenait à demander à quelqu'un d'autre.
+   (Conseiller exploitation nº 1, docs/33 §5.) */
 if (!process.env.DATABASE_URL) {
-  const port = process.env.PORT || 4173;
-  const up = await fetch(`http://127.0.0.1:${port}/api/health`, { signal: AbortSignal.timeout(1500) })
-    .then((r) => r.ok).catch(() => false);
-  if (up) {
-    console.error(`  a Meridian server answers on :${port} and this book is PGlite — stop it first (bash scripts/restart.sh stops gracefully), then run again`);
+  const dir = resolveDataDir();
+  const held = bookHolder(dir);
+  if (held) {
+    console.error(`  process ${held} holds ${dir} and this book is PGlite — stop it first (bash scripts/restart.sh stops gracefully), then run again`);
     process.exit(2);
   }
 }

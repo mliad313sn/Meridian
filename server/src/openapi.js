@@ -184,17 +184,35 @@ export function openApiDocument({ version = "dev", servers = [] } = {}) {
   for (const { method, path } of mountedRoutes()) {
     const doc = DOCS[`${method} ${path}`];
     if (!doc) continue;   // la porte F9 le refuse ; ici on ne ment pas par défaut
-    paths[path] ??= {};
+    /* OpenAPI nomme un paramètre de chemin `{nom}`. Express l'écrit
+       `:nom`. Publier la forme d'Express faisait envoyer à tout client
+       engendré le littéral « :externalId » — la description décrivait une
+       route que personne ne pouvait appeler. (Intégrateur, docs/33 §5.) */
+    const openApiPath = path.replace(/:(\w+)/g, "{$1}");
+    paths[openApiPath] ??= {};
     const collection = /^\/api\/v1\/(\w+)\/:externalId$/.exec(path)?.[1];
     const body = collection && WRITE_BODIES[collection];
-    paths[path][method.toLowerCase()] = {
+    const pathParams = [...path.matchAll(/:(\w+)/g)].map(([, name]) => ({
+      name, in: "path", required: true, schema: { type: "string", maxLength: 200 },
+      description: name === "externalId"
+        ? "Your own identifier for this row — stable across runs, unique within your integration"
+        : "The Meridian identifier of the row",
+    }));
+    /* REQ-02 tient sur cet en-tête ; il n'était écrit qu'en prose, donc
+       aucun client engendré ne l'exposait. */
+    const idempotency = body ? [{
+      name: "Idempotency-Key", in: "header", required: false,
+      schema: { type: "string", maxLength: 200 },
+      description: "One key names ONE request. The same key with the same body replays the recorded " +
+        "answer (response header Idempotent-Replayed: true); the same key with a different body is refused (422).",
+    }] : [];
+    paths[openApiPath][method.toLowerCase()] = {
       summary: doc.summary,
       description: doc.description,
       security: [{ apiKey: [] }],
       "x-required-scope": doc.scope,
-      ...(collection ? { parameters: [{ name: "externalId", in: "path", required: true,
-        schema: { type: "string", maxLength: 200 },
-        description: "Your own identifier for this row — stable across runs, unique within your integration" }] } : {}),
+      ...(pathParams.length || idempotency.length
+        ? { parameters: [...pathParams, ...idempotency] } : {}),
       ...(body ? { requestBody: { required: true, content: { "application/json": { schema: jsonSchema(body) } } } } : {}),
       responses: {
         200: {

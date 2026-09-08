@@ -449,6 +449,93 @@ past its date is not missed, the same date committed is; a gate
 milestone in placeholder is `Unscheduled`; the write API speaks the same
 vocabulary.
 
+### REQ-15 · Read back what you wrote: `decisions` and `actions` in the v1 portfolio — `open` (integrator, third round)
+
+**Observed.** The integrator rewrote `meridian_sync.py` against the
+published contract and loaded RT365's whole programme through it: 285
+writes, a second run with `created: 0` and no new row anywhere. Then it
+could not read any of it back. `/api/v1/portfolio` carries projects,
+milestones, register items and criteria — not decisions, not actions, not
+meetings. Three consequences, all measured: `adopt` on a legacy decision
+or action has no discovery path (the only public trace is string-matching
+a headline inside `/api/v1/audit`'s `detail`); no reconciliation of what a
+room decided is possible without a session; and a sync cannot see that a
+human closed an action before it reopens it — the integrator marked H-01
+`Done` on the screen, re-ran the sync unchanged, and watched it reopen to
+`Open` with a 200. The minute of a meeting was overwritten by a stale
+ledger.
+
+**To deliver.** `decisions` and `actions` in `loadPortfolio`
+(`server/src/portfolio.js`, beside `raid:` and `criteria:`), under the
+scope that already governs them. The integrator ranked this the single
+highest-value change.
+
+---
+
+### REQ-16 · Raise an action into the next scheduled occurrence — `open` (integrator, third round)
+
+**Observed.** After setup, the rewritten sync needs exactly two session
+calls per run, every run: create the daily occurrence and open it. The
+API never opens a meeting — a chair does (D-33.14, and the rule holds).
+But when the chair has closed the room, a new human act is 409 with no
+public remedy, while the *next* occurrence already exists and is
+`scheduled`. The documented workaround (a Dependency with a review date)
+writes cleanly, and then the act leaves the actions register: RT365's
+H-nn rows end up split across two registers by whether a room happened to
+be open.
+
+**To deliver.** `series` + `raiseIn: "next"` on `PUT /api/v1/actions`
+(`upsertAction` in `server/src/v1write.js`): attach to the next scheduled
+occurrence under the integration's name, without opening it. The last
+recurring session dependency goes with it.
+
+---
+
+### REQ-17 · A public write for structure, under a scope an administrator grants — `open` (integrator, third round)
+
+**Observed.** D-33.4 kept sites, programmes and people as administrator
+acts. The integrator's drill showed the cost: a first load still needs an
+administrator's password beside the integration key — and because the
+gate ladder lives on the programme, REQ-03's own prerequisite is not on
+the contract at all. The objection D-33.4 raised was governance, and a
+scope an administrator grants deliberately is an answer to it.
+
+**To deliver.** A `write:structure` scope (`server/src/integrations.js`)
+and `PUT /api/v1/{sites,programmes,people}`, the programme carrying
+`gateModel`. To be put to the interoperability committee first, as D-33.4
+said.
+
+---
+
+### REQ-18 · A register item records when, and by whom, it closed — `open` (integrator, third round)
+
+**Observed.** `PUT /api/v1/raid/{id}` with `status: "Closed"` answers 200
+and reads back closed — and `closed_on` stays null. There is no writable
+field for when a row closed or who closed it, so the ledger's closure
+date is lost on every row a sync closes. RT365 closes register items from
+its own ledger.
+
+**To deliver.** `closedOn` and `closedBy` on the RAID write body, with the
+same rules the screen applies.
+
+---
+
+### REQ-19 · A project date says what it rests on, as a milestone's does — `open` (integrator, third round)
+
+**Observed.** REQ-14 gave milestones `dateBasis` and `condition`, and the
+integrator confirmed both round-trip exactly. Projects have no
+equivalent: `dateBasis` on a project is accepted and silently dropped.
+RT365's project finish dates are placeholders for the same reason its
+gate dates are — D-057 sets the same rule for both.
+
+**To deliver.** `date_basis` and `condition` on `project.finish`, read by
+the same engine paths REQ-14 touched. Note the wider hygiene item behind
+it: the write API accepts unknown fields everywhere and refuses none, so
+`category` on a register item, `sponsor` and `acceptanceCriteria` on a
+project, and `status: "Closed"` on a project all answer 200 having done
+nothing. A contract that never says no teaches an integrator the wrong
+thing quietly.
+
 ---
 
 ## 4 · The communication loop with RT365
@@ -546,6 +633,16 @@ ahead — which is the whole reason the probe exists.
 | D-33.18 | 08/09 | The review is scheduled, not remembered: a weekday Routine fires a fresh Product Owner round; and `released` waits on a maintainer's tag push, which a session cannot do (403 on a tag ref). | Rely on the next person to run `/product-owner` (refused: a duty nothing fires is a duty nobody performs — the branch moved sixteen commits between two reads on the first day). Push the tag from a session (refused: it is a permission boundary, not an obstacle to route around). | none |
 | D-33.17 | 08/09 | A milestone date is mandatory but carries a basis; a placeholder is never missed or overdue. | A nullable date (refused: every screen sorts and draws by it; a null would have touched the roadmap, the Gantt, the agenda and the horizon). | none |
 | D-33.16 | 08/09 | `/api/health` stays unauthenticated and names the organisation and the instance — a supervisor holds no session; the proxy can hide it. | Authenticate it (refused: fleet supervision is the point). | code counsellor noted the disclosure |
+
+| D-33.19 | 08/09 | The full committee is convened on the release **as built**, not on the diff: a security and code reviewer over the whole surface, an operator who runs the runbook from nothing on real PostgreSQL, and an integrator who rewrites RT365's sync against the published contract. Three blocking findings stopped the tag until closed. | Review the diff only (refused: every one of the five blocking findings was in shipped code the diff had already passed — the secret in the trail, the seizure on a refused request, the self-ratification). | none |
+| D-33.20 | 08/09 | An integration's webhook signing secret never reaches the audit trail: a before-image on a table that holds a credential is built by allow-list, not by spreading the row. | Redact `webhook_secret` beside `key_hash` and leave the spread (refused: the next credential column added would leak the same way, silently — the spread is the defect, not the missing name). | none |
+| D-33.21 | 08/09 | The transaction boundary of a write **is the request**: `adopt` no longer commits on its own, it plans a binding that joins the caller's own write and commits or rolls back with it. | Reverse the binding on failure (refused: a compensating write is a second chance to fail, and the trail would carry a seizure and its undo rather than nothing). | none |
+| D-33.22 | 08/09 | Ratifying a decision is a segregated act, decided in `shared/rbac.js` (`canRatifyDecision`): the ratifier is a named person of the directory, and is neither the decider nor the account that recorded it. `can()` also closes by default on an unknown role. | Leave ratification to the integration's scopes (refused: `/api/v1` was the only path to the state, so a single key both proposed and ratified under a free-text name — the very segregation SECURITY.md names in scope). | none |
+| D-33.23 | 08/09 | The decision register becomes a versioned row (041): its state writes under `row_version` like every other mutable row, `adopt` works, and the F2 exemption text says what is true — the substance is immutable, the state is not. | Keep it unversioned and guard the adoption per table (refused: it made the write path honest-looking while two integrations still overwrote each other in silence, and the caller was handed a `version: 1` that was never true). | none |
+| D-33.24 | 08/09 | The backup and the drill ask the **book** who holds it — a marker carrying the host pid, written at open and removed at stop — instead of probing a guessed port; and both read `.env` before they read anything from the environment. | Probe every port in a range (refused: it answers "is something listening", not "is this book open", which is the question). | none |
+| D-33.25 | 08/09 | The drill counts every table the book holds, discovered at run time, not a list of nineteen written once. `/api/health` reports the last **proven** restore separately from the last attempt. | Extend the list to fifty-two names (refused: the next table added would fall out of the proof the same way, and nothing would say so). | none |
+| D-33.26 | 08/09 | The published contract speaks OpenAPI, not Express: `{externalId}`, and the `Idempotency-Key` header declared as a parameter rather than described in prose. | Leave the prose (refused: REQ-02 rests on that header, and no generated client exposed it). | none |
+| D-33.27 | 08/09 | The gaps the integrator found that are not defects — `decisions` and `actions` absent from the v1 read, no public write for structure, no way to open a meeting from the API, no closure date on a register item, a project date with no basis — are recorded as REQ-15…REQ-19 for the next round, not smuggled into a release being tagged. | Take them now (refused: five blocking findings were already open on a release that was meant to be tagged; widening it is how the next five get missed). | integrator ranked the first three as the highest-value changes |
 
 *(one line per decision, appended by each run)*
 
