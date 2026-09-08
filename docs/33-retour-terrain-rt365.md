@@ -641,11 +641,21 @@ answers in three places it can read:
   test; it is `accepted` when the requester says so on the issue (a
   comment, or closing it themselves); it is `released` when a version
   tag carries it. **No line is `released` yet**: `v5.10.0` is tagged
-  locally on `985d6af`, but a session cannot push a tag ref — GitHub
-  answers 403 on it while branch pushes succeed — so a maintainer must
-  push the tag before the release workflow runs. Until then RT365 pins
-  the branch, not the version (D-33.18). `docs/requests/rt365.json` carries all three, and a
-  `history` per line.
+  locally on `125d16c`, but a session cannot push a tag ref — GitHub
+  answers 403 on it while branch pushes succeed, on four attempts across
+  three commits — so a maintainer must push the tag before the release
+  workflow runs (D-33.18, D-33.30). Until then RT365 pins the branch, not
+  the version. One command, from a checkout of this branch:
+
+  ```bash
+  git fetch origin claude/meridian-rt365-feedback-d6vo3i
+  git tag -a v5.10.0 origin/claude/meridian-rt365-feedback-d6vo3i \
+    -m "Meridian 5.10.0 — the RT365 field return, and the committee that stopped it five times"
+  git push origin refs/tags/v5.10.0
+  ```
+
+  `docs/requests/rt365.json` carries all three states, and a `history`
+  per line.
 - **Escalation.** When RT365 rejects a refusal or a `done`, the line
   goes back to `open` with the objection quoted, and the sponsor of
   both repositories is the tie-breaker, named in the next D-33.n.
@@ -698,6 +708,8 @@ ahead — which is the whole reason the probe exists.
 
 | D-33.28 | 08/09 | RT365's post-5.10.0 list V-1…V-12 is read into this register whole, as REQ-20…REQ-31, in the priority RT365 gave it — before any of it is scheduled. | Take the three "highest" now (refused: a release with five blocking findings open was already being tagged; the register exists so that reading a request and scheduling it are separate acts). | none |
 | D-33.29 | 08/09 | V-8 is answered with a measurement, not an apology: a project created under a laddered programme carries exactly that ladder (proved again on a running instance), so the accepted gap is the MIGRATION of projects scaffolded before their programme declared one — and `adopt` on milestones is the working answer until it ships. | Rewrite existing projects when a ladder is declared (refused, D-33.2: dated gates and filed evidence would move under people's feet). Close V-8 as already-done (refused: RT365 measured ten milestones where it expected six, and the number is right — what it names is real). | RT365 filed it as a defect, not a preference |
+
+| D-33.30 | 08/09 | The tag stays a maintainer's act. Attempted again on `125d16c` once the committee's five blocking findings were closed, and refused again: branch refs push, tag refs answer 403. Four attempts on three different commits establish it as a permission boundary of the session credential, not a transient failure. The command a maintainer runs is in §4. | Route around it (refused: it is a boundary, and the proxy status shows no relay failure for the host — the remote itself refuses the ref). Ship untagged and call it released (refused: `released` in this register means a tag a third party can fetch). | none |
 
 *(one line per decision, appended by each run)*
 
