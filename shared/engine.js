@@ -288,7 +288,11 @@ export const Engine = {
     const approved = docs.filter(d => Engine.isEvidence(d)).length;
     const ms = db.milestones.find(m => m.project === projectId && m.gate === gateN);
     const date = ms ? ms.date : null;
-    const passed = date ? D(date) <= D(db.statusDate) : false;
+    /* REQ-14 — a placeholder date is a position on the timeline, not a
+       commitment: it never makes a gate "Overdue" or "Cleared" by the
+       calendar alone. Existing rows are committed; nothing changes for them. */
+    const placeholder = !!ms && ms.dateBasis === "placeholder";
+    const passed = date && !placeholder ? D(date) <= D(db.statusDate) : false;
     /* I-8 — the open register items raised AGAINST this gate. Informative,
        never blocking: a risk is a reason to look, not a lock (the lock is
        the evidence). The frozen arithmetic below is untouched. */
@@ -307,9 +311,11 @@ export const Engine = {
       ready: docs.length > 0 && complete,
       outstanding: docs.filter(d => !Engine.isEvidence(d)),
       unmet: criteria.filter(c => !c.met),
+      placeholder, condition: ms?.condition ?? "",
       state: passed && complete ? "Cleared"
            : passed ? "Overdue"
-           : date && days(db.statusDate, date) <= 45 ? (complete ? "Ready" : "At risk")
+           : date && !placeholder && days(db.statusDate, date) <= 45 ? (complete ? "Ready" : "At risk")
+           : placeholder ? "Unscheduled"
            : "Planned",
     };
   },

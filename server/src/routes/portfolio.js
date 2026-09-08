@@ -73,6 +73,13 @@ function assertLocalOrigin(row, what) {
    GREATER than everything, so `CHECK (budget >= 0)` waves it straight
    through — after which every derived figure on that project (SPI, CPI,
    EAC, the RAG, the published period) is NaN, silently and for good. */
+/* REQ-14 — ce que vaut une date de jalon : un engagement, ou une position
+   en attendant la mesure qui produira la vraie date (RT365 D-057). */
+const dateBasis = (v) => {
+  if (v === undefined || v === null || v === "") return "committed";
+  if (!["committed", "placeholder"].includes(v)) bad("dateBasis is committed or placeholder");
+  return v;
+};
 /* I-8 — un lien vers un jalon de gouvernance est un numéro dans l'échelle
    du programme ; vide veut dire « aucun ». */
 const gateLink = (v) => {
@@ -467,9 +474,10 @@ r.post("/milestones", async (req, res, next) => {
         const n = await allocateId(t, "MS");
         id = p.id + "-M" + n.split("-")[1];
         return t.query(
-          `INSERT INTO milestone (id, project_id, name, due_date, base_date, gate, kind, owner_id, intrusive)
-           VALUES ($1,$2,$3,$4,$4,NULL,'milestone',$5,$6)`,
-          [id, p.id, b.name, b.date, b.owner ?? p.pm_id ?? null, !!b.intrusive]);
+          `INSERT INTO milestone (id, project_id, name, due_date, base_date, gate, kind, owner_id, intrusive, date_basis, condition)
+           VALUES ($1,$2,$3,$4,$4,NULL,'milestone',$5,$6,$7,$8)`,
+          [id, p.id, b.name, b.date, b.owner ?? p.pm_id ?? null, !!b.intrusive,
+           dateBasis(b.dateBasis), String(b.condition ?? "").slice(0, 500)]);
       });
     res.status(201).json({ id });
   } catch (e) { next(e); }
@@ -506,6 +514,11 @@ r.patch("/milestones/:id", async (req, res, next) => {
     }
     if (b.owner !== undefined) patch.owner_id = b.owner || null;
     if (b.intrusive !== undefined) patch.intrusive = !!b.intrusive;
+    /* REQ-14 — a placeholder becomes a commitment when the condition
+       that produces the date has been measured; the reverse is allowed
+       too, and both are audited like any milestone change. */
+    if (b.dateBasis !== undefined) patch.date_basis = dateBasis(b.dateBasis);
+    if (b.condition !== undefined) patch.condition = String(b.condition ?? "").slice(0, 500);
     /* Moving a cutover, or newly marking one as intrusive, asks the same
        freeze question the original planning did. */
     const wantsIntrusive = b.intrusive === undefined ? m.intrusive : !!b.intrusive;

@@ -43,7 +43,8 @@ the delivery agent under this charter; the decisions of that run are in
 
 RT365 (`mliad313sn/RT365`, branch
 `claude/project-owner-agent-setup-hi3xqu`, commit `12a20a8`; re-read at
-`25b0483` the same afternoon — the branch had moved six commits, filed
+`25b0483` the same afternoon and again at `a90b1ae` — which brought
+D-057 and REQ-14 — the branch had moved six commits, filed
 the twelve issues, and added E-4 "two-way Meridian link once I-2 exists"
 and PC-5 "nothing real in a demo book until H-28") decided on
 8 September 2026 to run its whole project lifecycle in Meridian
@@ -420,6 +421,34 @@ a user did not write is still a request:
 | dates as placeholders "until O-17" | nothing for Meridian to do | — |
 | `MERIDIAN_ALLOW_DEMO` refusal on the sync side | the same refusal on the server side | REQ-12 |
 
+### REQ-14 · A milestone date says what it rests on — `done` 08/09 (RT365 D-057, no id)
+
+**Observed.** Found by the third re-read of RT365 (branch at `a90b1ae`,
+sixteen commits after the register was opened): decision D-057 sets the
+roadmap form — gate-driven sequencing with earliest-possible conditions,
+**no calendar date for gates C–F**, dates only for the owner's own
+committed acts or from a measured basis, weekly re-baseline; "Meridian is
+the schedule of record only after H-28". Meridian required a date on
+every milestone, so RT365 could only type placeholders, which the agenda
+would one day report as MISSED and the engine as Overdue. A request
+nobody wrote, carried by no id — exactly what the probe's "files changed
+since the last review" list exists for.
+
+**Delivered.** Migration 040: `milestone.date_basis` (`committed` |
+`placeholder`) and `milestone.condition` (the predecessor or measurement
+that will produce the real date). A date stays mandatory — the engine
+draws, sorts and compares with it — but a placeholder is a position on
+the timeline, never a promise: the agenda never marks it MISSED and
+announces it as a placeholder with its condition; `gateStatus` reports
+`placeholder`, `condition` and a new state `Unscheduled` instead of
+Overdue/Cleared by the calendar alone; existing rows are `committed` and
+unchanged. Session forms and `PUT /api/v1/milestones` carry both fields.
+
+**Measure.** `server/test/gates.test.js` (REQ-14 block): a placeholder
+past its date is not missed, the same date committed is; a gate
+milestone in placeholder is `Unscheduled`; the write API speaks the same
+vocabulary.
+
 ---
 
 ## 4 · The communication loop with RT365
@@ -504,6 +533,7 @@ ahead — which is the whole reason the probe exists.
 | D-33.13 | 08/09 | The default ladder seeds no criteria; only a declared ladder does. | Seed for all (refused: the code counsellor traced eleven surprise criteria and a group-only clearance on every new site project). | none |
 | D-33.14 | 08/09 | A standing human act is a RAID dependency with a review date, not a meeting action; the API keeps raising actions only in open rooms. | Actions without a room (refused: an action is what a room asked of someone). | none |
 | D-33.15 | 08/09 | The loop gains a counterpart, a cadence, three acceptance states, an escalation rule and a register version (§4). | None. | PMO counsellor asked for it |
+| D-33.17 | 08/09 | A milestone date is mandatory but carries a basis; a placeholder is never missed or overdue. | A nullable date (refused: every screen sorts and draws by it; a null would have touched the roadmap, the Gantt, the agenda and the horizon). | none |
 | D-33.16 | 08/09 | `/api/health` stays unauthenticated and names the organisation and the instance — a supervisor holds no session; the proxy can hide it. | Authenticate it (refused: fleet supervision is the point). | code counsellor noted the disclosure |
 
 *(one line per decision, appended by each run)*
@@ -514,10 +544,10 @@ ahead — which is the whole reason the probe exists.
 
 | | Before (5.9.0) | After (5.10.0) |
 |---|---|---|
-| tests | 449 | 513 |
+| tests | 449 | 515 |
 | static gates | 9 | 10 (F10 release audit) |
 | `/api/v1` routes | 4 read | 4 read + 8 write |
-| migrations | 033 | 039 |
+| migrations | 033 | 040 |
 | counsellors convened | — | 4 translators, 1 code reviewer, 1 PMO practitioner — 27 findings, all fixed or decided (D-33.9…16) |
 | first hour on a fresh clone | ~40 min of traps (RT365) | `npm install && npm run seed && npm run dev` |
 | open RT365 rows against Meridian | O-73, O-74, O-75, O-76 | O-73/74/75 answered; O-76 tools delivered, acts theirs |

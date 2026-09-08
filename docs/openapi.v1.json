@@ -675,7 +675,7 @@
     "/api/v1/milestones/:externalId": {
       "put": {
         "summary": "Create or update a milestone, keyed by your own identifier",
-        "description": "Creates the a milestone when nothing carries this externalId for your integration, updates it otherwise. The identity is (integration, externalId): two connected systems may both say \"E01\" without colliding. `version` is optional — when sent it is asserted (409 if stale); when omitted your system is the master of this row and the last write wins. Optional `Idempotency-Key` header: the same key with the same body replays the recorded answer (Idempotent-Replayed: true); the same key with another body is refused (422) — one key names ONE request, not a run. `adopt: \"<Meridian id>\"` binds your externalId to a row that already exists (created on a screen, or scaffolded) instead of creating another. The same business rules as the screens apply. `project` is a Meridian id or an externalId you created. A milestone with acceptanceCriteria cannot be marked done without acceptedBy — the person who checked them (PM-04).",
+        "description": "Creates the a milestone when nothing carries this externalId for your integration, updates it otherwise. The identity is (integration, externalId): two connected systems may both say \"E01\" without colliding. `version` is optional — when sent it is asserted (409 if stale); when omitted your system is the master of this row and the last write wins. Optional `Idempotency-Key` header: the same key with the same body replays the recorded answer (Idempotent-Replayed: true); the same key with another body is refused (422) — one key names ONE request, not a run. `adopt: \"<Meridian id>\"` binds your externalId to a row that already exists (created on a screen, or scaffolded) instead of creating another. The same business rules as the screens apply. `project` is a Meridian id or an externalId you created. A milestone with acceptanceCriteria cannot be marked done without acceptedBy — the person who checked them (PM-04). `dateBasis: \"placeholder\"` with a `condition` says the date is a position on the timeline, not a commitment: it is never reported missed or overdue until you make it `committed` (REQ-14).",
         "security": [
           {
             "apiKey": []
@@ -713,6 +713,12 @@
                   "date": {
                     "type": "string",
                     "format": "date"
+                  },
+                  "dateBasis": {
+                    "type": "string"
+                  },
+                  "condition": {
+                    "type": "string"
                   },
                   "owner": {
                     "type": "string"

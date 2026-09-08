@@ -515,7 +515,7 @@ function chip(label, on, onClick) { return h("button", { class: "chip" + (on ? "
 function statusTag(status) {
   const map = { Approved: "tag-ink", Cleared: "tag-ink", Closed: "tag-ink", "In review": "tag-soft",
     "At risk": "tag-accent", Overdue: "tag-accent", Pending: "tag-accent", Rejected: "tag-out",
-    Draft: "tag-out", Planned: "tag-out", Ready: "tag-soft", Open: "tag-soft" };
+    Draft: "tag-out", Planned: "tag-out", Unscheduled: "tag-out", Ready: "tag-soft", Open: "tag-soft" };
   /* R-15 — the WORD is translated, the VALUE compared upstream stays
      English: display and comparison never share a string. */
   return tag(t(status), map[status] || "");

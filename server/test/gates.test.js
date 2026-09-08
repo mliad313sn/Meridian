@@ -156,3 +156,58 @@ describe("I-4 · un critère se pose d'avance et se constate par un nom", () => 
     assert.equal((await viewer.post("/api/criteria", { project: PROJ.id, gate: 1, text: "x" })).status, 404);
   });
 });
+
+describe("REQ-14 · une date de jalon dit sur quoi elle repose (RT365 D-057)", () => {
+  test("une position n'est jamais manquée ni en retard ; un engagement l'est comme avant", async () => {
+    const pmo = await as("pmo");
+    const db = (await pmo.get("/api/bootstrap")).body.db;
+    const p = db.projects.find((x) => x.id === GROUP_PROJECT);
+    const r = await pmo.post("/api/milestones", {
+      project: p.id, name: "Gate C — Sim (placeholder)", date: "2026-01-15",
+      dateBasis: "placeholder", condition: "the capacity model, measured at gate B",
+    });
+    assert.equal(r.status, 201, r.text);
+    const bad = await pmo.post("/api/milestones", { project: p.id, name: "x", date: "2026-01-15", dateBasis: "guess" });
+    assert.equal(bad.status, 400);
+    const db2 = (await pmo.get("/api/bootstrap")).body.db;
+    const ms = db2.milestones.find((m) => m.id === r.body.id);
+    assert.equal(ms.dateBasis, "placeholder");
+    assert.match(ms.condition, /capacity/);
+    /* L'ordre du jour : la date est passée, et pourtant PAS « MANQUÉ ». */
+    const { buildAgenda } = await import("../../shared/meetings.js");
+    const agenda = buildAgenda(db2, { id: "MS-GRP-W", cadence: "weekly", scopeKind: "group" }, { meetsOn: "2026-01-20" }, []);
+    const flat = JSON.stringify(agenda.sections.find((s) => s.key === "milestones") ?? {});
+    assert.ok(!/MISSED · Gate C — Sim/.test(flat), "une position n'est pas un manquement");
+    /* Devenue un engagement, la même date est manquée. */
+    const c = await pmo.patch("/api/milestones/" + ms.id, { dateBasis: "committed", version: ms.version });
+    assert.equal(c.status, 200, c.text);
+    const db3 = (await pmo.get("/api/bootstrap")).body.db;
+    const agenda2 = buildAgenda(db3, { id: "MS-GRP-W", cadence: "weekly", scopeKind: "group" }, { meetsOn: "2026-01-20" }, []);
+    assert.ok(/MISSED · Gate C — Sim/.test(JSON.stringify(agenda2.sections.find((s) => s.key === "milestones"))));
+  });
+
+  test("un jalon de gouvernance en position n'est ni Overdue ni Cleared par le calendrier seul", async () => {
+    const pmo = await as("pmo");
+    const db = (await pmo.get("/api/bootstrap")).body.db;
+    const p = db.projects.find((x) => x.id === GROUP_PROJECT);
+    const g1 = db.milestones.find((m) => m.project === p.id && m.gate === 1);
+    const { Engine } = await import("../../shared/engine.js");
+    const before = Engine.gateStatus(db, p.id, 1).state;
+    const r = await pmo.patch("/api/milestones/" + g1.id, { dateBasis: "placeholder", condition: "sponsor's decision", version: g1.version });
+    assert.equal(r.status, 200, r.text);
+    const db2 = (await pmo.get("/api/bootstrap")).body.db;
+    const st = Engine.gateStatus(db2, p.id, 1);
+    assert.equal(st.placeholder, true);
+    assert.ok(["Unscheduled"].includes(st.state), `${before} → ${st.state}`);
+    assert.match(st.condition, /sponsor/);
+    /* Et par l'API d'écriture, le même vocabulaire. */
+    const admin = await as("admin");
+    const made = await admin.post("/api/admin/integrations", { name: "Roadmap", scopes: "write:portfolio" });
+    const { client } = await import("./harness.js");
+    const c = client();
+    const put = await c.put("/api/v1/milestones/GATE-F", { project: p.id, name: "Gate F — GA", date: "2027-06-30", dateBasis: "placeholder", condition: "no unresolved critical" }, { "X-API-Key": made.body.key });
+    assert.equal(put.status, 201, put.text);
+    const db3 = (await admin.get("/api/bootstrap")).body.db;
+    assert.equal(db3.milestones.find((m) => m.id === put.body.id).dateBasis, "placeholder");
+  });
+});

@@ -307,6 +307,8 @@ export async function loadPortfolio(user) {
       /* PM-04 — les critères posés d'avance, et qui a constaté. */
       acceptanceCriteria: m.acceptance_criteria ?? "",
       acceptedBy: m.accepted_by ?? null, acceptedOn: m.accepted_on ?? null,
+      /* REQ-14 — what the date is worth, and what will produce the real one. */
+      dateBasis: m.date_basis ?? "committed", condition: m.condition ?? "",
       externalSource: m.external_source ?? null, externalId: m.external_id ?? null,
       origin: m.origin ?? "local", version: m.row_version,
     })),

@@ -188,7 +188,10 @@ export function buildAgenda(db, series, occurrence, openActions = [], extras = {
   const lookOn = series.cadence === "weekly" ? 14 : 45;
   const ids = new Set(projects.map(p => p.id));
   const mAll = db.milestones.filter(m => ids.has(m.project));
-  const missed = mAll.filter(m => !m.done && D(m.date) < D(asOf) && days(m.date, asOf) <= lookBack * 3);
+  /* REQ-14 — a placeholder date (RT365 D-057: "no calendar date for gates
+     C–F") is a position, not a promise: it is never MISSED, and it is
+     announced as a placeholder when it comes into view. */
+  const missed = mAll.filter(m => !m.done && m.dateBasis !== "placeholder" && D(m.date) < D(asOf) && days(m.date, asOf) <= lookBack * 3);
   const soon = mAll.filter(m => !m.done && D(m.date) >= D(asOf) && days(asOf, m.date) <= lookOn);
   if (missed.length || soon.length) {
     sections.push({
@@ -203,9 +206,10 @@ export function buildAgenda(db, series, occurrence, openActions = [], extras = {
           entity: "milestone", entityId: m.id, urgent: true,
         })),
         ...soon.sort(by("date")).slice(0, monthly ? 12 : 6).map(m => ({
-          headline: m.name,
+          headline: (m.dateBasis === "placeholder" ? "PLACEHOLDER · " : "") + m.name,
           detail: (Engine.project(db, m.project) || {}).name + " — " + fmtDate(m.date) +
-                  " (in " + days(asOf, m.date) + " days)",
+                  " (in " + days(asOf, m.date) + " days)" +
+                  (m.dateBasis === "placeholder" ? " · not a commitment" + (m.condition ? " — after: " + m.condition : "") : ""),
           entity: "milestone", entityId: m.id, urgent: false,
         })),
       ],

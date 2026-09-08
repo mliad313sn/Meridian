@@ -1641,6 +1641,28 @@ export const ES = {
     "De dónde viene su autoridad, con las etiquetas propias de su organización.",
   "proposed":
     "propuesta",
+
+  // ── REQ-14 · la fecha del hito dice en qué se basa (RT365 D-057)
+  "The date is":
+    "La fecha es",
+  "a commitment":
+    "un compromiso",
+  "a placeholder — no calendar date yet":
+    "una posición — aún sin fecha de calendario",
+  "A placeholder is drawn where it sits but is never reported missed or overdue; make it a commitment once the condition below has been measured.":
+    "Una posición se dibuja donde está pero nunca se informa como incumplida ni atrasada; conviértala en compromiso una vez medida la condición de abajo.",
+  "Dated after":
+    "Fechada tras",
+  "the capacity model at gate C…":
+    "el modelo de capacidad en la puerta C…",
+  "The predecessor or the measurement that will produce the real date — read by whoever re-baselines.":
+    "El predecesor o la medición que producirá la fecha real — leído por quien restablezca la línea base.",
+  "placeholder":
+    "posición",
+  "after: ":
+    "tras: ",
+
+  "Unscheduled": "Sin fecha",
 };
 
 /* ── fragments composés autour de nombres vivants (R-15) ────────────── */

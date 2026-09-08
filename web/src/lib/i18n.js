@@ -1771,6 +1771,28 @@ export const FR = {
     "D'où vient son autorité, dans les étiquettes de votre organisation.",
   "proposed":
     "proposée",
+
+  // ── REQ-14 · la date de jalon dit sur quoi elle repose (RT365 D-057)
+  "The date is":
+    "La date est",
+  "a commitment":
+    "un engagement",
+  "a placeholder — no calendar date yet":
+    "une position — pas encore de date calendaire",
+  "A placeholder is drawn where it sits but is never reported missed or overdue; make it a commitment once the condition below has been measured.":
+    "Une position se dessine là où elle est mais n'est jamais dite manquée ni en retard ; faites-en un engagement une fois la condition ci-dessous mesurée.",
+  "Dated after":
+    "Datée après",
+  "the capacity model at gate C…":
+    "le modèle de capacité au jalon C…",
+  "The predecessor or the measurement that will produce the real date — read by whoever re-baselines.":
+    "Le prédécesseur ou la mesure qui produira la vraie date — lu par qui reposera la référence.",
+  "placeholder":
+    "position",
+  "after: ":
+    "après : ",
+
+  "Unscheduled": "Sans date",
 };
 
 /* ── enregistrement des dictionnaires ─────────────────────────────────

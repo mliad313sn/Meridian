@@ -126,6 +126,16 @@ verification is fixed here, not filed:
   restore-to-live and upgrade rollback, PGlite scripts refuse while the
   server runs.
 
+### Third re-read of RT365, the same day
+
+- **A milestone date says what it rests on** (REQ-14, from RT365's
+  decision D-057 "no calendar date for gates C–F"): `date_basis`
+  committed | placeholder and `condition` (migration 040). A placeholder
+  is a position, never a promise — the agenda never marks it MISSED, the
+  gate state reads `Unscheduled` instead of Overdue. Existing rows are
+  committed and unchanged. Found by the review probe's "files changed
+  since the last review" list, which is why that list exists.
+
 ### Fixed
 
 - **The first hour** (I-1 · M-01..M-03): `.env` is loaded; `PGLITE_DIR`
@@ -149,7 +159,7 @@ verification is fixed here, not filed:
   contract; the test that pinned "one endpoint per scope" now asserts
   "every scope served, every scoped route listed".
 
-Tests: 449 → 513; gates 9 → 10; migrations 033 → 039.
+Tests: 449 → 515; gates 9 → 10; migrations 033 → 040.
 
 ---
 

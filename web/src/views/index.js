@@ -1104,14 +1104,15 @@ Views.project = (db) => {
   const canPlan = may("schedule.write", p);
   const milestones = Engine.milestones(db, p.id).map(ms => {
     const g = ms.gate ? Engine.gateStatus(db, p.id, ms.gate) : null;
-    const late = D(ms.date) < D(db.statusDate);
-    const state = g ? g.state : (late ? "Cleared" : "Planned");
+    const late = ms.dateBasis !== "placeholder" && D(ms.date) < D(db.statusDate);
+    const state = g ? g.state : ms.dateBasis === "placeholder" ? "Unscheduled" : (late ? "Cleared" : "Planned");
     return h("div", { class: "step" },
       h("span", { class: "step-i " + (state === "Cleared" ? "ok" : state === "At risk" || state === "Overdue" ? "no" : "wait") },
         ms.gate ? "G" + ms.gate : "◇"),
       h("div", { style: "flex:1;min-width:0" },
         h("div", { class: "strong small" }, ms.name),
         h("div", { class: "xs muted" }, Engine.personName(db, ms.owner) + " · " + fmtDate(ms.date) +
+          (ms.dateBasis === "placeholder" ? " · " + t("placeholder") + (ms.condition ? " — " + t("after: ") + ms.condition : "") : "") +
           (g ? " · evidence " + g.approved + "/" + g.total : "") +
           (g && g.criteria.length ? " · " + t("criteria") + " " + g.criteriaMet + "/" + g.criteria.length : "") +
           (g && g.risks.length ? " · " + g.risks.length + " " + t("open register item(s) against it") : ""))),
@@ -1553,6 +1554,7 @@ function addMilestone(db, p) {
       { key: "name", label: "Milestone", required: true, span: 2 },
       { key: "date", label: "Date", type: "date", required: true, value: iso(addMonths(db.statusDate, 1)) },
       { key: "owner", label: "Owner", type: "select", value: p.pm, options: db.people.map(x => ({ value: x.id, label: x.name })) },
+      ...basisFields(null),
       /* V-03 — the flag that makes the site's freeze calendar apply. */
       { key: "intrusive", label: t("Touches the plant"), type: "checkbox", span: 2, value: false,
         hint: t("A cutover, a switch-over, anything a change freeze is about") },
@@ -1560,6 +1562,7 @@ function addMilestone(db, p) {
     saveLabel: "Add milestone",
     onSave: (v) => App.write("Milestone added", (a) => a.post("/milestones", {
       project: p.id, name: v.name, date: v.date, owner: v.owner, intrusive: !!v.intrusive,
+      dateBasis: v.dateBasis, condition: v.condition,
     }), { detail: v.name + " · " + fmtDate(v.date) }),
   });
 }
@@ -1669,6 +1672,7 @@ function editMilestone(db, ms) {
       { key: "date", label: "Date", type: "date", required: true, value: ms.date },
       { key: "owner", label: "Owner", type: "select", value: ms.owner ?? "",
         options: db.people.map((x) => ({ value: x.id, label: x.name })) },
+      ...basisFields(ms),
       /* PM-04 — les critères se posent d'AVANT ; sans eux, « terminé »
          est une opinion. Avec eux, cocher exige de nommer qui a constaté. */
       { key: "acceptanceCriteria", label: t("Acceptance criteria"), type: "textarea",
@@ -1687,9 +1691,22 @@ function editMilestone(db, ms) {
     onSave: (v) => App.write("Milestone updated", (a) => a.patch("/milestones/" + ms.id, {
       name: v.name, date: v.date, owner: v.owner || null, done: !!v.done,
       acceptanceCriteria: v.acceptanceCriteria, acceptedBy: v.acceptedBy || undefined,
-      intrusive: !!v.intrusive, version: ms.version,
+      intrusive: !!v.intrusive, dateBasis: v.dateBasis, condition: v.condition, version: ms.version,
     }), { detail: v.name }),
   });
+}
+
+/* REQ-14 (RT365 D-057) — what the date is worth. A placeholder is a
+   position on the timeline until the condition that produces the real
+   date has been measured; it is never read as missed. */
+function basisFields(ms) {
+  return [
+    { key: "dateBasis", label: t("The date is"), type: "select", value: ms?.dateBasis ?? "committed",
+      options: [{ value: "committed", label: t("a commitment") }, { value: "placeholder", label: t("a placeholder — no calendar date yet") }],
+      hint: t("A placeholder is drawn where it sits but is never reported missed or overdue; make it a commitment once the condition below has been measured.") },
+    { key: "condition", label: t("Dated after"), value: ms?.condition ?? "", placeholder: t("the capacity model at gate C…"),
+      hint: t("The predecessor or the measurement that will produce the real date — read by whoever re-baselines.") },
+  ];
 }
 
 function removeMilestone(db, ms) {

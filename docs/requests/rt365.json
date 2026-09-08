@@ -3,7 +3,7 @@
   "source": {
     "repository": "mliad313sn/RT365",
     "branch": "claude/project-owner-agent-setup-hi3xqu",
-    "commit": "25b0483",
+    "commit": "a90b1ae",
     "documents": [
       "docs/PMO_MERIDIAN_ASSESSMENT.md",
       "docs/PMO.md",
@@ -438,6 +438,37 @@
           "status": "open"
         }
       ]
+    },
+    {
+      "id": "REQ-14",
+      "origin": [
+        "D-057"
+      ],
+      "issue": 13,
+      "title": "A milestone date says what it rests on: committed or placeholder, with the condition that produces the real date (no calendar date for gates C–F)",
+      "status": "done",
+      "version": "5.10.0",
+      "decidedOn": "2026-09-08",
+      "delivered": [
+        "server/migrations/040_milestone_basis.sql",
+        "milestone.date_basis / condition",
+        "PUT /api/v1/milestones (dateBasis, condition)",
+        "shared/meetings.js (placeholders never MISSED)",
+        "shared/engine.js#gateStatus (Unscheduled)"
+      ],
+      "measure": "server/test/gates.test.js (REQ-14)",
+      "remaining": null,
+      "accepted": false,
+      "released": false,
+      "answerToSource": "D-057's placeholders can be typed as dateBasis: placeholder with the condition; make them committed when the measurement arrives.",
+      "history": [
+        {
+          "at": "2026-09-08",
+          "registerVersion": 3,
+          "status": "done",
+          "note": "found on the third re-read (a90b1ae), no id on RT365's side"
+        }
+      ]
     }
   ],
   "channel": {
@@ -451,5 +482,5 @@
     },
     "escalation": "a rejected refusal or done goes back to open with the objection quoted; the sponsor of both repositories is the tie-breaker"
   },
-  "registerVersion": 2
+  "registerVersion": 3
 }

@@ -117,7 +117,9 @@ const WRITE_DOCS = {
     "evidence documents are scaffolded as when a person creates one. Money is in millions."),
   "PUT /api/v1/milestones/:externalId": upsert("a milestone", "write:portfolio",
     "`project` is a Meridian id or an externalId you created. A milestone with acceptanceCriteria " +
-    "cannot be marked done without acceptedBy — the person who checked them (PM-04)."),
+    "cannot be marked done without acceptedBy — the person who checked them (PM-04). `dateBasis: " +
+    "\"placeholder\"` with a `condition` says the date is a position on the timeline, not a commitment: " +
+    "it is never reported missed or overdue until you make it `committed` (REQ-14)."),
   "PUT /api/v1/raid/:externalId": upsert("a register item (risk, issue, assumption, dependency)", "write:portfolio",
     "`gate` links it to a governance gate of the project, `cr` to a change request of the same project (I-8). " +
     "Omit `project` for a portfolio-wide item."),

@@ -287,6 +287,13 @@ export async function upsertMilestone(user, externalId, b) {
   const owner = b.owner !== undefined ? await resolvePerson(b.owner, "owner") : undefined;
   const criteria = text(b.acceptanceCriteria, 4000, "acceptanceCriteria");
   const acceptedBy = b.acceptedBy !== undefined ? await resolvePerson(b.acceptedBy, "acceptedBy") : undefined;
+  /* REQ-14 (RT365 D-057) — a date that is a position, not a promise. */
+  let basis;
+  if (b.dateBasis !== undefined) {
+    if (!["committed", "placeholder"].includes(b.dateBasis)) bad("dateBasis is committed or placeholder");
+    basis = b.dateBasis;
+  }
+  const condition = text(b.condition, 500, "condition");
 
   /* V-03 — la même question de gel de site que l'écran, AVANT la
      transaction : une bascule datée dans un arrêt d'usine est refusée
@@ -315,11 +322,13 @@ export async function upsertMilestone(user, externalId, b) {
         id = p.id + "-M" + n.split("-")[1];
         await t.query(
           `INSERT INTO milestone (id, project_id, name, due_date, base_date, gate, kind, owner_id, intrusive,
-                                  acceptance_criteria, external_source, external_id, done, accepted_by, accepted_on)
-           VALUES ($1,$2,$3,$4,$4,NULL,'milestone',$5,$6,$7,$8,$9,$10,$11,$12)`,
+                                  acceptance_criteria, external_source, external_id, done, accepted_by, accepted_on,
+                                  date_basis, condition)
+           VALUES ($1,$2,$3,$4,$4,NULL,'milestone',$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
           [id, p.id, name, date, owner ?? p.pm_id ?? null, !!b.intrusive, criteria ?? "", source, externalId,
            done, done && String(criteria ?? "").trim() ? acceptedBy : null,
-           done && String(criteria ?? "").trim() ? iso(new Date()) : null]);
+           done && String(criteria ?? "").trim() ? iso(new Date()) : null,
+           basis ?? "committed", condition ?? ""]);
       });
     return stamp(true, id, externalId, 1);
   }
@@ -331,6 +340,8 @@ export async function upsertMilestone(user, externalId, b) {
   if (owner !== undefined) patch.owner_id = owner;
   if (criteria !== undefined) patch.acceptance_criteria = criteria;
   if (b.intrusive !== undefined) patch.intrusive = !!b.intrusive;
+  if (basis !== undefined) patch.date_basis = basis;
+  if (condition !== undefined) patch.condition = condition;
   if (b.done !== undefined) {
     patch.done = !!b.done;
     const effective = criteria !== undefined ? criteria : existing.acceptance_criteria;
@@ -839,8 +850,8 @@ export const WRITE_BODIES = {
   projects: { adopt: "string", name: "string", programme: "string", site: "string", governanceLevel: "string", pm: "string",
     method: "string", start: "date", finish: "date", baselineFinish: "date", budget: "number",
     contingency: "number", desc: "string", version: "integer" },
-  milestones: { adopt: "string", project: "string", name: "string", date: "date", owner: "string", acceptanceCriteria: "string",
-    done: "boolean", acceptedBy: "string", intrusive: "boolean", version: "integer" },
+  milestones: { adopt: "string", project: "string", name: "string", date: "date", dateBasis: "string", condition: "string",
+    owner: "string", acceptanceCriteria: "string", done: "boolean", acceptedBy: "string", intrusive: "boolean", version: "integer" },
   raid: { adopt: "string", project: "string", type: "string", title: "string", detail: "string", p: "integer", i: "integer",
     tp: "integer", ti: "integer", response: "string", owner: "string", review: "date", status: "string",
     gate: "integer", cr: "string", version: "integer" },
