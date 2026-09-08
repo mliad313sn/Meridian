@@ -1749,6 +1749,28 @@ export const FR = {
     "Ce qui a été dit la dernière fois, ou ce qui ne doit pas encore l'être — lu par qui envoie la prochaine.",
   "Plan it":
     "Planifier",
+
+  // ── REQ-07 second tour · organe, preuve, provenance, statut
+  "A body, not a person (name it below)":
+    "Un organe, pas une personne (nommez-le ci-dessous)",
+  "Deciding body":
+    "Organe décideur",
+  "When a committee decided rather than one person: its name, as the minutes call it. Either a person or a body is required.":
+    "Quand c'est un comité qui a décidé plutôt qu'une personne : son nom, tel que le procès-verbal l'appelle. Une personne ou un organe est requis.",
+  "Ratified":
+    "Ratifiée",
+  "Proposed — awaiting ratification":
+    "Proposée — en attente de ratification",
+  "Record of the decision":
+    "Trace de la décision",
+  "The minutes, the gate report, the page where the decision is written down — a link a reader can open.":
+    "Le procès-verbal, le rapport de porte, la page où la décision est écrite — un lien qu'un lecteur peut ouvrir.",
+  "Provenance":
+    "Provenance",
+  "Where the authority for it comes from, in your organisation's own tags.":
+    "D'où vient son autorité, dans les étiquettes de votre organisation.",
+  "proposed":
+    "proposée",
 };
 
 /* ── enregistrement des dictionnaires ─────────────────────────────────

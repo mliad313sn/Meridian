@@ -106,6 +106,16 @@ remainder named, when `partial`. Plain text, no more than the reader
 needs. A request with no issue yet (found in the ledgers or the sync
 script) gets one, with the §3 entry of `docs/33` as its body.
 
+## §STATES — what a line's status means
+
+`open` accepted, not started · `partial` a slice on the branch, remainder
+named · `done` on the branch with its test · `accepted` the requester
+said so on the issue · `released` a version tag carries it · `refused`
+with the reason in §5. A rejected refusal or `done` goes back to `open`
+with the objection quoted; the sponsor is the tie-breaker. Bump
+`registerVersion` in `docs/requests/rt365.json` every round and append
+to each moved line's `history`.
+
 ## Report format
 
 ```

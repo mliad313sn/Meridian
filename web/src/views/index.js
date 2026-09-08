@@ -4659,7 +4659,7 @@ Views.reports = (db) => {
               (x.alternatives ? " · " + t("alternatives: ") + x.alternatives : "") +
               (x.dissent ? " · " + t("dissent: ") + x.dissent : "") +
               (x.supersedes ? " · " + t("supersedes ") + x.supersedes : ""),
-            by: x.byName || x.by || "—", scope: x.scope,
+            by: (x.byName || x.council || x.by || "—") + (x.status === "Proposed" ? " · " + t("proposed") : ""), scope: x.scope,
           }));
           return controls.concat(minuted).sort((a, b) => b.on.localeCompare(a.on)).slice(0, 30);
         });
@@ -5229,7 +5229,16 @@ const ladderNote = (db) => {
 
 /* I-4 — the criteria of a gate, and the named reviewer who found each met.
    Drawn under "Milestones & gates" for the gate that is next. */
-function criteriaBlock(db, p, gate) {
+function criteriaBlock(db, p, current) {
+  /* The current gate first, then every later gate that already carries
+     criteria (a declared ladder poses them all at birth — the code
+     counsellor found eight of them invisible until their gate came). */
+  const ladder = Engine.gates(db, p.id);
+  const gates = ladder.filter(g => g.n === current.n || (db.criteria || []).some(c => c.project === p.id && c.gate === g.n && g.n > current.n))
+    .map(g => g.n === current.n ? current : { ...g, ...Engine.gateStatus(db, p.id, g.n) });
+  return h("div", null, gates.map(g => criteriaGate(db, p, g)));
+}
+function criteriaGate(db, p, gate) {
   const rows = gate.criteria || [];
   const canPose = may("document.write", p) && !fromSdp(p);
   const canFind = may("document.approve", p);
@@ -5314,9 +5323,17 @@ function recordDecision(db) {
       { key: "project", label: t("Project"), type: "select", span: 2, value: writable[0]?.id ?? "",
         options: (groupLevel ? [{ value: "", label: t("Portfolio-wide (group level)") }] : [])
           .concat(writable.map((p) => ({ value: p.id, label: p.id + " · " + p.name }))) },
-      { key: "decidedBy", label: t("Decided by"), type: "select", required: true, value: db.currentUser ?? "",
-        options: db.people.map((p) => ({ value: p.id, label: p.name })) },
+      { key: "decidedBy", label: t("Decided by"), type: "select", value: db.currentUser ?? "",
+        options: [{ value: "", label: t("A body, not a person (name it below)") }].concat(db.people.map((p) => ({ value: p.id, label: p.name }))) },
       { key: "decidedOn", label: t("Decided on"), type: "date", value: db.statusDate },
+      { key: "council", label: t("Deciding body"), value: "",
+        hint: t("When a committee decided rather than one person: its name, as the minutes call it. Either a person or a body is required.") },
+      { key: "status", label: t("Status"), type: "select", value: "Ratified",
+        options: [{ value: "Ratified", label: t("Ratified") }, { value: "Proposed", label: t("Proposed — awaiting ratification") }] },
+      { key: "evidenceUri", label: t("Record of the decision"), span: 2, value: "", placeholder: "https://…", advanced: true,
+        hint: t("The minutes, the gate report, the page where the decision is written down — a link a reader can open.") },
+      { key: "provenance", label: t("Provenance"), value: "", advanced: true, placeholder: "[Committee] · [Owner instruction] · [Verified]",
+        hint: t("Where the authority for it comes from, in your organisation's own tags.") },
       { key: "rationale", label: t("Why"), type: "textarea", rows: 3, span: 2, value: "",
         hint: t("The reasoning, so the committee can read it back without the person who wrote it.") },
       { key: "alternatives", label: t("Alternatives considered"), type: "textarea", rows: 2, span: 2, value: "", advanced: true,
@@ -5334,7 +5351,8 @@ function recordDecision(db) {
     ],
     saveLabel: t("Record"),
     onSave: (v) => App.write("Decision recorded", (a) => a.post("/decisions", {
-      headline: v.headline, projectId: v.project || null, decidedBy: v.decidedBy, decidedOn: v.decidedOn,
+      headline: v.headline, projectId: v.project || null, decidedBy: v.decidedBy || null, decidedOn: v.decidedOn,
+      council: v.council, status: v.status, evidenceUri: v.evidenceUri, provenance: v.provenance,
       rationale: v.rationale, alternatives: v.alternatives, dissent: v.dissent,
       raidId: v.raidId || null, milestoneId: v.milestoneId || null, crId: v.crId || null,
       supersedes: v.supersedes || null,

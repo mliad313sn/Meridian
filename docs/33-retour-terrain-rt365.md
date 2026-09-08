@@ -151,11 +151,32 @@ PM-04 through the API, RAID by person name, decision immutability and
 supersession, actions only in open rooms, progress provenance, work
 items, idempotency replay/422/isolation/purge.
 
+**Second round (counsellors, same day).** `adopt: "<Meridian id>"` on
+every collection binds an external id to a row that already exists
+(created on a screen, or scaffolded) — RT365's sixteen projects and 86
+register rows migrate without a duplicate, and a scaffolded gate
+milestone adopted this way is where "Gate A passed" lands, on the
+milestone the engine reads (O-75 for real). `PUT /api/v1/criteria/:externalId`
+puts REQ-04 on the contract. A `cr` reference resolves by Meridian id
+(change requests carry no external id — the first version threw).
+`version` omitted is now true last-writer-wins, without a phantom 409
+when someone edited between the sync's read and write. The
+`Idempotency-Key` is reserved before the handler runs (two identical
+concurrent requests: one runs, one waits), the body is canonicalised
+(key order does not matter), and a refused request frees its key.
+Invalid `gate` numbers and `measuredAt` values are 400s, not 500s or
+silent coercions; an intrusive milestone in a site freeze is refused as
+on the screen (V-03).
+
 **Remaining.** `PUT` for sites, programmes, people: structure is an
 administrator's act, deliberately left to the session API and CSV
 import (decision D-33.4). Inbound **events** (INT-13 proper — a webhook
 receiver) are not needed once the upserts are idempotent; reopened if a
-source system cannot call PUT.
+source system cannot call PUT. A standing human act (RT365's H-nn) is
+not a meeting action: the API raises actions only in an open room, so a
+standing act is either a RAID `Dependency` with a review date, or an
+action of a standing series whose occurrence the Product Owner opens
+monthly — D-33.14 says which.
 
 ### REQ-03 · A gate ladder per programme — `done` 08/09 (I-3 · M-04 · O-75)
 
@@ -184,6 +205,16 @@ evidence required, authorising body), the four gates as the default.
   board, the gate-model section which shows every ladder by programme).
 - A changed ladder does not rewrite existing projects (their gates are
   dated, their evidence filed): decision D-33.2.
+- **Phases stay six** (D-33.9): the phase is the lifecycle stage the WBS
+  templates and the earned-value curve are built on; the ladder maps
+  onto it by position. Issue #3's title asked for "ladder and phases";
+  the phases part is refused with that reason.
+- **A gate passes per project** (D-33.10): each epic walks its own copy
+  of the ladder, dated proportionally to its window. A programme-level
+  passage is the governance project's gate — RT365's `RBT-GOV` pattern —
+  and the other projects' copies are informative. The default ladder
+  seeds **no criteria** (D-33.13): evidence approved clears it exactly as
+  before; only a declared ladder poses criteria at birth.
 
 **Measure.** `server/test/gates.test.js` (3 tests for I-3): validator
 refusals, six-gate programme → six gate milestones, six documents, last
@@ -285,7 +316,18 @@ too. `GET /api/decisions/log` merges room decisions and standalone ones,
 with the decider named. Decision register screen: "Record a decision"
 form with hints on every field a reader will need months later.
 
-**Measure.** `server/test/decisions.test.js` (5 tests for I-7).
+**Second round.** RT365's decision log carries what 034 had no home for
+(D-33.11, migration 039): `council` (the deciding body when it is not one
+person — "ARB", "Product Owner agent under D-040"), `evidence_uri` (the
+minutes, the gate report), `provenance` (their `[Committee]` /
+`[Owner instruction]` tags), `status` Proposed → Ratified with
+`ratified_by`. The substance (headline, rationale, alternatives,
+dissent, decider, date, project) is immutable; the state lives and every
+change is audited with before/after. Headlines are no longer cut at 300
+characters. The screen form carries all of it.
+
+**Measure.** `server/test/decisions.test.js` (6 tests for I-7) and the
+"second round" block of `server/test/writeapi.test.js`.
 
 ### REQ-08 · RAID linked to gates and change requests, reviews on the agenda — `done` 08/09 (I-8)
 
@@ -405,13 +447,32 @@ answers in three places it can read:
 | RT365 row | Answer |
 |---|---|
 | O-73 (first-run defects) | closed by REQ-01; the workaround in `docs/PMO.md` §2 can be deleted — `npm install && npm run seed && npm run dev` now does what it says |
-| O-74 (read-only API, identity in titles, pinned commit) | closed by REQ-02; `meridian_sync.py` can move to `PUT /api/v1/*` with `externalId` = its own ids and an `Idempotency-Key` per run, and unpin the commit |
+| O-74 (read-only API, identity in titles, pinned commit) | closed by REQ-02; `meridian_sync.py` can move to `PUT /api/v1/*` with `externalId` = its own ids, an `Idempotency-Key` **per request** (a key names one request, not a run — `<run>-<id>` is the shape), `adopt` for the rows it already created by name, and pin the branch instead of a commit until `v5.10.0` is tagged |
 | O-75 (two gate models) | closed by REQ-03; declare the ladder A–F on programme `RBT` and create the epics after — their gates will be A–F, with the exit evidence as criteria (REQ-04) |
 | O-76 / H-28 (operate for real) | tools delivered by REQ-06; the acts remain RT365's: PostgreSQL, a scheduled `npm run backup`, a monthly `npm run restore-drill`, the policy from the template |
 | D-049 "Meridian's phase machine is not used for authorisation" | can be revisited: with a six-gate ladder and criteria that require a named reviewer, Meridian's gates can carry RT365's authorisation if the Product Owner of RT365 wants one record instead of two |
 
 | E-4 "two-way link once I-2 exists" | I-2 exists (REQ-02). The reverse direction — decisions and actions recorded in a Meridian room flowing back to the ledgers — is served by the signed outbound events (INT-04, `Decision recorded` is a governance action) and by `GET /api/v1/audit`; nothing new is needed on Meridian's side. If RT365 wants a pull endpoint shaped for ledgers, that is REQ-14 — say so on issue #2 |
 | PC-5 "nothing real in a demo book until H-28" | Meridian now enforces it: production refuses to start while a demo password opens an account (REQ-12) |
+
+**The rules of the loop** (added on the PMO counsellor's review, D-33.15):
+
+- **Counterpart.** RT365's Program Orchestrator (docs/PMO.md) is the
+  requester of record; its Product Owner agent decides on its side.
+  Meridian's Product Owner answers them by name on the issue.
+- **Cadence.** Every `/product-owner` run, and at least weekly while
+  RT365 is live — a Routine on this repository can fire it; the sponsor
+  decides whether to schedule one.
+- **Acceptance.** A line is `done` when it is on the branch with its
+  test; it is `accepted` when the requester says so on the issue (a
+  comment, or closing it themselves); it is `released` when a version
+  tag carries it. `docs/requests/rt365.json` carries all three, and a
+  `history` per line.
+- **Escalation.** When RT365 rejects a refusal or a `done`, the line
+  goes back to `open` with the objection quoted, and the sponsor of
+  both repositories is the tie-breaker, named in the next D-33.n.
+- **Register version.** `registerVersion` in the JSON increases on every
+  round; RT365's tooling diffs against the version it last read.
 
 **Cadence.** The Product Owner reviews RT365 on every `/product-owner`
 run and at least weekly while RT365 is live. `scripts/rt365-review.mjs`
@@ -436,6 +497,14 @@ ahead — which is the whole reason the probe exists.
 | D-33.6 | 08/09 | PM-07, PM-10, PM-12 stay on the docs/26 register. | Deliver PM-12 skills as a text field (refused: a field nobody computes with is decoration). | none |
 | D-33.7 | 08/09 | Accept a free `category` label on register items for the next round (from the sync's `RAID_KIND` mapping). | Extend the four kinds (refused: the four are ISO 21502's and the escalation rules read them). | none |
 | D-33.8 | 08/09 | Two counsellors are convened before every push of a field-return round: a code reviewer on the diff, a PMO practitioner on the register against the delivered product. | None — the sponsor asked for it. | none |
+| D-33.9 | 08/09 | Phases stay the six the WBS and EVM are built on; the programme ladder maps onto them by position. | A phase model per programme (refused: the phase drives templates and the earned-value curve — frozen arithmetic). | PMO counsellor: issue #3 said "and phases" |
+| D-33.10 | 08/09 | A gate passes per project; a programme-level passage is the governance project's gate. | Programme-level gate rows (refused for now: no engine reads them; revisit if RT365 asks). | none |
+| D-33.11 | 08/09 | A decision carries council, evidence link, provenance and a Proposed/Ratified state; substance immutable, state audited. | Keep 034 as is (refused: RT365's rows lost four fields). | none |
+| D-33.12 | 08/09 | `adopt` on every write collection; criteria on the contract. | A migration script for existing books (refused: the API is the migration). | none |
+| D-33.13 | 08/09 | The default ladder seeds no criteria; only a declared ladder does. | Seed for all (refused: the code counsellor traced eleven surprise criteria and a group-only clearance on every new site project). | none |
+| D-33.14 | 08/09 | A standing human act is a RAID dependency with a review date, not a meeting action; the API keeps raising actions only in open rooms. | Actions without a room (refused: an action is what a room asked of someone). | none |
+| D-33.15 | 08/09 | The loop gains a counterpart, a cadence, three acceptance states, an escalation rule and a register version (§4). | None. | PMO counsellor asked for it |
+| D-33.16 | 08/09 | `/api/health` stays unauthenticated and names the organisation and the instance — a supervisor holds no session; the proxy can hide it. | Authenticate it (refused: fleet supervision is the point). | code counsellor noted the disclosure |
 
 *(one line per decision, appended by each run)*
 
@@ -445,9 +514,10 @@ ahead — which is the whole reason the probe exists.
 
 | | Before (5.9.0) | After (5.10.0) |
 |---|---|---|
-| tests | 449 | 505 |
+| tests | 449 | 513 |
 | static gates | 9 | 10 (F10 release audit) |
-| `/api/v1` routes | 4 read | 4 read + 7 write |
-| migrations | 033 | 038 |
+| `/api/v1` routes | 4 read | 4 read + 8 write |
+| migrations | 033 | 039 |
+| counsellors convened | — | 4 translators, 1 code reviewer, 1 PMO practitioner — 27 findings, all fixed or decided (D-33.9…16) |
 | first hour on a fresh clone | ~40 min of traps (RT365) | `npm install && npm run seed && npm run dev` |
 | open RT365 rows against Meridian | O-73, O-74, O-75, O-76 | O-73/74/75 answered; O-76 tools delivered, acts theirs |

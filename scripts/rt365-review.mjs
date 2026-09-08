@@ -14,7 +14,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { execSync } from "node:child_process";
+import { execSync, execFileSync } from "node:child_process";
 
 const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
@@ -24,6 +24,10 @@ const root = path.resolve(import.meta.dirname, "..");
 const register = JSON.parse(fs.readFileSync(path.join(root, "docs/requests/rt365.json"), "utf8"));
 
 const sh = (cmd, cwd = dir) => execSync(cmd, { cwd, stdio: ["ignore", "pipe", "pipe"] }).toString();
+/* Les noms de branches et de fichiers viennent d'un dépôt TIERS : jamais
+   dans un shell, toujours en arguments (le conseiller code a nommé le
+   fichier `x$(curl …|sh).md`). */
+const git = (...args) => execFileSync("git", args, { cwd: dir, stdio: ["ignore", "pipe", "pipe"] }).toString();
 
 if (!fs.existsSync(path.join(dir, ".git"))) {
   fs.mkdirSync(dir, { recursive: true });
@@ -34,8 +38,8 @@ if (!fs.existsSync(path.join(dir, ".git"))) {
   catch (e) { console.error(`cannot fetch ${repo}: ${e.message.split("\n")[0]}`); process.exit(2); }
 }
 
-const branches = sh("git for-each-ref --format='%(refname:short) %(objectname:short)' refs/remotes/origin")
-  .split("\n").map((l) => l.trim().replace(/'/g, "")).filter(Boolean)
+const branches = git("for-each-ref", "--format=%(refname:short) %(objectname:short)", "refs/remotes/origin")
+  .split("\n").map((l) => l.trim()).filter(Boolean)
   .map((l) => { const [ref, sha] = l.split(" "); return { ref, sha }; })
   .filter((b) => !b.ref.endsWith("/HEAD"));
 
@@ -45,11 +49,11 @@ const seen = new Map();   // id → { where, text }
 
 for (const b of branches) {
   let files;
-  try { files = sh(`git ls-tree -r --name-only ${b.ref}`).split("\n").filter(Boolean); } catch { continue; }
+  try { files = git("ls-tree", "-r", "--name-only", b.ref).split("\n").filter(Boolean); } catch { continue; }
   for (const f of files) {
     if (!/\.(md|py|json|yaml|yml|txt)$/i.test(f)) continue;
     let text;
-    try { text = sh(`git show ${b.ref}:${f}`); } catch { continue; }
+    try { text = git("show", `${b.ref}:${f}`); } catch { continue; }
     if (!/meridian/i.test(text)) continue;
     for (const line of text.split("\n")) {
       if (!/meridian/i.test(line)) continue;
@@ -76,7 +80,21 @@ if (context.length) {
   console.log(`\n  · decisions / ADRs naming Meridian, for context (${context.length}):`);
   for (const [id, { where }] of context) console.log(`    ${id}  (${where})`);
 }
+/* Une demande sans identifiant est invisible au motif ci-dessus. Depuis le
+   commit relu, on liste donc aussi chaque FICHIER modifié qui nomme
+   Meridian : c'est à lire, pas à compter. */
 const head = branches.find((b) => b.ref.includes(register.source.branch.split("/").pop()));
+if (head) {
+  let changed = [];
+  try {
+    changed = git("diff", "--name-only", register.source.commit, head.ref).split("\n").filter(Boolean)
+      .filter((f) => { try { return /meridian/i.test(git("show", `${head.ref}:${f}`)); } catch { return false; } });
+  } catch { /* le commit relu n'est plus joignable en clone superficiel : dit ci-dessous */ }
+  if (changed.length) {
+    console.log(`\n  ! ${changed.length} file(s) changed since ${register.source.commit.slice(0, 7)} name Meridian — read them, a request may carry no id:`);
+    for (const f of changed) console.log(`    ${f}`);
+  }
+}
 if (head && !register.source.commit.startsWith(head.sha)) {
   console.log(`\n  ! ${register.source.branch} moved: register reviewed ${register.source.commit.slice(0, 7)}, branch is at ${head.sha} — read the diff`);
 }

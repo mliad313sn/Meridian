@@ -66,7 +66,7 @@ export function gateDocsFor(project, ladder = GATES) {
 export function gateCriteriaFor(ladder = GATES) {
   const out = [];
   for (const g of ladder) {
-    g.evidence.split(",").map((t) => t.trim()).filter(Boolean)
+    g.evidence.split(/[,;]/).map((t) => t.trim()).filter(Boolean)
       .forEach((text, i) => out.push({ gate: g.n, seq: i, text: text[0].toUpperCase() + text.slice(1) }));
   }
   return out;
@@ -153,8 +153,12 @@ export async function scaffoldProject(t, project) {
       updated_on: iso(new Date()),
     })));
 
-  /* I-4 — the criteria each gate was declared with, posed at birth. */
-  const crit = gateCriteriaFor(ladder);
+  /* I-4 — the criteria each gate was declared with, posed at birth — for a
+     programme that DECLARED its ladder. The default four gates keep their
+     old behaviour for new projects too: evidence approved clears them
+     (D-33.13; the code counsellor traced eleven surprise criteria and a
+     group-only clearance on every new site project). */
+  const crit = ladder === GATES ? [] : gateCriteriaFor(ladder);
   for (const c of crit) c.id = await allocateId(t, "GC");
   await insertMany(t, "gate_criterion",
     ["id", "project_id", "gate", "seq", "text"],

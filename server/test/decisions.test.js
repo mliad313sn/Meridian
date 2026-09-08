@@ -72,6 +72,23 @@ describe("I-7 · une décision hors réunion", () => {
     assert.equal(bad.status, 400);
   });
 
+  test("un organe peut décider à la place d'une personne, avec sa preuve et sa provenance", async () => {
+    const pmo = await as("pmo");
+    const db = (await pmo.get("/api/bootstrap")).body.db;
+    const p = db.projects.find((x) => x.id === GROUP_PROJECT);
+    const r = await pmo.post("/api/decisions", {
+      headline: "The architecture board keeps the current identity provider", projectId: p.id,
+      council: "Architecture board", evidenceUri: "https://minutes.example/arb-2026-09-08", provenance: "[Committee]", status: "Proposed",
+    });
+    assert.equal(r.status, 201, r.text);
+    const log = await pmo.get("/api/decisions/log");
+    const mine = log.body.minuted.find((d) => d.id === r.body.id);
+    assert.equal(mine.council, "Architecture board");
+    assert.equal(mine.status, "Proposed");
+    assert.match(mine.evidenceUri, /^https:/);
+    assert.equal((await pmo.post("/api/decisions", { headline: "x", projectId: p.id, council: "ARB", evidenceUri: "ftp://x" })).status, 400);
+  });
+
   test("les refus : sans décideur, décideur inconnu, lien vers un autre projet", async () => {
     const pmo = await as("pmo");
     const db = (await pmo.get("/api/bootstrap")).body.db;
@@ -129,8 +146,12 @@ describe("I-8 · le RAID relié, et sa revue à l'ordre du jour", () => {
     const p = db.projects.find((x) => x.id === GROUP_PROJECT);
     const cr = db.crs.find((c) => c.project === p.id);
     const other = db.crs.find((c) => c.project !== p.id);
+    /* p2×i2 = 4 : sous les seuils d'escalade, donc l'élément n'est PAS
+       déjà dessiné par la section des escalades — c'est la section des
+       revues qui doit le ramener (le conseiller code a vu le test passer
+       pour la mauvaise raison avec 4×4). */
     const r = await pmo.post("/api/raid", {
-      type: "Risk", project: p.id, title: "DPIA not ready for gate 2", p: 4, i: 4,
+      type: "Risk", project: p.id, title: "DPIA not ready for gate 2", p: 2, i: 2,
       gate: 2, cr: cr?.id ?? null, review: "2026-01-05",
     });
     assert.equal(r.status, 201, r.text);
@@ -161,11 +182,12 @@ describe("I-8 · le RAID relié, et sa revue à l'ordre du jour", () => {
     const flat = JSON.stringify(sections);
     assert.ok(flat.includes(RISK), "l'élément dont la revue est due apparaît à l'ordre du jour");
     const reviews = (Array.isArray(sections) ? sections : []).find((s) => s.key === "reviews");
-    if (reviews) {
-      const mine = reviews.items.find((i) => i.entityId === RISK);
-      assert.ok(mine);
-      assert.match(mine.headline, /OVERDUE/);
-      assert.match(mine.detail, /against gate 2/);
-    }
+    assert.ok(reviews, "la section des revues existe");
+    const mine = reviews.items.find((i) => i.entityId === RISK);
+    assert.ok(mine, "c'est bien la section des revues qui le ramène");
+    assert.match(mine.headline, /OVERDUE/);
+    assert.match(mine.detail, /against gate 2/);
+    const badGate = await pmo.post("/api/raid", { type: "Risk", project: GROUP_PROJECT, title: "x", gate: 9 });
+    assert.equal(badGate.status, 400, "le jalon 9 n'existe pas sur une échelle à quatre");
   });
 });

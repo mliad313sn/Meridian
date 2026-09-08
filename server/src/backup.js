@@ -54,6 +54,17 @@ export function compareCounts(expected, found) {
   return { ok: mismatches.length === 0, mismatches };
 }
 
+/* Le mot de passe ne passe pas par argv (visible dans `ps`) : il va dans
+   PGPASSWORD, et l'adresse est donnée sans lui. */
+function withoutPassword(url) {
+  try {
+    const u = new URL(url);
+    const env = { ...process.env };
+    if (u.password) { env.PGPASSWORD = decodeURIComponent(u.password); u.password = ""; }
+    return { dsn: u.toString(), env };
+  } catch { return { dsn: url, env: process.env }; }
+}
+
 const run = (cmd, args, { env = process.env, input = null } = {}) => new Promise((resolve, reject) => {
   const child = spawn(cmd, args, { env, stdio: [input ? "pipe" : "ignore", "pipe", "pipe"] });
   let out = "", err = "";
@@ -77,7 +88,8 @@ export async function backup({ dir = process.env.MERIDIAN_BACKUP_DIR || path.joi
   const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
   if (url) {
     const file = path.join(dir, `meridian-${stamp}.dump`);
-    await run("pg_dump", ["--format=custom", "--no-owner", "--file", file, url]);
+    const { dsn, env } = withoutPassword(url);
+    await run("pg_dump", ["--format=custom", "--no-owner", "--file", file, dsn], { env });
     return { engine: "postgres", file, bytes: fs.statSync(file).size, at: new Date().toISOString() };
   }
   if (!pglite) throw new Error("No PGlite instance to dump — connect() first, or set DATABASE_URL");
@@ -103,15 +115,17 @@ export async function drill({ file, url = process.env.DATABASE_URL, expected = n
     const base = new URL(url);
     const adminUrl = new URL(url); adminUrl.pathname = "/postgres";
     const scratchUrl = new URL(url); scratchUrl.pathname = "/" + scratch;
-    await run("createdb", ["--maintenance-db", adminUrl.toString(), scratch]);
+    const admin = withoutPassword(adminUrl.toString());
+    const target = withoutPassword(scratchUrl.toString());
+    await run("createdb", ["--maintenance-db", admin.dsn, scratch], { env: admin.env });
     try {
-      await run("pg_restore", ["--no-owner", "--dbname", scratchUrl.toString(), file]);
+      await run("pg_restore", ["--no-owner", "--dbname", target.dsn, file], { env: target.env });
       const { default: pg } = await import("pg");
       const client = new pg.Client({ connectionString: scratchUrl.toString() });
       await client.connect();
       try { found = await counts(client); } finally { await client.end(); }
     } finally {
-      await run("dropdb", ["--maintenance-db", adminUrl.toString(), "--if-exists", scratch]).catch(() => {});
+      await run("dropdb", ["--maintenance-db", admin.dsn, "--if-exists", scratch], { env: admin.env }).catch(() => {});
     }
     void base;
   } else {

@@ -13,7 +13,8 @@
       "scripts/meridian_sync.py",
       "docs/IMPROVEMENT_REGISTER.md"
     ],
-    "reviewedAt": "2026-09-08"
+    "reviewedAt": "2026-09-08",
+    "branchPinned": "claude/meridian-rt365-feedback-d6vo3i"
   },
   "productOwner": {
     "charter": "docs/33-retour-terrain-rt365.md#1",
@@ -43,7 +44,16 @@
       "measure": "server/test/firsthour.test.js",
       "remaining": null,
       "answerToSource": "O-73 can be closed; delete the workaround in docs/PMO.md §2.",
-      "issue": 1
+      "issue": 1,
+      "accepted": false,
+      "released": false,
+      "history": [
+        {
+          "at": "2026-09-08",
+          "registerVersion": 1,
+          "status": "done"
+        }
+      ]
     },
     {
       "id": "REQ-02",
@@ -61,7 +71,12 @@
         "server/migrations/035_write_api.sql",
         "server/src/v1write.js",
         "server/src/routes/v1.js",
-        "docs/openapi.v1.json"
+        "docs/openapi.v1.json",
+        "adopt on every collection",
+        "PUT /api/v1/criteria/:externalId",
+        "cr by Meridian id",
+        "true last-writer-wins without version",
+        "Idempotency-Key reserved before the handler, canonical body"
       ],
       "measure": "server/test/writeapi.test.js",
       "api": {
@@ -76,13 +91,29 @@
           "PUT /api/v1/activities/:externalId",
           "PUT /api/v1/workitems/:externalId",
           "PUT /api/v1/decisions/:externalId",
-          "PUT /api/v1/actions/:externalId"
+          "PUT /api/v1/actions/:externalId",
+          "PUT /api/v1/criteria/:externalId"
         ],
         "header": "Idempotency-Key"
       },
       "remaining": "structure (sites, programmes, people) stays on the session API and CSV import — D-33.4",
       "answerToSource": "O-74 can be closed; meridian_sync.py can move to PUT /api/v1/* with its own ids and unpin the commit.",
-      "issue": 2
+      "issue": 2,
+      "accepted": false,
+      "released": false,
+      "history": [
+        {
+          "at": "2026-09-08",
+          "registerVersion": 1,
+          "status": "done"
+        },
+        {
+          "at": "2026-09-08",
+          "registerVersion": 2,
+          "status": "done",
+          "note": "second round after the counsellors: adopt, criteria route, cr, version, idempotency reservation"
+        }
+      ]
     },
     {
       "id": "REQ-03",
@@ -102,9 +133,18 @@
         "web/src/views/administration.js#programmeDialog"
       ],
       "measure": "server/test/gates.test.js",
-      "remaining": null,
+      "remaining": "phases stay six (D-33.9); gate passage per project (D-33.10)",
       "answerToSource": "O-75 can be closed; declare A–F on programme RBT, then create the epics.",
-      "issue": 3
+      "issue": 3,
+      "accepted": false,
+      "released": false,
+      "history": [
+        {
+          "at": "2026-09-08",
+          "registerVersion": 1,
+          "status": "done"
+        }
+      ]
     },
     {
       "id": "REQ-04",
@@ -119,11 +159,21 @@
       "delivered": [
         "server/migrations/037_gate_criteria.sql",
         "server/src/routes/portfolio.js#criteria",
-        "shared/engine.js#gateStatus"
+        "shared/engine.js#gateStatus",
+        "PUT /api/v1/criteria/:externalId"
       ],
       "measure": "server/test/gates.test.js",
       "remaining": null,
-      "issue": 4
+      "issue": 4,
+      "accepted": false,
+      "released": false,
+      "history": [
+        {
+          "at": "2026-09-08",
+          "registerVersion": 1,
+          "status": "done"
+        }
+      ]
     },
     {
       "id": "REQ-05",
@@ -141,7 +191,16 @@
       ],
       "measure": "server/test/writeapi.test.js",
       "remaining": "connectors INT-10/11/12 and cost lines by external id — written from the source side (D-33.5)",
-      "issue": 5
+      "issue": 5,
+      "accepted": false,
+      "released": false,
+      "history": [
+        {
+          "at": "2026-09-08",
+          "registerVersion": 1,
+          "status": "partial"
+        }
+      ]
     },
     {
       "id": "REQ-06",
@@ -168,7 +227,22 @@
       ],
       "measure": "server/test/backup.test.js",
       "remaining": "the acts: PostgreSQL, scheduled backup, monthly drill, signed policy — RT365's operator (H-28)",
-      "issue": 6
+      "issue": 6,
+      "accepted": false,
+      "released": false,
+      "history": [
+        {
+          "at": "2026-09-08",
+          "registerVersion": 1,
+          "status": "done"
+        },
+        {
+          "at": "2026-09-08",
+          "registerVersion": 2,
+          "status": "done",
+          "note": "runbook corrected: createdb right, first administrator before start, tenant .env in cron, restore-to-live and rollback, PGlite refuses while the server runs"
+        }
+      ]
     },
     {
       "id": "REQ-07",
@@ -182,11 +256,27 @@
       "delivered": [
         "server/migrations/034_decision_register.sql",
         "POST /api/decisions",
-        "GET /api/decisions/log"
+        "GET /api/decisions/log",
+        "server/migrations/039_decision_record.sql (council, evidence_uri, provenance, status, ratified_by)"
       ],
       "measure": "server/test/decisions.test.js",
       "remaining": null,
-      "issue": 7
+      "issue": 7,
+      "accepted": false,
+      "released": false,
+      "history": [
+        {
+          "at": "2026-09-08",
+          "registerVersion": 1,
+          "status": "done"
+        },
+        {
+          "at": "2026-09-08",
+          "registerVersion": 2,
+          "status": "done",
+          "note": "council, evidence link, provenance, Proposed/Ratified added (D-33.11)"
+        }
+      ]
     },
     {
       "id": "REQ-08",
@@ -204,7 +294,16 @@
       ],
       "measure": "server/test/decisions.test.js",
       "remaining": null,
-      "issue": 8
+      "issue": 8,
+      "accepted": false,
+      "released": false,
+      "history": [
+        {
+          "at": "2026-09-08",
+          "registerVersion": 1,
+          "status": "done"
+        }
+      ]
     },
     {
       "id": "REQ-09",
@@ -223,7 +322,16 @@
       ],
       "measure": "npm run audit (F10)",
       "remaining": "tags are pushed by a maintainer",
-      "issue": 9
+      "issue": 9,
+      "accepted": false,
+      "released": false,
+      "history": [
+        {
+          "at": "2026-09-08",
+          "registerVersion": 1,
+          "status": "done"
+        }
+      ]
     },
     {
       "id": "REQ-10",
@@ -244,7 +352,16 @@
       ],
       "measure": "server/test/stakeholders.test.js",
       "remaining": "PM-12 skills, PM-10 suppliers, PM-07 scheduling depth — on the docs/26 register (D-33.6)",
-      "issue": 10
+      "issue": 10,
+      "accepted": false,
+      "released": false,
+      "history": [
+        {
+          "at": "2026-09-08",
+          "registerVersion": 1,
+          "status": "partial"
+        }
+      ]
     },
     {
       "id": "REQ-11",
@@ -261,7 +378,16 @@
       ],
       "measure": "17 files",
       "remaining": "native-speaker read-through",
-      "issue": 11
+      "issue": 11,
+      "accepted": false,
+      "released": false,
+      "history": [
+        {
+          "at": "2026-09-08",
+          "registerVersion": 1,
+          "status": "done"
+        }
+      ]
     },
     {
       "id": "REQ-12",
@@ -280,24 +406,50 @@
       ],
       "measure": "server/test/posture.test.js",
       "remaining": null,
-      "issue": 12
+      "issue": 12,
+      "accepted": false,
+      "released": false,
+      "history": [
+        {
+          "at": "2026-09-08",
+          "registerVersion": 1,
+          "status": "done"
+        }
+      ]
     },
     {
       "id": "REQ-13",
       "origin": [
         "scripts/meridian_sync.py#RAID_KIND"
       ],
-      "title": "A free category label on register items (Gap, Observation, Open item…)",
+      "title": "Implied by the sync: a free category label on register items; standing human acts (H-nn) modelled as RAID dependencies with a review date (D-33.14)",
       "status": "open",
       "version": null,
       "decidedOn": "2026-09-08",
       "delivered": [],
       "measure": null,
-      "remaining": "accepted for the next round (D-33.7)"
+      "remaining": "accepted for the next round (D-33.7)",
+      "accepted": false,
+      "released": false,
+      "history": [
+        {
+          "at": "2026-09-08",
+          "registerVersion": 1,
+          "status": "open"
+        }
+      ]
     }
   ],
   "channel": {
     "issues": "https://github.com/mliad313sn/Meridian/issues",
-    "rule": "issue #n = improvement I-n = REQ-0n; the Product Owner answers on the issue and closes it when the line is done"
-  }
+    "rule": "issue #n = improvement I-n = REQ-0n; the Product Owner answers on the issue and closes it when the line is done",
+    "counterpart": "RT365 Program Orchestrator (docs/PMO.md); RT365 Product Owner agent decides on its side",
+    "acceptance": {
+      "done": "on the branch with its test",
+      "accepted": "the requester said so on the issue",
+      "released": "a version tag carries it"
+    },
+    "escalation": "a rejected refusal or done goes back to open with the objection quoted; the sponsor of both repositories is the tie-breaker"
+  },
+  "registerVersion": 2
 }

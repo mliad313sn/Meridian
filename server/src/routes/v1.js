@@ -29,7 +29,7 @@ import { openApiDocument, scopedEndpoints } from "../openapi.js";
 import { packageVersion } from "../env.js";
 import {
   idempotent, upsertProject, upsertMilestone, upsertRaid, upsertDecision, upsertAction,
-  upsertActivity, upsertWorkItem,
+  upsertActivity, upsertWorkItem, upsertCriterion,
 } from "../v1write.js";
 
 const r = Router();
@@ -102,6 +102,7 @@ r.put("/milestones/:externalId", requireIntegration("write:portfolio"), idempote
 r.put("/raid/:externalId", requireIntegration("write:portfolio"), idempotent(), write(upsertRaid));
 r.put("/activities/:externalId", requireIntegration("write:portfolio"), idempotent(), write(upsertActivity));
 r.put("/workitems/:externalId", requireIntegration("write:portfolio"), idempotent(), write(upsertWorkItem));
+r.put("/criteria/:externalId", requireIntegration("write:portfolio"), idempotent(), write(upsertCriterion));
 r.put("/decisions/:externalId", requireIntegration("write:meetings"), idempotent(), write(upsertDecision));
 r.put("/actions/:externalId", requireIntegration("write:meetings"), idempotent(), write(upsertAction));
 

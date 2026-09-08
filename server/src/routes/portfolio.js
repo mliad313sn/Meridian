@@ -18,6 +18,8 @@ import { loadPortfolio, projectFor, fromM, toM, loadSettings } from "../portfoli
 import { adoptionBySite } from "../adoption.js";
 import { Engine, GATES, PHASES, LESSON_CATEGORIES, iso, addDays, days, D } from "../../../shared/engine.js";
 import { scaffoldProject, reschedule, phaseFor } from "../wbs.js";
+import { ladderLength } from "../v1write.js";
+import { assertPlantWindow } from "../plant.js";
 
 
 const r = Router();
@@ -73,10 +75,21 @@ function assertLocalOrigin(row, what) {
    EAC, the RAG, the published period) is NaN, silently and for good. */
 /* I-8 — un lien vers un jalon de gouvernance est un numéro dans l'échelle
    du programme ; vide veut dire « aucun ». */
-const gateLink = (v) => (v === undefined || v === null || v === "" ? null : Math.max(1, Math.min(12, Math.round(Number(v) || 0))) || null);
+const gateLink = (v) => {
+  if (v === undefined || v === null || v === "") return null;
+  const n = Number(v);
+  if (!Number.isInteger(n) || n < 1) bad("The gate is the rank of a gate in the programme's ladder — a whole number");
+  return n;
+};
 /* …et un lien vers une modification doit exister ET appartenir au même
    projet : relier un risque de Toronto à une modification de Singapour
    ne veut rien dire, et un identifiant deviné ne doit rien révéler. */
+/* …et un numéro de jalon doit exister dans l'échelle du programme (I-3) :
+   « contre le jalon 9 » sur un programme à quatre jalons ne veut rien dire. */
+async function assertGateExists(projectId, gateN) {
+  const n = await ladderLength(projectId);
+  if (gateN > n) bad(`Gate ${gateN} does not exist — this project's programme has ${n} gates`);
+}
 async function crLink(v, projectId) {
   if (v === undefined || v === null || v === "") return null;
   const cr = await one(`SELECT id, project_id FROM change_request WHERE id = $1`, [String(v)]);
@@ -817,6 +830,8 @@ r.post("/raid", async (req, res, next) => {
     /* I-8 — résolu AVANT la transaction : le garde de db.js refuse, à
        raison, une lecture hors de la transaction ouverte. */
     const crId = await crLink(b.cr, b.project || null);
+    const gateN = gateLink(b.gate);
+    if (gateN && b.project) await assertGateExists(b.project, gateN);
 
     let id = null;
     await audited(req.user,
@@ -837,7 +852,7 @@ r.post("/raid", async (req, res, next) => {
            b.ti === undefined || b.ti === "" || b.ti === null ? null : Math.max(1, Math.min(5, num(b.ti))),
            /* I-8 — contre quoi ce risque se lève : le jalon de gouvernance
               qu'il menace, la modification qui le porte. */
-           gateLink(b.gate), crId]);
+           gateN, crId]);
       });
     res.status(201).json({ id });
   } catch (e) { next(e); }
@@ -869,7 +884,10 @@ r.patch("/raid/:id", async (req, res, next) => {
     if (b.response !== undefined) patch.response = b.response;
     if (b.owner !== undefined) patch.owner_id = b.owner || null;
     if (b.review !== undefined) patch.review_on = b.review || null;
-    if (b.gate !== undefined) patch.gate = gateLink(b.gate);
+    if (b.gate !== undefined) {
+      patch.gate = gateLink(b.gate);
+      if (patch.gate && item.project_id) await assertGateExists(item.project_id, patch.gate);
+    }
     if (b.cr !== undefined) patch.cr_id = await crLink(b.cr, item.project_id);
 
     const out = await audited(req.user,
@@ -1594,31 +1612,12 @@ r.patch("/projects/:id/priority", async (req, res, next) => {
    control the head of Operational Technology came looking for. */
 
 /** Freezes at a site covering a date. Read before a transaction opens. */
-async function freezesCovering(siteId, on) {
-  if (!siteId || !on) return [];
-  return many(
-    `SELECT id, label, starts_on, ends_on FROM site_window
-      WHERE site_id = $1 AND kind = 'freeze' AND $2 BETWEEN starts_on AND ends_on
-      ORDER BY starts_on`, [siteId, on]);
-}
 
 /**
  * The rule, in one place so every path that dates intrusive work asks the
  * same question: a milestone marked intrusive, at a site in a freeze, on
  * a project that touches the plant, needs a released MOC.
  */
-async function assertPlantWindow(project, { date, intrusive }) {
-  if (!intrusive) return;
-  if (project.plant_impact === "none" || !project.plant_impact) return;
-  if (project.moc_approved_on) return;   // released; the window is theirs to use
-  const hits = await freezesCovering(project.site_id, date);
-  if (!hits.length) return;
-  const w = hits[0];
-  throw new HttpError(409,
-    `${w.label} runs ${w.starts_on} to ${w.ends_on} at this site and this project is ` +
-    `classified as ${project.plant_impact} work. Move the date, or have management of ` +
-    `change release it at group level.`);
-}
 
 r.post("/windows", async (req, res, next) => {
   try {
@@ -3191,6 +3190,7 @@ r.get("/decisions/log", async (req, res, next) => {
       `SELECT d.id, d.headline, d.rationale, d.alternatives, d.dissent, d.decided_by,
               d.referred_to_scope, d.project_id, d.cr_id, d.raid_id, d.milestone_id, d.supersedes,
               COALESCE(o.meets_on, d.decided_on) AS decided_on, d.external_source, d.external_id,
+              d.council, d.evidence_uri, d.provenance, d.status, d.ratified_by,
               s.name AS series_name, s.scope_kind, pe.name AS decided_by_name
          FROM meeting_decision d
          LEFT JOIN meeting_occurrence o ON o.id = d.occurrence_id
@@ -3214,6 +3214,8 @@ r.get("/decisions/log", async (req, res, next) => {
         project: d.project_id ?? null, cr: d.cr_id ?? null, raid: d.raid_id ?? null,
         milestone: d.milestone_id ?? null, supersedes: d.supersedes ?? null,
         externalSource: d.external_source ?? null, externalId: d.external_id ?? null,
+        council: d.council ?? "", evidenceUri: d.evidence_uri ?? "", provenance: d.provenance ?? "",
+        status: d.status ?? "Ratified", ratifiedBy: d.ratified_by ?? "",
       })),
     });
   } catch (e) { next(e); }
@@ -3361,17 +3363,18 @@ r.post("/criteria", async (req, res, next) => {
     const p = await project(b.project, req.user);
     gate(req.user, "document.write", { project: p });
     const g = Math.round(Number(b.gate));
-    if (!(g >= 1 && g <= 12)) bad("A criterion belongs to a gate (1..12)");
+    const n = await ladderLength(p.id);
+    if (!(g >= 1 && g <= n)) bad(`A criterion belongs to a gate 1..${n} of this project's programme`);
     if (!String(b.text ?? "").trim()) bad("A criterion is a sentence — what must be true for the gate to pass");
-    const seq = (await one(`SELECT COALESCE(MAX(seq), -1) + 1 AS n FROM gate_criterion WHERE project_id = $1 AND gate = $2`, [p.id, g])).n;
     let id = null;
     await audited(req.user,
       () => ({ action: "Gate criterion posed", entity: "gate_criterion", entityId: id, detail: `gate ${g} · ${b.text}` }),
       async (t) => {
         id = await allocateId(t, "GC");
         await t.query(
-          `INSERT INTO gate_criterion (id, project_id, gate, seq, text) VALUES ($1,$2,$3,$4,$5)`,
-          [id, p.id, g, seq, String(b.text).trim().slice(0, 500)]);
+          `INSERT INTO gate_criterion (id, project_id, gate, seq, text)
+           VALUES ($1,$2,$3,(SELECT COALESCE(MAX(seq), -1) + 1 FROM gate_criterion WHERE project_id = $2 AND gate = $3),$4)`,
+          [id, p.id, g, String(b.text).trim().slice(0, 500)]);
       });
     res.status(201).json({ id });
   } catch (e) { next(e); }
@@ -3450,9 +3453,12 @@ r.post("/decisions", async (req, res, next) => {
   try {
     const b = req.body ?? {};
     if (!b.headline) bad("A decision needs a headline");
-    if (!b.decidedBy) bad("A decision outside a meeting names who decided — an active person in the directory");
-    const who = await one(`SELECT id FROM person WHERE id = $1 AND active`, [String(b.decidedBy)]);
-    if (!who) bad("The decider must be an active person in the directory");
+    const council = String(b.council ?? "").trim().slice(0, 200);
+    if (!b.decidedBy && !council) bad("A decision outside a meeting names who decided — an active person in the directory, or the deciding body");
+    const who = b.decidedBy ? await one(`SELECT id FROM person WHERE id = $1 AND active`, [String(b.decidedBy)]) : null;
+    if (b.decidedBy && !who) bad("The decider must be an active person in the directory");
+    const evidence = String(b.evidenceUri ?? "").trim().slice(0, 1000);
+    if (evidence && !/^https?:\/\//i.test(evidence)) bad("The evidence link is an http(s) address");
     const on = b.decidedOn ? String(b.decidedOn).slice(0, 10) : iso(new Date());
     if (!/^\d{4}-\d{2}-\d{2}$/.test(on)) bad("decidedOn must be an ISO date");
 
@@ -3492,11 +3498,14 @@ r.post("/decisions", async (req, res, next) => {
         await t.query(
           `INSERT INTO meeting_decision
              (id, occurrence_id, headline, rationale, alternatives, dissent, project_id, cr_id,
-              raid_id, milestone_id, supersedes, decided_by, decided_on, recorded_by)
-           VALUES ($1,NULL,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
-          [id, String(b.headline).slice(0, 300), String(b.rationale ?? "").slice(0, 4000),
+              raid_id, milestone_id, supersedes, decided_by, decided_on, recorded_by,
+              council, evidence_uri, provenance, status, ratified_by)
+           VALUES ($1,NULL,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
+          [id, String(b.headline).slice(0, 1000), String(b.rationale ?? "").slice(0, 4000),
            String(b.alternatives ?? "").slice(0, 4000), String(b.dissent ?? "").slice(0, 2000),
-           p?.id ?? null, crId, raidId, msId, supersedes, who.id, on, req.user.id]);
+           p?.id ?? null, crId, raidId, msId, supersedes, who?.id ?? null, on, req.user.id,
+           council, evidence, String(b.provenance ?? "").slice(0, 200),
+           b.status === "Proposed" ? "Proposed" : "Ratified", String(b.ratifiedBy ?? "").slice(0, 200)]);
       });
     res.status(201).json({ id });
   } catch (e) { next(e); }

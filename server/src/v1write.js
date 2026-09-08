@@ -44,9 +44,15 @@ import { HttpError } from "./auth.js";
 import { fromM, loadSettings } from "./portfolio.js";
 import { scaffoldProject, reschedule, phaseFor } from "./wbs.js";
 import { iso, D } from "../../shared/engine.js";
+import { assertPlantWindow } from "./plant.js";
 
 const bad = (msg) => { throw new HttpError(400, msg); };
 const sha = (s) => crypto.createHash("sha256").update(s).digest("hex");
+const canonical = (v) => {
+  if (Array.isArray(v)) return "[" + v.map(canonical).join(",") + "]";
+  if (v && typeof v === "object") return "{" + Object.keys(v).sort().map((k) => JSON.stringify(k) + ":" + canonical(v[k])).join(",") + "}";
+  return JSON.stringify(v);
+};
 const clampScale = (v, fallback = null) => {
   if (v === undefined || v === null || v === "") return fallback;
   const n = Math.round(Number(v));
@@ -97,11 +103,14 @@ export async function resolvePerson(ref, what) {
   return p.id;
 }
 
+const HAS_EXTERNAL_ID = new Set(["project", "milestone", "raid_item", "meeting_decision", "meeting_action", "activity", "work_item", "gate_criterion"]);
 async function resolveRef(table, source, ref, projectId, what) {
   if (!ref) return null;
-  const row = await one(
-    `SELECT id, project_id FROM ${table} WHERE id = $1 OR (external_source = $2 AND external_id = $1)`,
-    [String(ref), source]);
+  /* Une demande de modification n'a pas d'identité externe (035) : elle
+     se désigne par son identifiant Meridian seulement. */
+  const row = HAS_EXTERNAL_ID.has(table)
+    ? await one(`SELECT id, project_id FROM ${table} WHERE id = $1 OR (external_source = $2 AND external_id = $1)`, [String(ref), source])
+    : await one(`SELECT id, project_id FROM ${table} WHERE id = $1`, [String(ref)]);
   if (!row || (projectId && row.project_id && row.project_id !== projectId)) {
     bad(`${what}: "${ref}" does not exist on this project`);
   }
@@ -110,12 +119,77 @@ async function resolveRef(table, source, ref, projectId, what) {
 
 const stamp = (created, id, externalId, version) => ({ id, externalId, created, version });
 
+/**
+ * L'écriture d'une mise à jour. `version` envoyé : asserté (409 s'il est
+ * périmé). `version` absent : le système source est le maître de SA ligne
+ * et le dernier écrit gagne RÉELLEMENT — sans prédicat de version, plutôt
+ * qu'en assertant une version que l'appelant n'a jamais vue (une édition
+ * entre la lecture et l'écriture donnait un 409 « périmé » à qui n'avait
+ * rien envoyé — conseiller code, docs/33 §5).
+ */
+async function writeRow(t, table, id, version, patch, what) {
+  if (version !== undefined) {
+    const rv = await updateVersioned(t, table, id, version, patch);
+    if (!rv.ok) throw new HttpError(409, `The version you sent is stale — read the ${what} again`);
+    return rv;
+  }
+  const keys = Object.keys(patch);
+  const sets = keys.map((k, i) => `${k} = $${i + 2}`);
+  const r = await t.query(
+    `UPDATE ${table} SET ${sets.join(", ")}, row_version = row_version + 1 WHERE id = $1 RETURNING row_version`,
+    [id, ...keys.map((k) => patch[k])]);
+  if (!r.rows.length) throw new HttpError(404, `No such ${what} any more`);
+  return { ok: true, version: r.rows[0].row_version };
+}
+const sentVersion = (b) => {
+  if (b.version === undefined) return undefined;
+  const v = Number(b.version);
+  if (!Number.isInteger(v) || v < 1) bad("version is a positive whole number, or omitted");
+  return v;
+};
+
+/**
+ * ADOPTER une ligne existante (conseiller PMO, docs/33 D-33.12). Le
+ * premier intégrateur a déjà seize projets et 86 lignes RAID créées par
+ * leur nom AVANT que l'identité externe existe ; sans adoption, son
+ * premier PUT en créerait seize de plus. `adopt: "<id Meridian>"` lie
+ * l'identifiant externe à cette ligne-là, une fois ; une ligne déjà liée
+ * à un autre identifiant refuse.
+ */
+async function adoptRow(user, table, externalId, meridianId, entity, what) {
+  const row = await one(`SELECT * FROM ${table} WHERE id = $1`, [String(meridianId)]);
+  if (!row) bad(`adopt: no such ${what} ${meridianId}`);
+  if (row.external_id && (row.external_source !== user.id || row.external_id !== externalId)) {
+    throw new HttpError(409, `${what} ${row.id} is already bound to another external id`);
+  }
+  if (row.origin === "sdp") throw new HttpError(403, `This ${what} is synchronised from the SDP roadmap — it is edited there`);
+  if (!row.external_id) {
+    await audited(user,
+      { action: entity === "activity" ? "Stage linked" : "Row adopted", entity, entityId: row.id,
+        detail: `${row.name ?? row.title ?? row.headline ?? row.id} ↔ ${user.displayName} (${externalId})` },
+      async (t) => t.query(
+        `UPDATE ${table} SET external_source = $2, external_id = $3, row_version = row_version + 1 WHERE id = $1`,
+        [row.id, user.id, externalId]));
+  }
+  return one(`SELECT * FROM ${table} WHERE id = $1`, [row.id]);
+}
+
+/** Combien de jalons l'échelle du programme de ce projet compte (I-3). */
+export async function ladderLength(projectId) {
+  const row = await one(
+    `SELECT pr.gate_model FROM project p JOIN programme pr ON pr.id = p.programme_id WHERE p.id = $1`, [projectId]);
+  const m = row?.gate_model;
+  try { const parsed = typeof m === "string" ? JSON.parse(m) : m; return Array.isArray(parsed) && parsed.length ? parsed.length : 4; }
+  catch { return 4; }
+}
+
 /* ── projets ───────────────────────────────────────────────────────── */
 
 export async function upsertProject(user, externalId, b) {
   const source = user.id;
-  const existing = await one(
+  let existing = await one(
     `SELECT * FROM project WHERE external_source = $1 AND external_id = $2`, [source, externalId]);
+  if (!existing && b.adopt) existing = await adoptRow(user, "project", externalId, b.adopt, "project", "project");
   const name = text(b.name, 300, "name", !existing);
   const pm = b.pm !== undefined ? await resolvePerson(b.pm, "pm") : undefined;
   const method = b.method === undefined ? undefined
@@ -171,15 +245,14 @@ export async function upsertProject(user, externalId, b) {
   const shifted = (patch.start_date && patch.start_date !== existing.start_date) ||
                   (patch.finish_date && patch.finish_date !== existing.finish_date);
   const statusToday = shifted ? ((await loadSettings()).statusDate ?? iso(new Date())) : null;
-  const version = b.version === undefined ? existing.row_version : Number(b.version);
+  const version = sentVersion(b);
   if (!Object.keys(patch).length) return stamp(false, existing.id, externalId, existing.row_version);
 
   const out = await audited(user,
     { action: "Project updated", entity: "project", entityId: existing.id,
       detail: `${patch.name ?? existing.name} — from ${user.displayName} (${externalId})` },
     async (t) => {
-      const rv = await updateVersioned(t, "project", existing.id, version, patch);
-      if (!rv.ok) throw new HttpError(409, "The version you sent is stale — someone changed this project; read it again");
+      const rv = await writeRow(t, "project", existing.id, version, patch, "project");
       if (shifted) {
         /* Même geste que PATCH /projects/:id : déplacer la fenêtre
            ré-étire le plan, jamais la référence (A1). */
@@ -201,8 +274,12 @@ export async function upsertProject(user, externalId, b) {
 
 export async function upsertMilestone(user, externalId, b) {
   const source = user.id;
-  const existing = await one(
+  let existing = await one(
     `SELECT * FROM milestone WHERE external_source = $1 AND external_id = $2`, [source, externalId]);
+  /* Adopter un jalon de GOUVERNANCE échafaudé par l'échelle (I-3) est la
+     seule façon, par l'API, de consigner « la porte A est passée » sur le
+     jalon que le moteur lit — et non sur un jalon ordinaire à côté (O-75). */
+  if (!existing && b.adopt) existing = await adoptRow(user, "milestone", externalId, b.adopt, "milestone", "milestone");
   const p = existing ? await resolveProject(source, existing.project_id) : await resolveProject(source, b.project);
   if (!p) bad("A milestone needs a project — a Meridian id, or an external id you created");
   const name = text(b.name, 300, "name", !existing);
@@ -211,24 +288,39 @@ export async function upsertMilestone(user, externalId, b) {
   const criteria = text(b.acceptanceCriteria, 4000, "acceptanceCriteria");
   const acceptedBy = b.acceptedBy !== undefined ? await resolvePerson(b.acceptedBy, "acceptedBy") : undefined;
 
+  /* V-03 — la même question de gel de site que l'écran, AVANT la
+     transaction : une bascule datée dans un arrêt d'usine est refusée
+     quel que soit le chemin par lequel elle arrive. */
+  const plant = await one(`SELECT site_id, plant_impact, moc_approved_on FROM project WHERE id = $1`, [p.id]);
+  const wantsIntrusive = b.intrusive === undefined ? !!existing?.intrusive : !!b.intrusive;
+  if (wantsIntrusive && (date || b.intrusive !== undefined)) {
+    await assertPlantWindow(plant, { date: date ?? existing?.due_date, intrusive: true });
+  }
+
   if (!existing) {
     if (!date) bad("A milestone needs a date");
+    /* Créer ET cocher dans le même PUT : la règle d'acceptation (PM-04) se
+       vérifie AVANT d'insérer — une ligne créée puis un 400 serait un
+       demi-geste que la piste dirait entier. */
+    const done = !!b.done;
+    if (done && String(criteria ?? "").trim() && !acceptedBy) {
+      bad("This milestone has acceptance criteria — done needs acceptedBy, the person who checked them");
+    }
     let id = null;
     await audited(user,
-      () => ({ action: "Milestone added", entity: "milestone", entityId: id,
+      () => ({ action: done ? "Milestone accepted" : "Milestone added", entity: "milestone", entityId: id,
                detail: `${name} — from ${user.displayName} (${externalId})` }),
       async (t) => {
         const n = await allocateId(t, "MS");
         id = p.id + "-M" + n.split("-")[1];
         await t.query(
           `INSERT INTO milestone (id, project_id, name, due_date, base_date, gate, kind, owner_id, intrusive,
-                                  acceptance_criteria, external_source, external_id)
-           VALUES ($1,$2,$3,$4,$4,NULL,'milestone',$5,$6,$7,$8,$9)`,
-          [id, p.id, name, date, owner ?? p.pm_id ?? null, !!b.intrusive, criteria ?? "", source, externalId]);
+                                  acceptance_criteria, external_source, external_id, done, accepted_by, accepted_on)
+           VALUES ($1,$2,$3,$4,$4,NULL,'milestone',$5,$6,$7,$8,$9,$10,$11,$12)`,
+          [id, p.id, name, date, owner ?? p.pm_id ?? null, !!b.intrusive, criteria ?? "", source, externalId,
+           done, done && String(criteria ?? "").trim() ? acceptedBy : null,
+           done && String(criteria ?? "").trim() ? iso(new Date()) : null]);
       });
-    /* Créer puis cocher dans le même PUT : le même chemin que l'écran,
-       avec la même exigence d'accepteur. */
-    if (b.done) return upsertMilestone(user, externalId, { done: true, acceptedBy: b.acceptedBy });
     return stamp(true, id, externalId, 1);
   }
 
@@ -253,15 +345,13 @@ export async function upsertMilestone(user, externalId, b) {
     if (!patch.done) { patch.accepted_by = null; patch.accepted_on = null; }
   }
   if (!Object.keys(patch).length) return stamp(false, existing.id, externalId, existing.row_version);
-  const version = b.version === undefined ? existing.row_version : Number(b.version);
+  const version = sentVersion(b);
   const out = await audited(user,
     { action: patch.done && !existing.done ? "Milestone accepted" : "Milestone updated",
       entity: "milestone", entityId: existing.id,
       detail: `${patch.name ?? existing.name} — from ${user.displayName} (${externalId})` },
     async (t) => {
-      const rv = await updateVersioned(t, "milestone", existing.id, version, patch);
-      if (!rv.ok) throw new HttpError(409, "The version you sent is stale — read the milestone again");
-      return rv;
+      return writeRow(t, "milestone", existing.id, version, patch, "milestone");
     });
   return stamp(false, existing.id, externalId, out.version);
 }
@@ -273,8 +363,9 @@ const RESPONSES = ["Mitigate", "Avoid", "Transfer", "Accept", "Monitor", "Fix"];
 
 export async function upsertRaid(user, externalId, b) {
   const source = user.id;
-  const existing = await one(
+  let existing = await one(
     `SELECT * FROM raid_item WHERE external_source = $1 AND external_id = $2`, [source, externalId]);
+  if (!existing && b.adopt) existing = await adoptRow(user, "raid_item", externalId, b.adopt, "raid_item", "register item");
   const p = existing ? (existing.project_id ? await resolveProject(source, existing.project_id) : null)
                      : await resolveProject(source, b.project);
   const title = text(b.title, 300, "title", !existing);
@@ -283,7 +374,18 @@ export async function upsertRaid(user, externalId, b) {
   const response = b.response === undefined ? undefined : RESPONSES.includes(b.response) ? b.response : bad("response is " + RESPONSES.join(", "));
   const owner = b.owner !== undefined ? await resolvePerson(b.owner, "owner") : undefined;
   const review = b.review === undefined ? undefined : isoDate(b.review, "review");
-  const gateN = b.gate === undefined ? undefined : (b.gate === null || b.gate === "" ? null : Math.max(1, Math.min(12, Math.round(Number(b.gate)) || 0)) || null);
+  let gateN;
+  if (b.gate !== undefined) {
+    if (b.gate === null || b.gate === "") gateN = null;
+    else {
+      gateN = Number(b.gate);
+      if (!Number.isInteger(gateN) || gateN < 1) bad("gate is a whole number — the rank of a gate in the programme's ladder");
+    }
+  }
+  if (gateN && p) {
+    const n = await ladderLength(p.id);
+    if (gateN > n) bad(`gate ${gateN} does not exist — this project's programme has ${n} gates`);
+  }
   const cr = b.cr === undefined ? undefined : await resolveRef("change_request", source, b.cr, p?.id ?? null, "cr");
   const status = b.status === undefined ? undefined : b.status === "Closed" ? "Closed" : "Open";
 
@@ -323,39 +425,81 @@ export async function upsertRaid(user, externalId, b) {
   if (cr !== undefined) patch.cr_id = cr;
   if (status !== undefined) patch.status = status;
   if (!Object.keys(patch).length) return stamp(false, existing.id, externalId, existing.row_version);
-  const version = b.version === undefined ? existing.row_version : Number(b.version);
+  const version = sentVersion(b);
   const out = await audited(user,
     { action: status === "Closed" && existing.status !== "Closed" ? "Item closed" : "Item updated",
       entity: "raid_item", entityId: existing.id,
       detail: `${patch.title ?? existing.title} — from ${user.displayName} (${externalId})` },
     async (t) => {
-      const rv = await updateVersioned(t, "raid_item", existing.id, version, patch);
-      if (!rv.ok) throw new HttpError(409, "The version you sent is stale — read the item again");
-      return rv;
+      return writeRow(t, "raid_item", existing.id, version, patch, "raid item");
     });
   return stamp(false, existing.id, externalId, out.version);
 }
 
 /* ── décisions ─────────────────────────────────────────────────────── */
 
+const DECISION_STATUS = ["Proposed", "Ratified"];
+const evidenceUri = (v) => {
+  if (v === undefined) return undefined;
+  const u = String(v ?? "").trim();
+  if (!u) return "";
+  if (!/^https?:\/\//i.test(u)) bad("evidenceUri is an http(s) link to the record of the decision");
+  return u.slice(0, 1000);
+};
+
 export async function upsertDecision(user, externalId, b) {
   const source = user.id;
-  const existing = await one(
+  let existing = await one(
     `SELECT * FROM meeting_decision WHERE external_source = $1 AND external_id = $2`, [source, externalId]);
-  const headline = text(b.headline, 300, "headline", !existing);
+  if (!existing && b.adopt) existing = await adoptRow(user, "meeting_decision", externalId, b.adopt, "meeting_decision", "decision");
+  const headline = text(b.headline, 1000, "headline", !existing);
   if (existing) {
-    /* Immuable : un re-PUT identique est un no-op ; un re-PUT différent
-       est refusé — une décision qui change en est une nouvelle. */
-    const same = (headline === undefined || headline === existing.headline) &&
-      (b.rationale === undefined || String(b.rationale).slice(0, 4000) === existing.rationale);
-    if (!same) {
+    /* La SUBSTANCE est immuable (D-33.3) : un re-PUT qui la change est
+       refusé — une décision qui change en est une nouvelle. L'ÉTAT — statut,
+       ratifieur, lien de preuve — vit, et chaque changement s'audite. */
+    const decidedByS = b.decidedBy === undefined ? undefined : await resolvePerson(b.decidedBy, "decidedBy");
+    const projS = b.project === undefined ? undefined : (await resolveProject(source, b.project))?.id ?? null;
+    const substance = [
+      ["decidedBy", decidedByS, existing.decided_by],
+      ["council", b.council === undefined ? undefined : String(b.council).trim().slice(0, 200), existing.council],
+      ["decidedOn", b.decidedOn === undefined ? undefined : isoDate(b.decidedOn, "decidedOn"), existing.decided_on],
+      ["project", projS, existing.project_id],
+      ["headline", headline, existing.headline],
+      ["rationale", b.rationale === undefined ? undefined : String(b.rationale).slice(0, 4000), existing.rationale],
+      ["alternatives", b.alternatives === undefined ? undefined : String(b.alternatives).slice(0, 4000), existing.alternatives],
+      ["dissent", b.dissent === undefined ? undefined : String(b.dissent).slice(0, 2000), existing.dissent],
+    ].filter(([, sent, was]) => sent !== undefined && sent !== was).map(([k]) => k);
+    if (substance.length) {
       throw new HttpError(409,
-        `Decision ${existing.id} is on the record and cannot change — record a new one that supersedes it`);
+        `Decision ${existing.id} is on the record; ${substance.join(", ")} cannot change — record a new one that supersedes it`);
     }
+    const patch = {};
+    if (b.status !== undefined) {
+      if (!DECISION_STATUS.includes(b.status)) bad("status is Proposed or Ratified");
+      patch.status = b.status;
+    }
+    if (b.ratifiedBy !== undefined) patch.ratified_by = String(b.ratifiedBy ?? "").slice(0, 200);
+    const uri = evidenceUri(b.evidenceUri);
+    if (uri !== undefined) patch.evidence_uri = uri;
+    if (b.provenance !== undefined) patch.provenance = String(b.provenance ?? "").slice(0, 200);
+    const changed = Object.fromEntries(Object.entries(patch).filter(([k, v]) => v !== existing[k]));
+    if (!Object.keys(changed).length) return stamp(false, existing.id, externalId, 1);
+    await audited(user,
+      { action: changed.status === "Ratified" ? "Decision ratified" : "Decision state updated",
+        entity: "meeting_decision", entityId: existing.id,
+        detail: `${existing.headline.slice(0, 120)} — from ${user.displayName} (${externalId})`,
+        before: Object.fromEntries(Object.keys(changed).map((k) => [k, existing[k]])), after: changed },
+      async (t) => {
+        const keys = Object.keys(changed);
+        await t.query(
+          `UPDATE meeting_decision SET ${keys.map((k, i) => `${k} = $${i + 2}`).join(", ")} WHERE id = $1`,
+          [existing.id, ...keys.map((k) => changed[k])]);
+      });
     return stamp(false, existing.id, externalId, 1);
   }
   const decidedBy = await resolvePerson(b.decidedBy, "decidedBy");
-  if (!decidedBy) bad("A decision names who decided (decidedBy: an active person's id or exact name)");
+  const council = String(b.council ?? "").trim().slice(0, 200);
+  if (!decidedBy && !council) bad("A decision names who decided: decidedBy (an active person) or council (the deciding body, e.g. \"ARB\")");
   const on = isoDate(b.decidedOn, "decidedOn") ?? iso(new Date());
   const p = await resolveProject(source, b.project);
   const crId = await resolveRef("change_request", source, b.cr, p?.id ?? null, "cr");
@@ -378,13 +522,78 @@ export async function upsertDecision(user, externalId, b) {
       await t.query(
         `INSERT INTO meeting_decision
            (id, occurrence_id, headline, rationale, alternatives, dissent, project_id, cr_id, raid_id,
-            milestone_id, supersedes, decided_by, decided_on, recorded_by, external_source, external_id)
-         VALUES ($1,NULL,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+            milestone_id, supersedes, decided_by, decided_on, recorded_by, external_source, external_id,
+            council, evidence_uri, provenance, status, ratified_by)
+         VALUES ($1,NULL,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
         [id, headline, text(b.rationale, 4000, "rationale") ?? "", text(b.alternatives, 4000, "alternatives") ?? "",
          text(b.dissent, 2000, "dissent") ?? "", p?.id ?? null, crId, raidId, msId, supersedes,
-         decidedBy, on, user.id, source, externalId]);
+         decidedBy, on, user.id, source, externalId,
+         council, evidenceUri(b.evidenceUri) ?? "", String(b.provenance ?? "").slice(0, 200),
+         DECISION_STATUS.includes(b.status) ? b.status : "Ratified", String(b.ratifiedBy ?? "").slice(0, 200)]);
     });
   return stamp(true, id, externalId, 1);
+}
+
+/* ── critères de jalon (REQ-04 sur le contrat) ─────────────────────── */
+
+export async function upsertCriterion(user, externalId, b) {
+  const source = user.id;
+  let existing = await one(
+    `SELECT * FROM gate_criterion WHERE external_source = $1 AND external_id = $2`, [source, externalId]);
+  if (!existing && b.adopt) existing = await adoptRow(user, "gate_criterion", externalId, b.adopt, "gate_criterion", "criterion");
+  const p = existing ? await resolveProject(source, existing.project_id) : await resolveProject(source, b.project);
+  if (!p) bad("A criterion belongs to a project — a Meridian id, or an external id you created");
+  const textV = text(b.text, 500, "text", !existing);
+  const note = text(b.note, 2000, "note");
+  let doc;
+  if (b.document !== undefined) {
+    doc = b.document ? await one(`SELECT id, owner_id, project_id FROM document WHERE id = $1 OR (external_source = $2 AND external_id = $1)`, [String(b.document), source]) : null;
+    if (b.document && (!doc || (doc.project_id && doc.project_id !== p.id))) bad("document: does not exist on this project");
+  }
+  if (!existing) {
+    const g = Math.round(Number(b.gate));
+    const n = await ladderLength(p.id);
+    if (!(g >= 1 && g <= n)) bad(`A criterion belongs to a gate 1..${n} of this project's programme`);
+    let id = null;
+    await audited(user,
+      () => ({ action: "Gate criterion posed", entity: "gate_criterion", entityId: id,
+               detail: `gate ${g} · ${textV} — from ${user.displayName} (${externalId})` }),
+      async (t) => {
+        id = await allocateId(t, "GC");
+        await t.query(
+          `INSERT INTO gate_criterion (id, project_id, gate, seq, text, document_id, note, external_source, external_id)
+           VALUES ($1,$2,$3,(SELECT COALESCE(MAX(seq), -1) + 1 FROM gate_criterion WHERE project_id = $2 AND gate = $3),$4,$5,$6,$7,$8)`,
+          [id, p.id, g, textV, doc?.id ?? null, note ?? "", source, externalId]);
+      });
+    existing = await one(`SELECT * FROM gate_criterion WHERE id = $1`, [id]);
+    if (b.met === undefined) return stamp(true, id, externalId, 1);
+  }
+  const patch = {};
+  if (textV !== undefined) patch.text = textV;
+  if (note !== undefined) patch.note = note;
+  if (doc !== undefined) patch.document_id = doc?.id ?? null;
+  if (b.met !== undefined) {
+    if (b.met) {
+      /* Le même constat que l'écran : un réviseur nommé, indépendant de
+         la preuve citée. Une intégration ne constate pas à la place de
+         quelqu'un ; elle dit qui a constaté. */
+      const who = await resolvePerson(b.reviewedBy, "reviewedBy");
+      if (!who) bad("Finding a criterion met needs reviewedBy — the named person who checked it");
+      const linked = doc !== undefined ? doc : (existing.document_id ? await one(`SELECT id, owner_id FROM document WHERE id = $1`, [existing.document_id]) : null);
+      if (linked?.owner_id && linked.owner_id === who) bad("The reviewer owns the evidence this criterion cites — an independent reviewer finds it met");
+      patch.met = true; patch.reviewed_by = who; patch.reviewed_on = iso(new Date());
+    } else { patch.met = false; patch.reviewed_by = null; patch.reviewed_on = null; }
+  }
+  if (!Object.keys(patch).length) return stamp(false, existing.id, externalId, existing.row_version);
+  const version = sentVersion(b);
+  const out = await audited(user,
+    { action: patch.met === true && !existing.met ? "Gate criterion met" : patch.met === false && existing.met ? "Gate criterion reopened" : "Gate criterion updated",
+      entity: "gate_criterion", entityId: existing.id,
+      detail: `gate ${existing.gate} · ${patch.text ?? existing.text} — from ${user.displayName} (${externalId})` },
+    async (t) => {
+      return writeRow(t, "gate_criterion", existing.id, version, patch, "gate criterion");
+    });
+  return stamp(false, existing.id, externalId, out.version);
 }
 
 /* ── actions ───────────────────────────────────────────────────────── */
@@ -393,8 +602,9 @@ const ACTION_STATUS = ["Open", "In progress", "Done", "Cancelled"];
 
 export async function upsertAction(user, externalId, b) {
   const source = user.id;
-  const existing = await one(
+  let existing = await one(
     `SELECT * FROM meeting_action WHERE external_source = $1 AND external_id = $2`, [source, externalId]);
+  if (!existing && b.adopt) existing = await adoptRow(user, "meeting_action", externalId, b.adopt, "meeting_action", "action");
   const title = text(b.title, 300, "title", !existing);
   const detail = text(b.detail, 2000, "detail");
   const owner = b.owner !== undefined ? await resolvePerson(b.owner, "owner") : undefined;
@@ -445,15 +655,13 @@ export async function upsertAction(user, externalId, b) {
     if (status === "Done" || status === "Cancelled") patch.closed_at = new Date().toISOString();
   }
   if (!Object.keys(patch).length) return stamp(false, existing.id, externalId, existing.row_version);
-  const version = b.version === undefined ? existing.row_version : Number(b.version);
+  const version = sentVersion(b);
   const out = await audited(user,
     { action: status ? "Action " + status.toLowerCase() : "Action updated",
       entity: "meeting_action", entityId: existing.id,
       detail: `${patch.title ?? existing.title} — from ${user.displayName} (${externalId})` },
     async (t) => {
-      const rv = await updateVersioned(t, "meeting_action", existing.id, version, patch);
-      if (!rv.ok) throw new HttpError(409, "The version you sent is stale — read the action again");
-      return rv;
+      return writeRow(t, "meeting_action", existing.id, version, patch, "meeting action");
     });
   return stamp(false, existing.id, externalId, out.version);
 }
@@ -492,21 +700,22 @@ export async function upsertActivity(user, externalId, b) {
     /* La provenance : QUI a mesuré, QUAND. C'est ce qui distingue un
        chiffre remonté d'un chiffre tapé (M-07). */
     patch.progress_source = text(b.source, 120, "source") || user.displayName;
-    patch.progress_at = b.measuredAt ? new Date(b.measuredAt).toISOString() : new Date().toISOString();
-    if (Number.isNaN(Date.parse(patch.progress_at))) bad("measuredAt must be a date-time");
+    if (b.measuredAt !== undefined && b.measuredAt !== null && b.measuredAt !== "") {
+      const ms = Date.parse(String(b.measuredAt));
+      if (Number.isNaN(ms)) bad("measuredAt must be a date-time (ISO-8601)");
+      patch.progress_at = new Date(ms).toISOString();
+    } else patch.progress_at = new Date().toISOString();
   }
   if (b.name !== undefined) patch.name = text(b.name, 300, "name");
   if (!Object.keys(patch).length) return stamp(false, existing.id, externalId, existing.row_version);
-  const version = b.version === undefined ? existing.row_version : Number(b.version);
+  const version = sentVersion(b);
   const out = await audited(user,
     { action: patch.pct !== undefined ? "Progress reported" : "Stage updated", entity: "activity", entityId: existing.id,
       detail: (patch.pct !== undefined ? `${existing.name} → ${patch.pct}% ` : existing.name) + `— from ${user.displayName} (${externalId})`,
       before: patch.pct !== undefined ? { pct: existing.pct } : undefined,
       after: patch.pct !== undefined ? { pct: patch.pct, source: patch.progress_source } : undefined },
     async (t) => {
-      const rv = await updateVersioned(t, "activity", existing.id, version, patch);
-      if (!rv.ok) throw new HttpError(409, "The version you sent is stale — read the stage again");
-      return rv;
+      return writeRow(t, "activity", existing.id, version, patch, "activity");
     });
   return stamp(false, existing.id, externalId, out.version);
 }
@@ -551,15 +760,13 @@ export async function upsertWorkItem(user, externalId, b) {
   if (points !== undefined) patch.points = points;
   if (priority !== undefined) patch.priority = priority;
   if (!Object.keys(patch).length) return stamp(false, existing.id, externalId, existing.row_version);
-  const version = b.version === undefined ? existing.row_version : Number(b.version);
+  const version = sentVersion(b);
   const out = await audited(user,
     { action: column !== undefined && column !== existing.column_id ? "Work item moved" : "Work item updated",
       entity: "work_item", entityId: existing.id,
       detail: `${patch.title ?? existing.title} — from ${user.displayName} (${externalId})` },
     async (t) => {
-      const rv = await updateVersioned(t, "work_item", existing.id, version, patch);
-      if (!rv.ok) throw new HttpError(409, "The version you sent is stale — read the work item again");
-      return rv;
+      return writeRow(t, "work_item", existing.id, version, patch, "work item");
     });
   return stamp(false, existing.id, externalId, out.version);
 }
@@ -579,32 +786,42 @@ export function idempotent() {
     if (!key) return next();
     if (key.length > 200) return res.status(400).json({ error: "Idempotency-Key is at most 200 characters" });
     try {
-      const hash = sha(req.method + " " + req.originalUrl + "\n" + JSON.stringify(req.body ?? {}));
-      const seen = await one(
-        `SELECT request_hash, status, response_json FROM idempotency_key
-          WHERE integration_id = $1 AND key = $2`, [req.user.id, key]);
-      if (seen) {
+      /* Le corps est canonisé (clés triées) : le même objet sérialisé
+         dans un autre ordre est la même requête. */
+      const hash = sha(req.method + " " + req.originalUrl + "\n" + canonical(req.body ?? {}));
+      /* RÉSERVER la clé avant d'agir : deux requêtes identiques et
+         simultanées ne doivent pas courir toutes les deux. La réservation
+         (status 0) est levée par la réponse ; une réservation encore en
+         vol répond 409 « réessayez », jamais un doublon. */
+      const reserved = await query(
+        `INSERT INTO idempotency_key (integration_id, key, request_hash, status, response_json)
+         VALUES ($1,$2,$3,0,'{}') ON CONFLICT DO NOTHING RETURNING key`, [req.user.id, key, hash]);
+      if (!reserved.rows.length) {
+        const seen = await one(
+          `SELECT request_hash, status, response_json FROM idempotency_key
+            WHERE integration_id = $1 AND key = $2`, [req.user.id, key]);
         if (seen.request_hash !== hash) {
           return res.status(422).json({
             error: "Idempotency-Key reused with a different request — a key names ONE request; use a new key",
           });
         }
+        if (seen.status === 0) {
+          return res.status(409).json({ error: "The same request is still in flight — retry in a moment" });
+        }
         res.setHeader("Idempotent-Replayed", "true");
         const body = typeof seen.response_json === "string" ? JSON.parse(seen.response_json) : seen.response_json;
         return res.status(seen.status).json(body);
       }
+      const settle = (status, obj) => (status < 300
+        ? query(`UPDATE idempotency_key SET status = $3, response_json = $4 WHERE integration_id = $1 AND key = $2`,
+            [req.user.id, key, status, JSON.stringify(obj)])
+        /* Un refus n'est pas un acte : la réservation s'efface, la
+           requête corrigée pourra reprendre la même clé. */
+        : query(`DELETE FROM idempotency_key WHERE integration_id = $1 AND key = $2`, [req.user.id, key])
+      ).catch(() => {});
       const plain = res.json.bind(res);
-      res.json = (obj) => {
-        const status = res.statusCode || 200;
-        /* Seules les réponses de succès se rejouent : un 4xx est une
-           réponse à corriger, pas un acte à ne pas répéter. */
-        if (status < 300) {
-          query(`INSERT INTO idempotency_key (integration_id, key, request_hash, status, response_json)
-                 VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING`,
-            [req.user.id, key, hash, status, JSON.stringify(obj)]).catch(() => {});
-        }
-        return plain(obj);
-      };
+      res.json = (obj) => { settle(res.statusCode || 200, obj); return plain(obj); };
+      res.on("close", () => { if (!res.headersSent) settle(500, {}); });
       next();
     } catch (e) { next(e); }
   };
@@ -619,18 +836,21 @@ export async function purgeIdempotencyKeys(days = IDEMPOTENCY_DAYS) {
 
 /** Pour le contrat OpenAPI : ce que chaque collection accepte. */
 export const WRITE_BODIES = {
-  projects: { name: "string", programme: "string", site: "string", governanceLevel: "string", pm: "string",
+  projects: { adopt: "string", name: "string", programme: "string", site: "string", governanceLevel: "string", pm: "string",
     method: "string", start: "date", finish: "date", baselineFinish: "date", budget: "number",
     contingency: "number", desc: "string", version: "integer" },
-  milestones: { project: "string", name: "string", date: "date", owner: "string", acceptanceCriteria: "string",
+  milestones: { adopt: "string", project: "string", name: "string", date: "date", owner: "string", acceptanceCriteria: "string",
     done: "boolean", acceptedBy: "string", intrusive: "boolean", version: "integer" },
-  raid: { project: "string", type: "string", title: "string", detail: "string", p: "integer", i: "integer",
+  raid: { adopt: "string", project: "string", type: "string", title: "string", detail: "string", p: "integer", i: "integer",
     tp: "integer", ti: "integer", response: "string", owner: "string", review: "date", status: "string",
     gate: "integer", cr: "string", version: "integer" },
-  decisions: { headline: "string", rationale: "string", alternatives: "string", dissent: "string",
-    decidedBy: "string", decidedOn: "date", project: "string", cr: "string", raid: "string",
-    milestone: "string", supersedes: "string" },
-  actions: { title: "string", detail: "string", owner: "string", project: "string", dueDate: "date",
+  criteria: { adopt: "string", project: "string", gate: "integer", text: "string", document: "string", note: "string",
+    met: "boolean", reviewedBy: "string", version: "integer" },
+  decisions: { adopt: "string", headline: "string", rationale: "string", alternatives: "string", dissent: "string",
+    decidedBy: "string", council: "string", decidedOn: "date", project: "string", cr: "string", raid: "string",
+    milestone: "string", supersedes: "string", evidenceUri: "string", provenance: "string",
+    status: "string", ratifiedBy: "string" },
+  actions: { adopt: "string", title: "string", detail: "string", owner: "string", project: "string", dueDate: "date",
     status: "string", occurrence: "string", series: "string", version: "integer" },
   activities: { activity: "string", pct: "integer", source: "string", measuredAt: "date-time", name: "string", version: "integer" },
   workitems: { project: "string", title: "string", column: "string", assignee: "string", points: "integer",

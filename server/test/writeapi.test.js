@@ -251,8 +251,11 @@ describe("I-5 · l'avancement remonté porte sa provenance", () => {
   test("un élément de travail par identifiant externe, colonne par nom", async () => {
     const r = await put("/api/v1/workitems/RT-123", { project: "E01", title: "Idempotency on submit", column: "backlog", points: 5, priority: "P1" });
     assert.equal(r.status, 201, r.text);
-    const moved = await put("/api/v1/workitems/RT-123", { column: "done" });
-    assert.equal([200, 400].includes(moved.status), true);
+    const col = await one(`SELECT id FROM board_column ORDER BY seq DESC LIMIT 1`);
+    const moved = await put("/api/v1/workitems/RT-123", { column: col.id });
+    assert.equal(moved.status, 200, moved.text);
+    assert.equal((await one(`SELECT column_id FROM work_item WHERE id = $1`, [r.body.id])).column_id, col.id);
+    assert.equal((await put("/api/v1/workitems/RT-123", { column: "no-such-column" })).status, 400);
     const audit = await one(`SELECT action FROM audit_event WHERE entity = 'work_item' AND entity_id = $1 ORDER BY id DESC LIMIT 1`, [r.body.id]);
     assert.ok(audit);
   });
@@ -276,5 +279,148 @@ describe("INT-13 · Idempotency-Key", () => {
     const kept = await many(`SELECT integration_id FROM idempotency_key WHERE key = 'run-42'`);
     assert.equal(kept.length, 2);
     assert.equal(await purgeIdempotencyKeys(0), 2, "la purge efface ce qui a passé l'âge");
+  });
+});
+
+
+describe("second round · what the counsellors found (docs/33 §5)", () => {
+  test("adopt: an existing row created on a screen takes the integration's id — once", async () => {
+    const admin = await as("admin");
+    const db = (await admin.get("/api/bootstrap")).body.db;
+    const p = db.projects.find((x) => !x.externalId);
+    const r = await put("/api/v1/projects/LEGACY-1", { adopt: p.id, desc: "adopted" });
+    assert.equal(r.status, 200, r.text);
+    assert.equal(r.body.id, p.id, "no duplicate: the existing project is the row");
+    const row = await one(`SELECT external_id, description FROM project WHERE id = $1`, [p.id]);
+    assert.equal(row.external_id, "LEGACY-1");
+    assert.equal(row.description, "adopted");
+    const twice = await put("/api/v1/projects/LEGACY-2", { adopt: p.id });
+    assert.equal(twice.status, 409, "bound to another external id");
+    const ghost = await put("/api/v1/projects/LEGACY-3", { adopt: "PRJ-000" });
+    assert.equal(ghost.status, 400);
+    /* The scaffolded gate milestone becomes reachable: "Gate 1 passed" lands on
+       the milestone the engine reads, not on a plain one beside it (O-75). */
+    const gate1 = db.milestones.find((m) => m.project === p.id && m.gate === 1);
+    const g = await put("/api/v1/milestones/GATE-1", { adopt: gate1.id, done: true, acceptedBy: PM });
+    assert.equal(g.status, 200, g.text);
+    assert.equal((await one(`SELECT done, kind FROM milestone WHERE id = $1`, [gate1.id])).kind, "gate");
+  });
+
+  test("cr on raid and decisions resolves a change request by Meridian id", async () => {
+    const admin = await as("admin");
+    const db = (await admin.get("/api/bootstrap")).body.db;
+    const pid = (await one(`SELECT id FROM project WHERE external_source = $1 AND external_id = 'E01'`, [INT_ID])).id;
+    const cr = db.crs[0];
+    const other = await put("/api/v1/raid/O-30", { project: pid, title: "x", cr: cr.id });
+    assert.equal(other.status, 400, "a change of another project does not link");
+    assert.match(other.body.error, /project/);
+    const own = await put("/api/v1/raid/O-31", { project: cr.project, title: "linked", cr: cr.id, gate: 2 });
+    assert.equal(own.status, 201, own.text);
+    assert.equal((await one(`SELECT cr_id FROM raid_item WHERE id = $1`, [own.body.id])).cr_id, cr.id);
+    const badGate = await put("/api/v1/raid/O-32", { project: cr.project, title: "x", gate: 9 });
+    assert.equal(badGate.status, 400); assert.match(badGate.body.error, /4 gates/);
+    const notInt = await put("/api/v1/raid/O-33", { project: cr.project, title: "x", gate: "abc" });
+    assert.equal(notInt.status, 400);
+    const d = await c.put("/api/v1/decisions/D-070", { headline: "with a change", decidedBy: PM, project: cr.project, cr: cr.id }, { "X-API-Key": MEET_KEY });
+    assert.equal(d.status, 201, d.text);
+  });
+
+  test("measuredAt garbage is a 400, not a 500; an intrusive milestone in a freeze is refused like on the screen", async () => {
+    const bad = await put("/api/v1/activities/JIRA-EPIC-7", { pct: 50, measuredAt: "yesterday-ish" });
+    assert.equal(bad.status, 400); assert.match(bad.body.error, /measuredAt/);
+    const admin = await as("admin");
+    const db = (await admin.get("/api/bootstrap")).body.db;
+    const pid = (await one(`SELECT id FROM project WHERE external_source = $1 AND external_id = 'E01'`, [INT_ID])).id;
+    const proj = db.projects.find((x) => x.id === pid);
+    /* Classify the project as plant work and declare a freeze at its site. */
+    const cls = await admin.patch(`/api/projects/${pid}/plant`, { impact: "plant", version: proj.version });
+    assert.equal(cls.status, 200, cls.text);
+    const win = await admin.post("/api/windows", { site: proj.site, label: "Year-end freeze", from: "2026-12-20", to: "2027-01-05" });
+    assert.equal(win.status, 201, win.text);
+    const refused = await put("/api/v1/milestones/CUTOVER", { project: "E01", name: "Cutover", date: "2026-12-24", intrusive: true });
+    assert.equal(refused.status, 409, refused.text);
+    assert.match(refused.body.error, /freeze/i);
+    const fine = await put("/api/v1/milestones/CUTOVER", { project: "E01", name: "Cutover", date: "2027-01-10", intrusive: true });
+    assert.equal(fine.status, 201, fine.text);
+  });
+
+  test("a created project on the default ladder advances like before; on a declared ladder its criteria hold the gate", async () => {
+    const admin = await as("admin");
+    const db = (await admin.get("/api/bootstrap")).body.db;
+    const pid = (await one(`SELECT id FROM project WHERE external_source = $1 AND external_id = 'E01'`, [INT_ID])).id;
+    assert.equal(db.criteria.filter((x) => x.project === pid).length, 0, "no surprise criteria on the default four gates (D-33.13)");
+    const { Engine } = await import("../../shared/engine.js");
+    const before = Engine.canAdvance(db, pid);
+    assert.doesNotMatch(before.reason, /criterion/);
+    const lad = await admin.post("/api/admin/programmes", { id: "LAD", name: "Laddered",
+      gateModel: [{ name: "Gate A", owner: "PO", evidence: "charter; personas", at: 0.2 }, { name: "Gate B", owner: "ARB", evidence: "threat model", at: 0.7 }] });
+    assert.equal(lad.status, 201, lad.text);
+    const made = await put("/api/v1/projects/LAD-1", { name: "Laddered one", programme: "LAD", site: SITE, start: "2026-09-01", finish: "2027-03-01" });
+    assert.equal(made.status, 201, made.text);
+    const db2 = (await admin.get("/api/bootstrap")).body.db;
+    const crit = db2.criteria.filter((x) => x.project === made.body.id && x.gate === 1);
+    assert.equal(crit.length, 2, "the evidence list, split on comma and semicolon");
+    assert.match(Engine.canAdvance(db2, made.body.id).reason, /criterion/);
+    /* Criteria on the contract: adopt the scaffolded one, find it met by a named reviewer. */
+    const r = await put("/api/v1/criteria/GA-C1", { adopt: crit[0].id, met: true, reviewedBy: PM });
+    assert.equal(r.status, 200, r.text);
+    const posed = await put("/api/v1/criteria/GA-C9", { project: "LAD-1", gate: 1, text: "measurable outcomes agreed" });
+    assert.equal(posed.status, 201, posed.text);
+    assert.equal((await put("/api/v1/criteria/GA-C10", { project: "LAD-1", gate: 3, text: "x" })).status, 400, "gate 3 does not exist on a two-gate ladder");
+    const noWho = await put("/api/v1/criteria/GA-C9", { met: true });
+    assert.equal(noWho.status, 400);
+    const db3 = (await admin.get("/api/bootstrap")).body.db;
+    assert.equal(Engine.gateStatus(db3, made.body.id, 1).criteriaMet, 1);
+  });
+
+  test("a decision's substance is immutable, its state lives: council, evidence link, Proposed → Ratified", async () => {
+    const h = { "X-API-Key": MEET_KEY };
+    const d = await c.put("/api/v1/decisions/D-052", {
+      headline: "Model gateway is the only route to a model provider", council: "ARB", decidedOn: "2026-09-08",
+      provenance: "[Committee]", status: "Proposed", evidenceUri: "https://github.com/mliad313sn/RT365/blob/x/docs/DECISION_LOG.md",
+    }, h);
+    assert.equal(d.status, 201, d.text);
+    const row = await one(`SELECT council, status, decided_by, evidence_uri FROM meeting_decision WHERE id = $1`, [d.body.id]);
+    assert.equal(row.council, "ARB"); assert.equal(row.status, "Proposed"); assert.equal(row.decided_by, null);
+    const ratified = await c.put("/api/v1/decisions/D-052", { status: "Ratified", ratifiedBy: "Compliance Agent" }, h);
+    assert.equal(ratified.status, 200, ratified.text);
+    const after = await one(`SELECT status, ratified_by FROM meeting_decision WHERE id = $1`, [d.body.id]);
+    assert.equal(after.status, "Ratified"); assert.equal(after.ratified_by, "Compliance Agent");
+    const audit = await one(`SELECT action, before_json, after_json FROM audit_event WHERE entity = 'meeting_decision' AND entity_id = $1 ORDER BY id DESC LIMIT 1`, [d.body.id]);
+    assert.equal(audit.action, "Decision ratified");
+    assert.match(JSON.stringify(audit.before_json), /Proposed/);
+    const moved = await c.put("/api/v1/decisions/D-052", { decidedOn: "2026-09-09" }, h);
+    assert.equal(moved.status, 409, "the date is substance");
+    const badUri = await c.put("/api/v1/decisions/D-053", { headline: "x", council: "ARB", evidenceUri: "javascript:1" }, h);
+    assert.equal(badUri.status, 400);
+    const long = await c.put("/api/v1/decisions/D-054", { headline: "x".repeat(600), council: "ARB" }, h);
+    assert.equal(long.status, 201, "a long headline is kept, not truncated at 300");
+  });
+
+  test("an omitted version is true last-writer-wins; a sent version is asserted", async () => {
+    const pid = (await one(`SELECT id FROM project WHERE external_source = $1 AND external_id = 'E01'`, [INT_ID])).id;
+    const v = (await one(`SELECT row_version FROM project WHERE id = $1`, [pid])).row_version;
+    const admin = await as("admin");
+    const db = (await admin.get("/api/bootstrap")).body.db;
+    const p = db.projects.find((x) => x.id === pid);
+    const screen = await admin.patch("/api/projects/" + pid, { desc: "edited on the screen", version: p.version });
+    assert.equal(screen.status, 200, screen.text);
+    const sync = await put("/api/v1/projects/E01", { desc: "edited by the sync, no version" });
+    assert.equal(sync.status, 200, "no version sent → the source is the master, no phantom 409");
+    assert.equal(sync.body.version, v + 2);
+    const stale = await put("/api/v1/projects/E01", { desc: "x", version: v });
+    assert.equal(stale.status, 409);
+    assert.equal((await put("/api/v1/projects/E01", { desc: "x", version: "abc" })).status, 400);
+  });
+
+  test("Idempotency-Key: key order does not matter; a refused request frees its key", async () => {
+    const a = await put("/api/v1/raid/O-40", { project: "E01", title: "Ordered", type: "Issue" }, { "Idempotency-Key": "k-40" });
+    assert.equal(a.status, 201, a.text);
+    const b = await put("/api/v1/raid/O-40", { type: "Issue", title: "Ordered", project: "E01" }, { "Idempotency-Key": "k-40" });
+    assert.equal(b.status, 201); assert.equal(b.body.id, a.body.id);
+    const bad = await put("/api/v1/raid/O-41", { project: "E01", title: "x", type: "Gap" }, { "Idempotency-Key": "k-41" });
+    assert.equal(bad.status, 400);
+    const fixed = await put("/api/v1/raid/O-41", { project: "E01", title: "x", type: "Issue" }, { "Idempotency-Key": "k-41" });
+    assert.equal(fixed.status, 201, "the refused request did not burn the key");
   });
 });

@@ -1619,6 +1619,28 @@ export const ES = {
     "Lo que se dijo la última vez, o lo que aún no debe decirse — leído por quien envíe la siguiente.",
   "Plan it":
     "Planificar",
+
+  // ── REQ-07 segunda ronda · órgano, evidencia, procedencia, estado
+  "A body, not a person (name it below)":
+    "Un órgano, no una persona (nómbrelo abajo)",
+  "Deciding body":
+    "Órgano decisor",
+  "When a committee decided rather than one person: its name, as the minutes call it. Either a person or a body is required.":
+    "Cuando decidió un comité y no una persona: su nombre, tal como lo llama el acta. Se requiere una persona o un órgano.",
+  "Ratified":
+    "Ratificada",
+  "Proposed — awaiting ratification":
+    "Propuesta — pendiente de ratificación",
+  "Record of the decision":
+    "Registro de la decisión",
+  "The minutes, the gate report, the page where the decision is written down — a link a reader can open.":
+    "El acta, el informe de puerta, la página donde la decisión está escrita — un enlace que un lector puede abrir.",
+  "Provenance":
+    "Procedencia",
+  "Where the authority for it comes from, in your organisation's own tags.":
+    "De dónde viene su autoridad, con las etiquetas propias de su organización.",
+  "proposed":
+    "propuesta",
 };
 
 /* ── fragments composés autour de nombres vivants (R-15) ────────────── */

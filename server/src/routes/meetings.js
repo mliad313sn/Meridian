@@ -400,6 +400,8 @@ r.get("/occurrences/:id", async (req, res, next) => {
         alternatives: d.alternatives ?? "", dissent: d.dissent ?? "",
         raidId: d.raid_id ?? null, milestoneId: d.milestone_id ?? null,
         externalSource: d.external_source ?? null, externalId: d.external_id ?? null,
+        council: d.council ?? "", evidenceUri: d.evidence_uri ?? "", provenance: d.provenance ?? "",
+        status: d.status ?? "Ratified", ratifiedBy: d.ratified_by ?? "",
       })),
       openActions: actions,
       actionsRaisedHere: raisedHere.map((a) => ({

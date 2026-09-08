@@ -454,6 +454,7 @@ export async function loadPortfolio(user) {
       id: c.id, project: c.project_id, gate: c.gate, seq: c.seq, text: c.text,
       document: c.document_id ?? null, met: c.met,
       reviewedBy: c.reviewed_by ?? null, reviewedOn: c.reviewed_on ?? null, note: c.note ?? "",
+      externalSource: c.external_source ?? null, externalId: c.external_id ?? null,
       version: c.row_version,
     })),
 

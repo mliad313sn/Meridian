@@ -232,7 +232,12 @@ export async function connect(opts = {}) {
      serveur, la graine, les migrations, la remise à zéro, les scripts),
      et jamais par-dessus ce que le shell a déjà posé. */
   loadEnv();
-  const url = opts.url ?? process.env.DATABASE_URL;
+  /* Un `url: null` EXPLICITE veut dire « PGlite, sans repli » — c'est ce que
+     le harnais de test envoie. Avant, `null ?? process.env.DATABASE_URL`
+     retombait sur l'environnement : depuis que `.env` est lu, un
+     DATABASE_URL de production posé dans ce fichier aurait envoyé
+     `npm test` VIDER ce cluster (le conseiller code l'a tracé). */
+  const url = "url" in opts ? opts.url : process.env.DATABASE_URL;
   if (url) { impl = await openPg(url); dataDirUsed = null; }
   else {
     /* `dataDir: null` veut dire « en mémoire, je sais ce que je fais »

@@ -105,7 +105,9 @@ const upsert = (what, scope, extra) => ({
     `"E01" without colliding. \`version\` is optional — when sent it is asserted (409 if stale); ` +
     `when omitted your system is the master of this row and the last write wins. Optional ` +
     `\`Idempotency-Key\` header: the same key with the same body replays the recorded answer ` +
-    `(Idempotent-Replayed: true); the same key with another body is refused (422). ` +
+    `(Idempotent-Replayed: true); the same key with another body is refused (422) — one key names ONE ` +
+    `request, not a run. \`adopt: "<Meridian id>"\` binds your externalId to a row that already exists ` +
+    `(created on a screen, or scaffolded) instead of creating another. ` +
     `The same business rules as the screens apply. ${extra}`,
   scope, returns: UPSERT_RETURNS,
 });
@@ -125,9 +127,15 @@ const WRITE_DOCS = {
     "`measuredAt` so earned value reads measured, not typed, progress (I-5)."),
   "PUT /api/v1/workitems/:externalId": upsert("a work item on the board", "write:portfolio",
     "`column` is a column id or name; `assignee` an id or exact name."),
+  "PUT /api/v1/criteria/:externalId": upsert("a gate criterion", "write:portfolio",
+    "A sentence posed in advance on (project, gate — within the programme's ladder). `met: true` needs " +
+    "`reviewedBy`, a named person who does not own the `document` cited; the gate is ready only when every " +
+    "criterion is met. Adopt a scaffolded criterion with `adopt`."),
   "PUT /api/v1/decisions/:externalId": upsert("a decision outside a meeting", "write:meetings",
-    "Decisions are immutable: the same PUT again answers 200 with the same id; a different body " +
-    "answers 409 — record a new decision naming the old one in `supersedes` (I-7)."),
+    "Named by `decidedBy` (a person) or `council` (the deciding body). The substance — headline, rationale, " +
+    "alternatives, dissent — is immutable: a different substance answers 409 — record a new decision naming " +
+    "the old one in `supersedes` (I-7). The state — `status` Proposed|Ratified, `ratifiedBy`, `evidenceUri`, " +
+    "`provenance` — may change, and each change is audited with before/after."),
   "PUT /api/v1/actions/:externalId": upsert("an action", "write:meetings",
     "An action is raised in an OPEN meeting: send `occurrence` (an open occurrence id) or `series` " +
     "(the series whose open occurrence takes it). The API never opens a meeting — a chair does."),

@@ -283,6 +283,7 @@ async function runRole(role) {
 
 /* ── exécution ─────────────────────────────────────────────────── */
 
+process.env.MERIDIAN_ENV_FILE ??= "/nonexistent/.env";
 await connect({ dataDir: null, url: null });
 await migrate({ silent: true });
 await seed({ force: true, today: "2026-08-28" });

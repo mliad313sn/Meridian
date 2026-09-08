@@ -87,6 +87,45 @@ where the programme can read it (`docs/33`, `docs/requests/rt365.json`,
 - The **Product Owner** role: `.claude/commands/product-owner.md`,
   `scripts/rt365-review.mjs`, `docs/33` §1 and §5.
 
+### Second round, the same day — what two counsellors found
+
+A code reviewer and a PMO practitioner were convened on the diff and the
+register before the push (docs/33 §5, D-33.8). What survived their
+verification is fixed here, not filed:
+
+- `npm test` could have wiped a cluster named by `DATABASE_URL` in a
+  developer's `.env`, because the harness's explicit `url: null` fell
+  through to the environment once `.env` was read. An explicit null is
+  now PGlite with no fallback, and the tests never read `.env`.
+- `cr` on `PUT /api/v1/raid` and `/decisions` threw (change requests
+  carry no external id); resolves by Meridian id.
+- The default four gates seeded criteria on every new project, which
+  would have required group-level reviewers to clear gate 1 on a site
+  project (D-33.13): only a declared ladder poses criteria.
+- `PUT /api/v1/milestones` skipped the site-freeze refusal (V-03);
+  `assertPlantWindow` moved to `server/src/plant.js` and both paths ask it.
+- `adopt: "<Meridian id>"` on every write collection, and
+  `PUT /api/v1/criteria/:externalId` — without them RT365's existing book
+  could not migrate and REQ-04 was a screen-only control (D-33.12).
+- Decisions carry `council`, `evidenceUri`, `provenance`, `status`
+  Proposed/Ratified and `ratifiedBy` (migration 039, D-33.11); substance
+  immutable, state audited; headlines no longer cut at 300 characters.
+- `version` omitted on a write is true last-writer-wins (no phantom 409);
+  the `Idempotency-Key` is reserved before the handler runs, the body is
+  canonicalised, a refused request frees its key.
+- Invalid `gate` numbers (non-integers, beyond the ladder) and
+  `measuredAt` values are 400s; the review probe passes third-party
+  branch and file names as arguments, never through a shell; `pg_dump`
+  and friends get the password through `PGPASSWORD`, not `ps`; the PGlite
+  backup refuses to run while the server answers.
+- Two tests asserted less than the code claimed (a `[200, 400]` and an
+  agenda check that passed for the wrong reason); tightened, and six
+  cases added for the paths the suite did not exercise.
+- Runbook (docs/34): `createuser --createdb`, first administrator via
+  `admin:handover` before `npm start`, tenant `.env` named in cron,
+  restore-to-live and upgrade rollback, PGlite scripts refuse while the
+  server runs.
+
 ### Fixed
 
 - **The first hour** (I-1 · M-01..M-03): `.env` is loaded; `PGLITE_DIR`
@@ -110,7 +149,7 @@ where the programme can read it (`docs/33`, `docs/requests/rt365.json`,
   contract; the test that pinned "one endpoint per scope" now asserts
   "every scope served, every scoped route listed".
 
-Tests: 449 → 505; gates 9 → 10; migrations 033 → 038.
+Tests: 449 → 513; gates 9 → 10; migrations 033 → 039.
 
 ---
 
