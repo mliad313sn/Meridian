@@ -148,6 +148,52 @@ describe("agenda generation (R5.2, R5.3, R5.9)", () => {
     }
   });
 
+  /* REQ-19, after REQ-14. A placeholder finish is a POSITION on the
+     timeline waiting for the measurement that will produce the real
+     date. The agenda used to tell a steering meeting it was "42d late",
+     which sends a room after a slip nobody promised not to have. */
+  test("a project whose finish is a placeholder is never called late in the agenda", () => {
+    const book = (dateBasis) => {
+      const db = emptyBook();
+      db.programmes = [{ id: "PG", name: "Renewal", site: null }];
+      db.projects = [{
+        id: "P1", name: "Ledger replacement", programme: "PG", site: null,
+        start: "2026-01-05", finish: "2026-03-31", budget: 1_000_000,
+        phase: "Delivery", dateBasis, condition: dateBasis === "placeholder"
+          ? "after the capacity model at gate C" : "",
+        healthOverride: null, contingency: 0,
+      }];
+      /* Half-done work that should have finished: PV runs to today, EV
+         stops at 20 % — an SPI a long way under the red threshold, and a
+         forecast finish well beyond the planned one. */
+      db.activities = [{
+        id: "A1", project: "P1", name: "Migrate the ledger",
+        baseStart: "2026-01-05", baseEnd: "2026-03-31",
+        start: "2026-01-05", end: "2026-03-31", pct: 20, weight: 1, deps: [],
+      }];
+      db.ledger = [{ id: "L1", project: "P1", date: "2026-06-01", amount: 900_000,
+        kind: "Actual", source: "plan" }];
+      return db;
+    };
+
+    const agendaFor = (db) => buildAgenda(
+      db, { id: "S", cadence: "weekly", scopeKind: "group", timeboxMin: 20 },
+      { id: "O", meetsOn: "2026-07-01" }, []);
+
+    const committed = agendaFor(book("committed")).sections.find((x) => x.key === "exceptions");
+    assert.ok(committed, "a project this far behind belongs on the agenda whatever its date rests on");
+    assert.match(committed.items[0].detail, /\d+d late/,
+      "a date somebody committed to, and missed, is still reported late");
+
+    const placeholder = agendaFor(book("placeholder")).sections.find((x) => x.key === "exceptions");
+    assert.ok(placeholder, "it is still off track — the verdict on the DATE is what changes");
+    assert.doesNotMatch(placeholder.items[0].detail, /\d+d late/,
+      "nobody promised this date, so nothing about it is late");
+    assert.match(placeholder.items[0].detail, /forecast finish/,
+      "the forecast is still worth saying — it is the verdict that is withdrawn");
+    assert.match(placeholder.items[0].detail, /placeholder, not a commitment/);
+  });
+
   test("nothing outstanding still produces a section that says so", () => {
     const db = emptyBook();
     const agenda = buildAgenda(db, { id: "S", cadence: "weekly", scopeKind: "group", timeboxMin: 20 },

@@ -84,6 +84,7 @@ export const SIGNAL_TEXT = {
 
   /* why a trend has no value */
   trendOnePeriod:   "One period only — a trend needs at least two",
+  trendNoPeriod:    "No period in this window carries a value — there is nothing to trend",
   trendNoHistory:   "The register records the next review date, not that a review happened — there is no history",
   trendUndatedActions:    "Some actions were closed without a date, so the register cannot be replayed",
   trendUndatedExceptions: "Some exceptions were answered without a date, so the register cannot be replayed",
@@ -172,7 +173,9 @@ function trendOf(periods, blockedBy = null) {
   if (blockedBy) return { ...base, state: "N", why: blockedBy };
   const valued = periods.filter((p) => !noNumber(p.value));
   if (valued.length < 2) {
-    return { ...base, state: "N", why: SIGNAL_TEXT.trendOnePeriod,
+    return { ...base,
+      state: "N",
+      why: valued.length ? SIGNAL_TEXT.trendOnePeriod : SIGNAL_TEXT.trendNoPeriod,
       latest: valued.length ? valued[valued.length - 1].value : null };
   }
   const latest = valued[valued.length - 1].value;

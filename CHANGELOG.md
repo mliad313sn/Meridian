@@ -22,6 +22,81 @@ Nothing yet.
 
 ---
 
+## [5.14.0] — 2026-09-08
+
+RT365's integrator rewrote `meridian_sync.py` against our published
+contract and then **measured** what it still could not do. Everything in
+this release is one of those measurements, or the screen that was missing
+beside it.
+
+### Added
+
+- **A register item records when, and by whom, it closed** (REQ-18).
+  `status: Closed` answered 200 and read back closed while `closed_on`
+  stayed null — it stayed null because it did not exist. `raid_item` now
+  carries `closed_on` and `closed_by`, nullable, and **nothing is
+  back-dated**: a row closed before this migration is closed on a date
+  nobody knows, and writing the migration's own date would invent a
+  history no one lived. `closed_by` is a person from the directory, not
+  the account that pushed the button — the audit trail already carries
+  the second. Filed as an API defect; it was a product defect, because
+  the screen had the same hole.
+- **A project date says what it rests on** (REQ-19), as 040 did for a
+  milestone: `committed`, or a `placeholder` that is never reported late
+  until the condition producing the real date is measured. With it, the
+  two fields the same round measured as *accepted and lost*: the
+  **sponsor** who answers for the business case — a person, because a
+  name that does not resolve in the directory is a string, not a
+  responsibility — and the **acceptance criteria** that say in advance
+  what finished will mean. Milestones have had theirs since 032; a
+  project was closed on three signatures with no sentence saying what
+  they attested.
+- **A free category label on a register item** (REQ-13), implied by their
+  `RAID_KIND`. `kind` stays Risk/Issue/Assumption/Dependency — it is the
+  contract the engine reads and it does not open. `category` is their
+  word, beside ours.
+- **Five governance signals on the portfolio page** (REQ-28): decision
+  latency, action ageing, gate cycle time, RAID review compliance,
+  exception age — every one computed from timestamps the book already
+  keeps. **No new data entry**, which was the binding constraint and also
+  the test of the design: wanting a column means not having found the
+  timestamp that already answers the question.
+- **The field-return loop is adopted with a command** (REQ-31):
+  `npm run field:init` writes a register that passes the gates the moment
+  it lands. Step 1 of the pattern used to read *copy an existing
+  register*, and copying RT365's means inheriting forty-four requests
+  belonging to another programme and deleting them by hand.
+
+### Changed
+
+- **The write API refuses a body it does not understand**, naming the
+  unknown key, listing what is accepted, pointing at the contract, and
+  saying nothing was written. Their own D-10 is the argument: a 200 on a
+  body the route did not understand teaches the caller they wrote
+  something. This is only safe because the fields above were made real
+  first.
+- **The agenda no longer calls a placeholder finish late.** A project
+  that far behind still belongs on the agenda; what is withdrawn is the
+  verdict on a date nobody committed to. Saying *42d late* of a
+  placeholder sends a steering meeting after a slip that does not exist.
+- `route-match.mjs` (F1) reads the `signals` router. A router its map
+  does not name is invisible to the gate — the readouts were drawn, the
+  route answered, and F1 still called it a button that 404s. The gate was
+  lying in the safe direction, but lying.
+
+### Not done, and why
+
+- The **H-nn half of REQ-13** — standing human acts modelled as
+  dependencies with a review date — stays open. It is a modelling
+  decision, not a field.
+- `v5.14.0` is **not on the remote**, and neither is any earlier tag past
+  `v5.9.0`. Pushing a tag ref from this session is refused HTTP 403, and
+  the merge to the default branch was authorised by the owner and then
+  refused by the session's own permission classifier (`docs/33` D-33.50).
+  Every `released: false` in the register is honest.
+
+---
+
 ## [5.13.0] — 2026-09-08
 
 RT365 consolidated two rounds into one report and handed over the most

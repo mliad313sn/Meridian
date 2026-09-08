@@ -550,3 +550,27 @@ describe("REQ-28 · le contrat /api/v1", () => {
     }
   });
 });
+
+describe("REQ-28 · une fenêtre sans donnée n'est pas « une seule période »", () => {
+  test("zéro période valuée et une seule période valuée ne disent pas la même chose", () => {
+    const projects = [{ id: "P1", programme: "PR", scaffoldedGates: 4 }];
+    /* Une décision d'il y a longtemps, hors de la fenêtre de trois mois :
+       aucune période ne porte de valeur. */
+    const none = govSignals({
+      asAt: AS_AT, months: 3, projects,
+      decisions: [{ id: "D1", project: "P1", takenOn: "2025-01-06", recordedAt: "2025-01-09T10:00:00Z" }],
+    }).portfolio.signals.decisionLatency.trend;
+    assert.equal(none.state, "N");
+    assert.equal(none.why, SIGNAL_TEXT.trendNoPeriod);
+    assert.equal(none.latest, null);
+
+    const one = govSignals({
+      asAt: AS_AT, months: 3, projects,
+      decisions: [{ id: "D2", project: "P1", takenOn: "2026-08-03", recordedAt: "2026-08-06T10:00:00Z" }],
+    }).portfolio.signals.decisionLatency.trend;
+    assert.equal(one.state, "N");
+    assert.equal(one.why, SIGNAL_TEXT.trendOnePeriod);
+    assert.equal(one.latest, 3, "la seule période garde sa valeur ; c'est l'ÉCART qui manque");
+    assert.equal(one.delta, null);
+  });
+});

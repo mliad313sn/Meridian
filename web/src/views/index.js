@@ -25,6 +25,10 @@ import {
   RAG_LABEL, MONTHS, DAY,
 } from "../../../shared/engine.js";
 
+import {
+  SIGNAL_TEXT, SIGNAL_ORDER, formatSignal, formatTrend,
+} from "../../../shared/govsignals.js";
+
 import { meetingsView, invalidateMeetings } from "./meetings.js";
 import { accessPanel, directoryPanel, referencePanel, federationPanel, notificationsPanel, importPanel, continuityPanel, integrationsPanel, invalidateAdmin } from "./administration.js";
 
@@ -356,7 +360,14 @@ Views.portfolio = (db) => {
         h("div", { class: "xs muted" }, ps.length + " projects · SPI " + idx(r.spi) + " · CPI " + idx(r.cpi)));
     })));
 
-  return h("div", null, kpis, h("div", { class: "split" }, register, rail));
+  return h("div", null, kpis, h("div", { class: "split" }, register, rail),
+
+    /* REQ-28 (RT365's V-9) — this page answers "is it on time and on
+       budget". Under it, the question no screen in Meridian answered:
+       is this office getting slower? They asked for it HERE, and here
+       is where a PMO already comes to look. */
+    h("div", { style: "height:20px" }), h("hr", { class: "hr" }), h("div", { style: "height:14px" }),
+    governanceSignalsBlock(db));
 };
 
 /* ── My week — the personal landing (UX committee, daily-1) ────────────
@@ -4722,6 +4733,90 @@ function editDoc(db, d) {
  * cite ensuite. On additionne l'argent, on LISTE le reste, et on dit
  * combien on a laissé de côté et dans quelles unités.
  */
+/* ── REQ-28 (RT365's V-9) · the PMO's own throughput ───────────────────
+   Five signals, every one of them computed from timestamps the book
+   already carries — no new data entry, which was RT365's binding
+   constraint and also the test of the design: wanting a column here means
+   not having found the timestamp that already answers the question.
+
+   The portfolio row is drawn as tiles because a tile can carry its own
+   note, and the note is where an unmeasured signal says WHY. That is not
+   decoration. REQ-33 was this product shipping ON TRACK 100 % for a book
+   with no budget, and the same mistake is available here in five new
+   places: a programme that has closed no gates does not have a cycle time
+   of zero and is not doing well. So `formatSignal` returns the em dash and
+   the tile says the reason out loud, in the reader's language.
+
+   The per-programme table below carries the same rule: `—` with the reason
+   on the cell, never a zero, never a colour. Comparability is respected
+   too — a cycle time drawn from ladders of different lengths says so
+   rather than averaging four-gate and six-gate programmes together. */
+function governanceSignalsBlock(db) {
+  const [data] = liveFetch("signals", () => api.get("/signals"), (r) => [r]);
+  if (!data || !data.portfolio) {
+    return h("div", null,
+      sectionHead(t(SIGNAL_TEXT.block), t("Reading the clocks the book already keeps…")));
+  }
+
+  /* `why` on a signal is already the SENTENCE (SIGNAL_TEXT.noGateClosed),
+     not the key. Translating it means passing the sentence through the
+     dictionary, and every one of them has an FR and an ES entry — the
+     i18n gate cannot see these, because they arrive through a variable
+     rather than a literal `t("…")`, so a missing one would show up as a
+     half-French tile and nothing would fail. */
+  const why = (m) => (m && m.state !== "measured" && m.why ? t(m.why) : null);
+
+  /* One cell: the number in its own unit, its movement beside it, and —
+     when there is no number — the reason, never a stand-in for one. */
+  const cell = (m) => {
+    const head = formatSignal(m);
+    const reason = why(m);
+    return h("span", { class: "mono small", title: reason ?? null },
+      h("span", { style: head === "\u2014" ? "color:var(--muted)" : null }, head),
+      head === "\u2014" ? null : h("span", { class: "xs muted" }, "  " + formatTrend(m)));
+  };
+
+  const tiles = SIGNAL_ORDER.map((key) => {
+    const m = data.portfolio.signals[key];
+    const reason = why(m);
+    return {
+      label: t(SIGNAL_TEXT[key]),
+      value: formatSignal(m),
+      note: reason
+        ? reason
+        : (m?.trend?.state === "measured"
+            ? t("since the previous period: ") + formatTrend(m)
+            /* "one period only" and "no period at all" are different
+               statements and the module now distinguishes them; reaching
+               for a default here would print the wrong one. */
+            : t(m?.trend?.why ?? SIGNAL_TEXT.trendOnePeriod)),
+    };
+  });
+
+  const programmes = (data.programmes ?? []).filter((p) =>
+    SIGNAL_ORDER.some((k) => p.signals[k]?.state === "measured"));
+
+  return h("div", null,
+    sectionHead(t(SIGNAL_TEXT.block),
+      t("Five clocks the book already keeps, as at ") + data.asAt + t(", over ") +
+      data.months + t(" months. Nothing here asks anyone to type anything.")),
+    kpiStrip(tiles),
+    programmes.length
+      ? h("div", { style: "overflow-x:auto" },
+          table({
+            cols: [
+              { key: "name", label: t("Programme"), get: (p) => p.name },
+              ...SIGNAL_ORDER.map((key) => ({
+                key, label: t(SIGNAL_TEXT[key]), align: "c",
+                get: (p) => cell(p.signals[key]),
+              })),
+            ],
+            rows: programmes,
+          }))
+      : h("div", { class: "small muted", style: "padding:8px 0" },
+          t("No programme has measured any of the five yet — the reasons are on the tiles above.")));
+}
+
 function valueReportBlock(db, list) {
   const v = Engine.valueReport(db, list);
   const tot = v.totals;

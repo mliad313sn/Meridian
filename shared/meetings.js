@@ -126,7 +126,19 @@ export function buildAgenda(db, series, occurrence, openActions = [], extras = {
       items: exceptions.map(m => ({
         headline: (m.health.rag === "R" ? "RED · " : "AMBER · ") + m.project.name,
         detail: m.health.why +
-          (m.slipDays > 7 ? " · forecast finish " + fmtDate(m.forecastFinish) + " (" + m.slipDays + "d late)" : "") +
+          /* REQ-19, after REQ-14. A placeholder finish is a POSITION on
+             the timeline waiting for the measurement that will produce
+             the real date — it is never late, because nobody promised
+             it. Saying "42d late" of a date nobody committed to sends a
+             steering meeting after a slip that does not exist, and the
+             agenda is the one place where that costs a room's time.
+             The forecast is still worth saying; the verdict is not. */
+          (m.slipDays > 7
+            ? (m.project.dateBasis === "placeholder"
+                ? " · forecast finish " + fmtDate(m.forecastFinish) +
+                  " (the finish date is a placeholder, not a commitment)"
+                : " · forecast finish " + fmtDate(m.forecastFinish) + " (" + m.slipDays + "d late)")
+            : "") +
           (m.vac < -0.005 ? " · " + signedMoney(m.vac) + " against budget" : ""),
         entity: "project", entityId: m.project.id,
         urgent: m.health.rag === "R",
