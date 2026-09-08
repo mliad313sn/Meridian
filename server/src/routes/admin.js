@@ -14,6 +14,16 @@ import {
   SCOPES, listIntegrations, createIntegration, rotateIntegrationKey, normaliseScopes,
 } from "../integrations.js";
 import { acceptableWebhook, deliveriesOf } from "../events.js";
+import { posture } from "../posture.js";
+import { normaliseGateModel } from "../../../shared/engine.js";
+
+/* I-3 — l'échelle de jalons d'un programme, validée par la même fonction
+   que le navigateur explique. Un refus dit lequel des jalons cloche. */
+function gateModelOf(b) {
+  if (b.gateModel === undefined) return undefined;
+  try { return normaliseGateModel(b.gateModel); }
+  catch (e) { throw new HttpError(400, e.message); }
+}
 
 /* Même refus qu'ailleurs : un second écrivain est prévenu, jamais écrasé. */
 function conflict(result) {
@@ -27,6 +37,13 @@ r.use((req, _res, next) => {
   const v = can(req.user, "user.manage");
   if (!v.ok) return next(new HttpError(403, v.why));
   next();
+});
+
+/* I-12 — la posture du jour 1 : quelles portes publiées sont encore
+   ouvertes, et quels réglages fermés par défaut attendent une décision.
+   Lu par l'écran Administration, qui le montre tant que c'est vrai. */
+r.get("/posture", async (_req, res, next) => {
+  try { res.json(await posture()); } catch (e) { next(e); }
 });
 
 /* ── users ────────────────────────────────────────────────────────── */
@@ -468,6 +485,9 @@ const NUMERIC = new Set([
 ]);
 const BOOLEAN = new Set(["autoRag", "gateLock", "ccb", "capacityAlerts", "benefitTrack"]);
 const TEXT = new Set(["cadence", "orgName", "statusDate",
+  /* SaaS-04 / I-6 — the name this instance answers to in /api/health,
+     for a fleet that supervises many of them. */
+  "instanceId",
   // R-01 — the hosts an evidence link may point at, comma-separated
   "documentHosts",
   /* N-05 — the hosts an outbound webhook may address. Closed by default,
@@ -609,11 +629,14 @@ r.post("/programmes", async (req, res, next) => {
     if (/^SDP-/i.test(String(b.id))) {
       throw new HttpError(400, "The SDP- namespace is reserved for identifiers derived by the SDP sync");
     }
+    const model = gateModelOf(b) ?? null;
     await audited(req.user,
-      { action: "Programme added", entity: "programme", entityId: b.id, detail: b.name },
+      { action: "Programme added", entity: "programme", entityId: b.id,
+        detail: b.name + (model ? ` — ${model.length}-gate ladder` : "") },
       async (t) => t.query(
-        `INSERT INTO programme (id, name, sponsor, manager_id) VALUES ($1,$2,$3,$4)`,
-        [String(b.id).toUpperCase().slice(0, 5), b.name, b.sponsor ?? "", b.managerId ?? null]));
+        `INSERT INTO programme (id, name, sponsor, manager_id, gate_model) VALUES ($1,$2,$3,$4,$5)`,
+        [String(b.id).toUpperCase().slice(0, 5), b.name, b.sponsor ?? "", b.managerId ?? null,
+         model ? JSON.stringify(model) : null]));
     res.status(201).json({ id: b.id });
   } catch (e) { next(e); }
 });
@@ -703,6 +726,8 @@ r.patch("/programmes/:id", async (req, res, next) => {
     if (b.sponsor !== undefined) patch.sponsor = b.sponsor;
     if (b.managerId !== undefined) patch.manager_id = b.managerId || null;
     if (b.active !== undefined) patch.active = !!b.active;
+    const model = gateModelOf(b);
+    if (model !== undefined) patch.gate_model = model === null ? null : JSON.stringify(model);
     if (!Object.keys(patch).length) throw new HttpError(400, "Nothing recognised to change");
 
     if (b.active === false) {

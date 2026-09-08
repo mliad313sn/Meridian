@@ -25,6 +25,7 @@
 
 import v1Router from "./routes/v1.js";
 import { SCOPES } from "./integrations.js";
+import { WRITE_BODIES } from "./v1write.js";
 
 export const CONTRACT = "v1";
 
@@ -91,6 +92,55 @@ const DOCS = {
   },
 };
 
+/* I-2 — les sept écritures, décrites une fois chacune. Le corps est lu
+   dans v1write.js (WRITE_BODIES) : la description et la route ne peuvent
+   pas diverger sur ce qu'un PUT accepte. */
+const UPSERT_RETURNS = { contract: "string", generatedAt: "date-time", id: "string",
+  externalId: "string", created: "boolean", version: "integer" };
+const upsert = (what, scope, extra) => ({
+  summary: `Create or update ${what}, keyed by your own identifier`,
+  description:
+    `Creates the ${what} when nothing carries this externalId for your integration, updates it ` +
+    `otherwise. The identity is (integration, externalId): two connected systems may both say ` +
+    `"E01" without colliding. \`version\` is optional — when sent it is asserted (409 if stale); ` +
+    `when omitted your system is the master of this row and the last write wins. Optional ` +
+    `\`Idempotency-Key\` header: the same key with the same body replays the recorded answer ` +
+    `(Idempotent-Replayed: true); the same key with another body is refused (422). ` +
+    `The same business rules as the screens apply. ${extra}`,
+  scope, returns: UPSERT_RETURNS,
+});
+const WRITE_DOCS = {
+  "PUT /api/v1/projects/:externalId": upsert("a project", "write:portfolio",
+    "Creation needs programme, site, start and finish; the schedule, the gate milestones and the " +
+    "evidence documents are scaffolded as when a person creates one. Money is in millions."),
+  "PUT /api/v1/milestones/:externalId": upsert("a milestone", "write:portfolio",
+    "`project` is a Meridian id or an externalId you created. A milestone with acceptanceCriteria " +
+    "cannot be marked done without acceptedBy — the person who checked them (PM-04)."),
+  "PUT /api/v1/raid/:externalId": upsert("a register item (risk, issue, assumption, dependency)", "write:portfolio",
+    "`gate` links it to a governance gate of the project, `cr` to a change request of the same project (I-8). " +
+    "Omit `project` for a portfolio-wide item."),
+  "PUT /api/v1/activities/:externalId": upsert("the link to a schedule stage, and its measured progress", "write:portfolio",
+    "Stages are not created by integrations — the plan belongs to the project. The first call binds " +
+    "your id to an existing stage (`activity`); every call may carry `pct`, stamped with `source` and " +
+    "`measuredAt` so earned value reads measured, not typed, progress (I-5)."),
+  "PUT /api/v1/workitems/:externalId": upsert("a work item on the board", "write:portfolio",
+    "`column` is a column id or name; `assignee` an id or exact name."),
+  "PUT /api/v1/decisions/:externalId": upsert("a decision outside a meeting", "write:meetings",
+    "Decisions are immutable: the same PUT again answers 200 with the same id; a different body " +
+    "answers 409 — record a new decision naming the old one in `supersedes` (I-7)."),
+  "PUT /api/v1/actions/:externalId": upsert("an action", "write:meetings",
+    "An action is raised in an OPEN meeting: send `occurrence` (an open occurrence id) or `series` " +
+    "(the series whose open occurrence takes it). The API never opens a meeting — a chair does."),
+};
+Object.assign(DOCS, WRITE_DOCS);
+
+/** Les routes qui exigent une portée, pour la découverte. */
+export function scopedEndpoints() {
+  return Object.entries(DOCS)
+    .filter(([, d]) => d.scope)
+    .map(([k, d]) => { const [method, path] = k.split(" "); return { method, path, scope: d.scope }; });
+}
+
 /** Ce que dit la description, mais que le routeur ne peut pas dire. */
 export function documented() {
   return Object.keys(DOCS).map((k) => {
@@ -106,6 +156,7 @@ const jsonSchema = (shape) => ({
     if (kind === "date") return [k, { type: "string", format: "date" }];
     if (kind === "string[]") return [k, { type: "array", items: { type: "string" } }];
     if (kind === "object[]") return [k, { type: "array", items: { type: "object" } }];
+    if (kind === "date-time") return [k, { type: "string", format: "date-time" }];
     return [k, { type: kind }];
   })),
 });
@@ -124,16 +175,29 @@ export function openApiDocument({ version = "dev", servers = [] } = {}) {
     const doc = DOCS[`${method} ${path}`];
     if (!doc) continue;   // la porte F9 le refuse ; ici on ne ment pas par défaut
     paths[path] ??= {};
+    const collection = /^\/api\/v1\/(\w+)\/:externalId$/.exec(path)?.[1];
+    const body = collection && WRITE_BODIES[collection];
     paths[path][method.toLowerCase()] = {
       summary: doc.summary,
       description: doc.description,
       security: [{ apiKey: [] }],
       "x-required-scope": doc.scope,
+      ...(collection ? { parameters: [{ name: "externalId", in: "path", required: true,
+        schema: { type: "string", maxLength: 200 },
+        description: "Your own identifier for this row — stable across runs, unique within your integration" }] } : {}),
+      ...(body ? { requestBody: { required: true, content: { "application/json": { schema: jsonSchema(body) } } } } : {}),
       responses: {
         200: {
           description: "The document described above",
           content: { "application/json": { schema: jsonSchema(doc.returns) } },
         },
+        ...(body ? {
+          201: { description: "Created — the row did not exist for this externalId",
+            content: { "application/json": { schema: jsonSchema(doc.returns) } } },
+          400: { description: "The body breaks a rule the screens enforce too; the message says which" },
+          409: { description: "A stale version, an immutable decision, or a meeting that is not open" },
+          422: { description: "Idempotency-Key reused with a different request" },
+        } : {}),
         401: { description: "No key, an unknown key, or a revoked key — the three are indistinguishable on purpose" },
         403: { description: "The key is live but does not carry the scope this route requires" },
       },
@@ -151,9 +215,11 @@ export function openApiDocument({ version = "dev", servers = [] } = {}) {
         "shape has to change it becomes /api/v2, so that nobody has to guess. " +
         "Authentication is a key issued per connected system, carrying explicit " +
         "scopes; the product never stores the key itself, only its fingerprint.\n\n" +
-        "There is no write surface yet, and that is deliberate: a scope is only " +
-        "published once a route honours it. Declaring one earlier would advertise " +
-        "a door that does not exist and imply it is guarded.",
+        "Writes arrived with the first real integrator (RT365, docs/33): PUT by your " +
+        "own identifier on projects, milestones, register items, stage progress, work " +
+        "items, decisions and actions, under two write scopes, with an optional " +
+        "Idempotency-Key. A scope is only published once a route honours it: declaring " +
+        "one earlier would advertise a door that does not exist and imply it is guarded.",
       license: { name: "Apache-2.0", identifier: "Apache-2.0" },
     },
     servers: servers.length ? servers : [{ url: "http://localhost:4173", description: "A local instance" }],

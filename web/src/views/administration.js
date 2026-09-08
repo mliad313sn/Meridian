@@ -20,7 +20,7 @@ import {
 import { App, toast, reportError } from "../lib/state.js";
 import { api, download } from "../lib/api.js";
 import { t } from "../lib/i18n.js";
-import { Engine, fmtDate, money, uniq } from "../../../shared/engine.js";
+import { Engine, fmtDate, money, uniq, GATES, parseGateLadder, formatGateLadder } from "../../../shared/engine.js";
 
 /* Fetched on demand; invalidated by every write below. */
 const state = { users: null, loading: false, q: "", tab: "accounts" };
@@ -204,6 +204,55 @@ async function write(label, work, detail) {
 
 /* ── the panel ────────────────────────────────────────────────────── */
 
+/* ── I-12 · la posture du jour 1 ───────────────────────────────────────
+   Le terrain a dit « des identifiants publics, à changer le jour 1 » ;
+   un « à faire » que rien ne montre ne se fait pas. Ce bandeau reste tant
+   qu'un mot de passe imprimé dans le README ouvre encore un compte actif,
+   et nomme les comptes. Il dit aussi l'exemption break-glass en clair. */
+const postureState = { data: null, loading: false };
+export function invalidatePosture() { postureState.data = null; }
+
+function loadPosture() {
+  if (postureState.data || postureState.loading) return;
+  postureState.loading = true;
+  api.get("/admin/posture")
+    .then((d) => { postureState.data = d; })
+    .catch(() => { postureState.data = { failed: true, demoAccountsLive: [] }; })
+    .finally(() => { postureState.loading = false; App.emit(); });
+}
+
+export function posturePanel() {
+  if (!App.isAdmin) return null;
+  loadPosture();
+  const d = postureState.data;
+  if (!d || d.failed) return null;
+  const live = d.demoAccountsLive ?? [];
+  const waiting = [
+    !d.documentHostsSet ? t("no trusted document host named — evidence cannot be approved") : null,
+    !d.smtpConfigured ? t("no mail transport — notifications queue and do not send") : null,
+    !d.notifyHostsSet ? t("no notification host named — nothing leaves the instance") : null,
+  ].filter(Boolean);
+  if (!live.length && !waiting.length) return null;
+  return h("div", { class: "drop-hint", style: "margin-bottom:18px" },
+    live.length
+      ? h("div", null,
+          h("div", { class: "strong small" },
+            live.length + " " + t("demonstration account(s) still open with the password printed in the README")),
+          h("div", { class: "xs muted", style: "margin:4px 0 6px" },
+            t("Anyone who reads the repository can sign in as them. Change each password, or deactivate the account, before this instance carries anything real. In production the server refuses to start while this is true.")),
+          h("div", { class: "xs mono" }, live.map((l) => l.email).join(" · ")))
+      : null,
+    waiting.length
+      ? h("div", { style: live.length ? "margin-top:10px" : "" },
+          h("div", { class: "strong small" }, t("Closed by default, waiting on a decision")),
+          h("ul", { class: "xs muted", style: "margin:4px 0 0 18px;padding:0" },
+            waiting.map((w) => h("li", null, w))))
+      : null,
+    h("div", { class: "xs muted", style: "margin-top:10px;max-width:70ch" },
+      h("span", { class: "strong" }, t("Break-glass: ")),
+      t("an administrator is exempt from segregation of duties and may sign every step of a change request, including one it raised; each such signature is marked break-glass in the audit trail. Run the portfolio from named group and site accounts.")));
+}
+
 export function accessPanel(db) {
   if (!App.isAdmin) {
     return h("div", null,
@@ -221,6 +270,7 @@ export function accessPanel(db) {
     : users;
 
   return h("div", null,
+    posturePanel(),
     sectionHead("Access levels", "what each level may actually do"),
     levelTable(db, users),
 
@@ -655,15 +705,25 @@ function programmeDialog(db, g) {
         value: g?.managerId ?? "",
         options: [{ value: "", label: "Unassigned" }]
           .concat(db.people.map((p) => ({ value: p.id, label: p.name + " — " + p.role }))) },
+      /* I-3 — the programme's own gate ladder (retour de terrain RT365).
+         One gate per line: name | owner | evidence, comma separated | at%.
+         Empty keeps the default four. Validated by the same function the
+         server refuses with, so the message names the line that is wrong. */
+      { key: "ladder", label: t("Gate ladder"), type: "textarea", span: 2, rows: 5,
+        value: g?.gateModel?.length ? formatGateLadder(g.gateModel) : "",
+        placeholder: formatGateLadder(GATES),
+        hint: t("One gate per line: name | owner | evidence, comma separated | position in the project window as a percentage. Leave empty for the default ladder. Projects take the ladder at creation; a later change does not rewrite them."),
+        validate: (v) => { try { parseGateLadder(v); return ""; } catch (e) { return e.message; } } },
     ],
     saveLabel: g ? "Save programme" : "Add programme",
     onSave: (v) => write(g ? "Programme updated" : "Programme added",
       (a) => (g
         ? a.patch("/admin/programmes/" + g.id, {
             name: v.name, sponsor: v.sponsor, managerId: v.managerId || null,
-            version: g.version })
+            gateModel: parseGateLadder(v.ladder), version: g.version })
         : a.post("/admin/programmes", {
-            id: v.id, name: v.name, sponsor: v.sponsor, managerId: v.managerId || null })),
+            id: v.id, name: v.name, sponsor: v.sponsor, managerId: v.managerId || null,
+            gateModel: parseGateLadder(v.ladder) })),
       v.name),
   });
 }

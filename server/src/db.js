@@ -12,6 +12,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { loadEnv, resolveDataDir } from "./env.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 /* A packaged build ships the .sql files beside the executable rather than
@@ -24,6 +25,9 @@ export const migrationsDir = () =>
 
 let impl = null;
 let engineName = "none";
+/* Où le livre vit réellement — ce que /api/health et la ligne de démarrage
+   disent (I-1) : `null` en mémoire, sinon le répertoire résolu. */
+let dataDirUsed = null;
 
 /* ── date normalisation ───────────────────────────────────────────────
    Both drivers hand back JS `Date` objects for date and timestamp
@@ -215,21 +219,43 @@ async function openPglite(dataDir) {
       });
     },
     close: () => pglite.close(),
+    /* I-6 — la sauvegarde a besoin de l'instance PGlite elle-même
+       (dumpDataDir) ; rien d'autre ne doit y toucher. */
+    native: pglite,
   };
 }
 
 /* ── lifecycle ────────────────────────────────────────────────────── */
 
 export async function connect(opts = {}) {
+  /* I-1 — `.env` est lu ici, au seul endroit par lequel tout passe (le
+     serveur, la graine, les migrations, la remise à zéro, les scripts),
+     et jamais par-dessus ce que le shell a déjà posé. */
+  loadEnv();
   const url = opts.url ?? process.env.DATABASE_URL;
-  if (url) impl = await openPg(url);
-  else impl = await openPglite(opts.dataDir ?? process.env.PGLITE_DIR ?? null);
+  if (url) { impl = await openPg(url); dataDirUsed = null; }
+  else {
+    /* `dataDir: null` veut dire « en mémoire, je sais ce que je fais »
+       (le harnais de test) ; `undefined` veut dire « décide pour moi »,
+       et la réponse n'est plus jamais la mémoire par accident (M-01). */
+    dataDirUsed = resolveDataDir("dataDir" in opts ? opts.dataDir : undefined);
+    impl = await openPglite(dataDirUsed);
+  }
   engineName = impl.name;
   return impl;
 }
 
 export function engine() {
   return engineName;
+}
+
+/** Le répertoire PGlite en service, ou null (PostgreSQL, ou en mémoire). */
+export function dataDir() {
+  return dataDirUsed;
+}
+/** L'instance PGlite sous-jacente (sauvegarde, I-6), ou null sur PostgreSQL. */
+export function native() {
+  return impl?.native ?? null;
 }
 
 function need() {

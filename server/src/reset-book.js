@@ -59,6 +59,9 @@ const KEEP_TABLES = new Set([
   "app_user", "app_setting", "audit_event", "board_column", "id_counter",
   "integration", "report_period", "report_snapshot", "schema_migration",
   "session",
+  /* I-2 : la mémoire des clés d'idempotence appartient à l'intégration,
+     comme sa clé — configuration d'exploitation, pas contenu de démo. */
+  "idempotency_key",
 ]);
 
 /* Enfants avant parents ; toutes les FK croisées sont SET NULL ou CASCADE
@@ -69,7 +72,7 @@ const TABLES = [
   "timesheet", "person_absence", "commitment",
   "meeting_action", "meeting_decision", "meeting_attendance", "agenda_item",
   "meeting_occurrence", "meeting_series",
-  "report_narrative", "work_item", "document", "allocation",
+  "report_narrative", "work_item", "gate_criterion", "stakeholder", "comms_plan", "document", "allocation",
   "change_step", "change_request",
   "project_exception", "project_tolerance", "business_case", "benefit",
   "lesson", "demand",

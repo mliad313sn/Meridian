@@ -377,7 +377,7 @@ function lessonFields(db, l) {
     { key: "gate", label: t("Raised at gate"), type: "select", value: l && l.gate ? String(l.gate) : "",
       hint: t("Leave empty if it came up outside a gate, or at closure."),
       options: [{ value: "", label: t("Not at a gate") },
-                ...GATES.map((g) => ({ value: String(g.n), label: g.name }))] },
+                ...Engine.gates(db, l?.project ?? projects[0]?.id).map((g) => ({ value: String(g.n), label: g.name }))] },
     { key: "title", label: t("In one sentence"), span: 2, required: true, value: l ? l.title : "",
       hint: t("What someone scanning the register needs to recognise it by."),
       placeholder: t("The local supplier delivers in eight weeks, not four") },
@@ -1112,7 +1112,9 @@ Views.project = (db) => {
       h("div", { style: "flex:1;min-width:0" },
         h("div", { class: "strong small" }, ms.name),
         h("div", { class: "xs muted" }, Engine.personName(db, ms.owner) + " · " + fmtDate(ms.date) +
-          (g ? " · evidence " + g.approved + "/" + g.total : ""))),
+          (g ? " · evidence " + g.approved + "/" + g.total : "") +
+          (g && g.criteria.length ? " · " + t("criteria") + " " + g.criteriaMet + "/" + g.criteria.length : "") +
+          (g && g.risks.length ? " · " + g.risks.length + " " + t("open register item(s) against it") : ""))),
       h("div", { style: "text-align:right" }, statusTag(state),
         ms.gate && g && g.outstanding.length
           ? h("div", { class: "xs linkish muted", style: "margin-top:4px", onClick: () => go("#/documents") }, "see evidence")
@@ -1143,6 +1145,7 @@ Views.project = (db) => {
         ? h("button", { class: "btn btn-sm", onClick: () => addMilestone(db, p) }, icon("plus", 12), "Milestone")
         : null),
     h("div", { style: "margin-bottom:8px" }, milestones),
+    criteriaBlock(db, p, gate),
     !advance.ok ? h("div", { class: "drop-hint", style: "margin-top:12px" },
       h("span", { class: "strong" }, t("Phase advance is blocked. ")), tData(advance.reason),
       h("div", { style: "margin-top:8px" }, h("button", { class: "btn btn-xs", onClick: () => go("#/documents") }, t("Open the evidence list")))) : null,
@@ -1185,6 +1188,22 @@ Views.project = (db) => {
           ? open.length + t(" past the margin — waiting on an answer")
           : tol ? t("inside the margin set for it") : t("no margin set"),
         open.length > 0, toleranceBlock(db, p));
+    })(),
+    /* PM-05 / PM-11 (I-10) — who counts, and who is told. Folded, with a
+       one-line reading that says whether either register is still empty. */
+    (() => {
+      const sk = (db.stakeholders ?? []).filter((x) => x.project === p.id);
+      const opp = sk.filter((x) => x.attitude === "Opponent" || x.attitude === "Sceptic").length;
+      return fold(t("Stakeholders"),
+        sk.length ? sk.length + t(" named") + (opp ? " · " + opp + t(" sceptical or opposed") : "") : t("none named"),
+        false, stakeholderBlock(db, p, sk));
+    })(),
+    (() => {
+      const cm = (db.comms ?? []).filter((x) => x.project === p.id);
+      const due = cm.filter((x) => x.nextOn && D(x.nextOn) < D(db.statusDate)).length;
+      return fold(t("Communication plan"),
+        cm.length ? cm.length + t(" audience(s)") + (due ? " · " + due + t(" overdue") : "") : t("no plan"),
+        due > 0, commsBlock(db, p, cm));
     })(),
     fold(t("Plant & rollout"),
       (p.plantImpact ?? "none") === "none" ? t("business systems only") : t(IMPACT_LABEL[p.plantImpact]),
@@ -2370,7 +2389,12 @@ function raidDetail(db, r) {
           h("div", { class: "kpi-v", style: "font-size:19px" }, e.level), h("div", { class: "kpi-n" }, e.why))),
       h("hr", { class: "hr" }),
       h("p", { style: "margin:14px 0" }, r.detail || "No detail recorded."),
-      h("div", { class: "small muted" }, "Next review " + fmtDateLong(r.review))),
+      h("div", { class: "small muted" }, "Next review " + fmtDateLong(r.review)),
+      r.gate || r.cr
+        ? h("div", { class: "xs muted", style: "margin-top:6px" },
+            r.gate ? t("Against gate ") + r.gate + " " : "",
+            r.cr ? "· " + t("Change request") + " " + r.cr : "")
+        : null),
     actions: (close) => [
       h("button", { class: "btn btn-sm btn-danger", onClick: () => {
         confirmDialog({ title: "Delete " + r.id + "?", message: r.title, confirmLabel: "Delete", danger: true })
@@ -2411,7 +2435,20 @@ function raidFields(db, r, projectId) {
       value: r && r.ti != null ? r.ti : "", advanced: true,
       hint: t("Without a target, whether the mitigation worked is a matter of memory.") },
     { key: "owner", label: "Owner", type: "select", value: r ? r.owner : db.currentUser, options: db.people.map(p => ({ value: p.id, label: p.name })), advanced: true },
-    { key: "review", label: "Next review", type: "date", value: r ? r.review : iso(addDays(db.statusDate, 14)), span: 2, advanced: true },
+    { key: "review", label: "Next review", type: "date", value: r ? r.review : iso(addDays(db.statusDate, 14)), span: 2, advanced: true,
+      hint: t("The agenda of the next meeting in scope asks for this item once the date has come.") },
+    /* I-8 — against what this item stands: the governance gate it
+       threatens, the change request that raised or treats it. */
+    { key: "gate", label: t("Against gate"), type: "select", advanced: true,
+      value: r && r.gate ? String(r.gate) : "",
+      options: [{ value: "", label: t("Not linked to a gate") }]
+        .concat(Engine.gates(db, r ? r.project : projectId).map(g => ({ value: String(g.n), label: g.name }))),
+      hint: t("The gate whose passage this item puts at risk. The gate line shows how many open items stand against it.") },
+    { key: "cr", label: t("Change request"), type: "select", advanced: true,
+      value: r && r.cr ? r.cr : "",
+      options: [{ value: "", label: t("Not linked to a change") }]
+        .concat(db.crs.filter(c => !projectId && !r ? true : c.project === (r ? r.project : projectId))
+          .map(c => ({ value: c.id, label: c.id + " · " + c.title }))) },
   ];
 }
 
@@ -3636,6 +3673,7 @@ function newRaid(db, projectId) {
       const ok = await App.write("RAID item raised", (a) => a.post("/raid", {
         type: v.type, project: v.project || null, title: v.title, detail: v.detail,
         p: +v.p, i: +v.i, response: v.response, owner: v.owner, review: v.review,
+        tp: v.tp, ti: v.ti, gate: v.gate || null, cr: v.cr || null,
       }), { detail: v.title });
       if (ok !== false) {
         const exposure = v.p * v.i;
@@ -3654,6 +3692,7 @@ function editRaid(db, r) {
     onSave: (v) => App.write("RAID item updated", (a) => a.patch("/raid/" + r.id, {
       title: v.title, detail: v.detail, p: +v.p, i: +v.i, response: v.response,
       owner: v.owner, review: v.review, status: v.status, version: r.version,
+      tp: v.tp, ti: v.ti, gate: v.gate || null, cr: v.cr || null,
     }), { detail: r.id }),
   });
 }
@@ -3925,6 +3964,15 @@ function crDetail(db, c) {
       h("div", { class: "xs muted" }, route.why)),
 
     sectionHead("Approval path"),
+    /* S-13 / I-12 — l'exemption est dite là où elle s'exerce : un
+       administrateur qui regarde sa propre demande lit qu'il PEUT la
+       signer, que c'est l'exception, et qu'elle sera écrite. */
+    App.isAdmin && c.status === "Pending" &&
+      (c.raisedByUser === App.me.id || (App.me.personId && c.raisedBy === App.me.personId))
+      ? h("div", { class: "drop-hint xs", style: "margin-bottom:10px" },
+          h("span", { class: "strong" }, t("Break-glass: ")),
+          t("you raised this request. As an administrator you may still sign it — the exemption exists for emergencies, and the audit trail will mark the signature as break-glass. Prefer having a colleague with group authority decide it."))
+      : null,
     h("div", { style: "margin-bottom:14px" }, c.steps.map((st, i) =>
       h("div", { class: "step" },
         h("span", { class: "step-i " + (st.state === "done" ? "ok" : st.state === "rejected" ? "no" : st.state === "current" ? "" : "wait") },
@@ -4310,7 +4358,7 @@ Views.documents = (db) => {
   ];
 
   const gateBoard = App.scopedProjects().map(p => {
-    const gs = GATES.map(g => Engine.gateStatus(db, p.id, g.n));
+    const gs = Engine.gates(db, p.id).map(g => Engine.gateStatus(db, p.id, g.n));
     const cur = Engine.currentGate(db, p.id);
     return h("div", { style: "padding:11px 0;border-bottom:1px solid var(--rule-1);cursor:pointer", onClick: () => go("#/project/" + p.id) },
       h("div", { style: "display:flex;gap:8px;align-items:baseline" },
@@ -4330,7 +4378,8 @@ Views.documents = (db) => {
     h("section", { class: "l sec" },
       h("div", { class: "sec-hd" },
         searchBox(App.ui.docQ, "Search documents", v => App.set({ docQ: v })),
-        selectField("Gate", App.ui.docGate, [{ value: "all", label: "All gates" }, ...GATES.map(g => ({ value: String(g.n), label: "Gate " + g.n }))], v => App.set({ docGate: v }), "130px"),
+        selectField("Gate", App.ui.docGate, [{ value: "all", label: "All gates" },
+          ...Array.from({ length: Engine.maxGates(db) }, (_, i) => ({ value: String(i + 1), label: "Gate " + (i + 1) }))], v => App.set({ docGate: v }), "130px"),
         selectField(t("Status"), App.ui.docStatus,
           [{ value: "all", label: t("All statuses") },
            { value: "Draft", label: t("Draft") }, { value: "In review", label: t("In review") },
@@ -4346,13 +4395,18 @@ Views.documents = (db) => {
       sectionHead("Gate evidence", "by project"),
       h("div", { style: "margin-bottom:18px" }, gateBoard),
       h("hr", { class: "hr" }), h("div", { style: "height:18px" }),
-      sectionHead("The gate model"),
-      h("div", null, GATES.map(g => h("div", { class: "list-row" },
-        h("span", { class: "step-i", style: "flex:none" }, String(g.n)),
-        h("div", null,
-          h("div", { class: "strong small" }, g.name),
-          h("div", { class: "xs muted" }, g.evidence),
-          h("div", { class: "xs muted" }, "Owned by " + g.owner))))),
+      sectionHead("The gate model", ladderNote(db)),
+      /* I-3 — one ladder per programme that declares its own; the default
+         four for every other. Drawn per programme so the reader sees
+         which ladder their project actually walks. */
+      h("div", null, laddersOf(db).map(({ label, ladder }) => h("div", { style: "margin-bottom:10px" },
+        h("div", { class: "kicker", style: "margin:6px 0 2px" }, label),
+        ladder.map(g => h("div", { class: "list-row" },
+          h("span", { class: "step-i", style: "flex:none" }, String(g.n)),
+          h("div", null,
+            h("div", { class: "strong small" }, g.name),
+            h("div", { class: "xs muted" }, g.evidence),
+            h("div", { class: "xs muted" }, "Owned by " + g.owner))))))),
       h("div", { class: "card", style: "margin-top:16px" },
         h("div", { class: "card-kicker" }, "Gate locking"),
         h("div", { class: "small", style: "margin-top:4px" },
@@ -4381,7 +4435,8 @@ function docFields(db, d) {
     { key: "project", label: "Project", type: "select", value: d ? (d.project || "") : "",
       options: [{ value: "", label: "Portfolio-wide" }].concat(db.projects.map(p => ({ value: p.id, label: p.id + " · " + p.name }))) },
     { key: "type", label: "Type", type: "select", value: d ? d.type : "Design", options: DOC_TYPES },
-    { key: "gate", label: "Gate", type: "select", value: d ? String(d.gate) : "1", options: GATES.map(g => ({ value: String(g.n), label: g.name })) },
+    { key: "gate", label: "Gate", type: "select", value: d ? String(d.gate) : "1",
+      options: Engine.gates(db, d?.project ?? App.ui.project).map(g => ({ value: String(g.n), label: g.name })) },
     { key: "owner", label: "Owner", type: "select", value: d ? d.owner : db.currentUser, options: db.people.map(p => ({ value: p.id, label: p.name })) },
     { key: "rev", label: "Revision", value: d ? d.rev : "0.1" },
     { key: "status", label: "Status", type: "select", value: d ? d.status : "Draft", options: ["Draft", "In review", "Approved"] },
@@ -4583,7 +4638,13 @@ Views.reports = (db) => {
        Group level and above, like the audit trail it reads. */
     ...(["admin", "group"].includes(App.me.role) ? [
       h("div", { style: "height:26px" }),
-      sectionHead("Decision register", "consequential decisions, newest first"),
+      sectionHead("Decision register", "consequential decisions, newest first",
+        /* I-7 — a decision taken by whoever holds the authority, between
+           two meetings, is a decision. It is recorded here, not smuggled
+           into an artificial occurrence. */
+        App.can("project.write", { project: firstWritable(db) }) || App.me.role === "group" || App.isAdmin
+          ? h("button", { class: "btn btn-sm", onClick: () => recordDecision(db) }, icon("plus", 12), t("Record a decision"))
+          : null),
       (() => {
         const reg = liveFetch("register", () => api.get("/decisions/log"), (r) => {
           const controls = (r.register || []).map(x => ({
@@ -4592,8 +4653,13 @@ Views.reports = (db) => {
           }));
           const minuted = (r.minuted || []).map(x => ({
             on: String(x.on).slice(0, 10),
-            what: (x.referred ? "REFERRED to " + x.referred + " · " : "Decision · ") + x.headline,
-            detail: x.series + (x.rationale ? " — " + x.rationale : ""), by: x.by || "—", scope: x.scope,
+            what: (x.referred ? "REFERRED to " + x.referred + " · " : x.kind === "standalone" ? x.id + " · " : "Decision · ") + x.headline,
+            detail: (x.series || t("outside a meeting")) + (x.project ? " · " + x.project : "") +
+              (x.rationale ? " — " + x.rationale : "") +
+              (x.alternatives ? " · " + t("alternatives: ") + x.alternatives : "") +
+              (x.dissent ? " · " + t("dissent: ") + x.dissent : "") +
+              (x.supersedes ? " · " + t("supersedes ") + x.supersedes : ""),
+            by: x.byName || x.by || "—", scope: x.scope,
           }));
           return controls.concat(minuted).sort((a, b) => b.on.localeCompare(a.on)).slice(0, 30);
         });
@@ -4856,6 +4922,11 @@ Views.admin = (db) => {
       h("div", { style: "height:22px" }), h("hr", { class: "hr" }), h("div", { style: "height:18px" }),
       sectionHead("Reporting"),
       h("div", { class: "form-grid" },
+        h("div", { class: "field" }, h("label", null, "Instance identifier"),
+          h("input", { class: "input input-sm", value: db.settings.instanceId ?? "", placeholder: "prod-eu-1",
+            title: "What /api/health reports as instance.id — for a fleet that supervises several instances",
+            onChange: (e) => App.write("Instance identifier changed",
+              (a) => a.patch("/admin/settings", { instanceId: e.target.value.trim() }), { quiet: true }) })),
         h("div", { class: "field" }, h("label", null, "Organisation name"),
           h("input", { class: "input input-sm", value: db.orgName,
             onChange: e => App.write("Organisation renamed",
@@ -4939,15 +5010,19 @@ Views.admin = (db) => {
         federationPanel()) : null,
 
       h("div", { style: "height:22px" }), h("hr", { class: "hr" }), h("div", { style: "height:18px" }),
-      sectionHead("The gate model", "evidence required at each gate"),
-      table({
-        cols: [
-          { key: "n", label: "Gate", align: "c", width: "46px", get: g => h("span", { class: "num" }, String(g.n)) },
-          { key: "name", label: "Gate", get: g => h("span", { class: "strong small" }, g.name.split("—")[1].trim()) },
-          { key: "e", label: "Evidence", get: g => h("span", { class: "xs muted" }, g.evidence) },
-          { key: "o", label: "Owner", align: "r", get: g => h("span", { class: "small" }, g.owner) },
-        ], rows: GATES,
-      }),
+      sectionHead("The gate model", ladderNote(db)),
+      ...laddersOf(db).map(({ label, ladder }) => h("div", { style: "margin-bottom:12px" },
+        h("div", { class: "kicker", style: "margin:6px 0 4px" }, label),
+        table({
+          cols: [
+            { key: "n", label: "Gate", align: "c", width: "46px", get: g => h("span", { class: "num" }, String(g.n)) },
+            { key: "name", label: "Gate", get: g => h("span", { class: "strong small" }, (g.name.split("—")[1] ?? g.name).trim()) },
+            { key: "e", label: "Evidence", get: g => h("span", { class: "xs muted" }, g.evidence) },
+            { key: "o", label: "Owner", align: "r", get: g => h("span", { class: "small" }, g.owner) },
+          ], rows: ladder,
+        }))),
+      h("div", { class: "xs muted", style: "margin:-4px 0 14px;max-width:66ch" },
+        t("A programme declares its own ladder from Reference data → programme. Projects take their programme's ladder when they are created; changing a ladder later leaves existing projects as they are.")),
 
       h("div", { style: "height:22px" }), h("hr", { class: "hr" }), h("div", { style: "height:18px" }),
       sectionHead("Data", "held in PostgreSQL · every change attributed and audited"),
@@ -5024,6 +5099,248 @@ Views.meetings = (db) => meetingsView(db);
    R7.3 — a control the account has no authority for is absent, not
    greyed out. Each entry returns null when the account cannot do it, and
    the shell simply does not draw a button. */
+
+/* ── PM-05 · the stakeholder register (I-10) ───────────────────────── */
+const ATTITUDES = ["Champion", "Supporter", "Neutral", "Sceptic", "Opponent"];
+const ENGAGEMENTS = ["Inform", "Consult", "Involve", "Partner"];
+function stakeholderBlock(db, p, rows) {
+  const canEdit = mayWrite(p) && !fromSdp(p);
+  return h("div", null,
+    sectionHead("Stakeholders", t("interest × influence, attitude, and who owns the relationship"),
+      canEdit ? h("button", { class: "btn btn-sm", onClick: () => stakeholderDialog(db, p, null) }, icon("plus", 12), t("Stakeholder")) : null),
+    rows.length ? table({
+      cols: [
+        { key: "n", label: t("Who"), get: x => h("div", null,
+            h("div", { class: "strong small" }, x.name),
+            h("div", { class: "xs muted" }, [x.role, x.organisation].filter(Boolean).join(" · "))) },
+        { key: "g", label: t("Interest / influence"), align: "c", width: "120px",
+          get: x => h("span", { class: "mono small" }, x.interest + " / " + x.influence) },
+        { key: "a", label: t("Attitude"), width: "110px", get: x => tag(t(x.attitude),
+            x.attitude === "Opponent" || x.attitude === "Sceptic" ? "tag-acc" : x.attitude === "Champion" ? "tag-soft" : "tag-out") },
+        { key: "e", label: t("Engagement"), width: "100px", get: x => h("span", { class: "small" }, t(x.engagement)) },
+        { key: "o", label: t("Owner"), get: x => h("span", { class: "small muted" }, x.owner ? Engine.personName(db, x.owner) : "—") },
+        { key: "x", label: "", align: "r", width: "80px", get: x => !canEdit ? null
+          : h("div", { class: "btn-row", style: "justify-content:flex-end" },
+              h("button", { class: "btn btn-xs btn-ghost", onClick: () => stakeholderDialog(db, p, x) }, icon("pencil", 11)),
+              h("button", { class: "btn btn-xs btn-ghost", onClick: () => App.write("Stakeholder removed", (a) => a.del("/stakeholders/" + x.id), { detail: x.name }) }, icon("trash", 11))) },
+      ], rows,
+      empty: t("No stakeholder named yet."),
+    }) : h("div", { class: "small muted" },
+      t("No stakeholder named. The most frequent cause of failure on a multi-site project leaves no trace here until somebody writes a name.")));
+}
+function stakeholderDialog(db, p, x) {
+  formDialog({
+    title: x ? t("Edit stakeholder") : t("Name a stakeholder"), kicker: p.id, wide: true,
+    fields: [
+      { key: "name", label: t("Name"), required: true, span: 2, value: x ? x.name : "",
+        hint: t("A person or an organisation — a regulator, a supplier, a works council count.") },
+      { key: "person", label: t("In the directory"), type: "select", value: x?.person ?? "",
+        options: [{ value: "", label: t("Not in the directory") }].concat(db.people.map(q => ({ value: q.id, label: q.name }))) },
+      { key: "organisation", label: t("Organisation"), value: x?.organisation ?? "" },
+      { key: "role", label: t("Role"), value: x?.role ?? "" },
+      { key: "interest", label: t("Interest (1–5)"), type: "number", min: 1, max: 5, value: x?.interest ?? 3,
+        hint: t("How much the outcome matters to them.") },
+      { key: "influence", label: t("Influence (1–5)"), type: "number", min: 1, max: 5, value: x?.influence ?? 3,
+        hint: t("How much they can change the outcome.") },
+      { key: "attitude", label: t("Attitude"), type: "select", value: x?.attitude ?? "Neutral",
+        options: ATTITUDES.map(a => ({ value: a, label: t(a) })) },
+      { key: "engagement", label: t("Engagement"), type: "select", value: x?.engagement ?? "Inform",
+        options: ENGAGEMENTS.map(a => ({ value: a, label: t(a) })),
+        hint: t("Inform: they hear. Consult: they are asked. Involve: they shape it. Partner: they decide with you.") },
+      { key: "owner", label: t("Relationship owner"), type: "select", value: x?.owner ?? db.currentUser ?? "",
+        options: [{ value: "", label: "—" }].concat(db.people.map(q => ({ value: q.id, label: q.name }))) },
+      { key: "note", label: t("Note"), type: "textarea", rows: 2, span: 2, value: x?.note ?? "",
+        hint: t("What they want, what they fear, what was agreed with them — read by whoever takes over.") },
+    ],
+    saveLabel: x ? t("Save") : t("Add stakeholder"),
+    onSave: (v) => App.write(x ? "Stakeholder updated" : "Stakeholder added", (a) => {
+      const body = { name: v.name, person: v.person || null, organisation: v.organisation, role: v.role,
+        interest: +v.interest, influence: +v.influence, attitude: v.attitude, engagement: v.engagement,
+        owner: v.owner || null, note: v.note };
+      return x ? a.patch("/stakeholders/" + x.id, { ...body, version: x.version })
+               : a.post("/stakeholders", { ...body, project: p.id });
+    }, { detail: v.name }),
+  });
+}
+
+/* ── PM-11 · the communication plan (I-10) ─────────────────────────── */
+function commsBlock(db, p, rows) {
+  const canEdit = mayWrite(p) && !fromSdp(p);
+  return h("div", null,
+    sectionHead("Communication plan", t("who hears what, how often, from whom"),
+      canEdit ? h("button", { class: "btn btn-sm", onClick: () => commsDialog(db, p, null) }, icon("plus", 12), t("Audience")) : null),
+    rows.length ? table({
+      cols: [
+        { key: "a", label: t("Audience"), get: x => h("div", null,
+            h("div", { class: "strong small" }, x.audience),
+            x.purpose ? h("div", { class: "xs muted" }, x.purpose) : null) },
+        { key: "c", label: t("Channel"), get: x => h("span", { class: "small" }, x.channel || "—") },
+        { key: "f", label: t("Frequency"), get: x => h("span", { class: "small" }, x.frequency || "—") },
+        { key: "o", label: t("Owner"), get: x => h("span", { class: "small muted" }, x.owner ? Engine.personName(db, x.owner) : "—") },
+        { key: "n", label: t("Next"), align: "r", get: x => h("span", { class: "mono small" + (x.nextOn && D(x.nextOn) < D(db.statusDate) ? " bad strong" : "") }, x.nextOn ? fmtDate(x.nextOn) : "—") },
+        { key: "x", label: "", align: "r", width: "80px", get: x => !canEdit ? null
+          : h("div", { class: "btn-row", style: "justify-content:flex-end" },
+              h("button", { class: "btn btn-xs btn-ghost", onClick: () => commsDialog(db, p, x) }, icon("pencil", 11)),
+              h("button", { class: "btn btn-xs btn-ghost", onClick: () => App.write("Communication removed", (a) => a.del("/comms/" + x.id), { detail: x.audience }) }, icon("trash", 11))) },
+      ], rows,
+      empty: t("No audience planned yet."),
+    }) : h("div", { class: "small muted" },
+      t("No communication planned. The meetings and the digest carry most of it in practice; the plan says who else must hear, and when.")));
+}
+function commsDialog(db, p, x) {
+  formDialog({
+    title: x ? t("Edit communication") : t("Plan a communication"), kicker: p.id, wide: true,
+    fields: [
+      { key: "audience", label: t("Audience"), required: true, span: 2, value: x?.audience ?? "",
+        hint: t("Who must hear: a committee, a site, a supplier, the users of a branch.") },
+      { key: "purpose", label: t("What they need to know"), span: 2, value: x?.purpose ?? "",
+        hint: t("The message, in one line — status, a decision owed, a date that moves.") },
+      { key: "channel", label: t("Channel"), value: x?.channel ?? "", placeholder: t("weekly call, e-mail, town hall…") },
+      { key: "frequency", label: t("Frequency"), value: x?.frequency ?? "", placeholder: t("weekly, at each gate, once…") },
+      { key: "owner", label: t("Owner"), type: "select", value: x?.owner ?? db.currentUser ?? "",
+        options: [{ value: "", label: "—" }].concat(db.people.map(q => ({ value: q.id, label: q.name }))) },
+      { key: "nextOn", label: t("Next"), type: "date", value: x?.nextOn ?? "" },
+      { key: "note", label: t("Note"), type: "textarea", rows: 2, span: 2, value: x?.note ?? "",
+        hint: t("What was said last time, or what must not be said yet — read by whoever sends the next one.") },
+    ],
+    saveLabel: x ? t("Save") : t("Plan it"),
+    onSave: (v) => App.write(x ? "Communication updated" : "Communication planned", (a) => {
+      const body = { audience: v.audience, purpose: v.purpose, channel: v.channel, frequency: v.frequency,
+        owner: v.owner || null, nextOn: v.nextOn || null, note: v.note };
+      return x ? a.patch("/comms/" + x.id, { ...body, version: x.version })
+               : a.post("/comms", { ...body, project: p.id });
+    }, { detail: v.audience }),
+  });
+}
+
+/* I-3 — the ladders in the book: the default, then every programme that
+   declares its own. Shown by name so nobody has to guess which ladder a
+   project walks. */
+function laddersOf(db) {
+  const custom = (db.programmes || []).filter(pr => Array.isArray(pr.gateModel) && pr.gateModel.length);
+  const out = [{ label: custom.length ? t("Default ladder") : t("Every programme"), ladder: GATES }];
+  for (const pr of custom) out.push({ label: pr.name + " (" + pr.id + ")", ladder: pr.gateModel });
+  return out;
+}
+const ladderNote = (db) => {
+  const n = (db.programmes || []).filter(pr => Array.isArray(pr.gateModel) && pr.gateModel.length).length;
+  return n ? n + " " + t("programme(s) with their own ladder") : t("evidence required at each gate");
+};
+
+/* I-4 — the criteria of a gate, and the named reviewer who found each met.
+   Drawn under "Milestones & gates" for the gate that is next. */
+function criteriaBlock(db, p, gate) {
+  const rows = gate.criteria || [];
+  const canPose = may("document.write", p) && !fromSdp(p);
+  const canFind = may("document.approve", p);
+  const head = h("div", { style: "display:flex;justify-content:space-between;align-items:baseline;margin:14px 0 6px" },
+    h("div", { class: "kicker" }, t("Criteria for ") + gate.name + " · " + (gate.criteriaMet ?? 0) + "/" + rows.length + " " + t("found met")),
+    canPose ? h("button", { class: "btn btn-xs", onClick: () => poseCriterion(db, p, gate.n) }, icon("plus", 11), t("Criterion")) : null);
+  if (!rows.length) {
+    return h("div", null, head, h("div", { class: "xs muted" },
+      t("No criterion posed for this gate. Evidence alone clears it; a criterion says what the evidence must prove.")));
+  }
+  return h("div", null, head, rows.map(c => h("div", { class: "list-row", style: "align-items:flex-start" },
+    h("span", { class: "step-i " + (c.met ? "ok" : "wait"), style: "flex:none" }, c.met ? "✓" : String(c.seq + 1)),
+    h("div", { style: "flex:1;min-width:0" },
+      h("div", { class: "small" }, c.text),
+      h("div", { class: "xs muted" },
+        c.met ? t("found met by ") + Engine.personName(db, c.reviewedBy) + " · " + fmtDate(c.reviewedOn) : t("not yet found met"),
+        c.document ? " · " + ((db.docs.find(d => d.id === c.document) || {}).name || c.document) : "",
+        c.note ? " · " + c.note : "")),
+    h("div", { class: "btn-row", style: "justify-content:flex-end" },
+      canFind && !c.met ? h("button", { class: "btn btn-xs btn-primary", onClick: () => findCriterionMet(db, p, c) }, t("Found met")) : null,
+      canFind && c.met ? h("button", { class: "btn btn-xs btn-ghost", title: t("Reopen"), onClick: () => App.write("Gate criterion reopened",
+        (a) => a.patch("/criteria/" + c.id, { met: false, version: c.version }), { detail: c.text }) }, "↺") : null,
+      canPose ? h("button", { class: "btn btn-xs btn-ghost", title: t("Edit criterion"), onClick: () => editCriterion(db, p, c) }, icon("pencil", 11)) : null,
+      canPose && !c.met ? h("button", { class: "btn btn-xs btn-ghost", title: t("Remove criterion"),
+        onClick: () => App.write("Gate criterion removed", (a) => a.del("/criteria/" + c.id), { detail: c.text }) }, icon("trash", 11)) : null))));
+}
+function poseCriterion(db, p, gateN) {
+  formDialog({
+    title: t("Pose a criterion"), kicker: p.id + " · " + t("gate") + " " + gateN,
+    fields: [
+      { key: "text", label: t("What must be true"), required: true, span: 2, value: "",
+        hint: t("One testable sentence, written before the evidence. A reviewer will say whether it holds.") },
+    ],
+    saveLabel: t("Pose"),
+    onSave: (v) => App.write("Gate criterion posed", (a) => a.post("/criteria", { project: p.id, gate: gateN, text: v.text }), { detail: v.text }),
+  });
+}
+function editCriterion(db, p, c) {
+  formDialog({
+    title: t("Edit criterion"), kicker: c.id,
+    fields: [
+      { key: "text", label: t("What must be true"), required: true, span: 2, value: c.text,
+        hint: t("One testable sentence, written before the evidence. A reviewer will say whether it holds.") },
+      { key: "document", label: t("Evidence document"), type: "select", span: 2, value: c.document ?? "",
+        options: [{ value: "", label: "—" }].concat(db.docs.filter(d => d.project === p.id).map(d => ({ value: d.id, label: d.name + " · G" + d.gate }))) },
+      { key: "note", label: t("Note"), span: 2, value: c.note ?? "",
+        hint: t("Where to look, or why it was reformulated — read by the reviewer, months later.") },
+    ],
+    saveLabel: t("Save criterion"),
+    onSave: (v) => App.write("Gate criterion updated", (a) => a.patch("/criteria/" + c.id,
+      { text: v.text, document: v.document || null, note: v.note, version: c.version }), { detail: v.text }),
+  });
+}
+function findCriterionMet(db, p, c) {
+  const doc = c.document ? db.docs.find(d => d.id === c.document) : null;
+  formDialog({
+    title: t("Found met"), kicker: c.text,
+    message: doc ? t("The evidence cited is ") + doc.name + t(", owned by ") + Engine.personName(db, doc.owner) + ". " : "",
+    fields: [
+      { key: "reviewedBy", label: t("Reviewed by"), type: "select", required: true, value: db.currentUser ?? "",
+        hint: t("The named person who checked it — not the owner of the evidence it cites. The name stays."),
+        options: db.people.filter(x => !doc || x.id !== doc.owner).map(x => ({ value: x.id, label: x.name })) },
+    ],
+    saveLabel: t("Found met"),
+    onSave: (v) => App.write("Gate criterion met", (a) => a.patch("/criteria/" + c.id,
+      { met: true, reviewedBy: v.reviewedBy, version: c.version }), { detail: c.text }),
+  });
+}
+
+/* I-7 — the decision outside a meeting (retour de terrain RT365). Alternatives
+   and dissent are what a register loses first and what an auditor asks
+   for last; a decision that changes is a NEW decision naming the one it
+   supersedes — nothing here is edited or deleted. */
+function recordDecision(db) {
+  const writable = db.projects.filter((p) => mayWrite(p));
+  const groupLevel = App.isAdmin || App.me.role === "group";
+  formDialog({
+    title: t("Record a decision"), kicker: t("Decision register"), wide: true,
+    fields: [
+      { key: "headline", label: t("Decision"), required: true, span: 2, value: "",
+        hint: t("One sentence, in the past tense, that someone will read in a year without the context.") },
+      { key: "project", label: t("Project"), type: "select", span: 2, value: writable[0]?.id ?? "",
+        options: (groupLevel ? [{ value: "", label: t("Portfolio-wide (group level)") }] : [])
+          .concat(writable.map((p) => ({ value: p.id, label: p.id + " · " + p.name }))) },
+      { key: "decidedBy", label: t("Decided by"), type: "select", required: true, value: db.currentUser ?? "",
+        options: db.people.map((p) => ({ value: p.id, label: p.name })) },
+      { key: "decidedOn", label: t("Decided on"), type: "date", value: db.statusDate },
+      { key: "rationale", label: t("Why"), type: "textarea", rows: 3, span: 2, value: "",
+        hint: t("The reasoning, so the committee can read it back without the person who wrote it.") },
+      { key: "alternatives", label: t("Alternatives considered"), type: "textarea", rows: 2, span: 2, value: "", advanced: true,
+        hint: t("What was refused, and why. A register that keeps only the winner cannot explain the choice.") },
+      { key: "dissent", label: t("Dissent"), type: "textarea", rows: 2, span: 2, value: "", advanced: true,
+        hint: t("Who disagreed, and on what. Recorded dissent protects the dissenter and the decision alike.") },
+      { key: "raidId", label: t("Register item"), type: "select", value: "", advanced: true,
+        options: [{ value: "", label: "—" }].concat(db.raid.filter((r) => r.status === "Open").map((r) => ({ value: r.id, label: r.id + " · " + r.title }))) },
+      { key: "milestoneId", label: t("Milestone or gate"), type: "select", value: "", advanced: true,
+        options: [{ value: "", label: "—" }].concat(db.milestones.map((m) => ({ value: m.id, label: m.id + " · " + m.name }))) },
+      { key: "crId", label: t("Change request"), type: "select", value: "", advanced: true,
+        options: [{ value: "", label: "—" }].concat(db.crs.map((c) => ({ value: c.id, label: c.id + " · " + c.title }))) },
+      { key: "supersedes", label: t("Supersedes decision"), value: "", advanced: true,
+        hint: t("The identifier of the decision this one replaces, e.g. DEC-012. That one stays on the record.") },
+    ],
+    saveLabel: t("Record"),
+    onSave: (v) => App.write("Decision recorded", (a) => a.post("/decisions", {
+      headline: v.headline, projectId: v.project || null, decidedBy: v.decidedBy, decidedOn: v.decidedOn,
+      rationale: v.rationale, alternatives: v.alternatives, dissent: v.dissent,
+      raidId: v.raidId || null, milestoneId: v.milestoneId || null, crId: v.crId || null,
+      supersedes: v.supersedes || null,
+    }), { detail: v.headline }).then((ok) => { if (ok !== false) { delete live.data.register; App.emit(); } return ok; }),
+  });
+}
 
 const firstWritable = (db) => db.projects.find((p) => mayWrite(p)) ?? null;
 

@@ -13,8 +13,9 @@ import zlib from "node:zlib";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { existsSync } from "node:fs";
+import { packageVersion } from "./env.js";
 
-import { connect, migrate, engine, close, many, query } from "./db.js";
+import { connect, migrate, engine, close, many, query, dataDir } from "./db.js";
 import { sweep as notifySweep, purge, escalate, deliver, outboundTransport } from "./notify.js";
 import { probeEvidence } from "./probe.js";
 import { sweepExceptions } from "./exceptions.js";
@@ -31,8 +32,31 @@ import v1Routes from "./routes/v1.js";
 import federationServiceRoutes from "./routes/federationService.js";
 import { translate } from "./pgerror.js";
 import { say, localeOf } from "./i18n.js";
+import { liveDemoAccounts, demoRefusal } from "./posture.js";
+import { purgeIdempotencyKeys } from "./v1write.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
+const PKG_VERSION = packageVersion();
+
+/* SaaS-04 / I-6 — ce que la santé dit de CETTE instance. Lu à chaque
+   appel (une ligne de réglages, un compte de migrations) : la supervision
+   veut la vérité du moment, pas celle du démarrage. */
+async function instanceIdentity() {
+  try {
+    const rows = await many(
+      `SELECT key, value FROM app_setting WHERE key IN ('orgName','instanceId','backup.lastDrill')`);
+    const get = (k) => { const r = rows.find((x) => x.key === k); if (!r) return null;
+      try { return JSON.parse(r.value); } catch { return r.value; } };
+    const mig = await many(`SELECT count(*)::int AS n FROM schema_migration`);
+    const drill = get("backup.lastDrill");
+    return {
+      instance: { org: get("orgName") ?? "MERIDIAN", id: get("instanceId") ?? null,
+                  migrations: mig[0]?.n ?? 0 },
+      backup: drill ? { lastDrillAt: drill.at ?? null, ok: drill.ok ?? null,
+                        restoreSeconds: drill.restoreSeconds ?? null } : { lastDrillAt: null, ok: null },
+    };
+  } catch { return {}; }
+}
 /* Same reason as migrationsDir(): a packaged build serves the built
    client from beside the executable, and the answer is read when the app
    is built rather than when this module loads. */
@@ -132,12 +156,25 @@ export function buildApp() {
      et « pas chez moi » ne se départagent qu'ici. La version vient du
      paquet à la construction ; sur une exécution depuis les sources elle
      dit « dev ». */
-  const VERSION = process.env.MERIDIAN_VERSION || "dev";
-  app.get("/api/health", async (_req, res) => {
-    res.json({ ok: true, version: VERSION, engine: engine(),
-      /* A-11 — un terrain d'apprentissage se reconnaît de loin. */
-      training: process.env.MERIDIAN_TRAINING === "1" || undefined,
-      at: new Date().toISOString() });
+  const VERSION = PKG_VERSION;
+  app.get("/api/health", async (_req, res, next) => {
+    try {
+      res.json({ ok: true, version: VERSION,
+        /* I-9 — le même numéro que package.json et que le contrat OpenAPI,
+           d'où qu'on tourne ; `build` dit si c'est un paquet ou les
+           sources, ce que « dev » mélangeait avec « quelle version ? ». */
+        build: process.env.MERIDIAN_VERSION ? "packaged" : "sources",
+        engine: engine(),
+        /* I-1 — un livre en mémoire ne se découvre plus au redémarrage. */
+        ephemeral: engine() === "pglite" && !dataDir() ? true : undefined,
+        /* A-11 — un terrain d'apprentissage se reconnaît de loin. */
+        training: process.env.MERIDIAN_TRAINING === "1" || undefined,
+        /* SaaS-04 — l'identité de l'instance, pour une supervision de
+           flotte : le nom de l'organisation, le nombre de migrations
+           appliquées, et la dernière restauration éprouvée (I-6). */
+        ...(await instanceIdentity()),
+        at: new Date().toISOString() });
+    } catch (e) { next(e); }
   });
 
   app.use("/api/auth", authRoutes);
@@ -185,6 +222,22 @@ export function buildApp() {
     app.get(/^(?!\/api).*/, (_req, res) => {
       res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
       res.sendFile(join(dist, "index.html"));
+    });
+  } else {
+    /* I-1 (M-03) — « Cannot GET / » n'explique rien. Le serveur tourne, le
+       client n'est pas construit : on le dit, avec la commande. `npm run
+       dev` construit désormais lui-même ; cette page sert à qui lance
+       `node server/src/index.js` à la main, ou un paquet mal assemblé. */
+    app.get(/^(?!\/api).*/, (_req, res) => {
+      res.status(503).type("html").send(
+        "<!doctype html><meta charset=utf-8><title>Meridian — client not built</title>" +
+        "<body style=\"font:15px/1.5 system-ui;max-width:56ch;margin:12vh auto;padding:0 20px\">" +
+        "<h1 style=\"font-size:20px\">The API is up; the screens are not built yet.</h1>" +
+        "<p>This server answers <code>/api/*</code>, but <code>web/dist</code> does not exist, " +
+        "so there is nothing to draw. Build the client once, then reload:</p>" +
+        "<pre style=\"background:#f4f4f2;padding:12px\">npm run build</pre>" +
+        "<p>Or start with <code>npm run dev</code>, which builds when needed, or " +
+        "<code>npm run dev:web</code> for the Vite dev server with hot reload.</p>");
     });
   }
 
@@ -253,20 +306,62 @@ export function engineRefusal(requireFlag, engineName) {
   ].join("\n  ");
 }
 
+/* I-6 (M-08) — en production, PGlite ne tourne plus par défaut. Le
+   terrain l'a dit : « une vraie cartographie de portefeuille exige
+   PostgreSQL, des sauvegardes prouvées par restauration, et quelqu'un
+   d'astreinte le dimanche ». Une instance en production sur le moteur
+   d'essai est une décision, pas un oubli : MERIDIAN_ALLOW_PGLITE=1 la
+   prend en connaissance de cause. */
+export function productionEngineRefusal(env, engineName) {
+  if (env.NODE_ENV !== "production" || engineName === "postgres") return null;
+  if (env.MERIDIAN_ALLOW_PGLITE === "1" || env.MERIDIAN_TRAINING === "1") return null;
+  return [
+    "NODE_ENV=production and this instance is running on " + engineName + ".",
+    "A production book lives in PostgreSQL: set DATABASE_URL to a real cluster, run",
+    "scripts/backup.mjs on a schedule and scripts/restore-drill.mjs before anything real",
+    "(docs/34-exploitation.md). To run production on the trial engine anyway — a",
+    "single-user laptop, a pilot that carries nothing real — set MERIDIAN_ALLOW_PGLITE=1.",
+  ].join("\n  ");
+}
+
 export async function start({ port = process.env.PORT || 4173 } = {}) {
   await connect();
 
   /* PG-01 — une installation de service refuse PGlite au lieu de tourner
      en silence sur le mauvais moteur. Le refus arrive AVANT les
      migrations : on ne modifie pas une base qu'on refuse d'exploiter. */
-  const refusal = engineRefusal(process.env.MERIDIAN_REQUIRE_POSTGRES, engine());
+  const refusal = engineRefusal(process.env.MERIDIAN_REQUIRE_POSTGRES, engine())
+    ?? productionEngineRefusal(process.env, engine());
   if (refusal) {
     console.error("\nMeridian refuses to start.\n  " + refusal + "\n");
     await close();
     process.exit(1);
   }
+  /* I-1 — dire où vit le livre, chaque fois. Un livre en mémoire est
+     un choix explicite (MERIDIAN_EPHEMERAL=1) et se voit au démarrage. */
+  if (engine() === "pglite") {
+    console.log(dataDir()
+      ? `  book: ${dataDir()}`
+      : "  ! book: IN MEMORY (MERIDIAN_EPHEMERAL=1) — everything is lost when this process stops");
+  }
 
   await migrate({ silent: true });
+
+  /* I-12 — le jour 1 se mesure. Un mot de passe imprimé dans le README
+     qui ouvre encore un compte actif est dit à chaque démarrage, et
+     refusé en production. */
+  const live = await liveDemoAccounts().catch(() => []);
+  const demo = demoRefusal(process.env, live);
+  if (demo) {
+    console.error("\nMeridian refuses to start.\n  " + demo + "\n");
+    await close();
+    process.exit(1);
+  }
+  if (live.length) {
+    console.log(`  ! ${live.length} demonstration account(s) still open with the published password — ` +
+                "change them from Administration before this instance carries anything real");
+  }
+
   const app = buildApp();
   /* S-08 — listen where the operator said, and say where that is.
      app.listen(port) binds every interface, while the startup line said
@@ -338,6 +433,8 @@ export async function start({ port = process.env.PORT || 4173 } = {}) {
            autorisés. */
         await probeEvidence().catch(() => {});
         await purge();
+        /* I-2 — la mémoire d'idempotence a trente jours. */
+        await purgeIdempotencyKeys().catch(() => {});
       } finally {
         await query(`SELECT pg_advisory_unlock($1)`, [LOCK]).catch(() => {});
       }

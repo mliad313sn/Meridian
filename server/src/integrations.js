@@ -32,6 +32,13 @@ import { sha256hex, generateServiceKey } from "./federation.js";
 export const SCOPES = {
   "read:portfolio": "Read the portfolio — projects, schedule, money, risks, benefits",
   "read:audit": "Read the audit trail — every recorded decision and change",
+  /* I-2 (retour de terrain RT365) — les portées d'écriture arrivent AVEC
+     les routes qui les honorent, jamais avant : PUT /api/v1/{projects,
+     milestones,raid,activities,workitems} et PUT /api/v1/{decisions,
+     actions}. Deux portées, pas une : un système de suivi qui remonte de
+     l'avancement n'a aucune raison de pouvoir consigner une décision. */
+  "write:portfolio": "Write projects, milestones, register items, stage progress and work items, keyed by your own identifiers",
+  "write:meetings": "Record decisions and actions, keyed by your own identifiers",
 };
 
 export const scopeList = () => Object.keys(SCOPES);

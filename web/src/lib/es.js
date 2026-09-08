@@ -1371,6 +1371,254 @@ export const ES = {
   "Risk and effort pull the score down": "El riesgo y el esfuerzo BAJAN la puntuación",
   "Four notes are needed — fit, value, risk and effort. An unscored project sorts last, not worst.":
     "Se necesitan cuatro notas — encaje, valor, riesgo y esfuerzo. Un proyecto sin puntuar se ordena al final, no como el peor.",
+
+  // ── I-12 · la posture du jour 1 (retour de terrain RT365)
+  "demonstration account(s) still open with the password printed in the README":
+    "cuenta(s) de demostración aún abierta(s) con la contraseña impresa en el README",
+  "Anyone who reads the repository can sign in as them. Change each password, or deactivate the account, before this instance carries anything real. In production the server refuses to start while this is true.":
+    "Cualquiera que lea el repositorio puede iniciar sesión con ellas. Cambie cada contraseña, o desactive la cuenta, antes de que esta instancia contenga algo real. En producción el servidor se niega a arrancar mientras esto sea cierto.",
+  "Closed by default, waiting on a decision":
+    "Cerrado por defecto, a la espera de una decisión",
+  "no trusted document host named — evidence cannot be approved":
+    "ningún host documental de confianza designado — no se puede aprobar ninguna evidencia",
+  "no mail transport — notifications queue and do not send":
+    "sin transporte de correo — las notificaciones se acumulan y no se envían",
+  "no notification host named — nothing leaves the instance":
+    "ningún host de notificación designado — nada sale de la instancia",
+  "Break-glass: ":
+    "Rotura de cristal: ",
+  "an administrator is exempt from segregation of duties and may sign every step of a change request, including one it raised; each such signature is marked break-glass in the audit trail. Run the portfolio from named group and site accounts.":
+    "un administrador está exento de la segregación de funciones y puede firmar cada paso de una solicitud de cambio, incluida una que él mismo planteó; cada firma de ese tipo se marca como rotura de cristal en la pista de auditoría. Gestione la cartera desde cuentas de grupo y de sitio nominativas.",
+  "you raised this request. As an administrator you may still sign it — the exemption exists for emergencies, and the audit trail will mark the signature as break-glass. Prefer having a colleague with group authority decide it.":
+    "usted planteó esta solicitud. Como administrador aún puede firmarla — la exención existe para emergencias, y la pista de auditoría marcará la firma como rotura de cristal. Es preferible que la decida un colega con autoridad de grupo.",
+
+  // ── I-7 / I-8 · el registro de decisiones y el RAID vinculado (retorno de terreno RT365)
+  "The agenda of the next meeting in scope asks for this item once the date has come.":
+    "La agenda de la próxima reunión en su ámbito reclama este elemento una vez llegada la fecha.",
+  "Against gate":
+    "Contra la puerta",
+  "Not linked to a gate":
+    "Sin vínculo con una puerta",
+  "The gate whose passage this item puts at risk. The gate line shows how many open items stand against it.":
+    "La puerta de gobernanza cuyo paso este elemento pone en riesgo. La línea de la puerta indica cuántos elementos abiertos pesan contra ella.",
+  "Change request":
+    "Solicitud de cambio",
+  "Not linked to a change":
+    "Sin vínculo con un cambio",
+  "Against gate ":
+    "Contra la puerta ",
+  "open register item(s) against it":
+    "elemento(s) de registro abierto(s) en su contra",
+  "outside a meeting":
+    "fuera de reunión",
+  "alternatives: ":
+    "alternativas: ",
+  "dissent: ":
+    "disenso: ",
+  "supersedes ":
+    "reemplaza ",
+  "Decision register":
+    "Registro de decisiones",
+  "One sentence, in the past tense, that someone will read in a year without the context.":
+    "Una frase, en pasado, que alguien leerá dentro de un año sin el contexto.",
+  "Portfolio-wide (group level)":
+    "Toda la cartera (nivel grupo)",
+  "Decided by":
+    "Decidido por",
+  "Decided on":
+    "Decidido el",
+  "The reasoning, so the committee can read it back without the person who wrote it.":
+    "El razonamiento, para que el comité pueda releerlo sin la persona que lo escribió.",
+  "Alternatives considered":
+    "Alternativas consideradas",
+  "What was refused, and why. A register that keeps only the winner cannot explain the choice.":
+    "Lo que se descartó, y por qué. Un registro que solo guarda la opción elegida no explica la elección.",
+  "Dissent":
+    "Disenso",
+  "Who disagreed, and on what. Recorded dissent protects the dissenter and the decision alike.":
+    "Quién estuvo en desacuerdo, y en qué. Un disenso registrado protege tanto a quien lo expresa como a la decisión.",
+  "Register item":
+    "Elemento del registro",
+  "Milestone or gate":
+    "Hito",
+  "Supersedes decision":
+    "Reemplaza la decisión",
+  "The identifier of the decision this one replaces, e.g. DEC-012. That one stays on the record.":
+    "El identificador de la decisión que esta reemplaza, p. ej. DEC-012. Aquella permanece en el registro.",
+
+  // ── I-3 / I-4 · la escalera de puertas y los criterios (retorno de terreno RT365)
+  "Default ladder":
+    "Escalera por defecto",
+  "Every programme":
+    "Todos los programas",
+  "programme(s) with their own ladder":
+    "programa(s) con su propia escalera",
+  "evidence required at each gate":
+    "evidencia exigida en cada puerta",
+  "A programme declares its own ladder from Reference data → programme. Projects take their programme's ladder when they are created; changing a ladder later leaves existing projects as they are.":
+    "Un programa declara su propia escalera desde Datos de referencia → programa. Los proyectos toman la escalera de su programa al crearse; cambiarla después deja los proyectos existentes tal como están.",
+  "Criteria for ":
+    "Criterios de ",
+  "found met":
+    "verificado(s)",
+  "Criterion":
+    "Criterio",
+  "No criterion posed for this gate. Evidence alone clears it; a criterion says what the evidence must prove.":
+    "Ningún criterio planteado para esta puerta. La evidencia sola la supera; un criterio dice qué debe demostrar la evidencia.",
+  "found met by ":
+    "verificado por ",
+  "not yet found met":
+    "aún no verificado",
+  "Found met":
+    "Verificado",
+  "Reopen":
+    "Reabrir",
+  "Edit criterion":
+    "Editar el criterio",
+  "Remove criterion":
+    "Quitar el criterio",
+  "Pose a criterion":
+    "Plantear un criterio",
+  "What must be true":
+    "Lo que debe ser cierto",
+  "One testable sentence, written before the evidence. A reviewer will say whether it holds.":
+    "Una frase verificable, escrita antes de la evidencia. Un revisor dirá si se cumple.",
+  "Pose":
+    "Plantear",
+  "Evidence document":
+    "Documento de evidencia",
+  "Where to look, or why it was reformulated — read by the reviewer, months later.":
+    "Dónde mirar, o por qué se reformuló — leído por el revisor, meses después.",
+  "Save criterion":
+    "Guardar el criterio",
+  "The evidence cited is ":
+    "La evidencia citada es ",
+  ", owned by ":
+    ", propiedad de ",
+  "Reviewed by":
+    "Revisado por",
+  "The named person who checked it — not the owner of the evidence it cites. The name stays.":
+    "La persona nominada que lo comprobó — no el propietario de la evidencia citada. El nombre permanece.",
+  "criteria":
+    "criterios",
+  "Gate ladder":
+    "Escalera de puertas",
+  "One gate per line: name | owner | evidence, comma separated | position in the project window as a percentage. Leave empty for the default ladder. Projects take the ladder at creation; a later change does not rewrite them.":
+    "Una puerta por línea: nombre | propietario | evidencia, separada por comas | posición en la ventana del proyecto en porcentaje. Vacío = escalera por defecto. Los proyectos toman la escalera al crearse; un cambio posterior no los reescribe.",
+
+  // ── PM-05 / PM-11 · partes interesadas y plan de comunicación (I-10)
+  " named":
+    " nombrada(s)",
+  " sceptical or opposed":
+    " escéptica(s) u opuesta(s)",
+  "none named":
+    "ninguna nombrada",
+  "Communication plan":
+    "Plan de comunicación",
+  " audience(s)":
+    " audiencia(s)",
+  " overdue":
+    " atrasada(s)",
+  "no plan":
+    "sin plan",
+  "interest × influence, attitude, and who owns the relationship":
+    "interés × influencia, actitud, y quién lleva la relación",
+  "Stakeholder":
+    "Parte interesada",
+  "Who":
+    "Quién",
+  "Interest / influence":
+    "Interés / influencia",
+  "Attitude":
+    "Actitud",
+  "Champion":
+    "Promotor",
+  "Supporter":
+    "Partidario",
+  "Neutral":
+    "Neutral",
+  "Sceptic":
+    "Escéptico",
+  "Opponent":
+    "Opositor",
+  "Engagement":
+    "Participación",
+  "Inform":
+    "Informar",
+  "Consult":
+    "Consultar",
+  "Involve":
+    "Involucrar",
+  "Partner":
+    "Asociar",
+  "Owner":
+    "Responsable",
+  "No stakeholder named yet.":
+    "Ninguna parte interesada nombrada todavía.",
+  "No stakeholder named. The most frequent cause of failure on a multi-site project leaves no trace here until somebody writes a name.":
+    "Ninguna parte interesada nombrada. La causa de fracaso más frecuente en un proyecto multisitio no deja rastro aquí hasta que alguien escribe un nombre.",
+  "Edit stakeholder":
+    "Editar la parte interesada",
+  "Name a stakeholder":
+    "Nombrar una parte interesada",
+  "A person or an organisation — a regulator, a supplier, a works council count.":
+    "Una persona o una organización — un regulador, un proveedor, un comité de empresa cuentan.",
+  "In the directory":
+    "En el directorio",
+  "Not in the directory":
+    "Fuera del directorio",
+  "Organisation":
+    "Organización",
+  "Role":
+    "Rol",
+  "Interest (1–5)":
+    "Interés (1–5)",
+  "How much the outcome matters to them.":
+    "Cuánto les importa el resultado.",
+  "Influence (1–5)":
+    "Influencia (1–5)",
+  "How much they can change the outcome.":
+    "Cuánto pueden cambiar el resultado.",
+  "Inform: they hear. Consult: they are asked. Involve: they shape it. Partner: they decide with you.":
+    "Informar: escuchan. Consultar: se les pregunta. Involucrar: lo moldean. Asociar: deciden con usted.",
+  "Relationship owner":
+    "Lleva la relación",
+  "What they want, what they fear, what was agreed with them — read by whoever takes over.":
+    "Qué quieren, qué temen, qué se acordó con ellos — leído por quien tome el relevo.",
+  "Add stakeholder":
+    "Añadir la parte interesada",
+  "who hears what, how often, from whom":
+    "quién oye qué, con qué frecuencia, de quién",
+  "Audience":
+    "Audiencia",
+  "Channel":
+    "Canal",
+  "Frequency":
+    "Frecuencia",
+  "Next":
+    "Próxima",
+  "No audience planned yet.":
+    "Ninguna audiencia planificada todavía.",
+  "No communication planned. The meetings and the digest carry most of it in practice; the plan says who else must hear, and when.":
+    "Ninguna comunicación planificada. Las reuniones y el resumen llevan la mayor parte en la práctica; el plan dice quién más debe oír, y cuándo.",
+  "Edit communication":
+    "Editar la comunicación",
+  "Plan a communication":
+    "Planificar una comunicación",
+  "Who must hear: a committee, a site, a supplier, the users of a branch.":
+    "Quién debe oír: un comité, un sitio, un proveedor, los usuarios de una sucursal.",
+  "What they need to know":
+    "Lo que necesitan saber",
+  "The message, in one line — status, a decision owed, a date that moves.":
+    "El mensaje, en una línea — un estado, una decisión pendiente, una fecha que se mueve.",
+  "weekly call, e-mail, town hall…":
+    "reunión semanal, correo, asamblea…",
+  "weekly, at each gate, once…":
+    "semanal, en cada puerta, una vez…",
+  "What was said last time, or what must not be said yet — read by whoever sends the next one.":
+    "Lo que se dijo la última vez, o lo que aún no debe decirse — leído por quien envíe la siguiente.",
+  "Plan it":
+    "Planificar",
 };
 
 /* ── fragments composés autour de nombres vivants (R-15) ────────────── */
@@ -1381,6 +1629,8 @@ export const ES = {
    « above the escalation threshold » traduit en FR et pas en ES : ce
    miroir était partiel. Il est désormais tenu complet par la porte F5. */
 export const ES_FRAG = [
+  [/(\d+) criterions? not yet found met\b/g, "$1 criterio(s) aún no verificado(s)"],
+  [/\bno evidence item filed\b/g, "ninguna evidencia presentada"],
   [/\bbehind the plan\b/g, "con retraso sobre el plan"],
   [/\bahead of plan\b/g, "adelantado sobre el plan"],
   [/\bspending faster than earning\b/g, "gasta más rápido de lo que gana valor"],

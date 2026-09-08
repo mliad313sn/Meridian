@@ -1,11 +1,11 @@
 {
   "name": "meridian-itpmo",
-  "version": "5.9.0",
+  "version": "5.10.0",
   "private": true,
   "type": "module",
-  "description": "Meridian group IT-PMO — multi-site project portfolio management",
+  "description": "Meridian group IT-PMO \u2014 multi-site project portfolio management",
   "scripts": {
-    "dev": "node server/src/index.js",
+    "dev": "node scripts/dev.mjs",
     "dev:web": "vite --config web/vite.config.js",
     "build": "vite build --config web/vite.config.js",
     "start": "NODE_ENV=production node server/src/index.js",
@@ -15,7 +15,7 @@
     "restore": "node scripts/restore-archive.mjs",
     "test": "node --test \"server/test/**/*.test.js\"",
     "test:watch": "node --test --watch \"server/test/**/*.test.js\"",
-    "audit": "node scripts/audit/route-match.mjs && node scripts/audit/crud-audit.mjs && node scripts/audit/version-audit.mjs && node scripts/audit/control-audit.mjs && node scripts/audit/i18n-audit.mjs && node scripts/audit/help-coverage.mjs && node scripts/audit/kit-imports.mjs && node scripts/audit/openapi-drift.mjs && npm run audit:views",
+    "audit": "node scripts/audit/route-match.mjs && node scripts/audit/crud-audit.mjs && node scripts/audit/version-audit.mjs && node scripts/audit/control-audit.mjs && node scripts/audit/i18n-audit.mjs && node scripts/audit/help-coverage.mjs && node scripts/audit/kit-imports.mjs && node scripts/audit/openapi-drift.mjs && node scripts/audit/release-audit.mjs && npm run audit:views",
     "audit:views": "node scripts/audit/view-render.mjs",
     "verify": "npm test && npm run build && npm run audit && npm run audit:deps",
     "sweep": "node scripts/audit/usecase-sweep.mjs",
@@ -24,7 +24,10 @@
     "training": "node scripts/training.mjs",
     "audit:deps": "npm audit --omit=dev --audit-level=high",
     "admin:handover": "node scripts/admin-handover.mjs",
-    "openapi": "node scripts/openapi.mjs"
+    "openapi": "node scripts/openapi.mjs",
+    "dev:server": "node server/src/index.js",
+    "backup": "node scripts/backup.mjs",
+    "restore-drill": "node scripts/restore-drill.mjs"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.2.17",

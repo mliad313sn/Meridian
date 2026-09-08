@@ -82,6 +82,10 @@ export function t(s) {
    FRAGMENTS by pattern, leaving the numbers alone. Applied to composed
    notes and to server-composed agenda text at render time. */
 export const FRAG = [
+  /* I-4 — the criteria half of "phase advance is blocked"; precise
+     patterns first, like the rest of this table. */
+  [/(\d+) criterions? not yet found met\b/g, "$1 critère(s) pas encore constaté(s) tenu(s)"],
+  [/\bno evidence item filed\b/g, "aucune preuve déposée"],
   [/\bbehind the plan\b/g, "en retard sur le plan"],
   [/\bahead of plan\b/g, "en avance sur le plan"],
   [/\bspending faster than earning\b/g, "dépense plus vite que la valeur acquise"],
@@ -1497,6 +1501,254 @@ export const FR = {
   "Risk and effort pull the score down": "Le risque et l'effort font BAISSER le score",
   "Four notes are needed — fit, value, risk and effort. An unscored project sorts last, not worst.":
     "Quatre notes sont nécessaires — adéquation, valeur, risque et effort. Un projet sans score se place en dernier, pas en pire.",
+
+  // ── I-12 · la posture du jour 1 (retour de terrain RT365)
+  "demonstration account(s) still open with the password printed in the README":
+    "compte(s) de démonstration encore ouvert(s) avec le mot de passe imprimé dans le README",
+  "Anyone who reads the repository can sign in as them. Change each password, or deactivate the account, before this instance carries anything real. In production the server refuses to start while this is true.":
+    "Quiconque lit le dépôt peut se connecter avec. Changez chaque mot de passe, ou désactivez le compte, avant que cette instance ne porte quoi que ce soit de réel. En production, le serveur refuse de démarrer tant que c'est vrai.",
+  "Closed by default, waiting on a decision":
+    "Fermé par défaut, en attente d'une décision",
+  "no trusted document host named — evidence cannot be approved":
+    "aucun hôte documentaire de confiance nommé — aucune preuve ne peut être approuvée",
+  "no mail transport — notifications queue and do not send":
+    "aucun transport de courriel — les notifications s'accumulent sans partir",
+  "no notification host named — nothing leaves the instance":
+    "aucun hôte de notification nommé — rien ne sort de l'instance",
+  "Break-glass: ":
+    "Bris de glace : ",
+  "an administrator is exempt from segregation of duties and may sign every step of a change request, including one it raised; each such signature is marked break-glass in the audit trail. Run the portfolio from named group and site accounts.":
+    "un administrateur est exempté de la séparation des tâches et peut signer chaque étape d'une demande de modification, y compris celle qu'il a émise ; chacune de ces signatures est marquée bris de glace dans la piste d'audit. Pilotez le portefeuille depuis des comptes groupe et site nommés.",
+  "you raised this request. As an administrator you may still sign it — the exemption exists for emergencies, and the audit trail will mark the signature as break-glass. Prefer having a colleague with group authority decide it.":
+    "vous avez émis cette demande. En tant qu'administrateur vous pouvez tout de même la signer — l'exemption existe pour les urgences, et la piste d'audit marquera la signature comme bris de glace. Préférez la faire décider par un collègue de niveau groupe.",
+
+  // ── I-7 / I-8 · le registre des décisions et le RAID relié (retour de terrain RT365)
+  "The agenda of the next meeting in scope asks for this item once the date has come.":
+    "L'ordre du jour du prochain comité concerné réclame cet élément une fois la date venue.",
+  "Against gate":
+    "Contre le jalon",
+  "Not linked to a gate":
+    "Sans lien avec un jalon",
+  "The gate whose passage this item puts at risk. The gate line shows how many open items stand against it.":
+    "Le jalon de gouvernance dont cet élément menace le passage. La ligne du jalon dit combien d'éléments ouverts pèsent contre lui.",
+  "Change request":
+    "Demande de modification",
+  "Not linked to a change":
+    "Sans lien avec une modification",
+  "Against gate ":
+    "Contre le jalon ",
+  "open register item(s) against it":
+    "élément(s) de registre ouvert(s) contre lui",
+  "outside a meeting":
+    "hors réunion",
+  "alternatives: ":
+    "alternatives : ",
+  "dissent: ":
+    "dissension : ",
+  "supersedes ":
+    "remplace ",
+  "Decision register":
+    "Registre des décisions",
+  "One sentence, in the past tense, that someone will read in a year without the context.":
+    "Une phrase, au passé, que quelqu'un lira dans un an sans le contexte.",
+  "Portfolio-wide (group level)":
+    "Tout le portefeuille (niveau groupe)",
+  "Decided by":
+    "Décidé par",
+  "Decided on":
+    "Décidé le",
+  "The reasoning, so the committee can read it back without the person who wrote it.":
+    "Le raisonnement, pour que le comité puisse le relire sans la personne qui l'a écrit.",
+  "Alternatives considered":
+    "Alternatives examinées",
+  "What was refused, and why. A register that keeps only the winner cannot explain the choice.":
+    "Ce qui a été écarté, et pourquoi. Un registre qui ne garde que le choix retenu n'explique pas le choix.",
+  "Dissent":
+    "Dissension",
+  "Who disagreed, and on what. Recorded dissent protects the dissenter and the decision alike.":
+    "Qui n'était pas d'accord, et sur quoi. Une dissension consignée protège autant celui qui l'exprime que la décision.",
+  "Register item":
+    "Élément de registre",
+  "Milestone or gate":
+    "Jalon",
+  "Supersedes decision":
+    "Remplace la décision",
+  "The identifier of the decision this one replaces, e.g. DEC-012. That one stays on the record.":
+    "L'identifiant de la décision que celle-ci remplace, p. ex. DEC-012. Celle-là reste au registre.",
+
+  // ── I-3 / I-4 · l'échelle de jalons et les critères (retour de terrain RT365)
+  "Default ladder":
+    "Échelle par défaut",
+  "Every programme":
+    "Tous les programmes",
+  "programme(s) with their own ladder":
+    "programme(s) avec leur propre échelle",
+  "evidence required at each gate":
+    "preuves exigées à chaque jalon",
+  "A programme declares its own ladder from Reference data → programme. Projects take their programme's ladder when they are created; changing a ladder later leaves existing projects as they are.":
+    "Un programme déclare sa propre échelle depuis Données de référence → programme. Les projets prennent l'échelle de leur programme à leur création ; changer une échelle ensuite laisse les projets existants tels quels.",
+  "Criteria for ":
+    "Critères de ",
+  "found met":
+    "constaté(s) tenu(s)",
+  "Criterion":
+    "Critère",
+  "No criterion posed for this gate. Evidence alone clears it; a criterion says what the evidence must prove.":
+    "Aucun critère posé pour ce jalon. Les preuves seules le franchissent ; un critère dit ce que la preuve doit démontrer.",
+  "found met by ":
+    "constaté tenu par ",
+  "not yet found met":
+    "pas encore constaté tenu",
+  "Found met":
+    "Constaté tenu",
+  "Reopen":
+    "Rouvrir",
+  "Edit criterion":
+    "Modifier le critère",
+  "Remove criterion":
+    "Retirer le critère",
+  "Pose a criterion":
+    "Poser un critère",
+  "What must be true":
+    "Ce qui doit être vrai",
+  "One testable sentence, written before the evidence. A reviewer will say whether it holds.":
+    "Une phrase vérifiable, écrite avant la preuve. Un réviseur dira si elle tient.",
+  "Pose":
+    "Poser",
+  "Evidence document":
+    "Document de preuve",
+  "Where to look, or why it was reformulated — read by the reviewer, months later.":
+    "Où regarder, ou pourquoi il a été reformulé — lu par le réviseur, des mois plus tard.",
+  "Save criterion":
+    "Enregistrer le critère",
+  "The evidence cited is ":
+    "La preuve citée est ",
+  ", owned by ":
+    ", détenue par ",
+  "Reviewed by":
+    "Revu par",
+  "The named person who checked it — not the owner of the evidence it cites. The name stays.":
+    "La personne nommée qui l'a vérifié — pas le propriétaire de la preuve citée. Le nom reste.",
+  "criteria":
+    "critères",
+  "Gate ladder":
+    "Échelle de jalons",
+  "One gate per line: name | owner | evidence, comma separated | position in the project window as a percentage. Leave empty for the default ladder. Projects take the ladder at creation; a later change does not rewrite them.":
+    "Un jalon par ligne : nom | propriétaire | preuves, séparées par des virgules | position dans la fenêtre du projet en pourcentage. Vide = échelle par défaut. Les projets prennent l'échelle à leur création ; un changement ultérieur ne les réécrit pas.",
+
+  // ── PM-05 / PM-11 · parties prenantes et plan de communication (I-10)
+  " named":
+    " nommée(s)",
+  " sceptical or opposed":
+    " sceptique(s) ou opposée(s)",
+  "none named":
+    "aucune nommée",
+  "Communication plan":
+    "Plan de communication",
+  " audience(s)":
+    " audience(s)",
+  " overdue":
+    " en retard",
+  "no plan":
+    "aucun plan",
+  "interest × influence, attitude, and who owns the relationship":
+    "intérêt × influence, attitude, et qui tient la relation",
+  "Stakeholder":
+    "Partie prenante",
+  "Who":
+    "Qui",
+  "Interest / influence":
+    "Intérêt / influence",
+  "Attitude":
+    "Attitude",
+  "Champion":
+    "Champion",
+  "Supporter":
+    "Soutien",
+  "Neutral":
+    "Neutre",
+  "Sceptic":
+    "Sceptique",
+  "Opponent":
+    "Opposant",
+  "Engagement":
+    "Association",
+  "Inform":
+    "Informer",
+  "Consult":
+    "Consulter",
+  "Involve":
+    "Impliquer",
+  "Partner":
+    "Associer",
+  "Owner":
+    "Responsable",
+  "No stakeholder named yet.":
+    "Aucune partie prenante nommée pour l'instant.",
+  "No stakeholder named. The most frequent cause of failure on a multi-site project leaves no trace here until somebody writes a name.":
+    "Aucune partie prenante nommée. La cause d'échec la plus fréquente d'un projet multi-sites ne laisse aucune trace ici tant que personne n'écrit un nom.",
+  "Edit stakeholder":
+    "Modifier la partie prenante",
+  "Name a stakeholder":
+    "Nommer une partie prenante",
+  "A person or an organisation — a regulator, a supplier, a works council count.":
+    "Une personne ou une organisation — un régulateur, un fournisseur, un comité d'entreprise comptent.",
+  "In the directory":
+    "Dans l'annuaire",
+  "Not in the directory":
+    "Hors annuaire",
+  "Organisation":
+    "Organisation",
+  "Role":
+    "Rôle",
+  "Interest (1–5)":
+    "Intérêt (1–5)",
+  "How much the outcome matters to them.":
+    "À quel point le résultat compte pour eux.",
+  "Influence (1–5)":
+    "Influence (1–5)",
+  "How much they can change the outcome.":
+    "À quel point ils peuvent changer le résultat.",
+  "Inform: they hear. Consult: they are asked. Involve: they shape it. Partner: they decide with you.":
+    "Informer : ils entendent. Consulter : on leur demande. Impliquer : ils façonnent. Associer : ils décident avec vous.",
+  "Relationship owner":
+    "Tient la relation",
+  "What they want, what they fear, what was agreed with them — read by whoever takes over.":
+    "Ce qu'ils veulent, ce qu'ils craignent, ce qui a été convenu avec eux — lu par qui prend la suite.",
+  "Add stakeholder":
+    "Ajouter la partie prenante",
+  "who hears what, how often, from whom":
+    "qui entend quoi, à quelle fréquence, de qui",
+  "Audience":
+    "Audience",
+  "Channel":
+    "Canal",
+  "Frequency":
+    "Fréquence",
+  "Next":
+    "Prochaine",
+  "No audience planned yet.":
+    "Aucune audience planifiée pour l'instant.",
+  "No communication planned. The meetings and the digest carry most of it in practice; the plan says who else must hear, and when.":
+    "Aucune communication planifiée. Les comités et le digest en portent l'essentiel en pratique ; le plan dit qui d'autre doit entendre, et quand.",
+  "Edit communication":
+    "Modifier la communication",
+  "Plan a communication":
+    "Planifier une communication",
+  "Who must hear: a committee, a site, a supplier, the users of a branch.":
+    "Qui doit entendre : un comité, un site, un fournisseur, les utilisateurs d'une agence.",
+  "What they need to know":
+    "Ce qu'ils doivent savoir",
+  "The message, in one line — status, a decision owed, a date that moves.":
+    "Le message, en une ligne — un état, une décision due, une date qui bouge.",
+  "weekly call, e-mail, town hall…":
+    "point hebdomadaire, courriel, réunion plénière…",
+  "weekly, at each gate, once…":
+    "hebdomadaire, à chaque jalon, une fois…",
+  "What was said last time, or what must not be said yet — read by whoever sends the next one.":
+    "Ce qui a été dit la dernière fois, ou ce qui ne doit pas encore l'être — lu par qui envoie la prochaine.",
+  "Plan it":
+    "Planifier",
 };
 
 /* ── enregistrement des dictionnaires ─────────────────────────────────

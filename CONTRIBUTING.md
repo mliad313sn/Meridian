@@ -10,13 +10,15 @@ tabs.
 ```bash
 npm install
 npm run seed     # migrate, then build the opening book
-npm run dev      # http://localhost:4173
+npm run dev      # builds the client once if needed, then http://localhost:4173
 ```
 
 With no `DATABASE_URL` the server runs **PGlite** — PostgreSQL compiled
-to WebAssembly — from `server/.data/pgdata`. Same SQL, same planner, no
-server to install. Point `DATABASE_URL` at a real cluster when you want
-one; nothing else changes.
+to WebAssembly — from `server/.data/pgdata`, created if missing. Same
+SQL, same planner, no server to install. Point `DATABASE_URL` at a real
+cluster when you want one; nothing else changes. Copy `.env.example` to
+`.env` for anything you want set every time; the shell always wins over
+the file. `npm run dev:web` gives you Vite with hot reload instead.
 
 > **Do not hard-kill the dev server.** PGlite does not complete crash
 > recovery the way a server does, and a `SIGKILL` mid-write leaves the
@@ -34,8 +36,8 @@ just for you.
 npm run verify
 ```
 
-That is 356 tests, a client build, eight static gates and a dependency
-audit. It must be green. It takes about two minutes.
+That is every suite, a client build, ten static gates and a dependency
+audit. It must be green. It takes about three minutes.
 
 `npm run sweep` exercises 286 use cases across the four roles and is
 worth running when you touch authorisation. Twelve of its warnings are

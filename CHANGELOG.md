@@ -22,6 +22,98 @@ Nothing yet.
 
 ---
 
+## [5.10.0] — 2026-09-08
+
+The RT365 field return (docs/33). For the first time a programme that is
+not this product's own demo ran its whole lifecycle in Meridian — sixteen
+projects, six gates, 86 register items, fourteen decisions, twenty-one
+actions, loaded by API on 5.9.0 — and wrote down what it found: twelve
+findings, twelve improvements in value order, four RAID rows against
+Meridian. This release takes all twelve, under a Product Owner appointed
+the same day with full authority to decide, a duty to review the field
+repository on every round, and a register that answers each request
+where the programme can read it (`docs/33`, `docs/requests/rt365.json`,
+`/product-owner`).
+
+### Added
+
+- **Write API v1** (I-2 · M-05 · INT-13): `PUT /api/v1/{projects,
+  milestones,raid,activities,workitems}` under `write:portfolio` and
+  `PUT /api/v1/{decisions,actions}` under `write:meetings`, keyed by the
+  integration's **own identifier** (`external_source`, `external_id`,
+  migration 035), with an optional **`Idempotency-Key`** (same key + same
+  body replays; same key + other body 422). The same rules as the screens:
+  scaffolded projects, PM-04 acceptance, immutable decisions, actions only
+  in an open room. OpenAPI describes every body; discovery lists every
+  scoped route. Why it was wrong before: the only public surface read, so
+  the first integrator wrote through 144 undocumented session routes and
+  encoded its identity in titles.
+- **Gate ladder per programme** (I-3 · M-04): `programme.gate_model`
+  (036); a project is born with its programme's gates, evidence documents
+  and criteria; the default four are unchanged for programmes that
+  declare nothing. Why: six real gates had to live beside four fixed ones.
+- **Gate criteria** (I-4 · M-06): `gate_criterion` (037) — posed in
+  advance, found met by a named reviewer who does not own the evidence
+  cited; a gate is ready only when evidence is approved **and** criteria
+  are met. Why: "evidence 0/1" was a count of documents, not an answer to
+  "what does this prove".
+- **Decisions outside meetings** (I-7): `meeting_decision` anchored to a
+  room or to a named decider and date (034), with alternatives, dissent
+  and supersession; `POST /api/decisions`; one register for both. Why: a
+  decision taken between two meetings had to be smuggled into an
+  artificial occurrence.
+- **RAID against gates and changes, reviews on the agenda** (I-8):
+  `raid_item.gate`, `raid_item.cr_id`; the agenda asks for register
+  items whose review date has come. Why: `review_on` had been stored since
+  migration 002 and read by nobody.
+- **Progress with provenance** (I-5, first slice): a source system binds
+  its id to a stage and reports `pct` stamped with `progress_source` and
+  `progress_at`. Why: earned value read typed percentages.
+- **Stakeholder register and communication plan** (I-10 · PM-05 · PM-11,
+  038): interest × influence, attitude, engagement, owner; audience,
+  message, channel, frequency, next date.
+- **Operate-for-real kit** (I-6 · M-08 · G-01 · SaaS-03/04/05):
+  `npm run backup`, `npm run restore-drill` (restores elsewhere, recounts,
+  times, records), `/api/health` with instance identity and the last
+  proven restore, `docs/34-exploitation.md`, `docs/security-policy-template.md`.
+- **Day-one posture** (I-12 · M-10): the seeded demo passwords are
+  measured at boot; production refuses to start while one still opens an
+  account; Administration shows the banner; break-glass signatures are
+  marked in the audit trail. `GET /api/admin/posture`.
+- **Release discipline** (I-9 · M-09): gate **F10** (`release-audit`):
+  package.json, package-lock.json, docs/openapi.v1.json and CHANGELOG.md
+  must agree; `release.yml` publishes a GitHub Release on a tag.
+- **English committee record** (I-11 · M-11): `docs/en/16…32`.
+- The **Product Owner** role: `.claude/commands/product-owner.md`,
+  `scripts/rt365-review.mjs`, `docs/33` §1 and §5.
+
+### Fixed
+
+- **The first hour** (I-1 · M-01..M-03): `.env` is loaded; `PGLITE_DIR`
+  defaults to `server/.data/pgdata` and is created; a book in memory must
+  be asked for (`MERIDIAN_EPHEMERAL=1`) and is announced; `npm run dev`
+  builds the client when missing; `/` without a built client explains
+  instead of `Cannot GET /`. Why: the README's one-minute start lost the
+  seed on exit and cost a newcomer forty minutes.
+- `/api/health` and `/api/v1/openapi.json` report the package version
+  (`build: sources|packaged`) instead of `dev` and a five-releases-old
+  number.
+- The agenda's exclusion set for register reviews was built from items the
+  decision cap had deferred, not from items actually drawn (found by the
+  first I-8 test).
+
+### Changed
+
+- `NODE_ENV=production` refuses PGlite unless `MERIDIAN_ALLOW_PGLITE=1`.
+- `npm run dev` is `scripts/dev.mjs`; the bare server is `npm run dev:server`.
+- Discovery (`GET /api/v1`) lists every scoped route, read from the
+  contract; the test that pinned "one endpoint per scope" now asserts
+  "every scope served, every scoped route listed".
+
+Tests: 449 → 505; gates 9 → 10; migrations 033 → 038.
+
+---
+
 ## [5.9.0] — 2026-09-01
 
 The process-acceptance committee (docs/32). Eight gates and 448 tests

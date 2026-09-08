@@ -80,6 +80,44 @@ export const GATES = [
   { n: 4, name: "Gate 4 — Benefits",         at: .88, owner: "PMO",                 evidence: "Realisation report, lessons learned" },
 ];
 export const PHASES = ["Initiation", "Design", "Execution", "Transition", "Closure", "Closed"];
+
+/* I-3 (retour de terrain RT365, M-04) — the gate ladder is a property of
+   the PROGRAMME. Nothing in the frozen arithmetic changes: what changes is
+   the list it walks. `normaliseGateModel` is the one validator, shared by
+   the server (which refuses) and the browser (which explains). */
+export const MAX_GATES = 12;
+export function normaliseGateModel(input) {
+  if (input === null || input === undefined || input === "") return null;
+  if (!Array.isArray(input)) throw new Error("A gate ladder is a list of gates");
+  if (!input.length) return null;
+  if (input.length > MAX_GATES) throw new Error(`A gate ladder has at most ${MAX_GATES} gates`);
+  let last = 0;
+  const out = input.map((g, i) => {
+    const name = String(g?.name ?? "").trim();
+    if (!name) throw new Error(`Gate ${i + 1} needs a name`);
+    const at = Number(g?.at);
+    if (!Number.isFinite(at) || at <= 0 || at >= 1) throw new Error(`Gate ${i + 1} (${name}): "at" is where it sits in the project window, between 0 and 1 exclusive`);
+    if (at <= last) throw new Error(`Gate ${i + 1} (${name}) must come after the previous gate`);
+    last = at;
+    return { n: i + 1, name, at: Math.round(at * 1000) / 1000,
+      owner: String(g?.owner ?? "").trim() || "Sponsor",
+      evidence: String(g?.evidence ?? "").trim() };
+  });
+  return out;
+}
+/* "Name | Owner | Evidence, comma separated | at%" — one gate per line.
+   The textual form an administrator types; the JSON form is what is stored. */
+export function parseGateLadder(text) {
+  const lines = String(text ?? "").split("\n").map((l) => l.trim()).filter(Boolean);
+  if (!lines.length) return null;
+  return normaliseGateModel(lines.map((l) => {
+    const [name, owner, evidence, at] = l.split("|").map((x) => (x ?? "").trim());
+    const pct = Number(String(at ?? "").replace("%", ""));
+    return { name, owner, evidence, at: Number.isFinite(pct) ? pct / 100 : NaN };
+  }));
+}
+export const formatGateLadder = (model) => (model ?? []).map((g) =>
+  `${g.name} | ${g.owner} | ${g.evidence} | ${Math.round(g.at * 100)}%`).join("\n");
 export const RAID_TYPES = ["Risk", "Issue", "Assumption", "Dependency"];
 export const RESPONSES = ["Mitigate", "Avoid", "Transfer", "Accept", "Monitor", "Fix"];
 /* PM-02 — où l'on ira CHERCHER un enseignement plus tard. Les onze
@@ -251,33 +289,65 @@ export const Engine = {
     const ms = db.milestones.find(m => m.project === projectId && m.gate === gateN);
     const date = ms ? ms.date : null;
     const passed = date ? D(date) <= D(db.statusDate) : false;
+    /* I-8 — the open register items raised AGAINST this gate. Informative,
+       never blocking: a risk is a reason to look, not a lock (the lock is
+       the evidence). The frozen arithmetic below is untouched. */
+    const risks = (db.raid || []).filter(r => r.project === projectId && r.gate === gateN && r.status === "Open");
+    /* I-4 — the criteria posed in advance for this gate, and whether a
+       named reviewer has found each one met. With no criteria the
+       arithmetic is exactly what it was; with criteria, evidence alone
+       does not clear the gate. */
+    const criteria = (db.criteria || []).filter(c => c.project === projectId && c.gate === gateN);
+    const criteriaMet = criteria.filter(c => c.met).length;
+    const allMet = criteriaMet === criteria.length;
+    const complete = approved === docs.length && allMet;
     return {
-      gate: gateN, date, docs, approved, total: docs.length,
-      ready: docs.length > 0 && approved === docs.length,
+      gate: gateN, date, docs, approved, total: docs.length, risks,
+      criteria, criteriaMet,
+      ready: docs.length > 0 && complete,
       outstanding: docs.filter(d => !Engine.isEvidence(d)),
-      state: passed && approved === docs.length ? "Cleared"
+      unmet: criteria.filter(c => !c.met),
+      state: passed && complete ? "Cleared"
            : passed ? "Overdue"
-           : date && days(db.statusDate, date) <= 45 ? (approved === docs.length ? "Ready" : "At risk")
+           : date && days(db.statusDate, date) <= 45 ? (complete ? "Ready" : "At risk")
            : "Planned",
     };
   },
 
+  /* I-3 — the ladder this project walks: its programme's, or the default. */
+  gates(db, projectId) {
+    const p = projectId ? Engine.project(db, projectId) : null;
+    const pr = p ? Engine.programme(db, p.programme) : null;
+    const model = pr && Array.isArray(pr.gateModel) && pr.gateModel.length ? pr.gateModel : null;
+    return model ?? GATES;
+  },
+  /* The longest ladder in the book — for filters that span every programme. */
+  maxGates(db) {
+    return Math.max(GATES.length, ...(db.programmes || []).map((pr) => (pr.gateModel || []).length));
+  },
   currentGate(db, projectId) {
-    for (const g of GATES) {
+    const ladder = Engine.gates(db, projectId);
+    for (const g of ladder) {
       const st = Engine.gateStatus(db, projectId, g.n);
       if (st.state !== "Cleared") return { ...g, ...st };
     }
-    return { ...GATES[3], ...Engine.gateStatus(db, projectId, 4) };
+    const last = ladder[ladder.length - 1];
+    return { ...last, ...Engine.gateStatus(db, projectId, last.n) };
   },
 
   canAdvance(db, projectId) {
     if (!db.settings.gateLock) return { ok: true, reason: "Gate locking is off" };
     const g = Engine.currentGate(db, projectId);
     if (g.state === "Cleared" || g.ready) return { ok: true, reason: "Evidence complete for " + g.name };
+    const parts = [];
+    if (g.outstanding.length) parts.push(g.outstanding.length + " evidence item" + (g.outstanding.length === 1 ? "" : "s") + " outstanding");
+    if (g.unmet && g.unmet.length) parts.push(g.unmet.length + " criterion" + (g.unmet.length === 1 ? "" : "s") + " not yet found met");
+    if (!parts.length) parts.push("no evidence item filed");
     return {
       ok: false,
-      reason: g.outstanding.length + " evidence item" + (g.outstanding.length === 1 ? "" : "s") + " outstanding for " + g.name,
+      reason: parts.join(" · ") + " for " + g.name,
       items: g.outstanding,
+      unmet: g.unmet ?? [],
     };
   },
 

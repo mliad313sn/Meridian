@@ -105,6 +105,19 @@ const ENTITIES = {
     d: NA("Append-only (R6.2)") },
 
   ext_link: { c: /post\("\/links"/, u: /patch\("\/links\/:id"/, d: /delete\("\/links\/:id"/ },
+  /* I-2 — la mémoire d'idempotence d'une intégration : écrite par le
+     garde, rejouée telle quelle, purgée à trente jours. Rien à corriger
+     à la main — corriger une réponse enregistrée serait mentir au tiers. */
+  idempotency_key: { c: /put\("\/(projects|raid)\/:externalId"/,
+    u: NA("A recorded answer is replayed as it was — editing it would lie to the caller"),
+    d: NA("Purged after thirty days by the hourly sweep") },
+
+  /* I-4 — un critère se pose, se reformule, se tient (réviseur nommé) et,
+     tant qu'il n'est pas tenu, se retire. */
+  gate_criterion: { c: /post\("\/criteria"/, u: /patch\("\/criteria\/:id"/, d: /delete\("\/criteria\/:id"/ },
+  /* PM-05 / PM-11 (I-10) — two registers of the project, corrected in place. */
+  stakeholder: { c: /post\("\/stakeholders"/, u: /patch\("\/stakeholders\/:id"/, d: /delete\("\/stakeholders\/:id"/ },
+  comms_plan: { c: /post\("\/comms"/, u: /patch\("\/comms\/:id"/, d: /delete\("\/comms\/:id"/ },
 
   meeting_series: { c: /post\("\/series"/, u: /patch\("\/series\/:id"/,
     d: NA("Retired via active=false — its history must remain readable") },
@@ -132,6 +145,9 @@ const SERVER_ONLY = new Set([
      avertir ; les afficher demanderait au lecteur d'interpréter un 502 à
      la place de l'outil. */
   "probe_status", "probe_fails",
+  /* I-2 — la mécanique d'idempotence : une empreinte de requête et la
+     réponse enregistrée, rejouée à l'appelant, jamais dessinée. */
+  "request_hash", "response_json",
 ]);
 
 const verb = (spec) => {

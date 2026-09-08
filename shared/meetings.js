@@ -252,6 +252,36 @@ export function buildAgenda(db, series, occurrence, openActions = [], extras = {
     });
   }
 
+  /* 6b · I-8 — register items whose REVIEW DATE has come. The date was
+     stored since the first migration and read by nobody; a review that
+     no agenda asks for does not happen. Overdue first, then those due
+     before the next run; the escalations above are not repeated. */
+  /* What the agenda has ACTUALLY drawn so far — not `seen`, which also
+     holds items the decision cap deferred; a deferred item whose review
+     is overdue is exactly what this section exists to bring back. */
+  const shown = new Set(sections.flatMap(sec => sec.items.map(i => i.entityId)));
+  const reviews = db.raid
+    .filter(r => r.status === "Open" && r.review && (!r.project || ids.has(r.project)) && !shown.has(r.id))
+    .filter(r => days(asOf, r.review) <= lookOn)
+    .sort((a, b) => a.review.localeCompare(b.review))
+    .slice(0, monthly ? 12 : 6);
+  if (reviews.length) {
+    sections.push({
+      key: "reviews",
+      title: "Register items due for review",
+      weight: 2,
+      items: reviews.map(r => ({
+        headline: (D(r.review) < D(asOf) ? "OVERDUE · " : "") + r.id + " · " + r.title,
+        detail: "review was due " + fmtDate(r.review) +
+                (D(r.review) < D(asOf) ? " (" + days(r.review, asOf) + " days ago)" : " (in " + days(asOf, r.review) + " days)") +
+                " · owner " + Engine.personName(db, r.owner) +
+                (r.gate ? " · against gate " + r.gate : "") + (r.cr ? " · " + r.cr : ""),
+        entity: "raid_item", entityId: r.id,
+        urgent: D(r.review) < D(asOf),
+      })),
+    });
+  }
+
   /* 7 · Capacity — weekly cares about the next fortnight only. */
   if (db.settings.capacityAlerts) {
     const over = Engine.overAllocated(db, monthly ? 12 : 4)

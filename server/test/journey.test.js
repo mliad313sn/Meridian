@@ -521,3 +521,79 @@ describe("11 · capitaliser, restituer, sortir", () => {
     assert.ok(!/presidencia-lima-2026|-mine"/.test(flat), "aucun mot de passe n'y figure");
   });
 });
+
+/* ── 12 · le retour de terrain (docs/33) ──────────────────────────────
+   Ce qu'une organisation branchée fait le jour où son système de suivi
+   parle à Meridian : une clé d'écriture, un projet par SON identifiant,
+   un critère posé puis constaté, une décision hors salle, une partie
+   prenante — et la sauvegarde qui se prouve avant de compter dessus. */
+describe("12 · le retour de terrain — écrire par l'API, constater, sauvegarder", () => {
+  const machine = client();
+  let KEY, EXT_PROJECT;
+
+  test("I-2 · une clé d'écriture crée un projet par son identifiant externe, dans NOTRE programme", async () => {
+    const made = await dir.post("/api/admin/integrations",
+      { name: "grand-livre-lima", scopes: "write:portfolio,write:meetings" });
+    assert.equal(made.status, 201, JSON.stringify(made.body));
+    KEY = made.body.key;
+    const body = {
+      name: "E01 Fondations", programme: PROG, site: SITE, governanceLevel: "group",
+      pm: PM_ID, start: "2026-09-07", finish: "2027-03-31", budget: 0.5,
+    };
+    const r = await machine.put("/api/v1/projects/E01", body, { "X-API-Key": KEY, "Idempotency-Key": "run-1" });
+    assert.equal(r.status, 201, r.text);
+    EXT_PROJECT = r.body.id;
+    const again = await machine.put("/api/v1/projects/E01", body, { "X-API-Key": KEY, "Idempotency-Key": "run-1" });
+    assert.equal(again.status, 201, "même clé, même corps : la réponse est rejouée, rien n'est recréé");
+    const other = await machine.put("/api/v1/projects/E01", { name: "E01 Fondations" },
+      { "X-API-Key": KEY, "Idempotency-Key": "run-1" });
+    assert.equal(other.status, 422, "même clé, autre corps : refusé — une clé nomme UNE requête");
+    const rows = await many(`SELECT count(*)::int AS n FROM project WHERE external_id = 'E01'`);
+    assert.equal(rows[0].n, 1);
+  });
+
+  test("I-4 · un critère posé par le groupe est constaté par un réviseur nommé — et le jalon le lit", async () => {
+    const posed = await pmo.post("/api/criteria", { project: EXT_PROJECT, gate: 1, text: "Le sponsor est nommé" });
+    assert.equal(posed.status, 201, JSON.stringify(posed.body));
+    const noWho = await pmo.patch(`/api/criteria/${posed.body.id}`, { met: true, version: 1 });
+    assert.equal(noWho.status, 400, "sans réviseur nommé, pas de constat");
+    const met = await pmo.patch(`/api/criteria/${posed.body.id}`, { met: true, reviewedBy: SPONSOR_ID, version: 1 });
+    assert.equal(met.status, 200, JSON.stringify(met.body));
+    const db = (await pmo.get("/api/bootstrap")).body.db;
+    const { Engine } = await import("../../shared/engine.js");
+    const st = Engine.gateStatus(db, EXT_PROJECT, 1);
+    assert.ok(st.criteria.length >= 1 && st.criteriaMet >= 1, "le jalon compte ses critères tenus");
+  });
+
+  test("I-7 · une décision prise hors salle par qui en a l'autorité entre au registre — et ne s'efface pas", async () => {
+    const d = await pmo.post("/api/decisions", {
+      headline: "Le jalon 1 est entendu le 15 octobre", projectId: EXT_PROJECT, decidedBy: SPONSOR_ID,
+      rationale: "le comité ne peut pas attendre", alternatives: "reporter (refusé)", dissent: "le site demandait le report",
+    });
+    assert.equal(d.status, 201, JSON.stringify(d.body));
+    assert.equal((await pmo.del("/api/decisions/" + d.body.id)).status, 404, "pas de suppression : une décision se remplace");
+    const log = await pmo.get("/api/decisions/log");
+    assert.ok(log.body.minuted.some((x) => x.id === d.body.id && x.kind === "standalone"));
+  });
+
+  test("PM-05 · le site nomme un régulateur comme partie prenante de SON projet", async () => {
+    const r = await lead.post("/api/stakeholders", {
+      project: PROJECT, name: "OSINERGMIN", organisation: "Regulador", interest: 5, influence: 5, attitude: "Sceptic",
+    });
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+    assert.equal((await lead.post("/api/stakeholders", { project: EXT_PROJECT, name: "x" })).status, 403,
+      "un projet groupe n'est pas le sien");
+  });
+
+  test("I-6 · la sauvegarde se prouve ailleurs avant qu'on compte dessus, et la santé le dit", async () => {
+    const { backup, drill, counts, record } = await import("../src/backup.js");
+    const fs = await import("node:fs"); const os = await import("node:os"); const path = await import("node:path");
+    const out = await backup({ dir: fs.mkdtempSync(path.join(os.tmpdir(), "meridian-journey-")), url: null });
+    const proof = await drill({ file: out.file, url: null, expected: await counts() });
+    assert.equal(proof.ok, true, JSON.stringify(proof.mismatches));
+    await record(proof);
+    const h = (await client().get("/api/health")).body;
+    assert.ok(h.backup.lastDrillAt, "la dernière restauration ÉPROUVÉE se lit sans se connecter");
+    assert.equal(h.backup.ok, true);
+  });
+});

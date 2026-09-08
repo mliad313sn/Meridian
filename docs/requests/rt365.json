@@ -1,0 +1,303 @@
+{
+  "$schema": "meridian-request-register/1",
+  "source": {
+    "repository": "mliad313sn/RT365",
+    "branch": "claude/project-owner-agent-setup-hi3xqu",
+    "commit": "25b0483",
+    "documents": [
+      "docs/PMO_MERIDIAN_ASSESSMENT.md",
+      "docs/PMO.md",
+      "docs/ADRs/ADR-017.md",
+      "docs/RAID_LOG.md",
+      "docs/MISSING_ACTIONS.md",
+      "scripts/meridian_sync.py",
+      "docs/IMPROVEMENT_REGISTER.md"
+    ],
+    "reviewedAt": "2026-09-08"
+  },
+  "productOwner": {
+    "charter": "docs/33-retour-terrain-rt365.md#1",
+    "command": ".claude/commands/product-owner.md",
+    "lastRun": "2026-09-08"
+  },
+  "requests": [
+    {
+      "id": "REQ-01",
+      "origin": [
+        "I-1",
+        "M-01",
+        "M-02",
+        "M-03",
+        "O-73"
+      ],
+      "title": "The first hour: .env, default data directory, dev builds, no silent in-memory book",
+      "status": "done",
+      "version": "5.10.0",
+      "decidedOn": "2026-09-08",
+      "delivered": [
+        "server/src/env.js",
+        "scripts/dev.mjs",
+        "server/src/index.js#503-page",
+        ".env.example"
+      ],
+      "measure": "server/test/firsthour.test.js",
+      "remaining": null,
+      "answerToSource": "O-73 can be closed; delete the workaround in docs/PMO.md §2.",
+      "issue": 1
+    },
+    {
+      "id": "REQ-02",
+      "origin": [
+        "I-2",
+        "M-05",
+        "O-74",
+        "INT-13"
+      ],
+      "title": "Write API v1 by external id with Idempotency-Key",
+      "status": "done",
+      "version": "5.10.0",
+      "decidedOn": "2026-09-08",
+      "delivered": [
+        "server/migrations/035_write_api.sql",
+        "server/src/v1write.js",
+        "server/src/routes/v1.js",
+        "docs/openapi.v1.json"
+      ],
+      "measure": "server/test/writeapi.test.js",
+      "api": {
+        "scopes": [
+          "write:portfolio",
+          "write:meetings"
+        ],
+        "routes": [
+          "PUT /api/v1/projects/:externalId",
+          "PUT /api/v1/milestones/:externalId",
+          "PUT /api/v1/raid/:externalId",
+          "PUT /api/v1/activities/:externalId",
+          "PUT /api/v1/workitems/:externalId",
+          "PUT /api/v1/decisions/:externalId",
+          "PUT /api/v1/actions/:externalId"
+        ],
+        "header": "Idempotency-Key"
+      },
+      "remaining": "structure (sites, programmes, people) stays on the session API and CSV import — D-33.4",
+      "answerToSource": "O-74 can be closed; meridian_sync.py can move to PUT /api/v1/* with its own ids and unpin the commit.",
+      "issue": 2
+    },
+    {
+      "id": "REQ-03",
+      "origin": [
+        "I-3",
+        "M-04",
+        "O-75"
+      ],
+      "title": "Gate ladder per programme",
+      "status": "done",
+      "version": "5.10.0",
+      "decidedOn": "2026-09-08",
+      "delivered": [
+        "server/migrations/036_gate_ladder.sql",
+        "shared/engine.js#normaliseGateModel",
+        "server/src/wbs.js",
+        "web/src/views/administration.js#programmeDialog"
+      ],
+      "measure": "server/test/gates.test.js",
+      "remaining": null,
+      "answerToSource": "O-75 can be closed; declare A–F on programme RBT, then create the epics.",
+      "issue": 3
+    },
+    {
+      "id": "REQ-04",
+      "origin": [
+        "I-4",
+        "M-06"
+      ],
+      "title": "Gate criteria found met by a named, independent reviewer",
+      "status": "done",
+      "version": "5.10.0",
+      "decidedOn": "2026-09-08",
+      "delivered": [
+        "server/migrations/037_gate_criteria.sql",
+        "server/src/routes/portfolio.js#criteria",
+        "shared/engine.js#gateStatus"
+      ],
+      "measure": "server/test/gates.test.js",
+      "remaining": null,
+      "issue": 4
+    },
+    {
+      "id": "REQ-05",
+      "origin": [
+        "I-5",
+        "M-07"
+      ],
+      "title": "Progress and cost from source systems",
+      "status": "partial",
+      "version": "5.10.0",
+      "decidedOn": "2026-09-08",
+      "delivered": [
+        "PUT /api/v1/activities/:externalId (pct, source, measuredAt)",
+        "activity.progress_source / progress_at"
+      ],
+      "measure": "server/test/writeapi.test.js",
+      "remaining": "connectors INT-10/11/12 and cost lines by external id — written from the source side (D-33.5)",
+      "issue": 5
+    },
+    {
+      "id": "REQ-06",
+      "origin": [
+        "I-6",
+        "M-08",
+        "O-76",
+        "H-28",
+        "G-01",
+        "SaaS-03",
+        "SaaS-04",
+        "SaaS-05"
+      ],
+      "title": "Operate-for-real kit: backup, restore drill, instance identity, production refusals, runbook",
+      "status": "done",
+      "version": "5.10.0",
+      "decidedOn": "2026-09-08",
+      "delivered": [
+        "server/src/backup.js",
+        "scripts/backup.mjs",
+        "scripts/restore-drill.mjs",
+        "GET /api/health#instance,backup",
+        "docs/34-exploitation.md"
+      ],
+      "measure": "server/test/backup.test.js",
+      "remaining": "the acts: PostgreSQL, scheduled backup, monthly drill, signed policy — RT365's operator (H-28)",
+      "issue": 6
+    },
+    {
+      "id": "REQ-07",
+      "origin": [
+        "I-7"
+      ],
+      "title": "Decisions as first-class records outside meetings",
+      "status": "done",
+      "version": "5.10.0",
+      "decidedOn": "2026-09-08",
+      "delivered": [
+        "server/migrations/034_decision_register.sql",
+        "POST /api/decisions",
+        "GET /api/decisions/log"
+      ],
+      "measure": "server/test/decisions.test.js",
+      "remaining": null,
+      "issue": 7
+    },
+    {
+      "id": "REQ-08",
+      "origin": [
+        "I-8"
+      ],
+      "title": "RAID linked to gates and change requests; review dates on the agenda",
+      "status": "done",
+      "version": "5.10.0",
+      "decidedOn": "2026-09-08",
+      "delivered": [
+        "raid_item.gate",
+        "raid_item.cr_id",
+        "shared/meetings.js#reviews"
+      ],
+      "measure": "server/test/decisions.test.js",
+      "remaining": null,
+      "issue": 8
+    },
+    {
+      "id": "REQ-09",
+      "origin": [
+        "I-9",
+        "M-09"
+      ],
+      "title": "Release discipline: one version everywhere, F10 gate, release workflow",
+      "status": "done",
+      "version": "5.10.0",
+      "decidedOn": "2026-09-08",
+      "delivered": [
+        "scripts/audit/release-audit.mjs",
+        ".github/workflows/release.yml",
+        "server/src/env.js#packageVersion"
+      ],
+      "measure": "npm run audit (F10)",
+      "remaining": "tags are pushed by a maintainer",
+      "issue": 9
+    },
+    {
+      "id": "REQ-10",
+      "origin": [
+        "I-10",
+        "M-12",
+        "PM-05",
+        "PM-11"
+      ],
+      "title": "Stakeholder register and communication plan",
+      "status": "partial",
+      "version": "5.10.0",
+      "decidedOn": "2026-09-08",
+      "delivered": [
+        "server/migrations/038_stakeholders_comms.sql",
+        "/api/stakeholders",
+        "/api/comms"
+      ],
+      "measure": "server/test/stakeholders.test.js",
+      "remaining": "PM-12 skills, PM-10 suppliers, PM-07 scheduling depth — on the docs/26 register (D-33.6)",
+      "issue": 10
+    },
+    {
+      "id": "REQ-11",
+      "origin": [
+        "I-11",
+        "M-11"
+      ],
+      "title": "English translation of the committee record docs/16–32",
+      "status": "done",
+      "version": "5.10.0",
+      "decidedOn": "2026-09-08",
+      "delivered": [
+        "docs/en/"
+      ],
+      "measure": "17 files",
+      "remaining": "native-speaker read-through",
+      "issue": 11
+    },
+    {
+      "id": "REQ-12",
+      "origin": [
+        "I-12",
+        "M-10"
+      ],
+      "title": "Day-one security posture: demo passwords measured and refused in production, policy template, break-glass written",
+      "status": "done",
+      "version": "5.10.0",
+      "decidedOn": "2026-09-08",
+      "delivered": [
+        "server/src/posture.js",
+        "GET /api/admin/posture",
+        "docs/security-policy-template.md"
+      ],
+      "measure": "server/test/posture.test.js",
+      "remaining": null,
+      "issue": 12
+    },
+    {
+      "id": "REQ-13",
+      "origin": [
+        "scripts/meridian_sync.py#RAID_KIND"
+      ],
+      "title": "A free category label on register items (Gap, Observation, Open item…)",
+      "status": "open",
+      "version": null,
+      "decidedOn": "2026-09-08",
+      "delivered": [],
+      "measure": null,
+      "remaining": "accepted for the next round (D-33.7)"
+    }
+  ],
+  "channel": {
+    "issues": "https://github.com/mliad313sn/Meridian/issues",
+    "rule": "issue #n = improvement I-n = REQ-0n; the Product Owner answers on the issue and closes it when the line is done"
+  }
+}

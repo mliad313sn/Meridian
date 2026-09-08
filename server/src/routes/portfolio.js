@@ -71,6 +71,19 @@ function assertLocalOrigin(row, what) {
    GREATER than everything, so `CHECK (budget >= 0)` waves it straight
    through — after which every derived figure on that project (SPI, CPI,
    EAC, the RAG, the published period) is NaN, silently and for good. */
+/* I-8 — un lien vers un jalon de gouvernance est un numéro dans l'échelle
+   du programme ; vide veut dire « aucun ». */
+const gateLink = (v) => (v === undefined || v === null || v === "" ? null : Math.max(1, Math.min(12, Math.round(Number(v) || 0))) || null);
+/* …et un lien vers une modification doit exister ET appartenir au même
+   projet : relier un risque de Toronto à une modification de Singapour
+   ne veut rien dire, et un identifiant deviné ne doit rien révéler. */
+async function crLink(v, projectId) {
+  if (v === undefined || v === null || v === "") return null;
+  const cr = await one(`SELECT id, project_id FROM change_request WHERE id = $1`, [String(v)]);
+  if (!cr || (projectId && cr.project_id !== projectId)) bad("That change request does not exist on this project");
+  return cr.id;
+}
+
 const num = (v, fallback = 0) => {
   if (v === undefined || v === null || v === "") return fallback;
   const n = Number(v);
@@ -801,6 +814,9 @@ r.post("/raid", async (req, res, next) => {
     if (!b.title) bad("An item needs a title");
     const kind = ["Risk", "Issue", "Assumption", "Dependency"].includes(b.type) ? b.type : "Risk";
     const prefix = { Risk: "RSK", Issue: "ISS", Assumption: "ASM", Dependency: "DEP" }[kind];
+    /* I-8 — résolu AVANT la transaction : le garde de db.js refuse, à
+       raison, une lecture hors de la transaction ouverte. */
+    const crId = await crLink(b.cr, b.project || null);
 
     let id = null;
     await audited(req.user,
@@ -811,14 +827,17 @@ r.post("/raid", async (req, res, next) => {
         return t.query(
           `INSERT INTO raid_item
              (id, project_id, kind, title, detail, probability, impact, status, response, owner_id, opened_on, review_on, origin_site,
-              target_probability, target_impact)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,'Open',$8,$9,CURRENT_DATE,$10,$11,$12,$13)`,
+              target_probability, target_impact, gate, cr_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,'Open',$8,$9,CURRENT_DATE,$10,$11,$12,$13,$14,$15)`,
           [id, b.project || null, kind, b.title, b.detail ?? "",
            Math.max(1, Math.min(5, num(b.p, 3))), Math.max(1, Math.min(5, num(b.i, 3))),
            b.response ?? "Monitor", b.owner ?? null, b.review ?? null, originSite,
            /* PM-06 — la cible résiduelle dès la levée, quand elle est connue. */
            b.tp === undefined || b.tp === "" || b.tp === null ? null : Math.max(1, Math.min(5, num(b.tp))),
-           b.ti === undefined || b.ti === "" || b.ti === null ? null : Math.max(1, Math.min(5, num(b.ti)))]);
+           b.ti === undefined || b.ti === "" || b.ti === null ? null : Math.max(1, Math.min(5, num(b.ti))),
+           /* I-8 — contre quoi ce risque se lève : le jalon de gouvernance
+              qu'il menace, la modification qui le porte. */
+           gateLink(b.gate), crId]);
       });
     res.status(201).json({ id });
   } catch (e) { next(e); }
@@ -850,6 +869,8 @@ r.patch("/raid/:id", async (req, res, next) => {
     if (b.response !== undefined) patch.response = b.response;
     if (b.owner !== undefined) patch.owner_id = b.owner || null;
     if (b.review !== undefined) patch.review_on = b.review || null;
+    if (b.gate !== undefined) patch.gate = gateLink(b.gate);
+    if (b.cr !== undefined) patch.cr_id = await crLink(b.cr, item.project_id);
 
     const out = await audited(req.user,
       { action: b.status === "Closed" ? "Item closed" : "Item updated",
@@ -1021,10 +1042,18 @@ r.post("/change/:id/approve", async (req, res, next) => {
     if (!current) throw new HttpError(409, "This request has no step awaiting a decision");
     const isLast = current.seq === steps.length - 1;
 
+    /* S-13 / I-12 — l'exemption break-glass se LIT dans la piste. Un
+       administrateur qui signe sa propre demande passe la porte que
+       rbac.js lui ouvre exprès ; la piste dit que c'est arrivé, en toutes
+       lettres, plutôt que de laisser un auditeur le déduire. */
+    const selfSigned = req.user.role === "admin" &&
+      ((cr.raised_by_user && cr.raised_by_user === req.user.id) ||
+       (cr.raised_by && req.user.personId && cr.raised_by === req.user.personId));
     await audited(req.user,
       { action: isLast ? "Change request approved" : "Change step signed",
         entity: "change_request", entityId: cr.id,
-        detail: `${current.role_label}${req.body?.comment ? " — " + req.body.comment : ""}` },
+        detail: `${current.role_label}${req.body?.comment ? " — " + req.body.comment : ""}` +
+                (selfSigned ? " — BREAK-GLASS: administrator signing a request they raised" : "") },
       async (t) => {
         await t.query(
           `UPDATE change_step SET state='done', decided_by=$2, decided_on=CURRENT_DATE, comment=$3
@@ -3154,13 +3183,20 @@ r.get("/decisions/log", async (req, res, next) => {
     await noteConsultation(req.user, "Decision register", "");   // R-14
     const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 200));
     const audits = await readAudit({ action: REGISTER_ACTIONS.join(","), limit });
+    /* I-7 — les décisions d'une salle ET celles prises hors salle par
+       qui en a l'autorité (occurrence_id NULL, date + décideur nommés).
+       Un seul registre : un lecteur ne doit pas avoir à savoir dans
+       quelle pièce une décision a été prise pour la trouver. */
     const minuted = await many(
-      `SELECT d.id, d.headline, d.rationale, d.decided_by, d.referred_to_scope,
-              o.meets_on, s.name AS series_name, s.scope_kind
+      `SELECT d.id, d.headline, d.rationale, d.alternatives, d.dissent, d.decided_by,
+              d.referred_to_scope, d.project_id, d.cr_id, d.raid_id, d.milestone_id, d.supersedes,
+              COALESCE(o.meets_on, d.decided_on) AS decided_on, d.external_source, d.external_id,
+              s.name AS series_name, s.scope_kind, pe.name AS decided_by_name
          FROM meeting_decision d
-         JOIN meeting_occurrence o ON o.id = d.occurrence_id
-         JOIN meeting_series s ON s.id = o.series_id
-        ORDER BY o.meets_on DESC, d.id DESC
+         LEFT JOIN meeting_occurrence o ON o.id = d.occurrence_id
+         LEFT JOIN meeting_series s ON s.id = o.series_id
+         LEFT JOIN person pe ON pe.id = d.decided_by
+        ORDER BY COALESCE(o.meets_on, d.decided_on) DESC, d.id DESC
         LIMIT $1`, [limit]);
     res.json({
       register: audits.map((a) => ({
@@ -3169,11 +3205,300 @@ r.get("/decisions/log", async (req, res, next) => {
         before: a.before_json ?? null, after: a.after_json ?? null,
       })),
       minuted: minuted.map((d) => ({
-        kind: "meeting", id: d.id, headline: d.headline, rationale: d.rationale,
-        by: d.decided_by, on: d.meets_on, series: d.series_name,
-        scope: d.scope_kind, referred: d.referred_to_scope ?? null,
+        kind: d.series_name ? "meeting" : "standalone",
+        id: d.id, headline: d.headline, rationale: d.rationale,
+        alternatives: d.alternatives ?? "", dissent: d.dissent ?? "",
+        by: d.decided_by, byName: d.decided_by_name ?? null, on: d.decided_on,
+        series: d.series_name ?? null,
+        scope: d.scope_kind ?? null, referred: d.referred_to_scope ?? null,
+        project: d.project_id ?? null, cr: d.cr_id ?? null, raid: d.raid_id ?? null,
+        milestone: d.milestone_id ?? null, supersedes: d.supersedes ?? null,
+        externalSource: d.external_source ?? null, externalId: d.external_id ?? null,
       })),
     });
+  } catch (e) { next(e); }
+});
+
+/* ── PM-05 · les parties prenantes — PM-11 · le plan de communication ──
+   Retour de terrain RT365 (I-10). Écriture de projet ordinaire
+   (project.write) : connaître ses parties prenantes et dire qui informer
+   est le travail de qui livre, pas un acte de gouvernance. */
+const ATTITUDES = ["Champion", "Supporter", "Neutral", "Sceptic", "Opponent"];
+const ENGAGEMENTS = ["Inform", "Consult", "Involve", "Partner"];
+const scale5 = (v, fallback = 3) => Math.max(1, Math.min(5, num(v, fallback)));
+
+r.post("/stakeholders", async (req, res, next) => {
+  try {
+    const b = req.body ?? {};
+    const p = await project(b.project, req.user);
+    gate(req.user, "project.write", { project: p });
+    if (!String(b.name ?? "").trim()) bad("A stakeholder needs a name — a person, or an organisation");
+    if (b.person) {
+      const who = await one(`SELECT id FROM person WHERE id = $1`, [String(b.person)]);
+      if (!who) bad("No such person in the directory");
+    }
+    let id = null;
+    await audited(req.user,
+      () => ({ action: "Stakeholder added", entity: "stakeholder", entityId: id, detail: b.name }),
+      async (t) => {
+        id = await allocateId(t, "STK");
+        await t.query(
+          `INSERT INTO stakeholder (id, project_id, person_id, name, organisation, role_label, interest, influence, attitude, engagement, owner_id, note)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+          [id, p.id, b.person || null, String(b.name).trim().slice(0, 200), String(b.organisation ?? "").slice(0, 200),
+           String(b.role ?? "").slice(0, 200), scale5(b.interest), scale5(b.influence),
+           ATTITUDES.includes(b.attitude) ? b.attitude : "Neutral",
+           ENGAGEMENTS.includes(b.engagement) ? b.engagement : "Inform",
+           b.owner || null, String(b.note ?? "").slice(0, 2000)]);
+      });
+    res.status(201).json({ id });
+  } catch (e) { next(e); }
+});
+
+r.patch("/stakeholders/:id", async (req, res, next) => {
+  try {
+    const row = await one(`SELECT * FROM stakeholder WHERE id = $1`, [req.params.id]);
+    if (!row) throw new HttpError(404, "No such stakeholder");
+    gate(req.user, "project.write", { project: await project(row.project_id, req.user) });
+    const b = req.body ?? {};
+    const patch = {};
+    if (b.name !== undefined) { if (!String(b.name).trim()) bad("A stakeholder needs a name"); patch.name = String(b.name).trim().slice(0, 200); }
+    if (b.person !== undefined) patch.person_id = b.person || null;
+    if (b.organisation !== undefined) patch.organisation = String(b.organisation).slice(0, 200);
+    if (b.role !== undefined) patch.role_label = String(b.role).slice(0, 200);
+    if (b.interest !== undefined) patch.interest = scale5(b.interest);
+    if (b.influence !== undefined) patch.influence = scale5(b.influence);
+    if (b.attitude !== undefined) { if (!ATTITUDES.includes(b.attitude)) bad("attitude is " + ATTITUDES.join(", ")); patch.attitude = b.attitude; }
+    if (b.engagement !== undefined) { if (!ENGAGEMENTS.includes(b.engagement)) bad("engagement is " + ENGAGEMENTS.join(", ")); patch.engagement = b.engagement; }
+    if (b.owner !== undefined) patch.owner_id = b.owner || null;
+    if (b.note !== undefined) patch.note = String(b.note).slice(0, 2000);
+    const out = await audited(req.user,
+      { action: "Stakeholder updated", entity: "stakeholder", entityId: row.id, detail: patch.name ?? row.name,
+        before: b.attitude !== undefined && b.attitude !== row.attitude ? { attitude: row.attitude } : undefined,
+        after: b.attitude !== undefined && b.attitude !== row.attitude ? { attitude: b.attitude } : undefined },
+      async (t) => conflict(await updateVersioned(t, "stakeholder", row.id, requiredVersion(b, "stakeholder"), patch)));
+    res.json({ version: out.version });
+  } catch (e) { next(e); }
+});
+
+r.delete("/stakeholders/:id", async (req, res, next) => {
+  try {
+    const row = await one(`SELECT * FROM stakeholder WHERE id = $1`, [req.params.id]);
+    if (!row) throw new HttpError(404, "No such stakeholder");
+    gate(req.user, "project.write", { project: await project(row.project_id, req.user) });
+    await audited(req.user,
+      { action: "Stakeholder removed", entity: "stakeholder", entityId: row.id, detail: row.name, before: { ...row } },
+      async (t) => t.query(`DELETE FROM stakeholder WHERE id = $1`, [row.id]));
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
+r.post("/comms", async (req, res, next) => {
+  try {
+    const b = req.body ?? {};
+    const p = await project(b.project, req.user);
+    gate(req.user, "project.write", { project: p });
+    if (!String(b.audience ?? "").trim()) bad("A communication line names its audience");
+    let id = null;
+    await audited(req.user,
+      () => ({ action: "Communication planned", entity: "comms_plan", entityId: id, detail: b.audience }),
+      async (t) => {
+        id = await allocateId(t, "COM");
+        await t.query(
+          `INSERT INTO comms_plan (id, project_id, audience, purpose, channel, frequency, owner_id, next_on, note)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+          [id, p.id, String(b.audience).trim().slice(0, 200), String(b.purpose ?? "").slice(0, 1000),
+           String(b.channel ?? "").slice(0, 200), String(b.frequency ?? "").slice(0, 100),
+           b.owner || null, b.nextOn || null, String(b.note ?? "").slice(0, 2000)]);
+      });
+    res.status(201).json({ id });
+  } catch (e) { next(e); }
+});
+
+r.patch("/comms/:id", async (req, res, next) => {
+  try {
+    const row = await one(`SELECT * FROM comms_plan WHERE id = $1`, [req.params.id]);
+    if (!row) throw new HttpError(404, "No such communication line");
+    gate(req.user, "project.write", { project: await project(row.project_id, req.user) });
+    const b = req.body ?? {};
+    const patch = {};
+    if (b.audience !== undefined) { if (!String(b.audience).trim()) bad("A communication line names its audience"); patch.audience = String(b.audience).trim().slice(0, 200); }
+    if (b.purpose !== undefined) patch.purpose = String(b.purpose).slice(0, 1000);
+    if (b.channel !== undefined) patch.channel = String(b.channel).slice(0, 200);
+    if (b.frequency !== undefined) patch.frequency = String(b.frequency).slice(0, 100);
+    if (b.owner !== undefined) patch.owner_id = b.owner || null;
+    if (b.nextOn !== undefined) patch.next_on = b.nextOn || null;
+    if (b.note !== undefined) patch.note = String(b.note).slice(0, 2000);
+    const out = await audited(req.user,
+      { action: "Communication updated", entity: "comms_plan", entityId: row.id, detail: patch.audience ?? row.audience },
+      async (t) => conflict(await updateVersioned(t, "comms_plan", row.id, requiredVersion(b, "communication line"), patch)));
+    res.json({ version: out.version });
+  } catch (e) { next(e); }
+});
+
+r.delete("/comms/:id", async (req, res, next) => {
+  try {
+    const row = await one(`SELECT * FROM comms_plan WHERE id = $1`, [req.params.id]);
+    if (!row) throw new HttpError(404, "No such communication line");
+    gate(req.user, "project.write", { project: await project(row.project_id, req.user) });
+    await audited(req.user,
+      { action: "Communication removed", entity: "comms_plan", entityId: row.id, detail: row.audience, before: { ...row } },
+      async (t) => t.query(`DELETE FROM comms_plan WHERE id = $1`, [row.id]));
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
+/* ── I-4 · les critères d'un jalon, et qui a constaté ───────────────
+   Retour de terrain RT365 : « voir preuve 0/1 » était un compte de
+   documents. Un critère est une phrase posée d'avance ; il est TENU par
+   un réviseur nommé, qui n'est pas le propriétaire de la preuve qu'il
+   cite. Poser ou reformuler un critère est de l'écriture de preuve ;
+   le déclarer tenu est de l'approbation de preuve — deux pouvoirs que
+   rbac.js distingue déjà (document.write / document.approve). */
+r.post("/criteria", async (req, res, next) => {
+  try {
+    const b = req.body ?? {};
+    const p = await project(b.project, req.user);
+    gate(req.user, "document.write", { project: p });
+    const g = Math.round(Number(b.gate));
+    if (!(g >= 1 && g <= 12)) bad("A criterion belongs to a gate (1..12)");
+    if (!String(b.text ?? "").trim()) bad("A criterion is a sentence — what must be true for the gate to pass");
+    const seq = (await one(`SELECT COALESCE(MAX(seq), -1) + 1 AS n FROM gate_criterion WHERE project_id = $1 AND gate = $2`, [p.id, g])).n;
+    let id = null;
+    await audited(req.user,
+      () => ({ action: "Gate criterion posed", entity: "gate_criterion", entityId: id, detail: `gate ${g} · ${b.text}` }),
+      async (t) => {
+        id = await allocateId(t, "GC");
+        await t.query(
+          `INSERT INTO gate_criterion (id, project_id, gate, seq, text) VALUES ($1,$2,$3,$4,$5)`,
+          [id, p.id, g, seq, String(b.text).trim().slice(0, 500)]);
+      });
+    res.status(201).json({ id });
+  } catch (e) { next(e); }
+});
+
+r.patch("/criteria/:id", async (req, res, next) => {
+  try {
+    const c = await one(`SELECT * FROM gate_criterion WHERE id = $1`, [req.params.id]);
+    if (!c) throw new HttpError(404, "No such criterion");
+    const p = await project(c.project_id, req.user);
+    const b = req.body ?? {};
+    const patch = {};
+    if (b.text !== undefined) {
+      gate(req.user, "document.write", { project: p });
+      if (!String(b.text).trim()) bad("A criterion is a sentence");
+      patch.text = String(b.text).trim().slice(0, 500);
+    }
+    if (b.note !== undefined) { gate(req.user, "document.write", { project: p }); patch.note = String(b.note).slice(0, 2000); }
+    let doc = null;
+    if (b.document !== undefined) {
+      gate(req.user, "document.write", { project: p });
+      if (b.document) {
+        doc = await one(`SELECT id, owner_id, project_id, gate FROM document WHERE id = $1`, [String(b.document)]);
+        if (!doc || (doc.project_id && doc.project_id !== p.id)) bad("That document does not exist on this project");
+        patch.document_id = doc.id;
+      } else patch.document_id = null;
+    }
+    if (b.met !== undefined) {
+      const met = !!b.met;
+      if (met) {
+        /* Le constat : un réviseur nommé, indépendant de la preuve. */
+        const who = b.reviewedBy ? await one(`SELECT id FROM person WHERE id = $1 AND active`, [String(b.reviewedBy)]) : null;
+        if (!who) bad("Finding a criterion met needs reviewedBy — the named person who checked it");
+        const linked = doc ?? (c.document_id ? await one(`SELECT id, owner_id FROM document WHERE id = $1`, [c.document_id]) : null);
+        gate(req.user, "document.approve", { project: p, owner_id: linked?.owner_id ?? null, gate: c.gate });
+        if (linked?.owner_id && linked.owner_id === who.id) {
+          bad("The reviewer owns the evidence this criterion cites — an independent reviewer finds it met");
+        }
+        patch.met = true; patch.reviewed_by = who.id; patch.reviewed_on = iso(new Date());
+      } else {
+        gate(req.user, "document.approve", { project: p, owner_id: null, gate: c.gate });
+        patch.met = false; patch.reviewed_by = null; patch.reviewed_on = null;
+      }
+    }
+    const out = await audited(req.user,
+      { action: b.met === true ? "Gate criterion met" : b.met === false ? "Gate criterion reopened" : "Gate criterion updated",
+        entity: "gate_criterion", entityId: c.id, detail: `gate ${c.gate} · ${patch.text ?? c.text}` },
+      async (t) => conflict(await updateVersioned(t, "gate_criterion", c.id, requiredVersion(b, "criterion"), patch)));
+    res.json({ version: out.version });
+  } catch (e) { next(e); }
+});
+
+r.delete("/criteria/:id", async (req, res, next) => {
+  try {
+    const c = await one(`SELECT * FROM gate_criterion WHERE id = $1`, [req.params.id]);
+    if (!c) throw new HttpError(404, "No such criterion");
+    gate(req.user, "document.write", { project: await project(c.project_id, req.user) });
+    if (c.met) throw new HttpError(409, "A criterion found met is on the record — reopen it first");
+    await audited(req.user,
+      { action: "Gate criterion removed", entity: "gate_criterion", entityId: c.id, detail: c.text, before: { ...c } },
+      async (t) => t.query(`DELETE FROM gate_criterion WHERE id = $1`, [c.id]));
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
+/* ── I-7 · la décision hors réunion ─────────────────────────────────
+   Retour de terrain RT365 : les décisions prises par le propriétaire
+   d'un produit ENTRE deux comités n'avaient pas de place et ont été
+   consignées dans une occurrence de réunion artificielle. Ici, une
+   décision est un enregistrement à part entière : un décideur nommé, une
+   date, ce qui a été écarté, qui n'était pas d'accord, et ce qu'elle
+   tranche (projet, modification, risque, jalon). Elle ne se modifie pas
+   et ne s'efface pas : une décision qui change en est une nouvelle, qui
+   nomme celle qu'elle remplace. */
+r.post("/decisions", async (req, res, next) => {
+  try {
+    const b = req.body ?? {};
+    if (!b.headline) bad("A decision needs a headline");
+    if (!b.decidedBy) bad("A decision outside a meeting names who decided — an active person in the directory");
+    const who = await one(`SELECT id FROM person WHERE id = $1 AND active`, [String(b.decidedBy)]);
+    if (!who) bad("The decider must be an active person in the directory");
+    const on = b.decidedOn ? String(b.decidedOn).slice(0, 10) : iso(new Date());
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(on)) bad("decidedOn must be an ISO date");
+
+    /* L'autorité : sur un projet, celle d'y écrire ; sans projet, c'est
+       une décision de portefeuille, un acte de niveau groupe. */
+    let p = null;
+    if (b.projectId) {
+      p = await project(b.projectId, req.user);
+      gate(req.user, "project.write", { project: p });
+    } else if (!["admin", "group"].includes(req.user.role)) {
+      throw new HttpError(403, "Portfolio-wide decisions are recorded at group level");
+    }
+    /* Les liens doivent exister, et sur CE projet : un identifiant deviné
+       ne doit rien révéler et rien relier de travers. */
+    const link = async (table, id, col = "project_id") => {
+      if (!id) return null;
+      const row = await one(`SELECT id, ${col} AS pid FROM ${table} WHERE id = $1`, [String(id)]);
+      if (!row || (p && row.pid && row.pid !== p.id)) bad(`That ${table.replace("_", " ")} does not exist on this project`);
+      return row.id;
+    };
+    const crId = await link("change_request", b.crId);
+    const raidId = await link("raid_item", b.raidId);
+    const msId = await link("milestone", b.milestoneId);
+    let supersedes = null;
+    if (b.supersedes) {
+      const prev = await one(`SELECT id FROM meeting_decision WHERE id = $1`, [String(b.supersedes)]);
+      if (!prev) bad("The decision this one supersedes does not exist");
+      supersedes = prev.id;
+    }
+
+    let id = null;
+    await audited(req.user,
+      () => ({ action: "Decision recorded", entity: "meeting_decision", entityId: id,
+               detail: String(b.headline).slice(0, 300) + (supersedes ? " — supersedes " + supersedes : "") }),
+      async (t) => {
+        id = await allocateId(t, "DEC", { pad: 3 });
+        await t.query(
+          `INSERT INTO meeting_decision
+             (id, occurrence_id, headline, rationale, alternatives, dissent, project_id, cr_id,
+              raid_id, milestone_id, supersedes, decided_by, decided_on, recorded_by)
+           VALUES ($1,NULL,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+          [id, String(b.headline).slice(0, 300), String(b.rationale ?? "").slice(0, 4000),
+           String(b.alternatives ?? "").slice(0, 4000), String(b.dissent ?? "").slice(0, 2000),
+           p?.id ?? null, crId, raidId, msId, supersedes, who.id, on, req.user.id]);
+      });
+    res.status(201).json({ id });
   } catch (e) { next(e); }
 });
 

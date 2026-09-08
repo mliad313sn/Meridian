@@ -34,6 +34,8 @@ const DEFAULT_SETTINGS = {
   capexEnvelope: 0,
   cadence: "Weekly — Monday 09:00",
   orgName: "MERIDIAN",
+  /* SaaS-04 — the instance's own name in a fleet; empty on a single one. */
+  instanceId: "",
   /* R-01 — the hosts an evidence link may point at, comma-separated.
      EMPTY FAILS CLOSED: until somebody names the group's document estate,
      nothing can be approved as evidence — the same rule the change
@@ -105,7 +107,8 @@ export async function loadPortfolio(user) {
   const [
     activities, deps, milestones, ledger, raidRows, crRows, stepRows,
     allocations, docs, columns, items, crossDeps, narrativeRows, extLinks,
-    benefits, waves, commitments, timesheets, lessonRows, tolerances, exceptions, caseRows,
+    benefits, waves, commitments, timesheets, lessonRows, tolerances, exceptions, caseRows, criterionRows,
+    stakeholderRows, commsRows,
   ] = await Promise.all([
     inScope(`SELECT * FROM activity WHERE project_id = ANY($1) ORDER BY project_id, stage`),
     inScope(`SELECT d.* FROM activity_dep d JOIN activity a ON a.id = d.activity_id
@@ -162,6 +165,11 @@ export async function loadPortfolio(user) {
               WHERE project_id = ANY($1) ORDER BY raised_on DESC, id`),
     /* PM-03 — la promesse contre laquelle le réalisé se relira. */
     inScope(`SELECT * FROM business_case WHERE project_id = ANY($1)`),
+    /* I-4 — les critères de chaque jalon, et qui les a constatés. */
+    inScope(`SELECT * FROM gate_criterion WHERE project_id = ANY($1) ORDER BY project_id, gate, seq, id`),
+    /* PM-05 / PM-11 — qui compte, et qui on informe. */
+    inScope(`SELECT * FROM stakeholder WHERE project_id = ANY($1) ORDER BY project_id, influence DESC, interest DESC, name`),
+    inScope(`SELECT * FROM comms_plan WHERE project_id = ANY($1) ORDER BY project_id, next_on NULLS LAST, id`),
   ]);
 
   const depsByActivity = new Map();
@@ -227,6 +235,8 @@ export async function loadPortfolio(user) {
     })),
     programmes: programmes.map((p) => ({
       id: p.id, name: p.name, sponsor: p.sponsor, managerId: p.manager_id,
+      /* I-3 — the programme's own gate ladder, or null for the default. */
+      gateModel: p.gate_model ? jsonValue(p.gate_model) : null,
       origin: p.origin ?? "local", version: p.row_version,
     })),
     people: people.map((p) => ({
@@ -261,6 +271,8 @@ export async function loadPortfolio(user) {
       fit: p.fit_score ?? null, value: p.value_score ?? null,
       risk: p.risk_score ?? null, effort: p.effort_score ?? null,
       rank: p.rank_seq ?? null,
+      /* I-2 — d'où vient cette ligne, quand un système branché l'a créée. */
+      externalSource: p.external_source ?? null, externalId: p.external_id ?? null,
       version: p.row_version,
     })),
 
@@ -282,6 +294,9 @@ export async function loadPortfolio(user) {
       start: a.start_date, end: a.end_date, baseStart: a.base_start, baseEnd: a.base_end,
       weight: Number(a.weight), pct: a.pct, owner: a.owner_id,
       deps: depsByActivity.get(a.id) ?? [],
+      /* I-5 — qui a mesuré cet avancement, et quand ; vide = saisi ici. */
+      progressSource: a.progress_source ?? "", progressAt: a.progress_at ?? null,
+      externalSource: a.external_source ?? null, externalId: a.external_id ?? null,
       origin: a.origin ?? "local", version: a.row_version,
     })),
 
@@ -292,6 +307,7 @@ export async function loadPortfolio(user) {
       /* PM-04 — les critères posés d'avance, et qui a constaté. */
       acceptanceCriteria: m.acceptance_criteria ?? "",
       acceptedBy: m.accepted_by ?? null, acceptedOn: m.accepted_on ?? null,
+      externalSource: m.external_source ?? null, externalId: m.external_id ?? null,
       origin: m.origin ?? "local", version: m.row_version,
     })),
 
@@ -392,6 +408,10 @@ export async function loadPortfolio(user) {
            assurance. */
         tp: r.target_probability, ti: r.target_impact,
         owner: r.owner_id, opened: r.opened_on, review: r.review_on,
+        /* I-8 — contre quoi il se lève : le jalon de gouvernance menacé,
+           la modification qui le porte. */
+        gate: r.gate ?? null, cr: r.cr_id ?? null,
+        externalSource: r.external_source ?? null, externalId: r.external_id ?? null,
         originSite: r.origin_site ?? null,   // a site concern names its raising site
         version: r.row_version,
       })),
@@ -429,12 +449,37 @@ export async function loadPortfolio(user) {
         version: d.row_version,
       })),
 
+    /* I-4 — the criteria posed for each gate, and who found them met. */
+    criteria: criterionRows.map((c) => ({
+      id: c.id, project: c.project_id, gate: c.gate, seq: c.seq, text: c.text,
+      document: c.document_id ?? null, met: c.met,
+      reviewedBy: c.reviewed_by ?? null, reviewedOn: c.reviewed_on ?? null, note: c.note ?? "",
+      version: c.row_version,
+    })),
+
+    /* PM-05 — the stakeholder register: interest × influence, attitude,
+       how they are engaged, and who on the team owns the relationship. */
+    stakeholders: stakeholderRows.map((x) => ({
+      id: x.id, project: x.project_id, person: x.person_id ?? null, name: x.name,
+      organisation: x.organisation, role: x.role_label, interest: x.interest, influence: x.influence,
+      attitude: x.attitude, engagement: x.engagement, owner: x.owner_id ?? null, note: x.note,
+      version: x.row_version,
+    })),
+    /* PM-11 — the communication plan: who hears what, how often, from whom. */
+    comms: commsRows.map((x) => ({
+      id: x.id, project: x.project_id, audience: x.audience, purpose: x.purpose, channel: x.channel,
+      frequency: x.frequency, owner: x.owner_id ?? null, nextOn: x.next_on ?? null, note: x.note,
+      version: x.row_version,
+    })),
+
     columns: columns.map((c) => ({ id: c.id, name: c.name, wip: c.wip })),
 
     items: items.map((i) => ({
       id: i.id, project: i.project_id, column: i.column_id, title: i.title,
       assignee: i.assignee_id, points: i.points, priority: i.priority,
-      created: i.created_on, version: i.row_version,
+      created: i.created_on,
+      externalSource: i.external_source ?? null, externalId: i.external_id ?? null,
+      version: i.row_version,
     })),
 
     crossDeps: crossDeps.map((c) => ({

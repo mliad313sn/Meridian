@@ -68,12 +68,17 @@ gates before it will let a change through.
 ```bash
 npm install
 npm run seed     # migrate + build the opening book (add -- --force to rebuild)
-npm run dev      # http://localhost:4173
+npm run dev      # builds the client once if needed, then http://localhost:4173
 ```
 
 That is the whole setup. With no `DATABASE_URL` the server runs
 **PGlite** — PostgreSQL 16.4 compiled to WebAssembly — from
-`server/.data/pgdata`. Same SQL, same planner, no server to install.
+`server/.data/pgdata`, created if missing. Same SQL, same planner, no
+server to install. A `.env` at the root is read by every command and
+never overrides what the shell set; a book **in memory** has to be asked
+for (`MERIDIAN_EPHEMERAL=1`) and `/api/health` says so. (The first real
+integrator lost forty minutes and a seed to the previous behaviour —
+docs/33, REQ-01.)
 
 For a real cluster:
 
@@ -86,9 +91,11 @@ DATABASE_URL=postgres://user:pass@host:5432/meridian npm start
 Other commands:
 
 ```bash
-npm test              # 413 tests
-npm run audit         # nine gates: routes, CRUD+audit, versions, controls, language, field help, kit imports, view render, API contract
-npm run verify        # tests + build + the nine gates + a dependency audit
+npm test              # the suites — the count is in CHANGELOG.md
+npm run audit         # ten gates: routes, CRUD+audit, versions, controls, language, field help, kit imports, API contract, one version everywhere, view render
+npm run verify        # tests + build + the ten gates + a dependency audit
+npm run backup        # pg_dump (PostgreSQL) or the data directory (PGlite) → server/.data/backups
+npm run restore-drill # restore the newest backup ELSEWHERE, recount, time it — /api/health reports it
 npm run sweep         # 286 use cases × 4 roles + 72 view renders, on a fresh instance
 npm run build         # build the client into web/dist
 npm run package:installer  # dist/MeridianSetup.exe — Windows service installer
@@ -99,6 +106,7 @@ npm run training      # a separate practice instance on :4180 — never touches 
 npm run training -- --reset   # put it back to how it started
 npm run training -- --drop    # erase it
 npm run dev:web       # Vite dev server with HMR, proxying /api to :4173
+npm run dev:server    # the bare server, without the build step
 bash scripts/restart.sh   # restart the dev server *gracefully* — see the note below
 ```
 
@@ -145,13 +153,17 @@ shared/          engine.js   EVM · CPM · gates · RAID · capacity  (behaviour
                  rbac.js     the one place authority is decided
                  meetings.js agenda generation and minutes
 
-server/          src/db.js         pg | PGlite, migrations, optimistic concurrency
+server/          src/env.js        .env, the data directory, the one version number
+                 src/db.js         pg | PGlite, migrations, optimistic concurrency
+                 src/v1write.js    the write API — upserts by external id, Idempotency-Key
+                 src/backup.js     backup, and the restore drill that proves it
+                 src/posture.js    which published passwords still open a door
                  src/auth.js       scrypt, server-side sessions
                  src/audit.js      append-only, inside the mutation's transaction
                  src/portfolio.js  rows → the shape the engine reads
                  src/routes/       auth · portfolio · meetings · admin · import
-                 migrations/       ordered SQL (001–032, applied at boot)
-                 test/             413 tests
+                 migrations/       ordered SQL (001–038, applied at boot)
+                 test/             the suites — count in CHANGELOG.md
 
 web/             src/ui/kit.js     h() builder, dialogs, tables, charts (from v4)
                  src/lib/          api client, state, permission mirror
@@ -205,6 +217,11 @@ never a silent overwrite.
 | [`docs/29-comite-international-saas.md`](docs/29-comite-international-saas.md) | International, SaaS & multi-tenant committee (FR) — instance-per-tenant decided, the language registry, and PostgreSQL required in service |
 | [`docs/30-vues-restitution.md`](docs/30-vues-restitution.md) | The `reporting.*` read contract — fourteen stable SQL views for Power BI, Excel, Tableau, Qlik |
 | [`docs/31-preuves-sharepoint.md`](docs/31-preuves-sharepoint.md) | SharePoint/OneDrive as evidence hosts — the recipe, and what the probe can honestly say |
+| [`docs/32-comite-recette-processus.md`](docs/32-comite-recette-processus.md) | Process-acceptance committee (FR) — the ordered journey of a new organisation, and the seams it found |
+| [`docs/33-retour-terrain-rt365.md`](docs/33-retour-terrain-rt365.md) | **The RT365 field return** — the first real programme's twelve findings, the request register in detail, the Product Owner's charter and decisions, the communication loop; [`docs/requests/rt365.json`](docs/requests/rt365.json) is the same as data |
+| [`docs/34-exploitation.md`](docs/34-exploitation.md) | Operating it for real — PostgreSQL, backup and the restore drill that proves it, second instance, proxy, upgrade tenant by tenant, fleet template |
+| [`docs/security-policy-template.md`](docs/security-policy-template.md) | The written security policy SECURITY.md says is yours — as a page to fill in |
+| [`docs/en/`](docs/en/) | The committee record 16–32 in English (the French originals govern) |
 
 ---
 
@@ -215,6 +232,14 @@ loop against this repository, bounded by the requirements register and
 the AMDEC. With no argument it takes the highest-RPN open finding. It
 stops at DONE, BLOCKED, or after five cycles without closure. See
 [`.claude/commands/goal.md`](.claude/commands/goal.md).
+
+`/product-owner` is the role above it: it reviews the field repository
+(`mliad313sn/RT365`, every branch) and the issues it files here for what
+they say about Meridian, enters every new request in the register,
+decides, convenes counsellors, and drives the highest-value open line
+through `/goal`. See
+[`.claude/commands/product-owner.md`](.claude/commands/product-owner.md)
+and `docs/33` §1.
 
 ---
 
@@ -252,6 +277,9 @@ Stated plainly rather than buried; all scored in the AMDEC.
   teaches a supply-chain weakness to everyone who clones it. The file is
   now ignored, and [CONTRIBUTING.md](CONTRIBUTING.md) says to install your
   proxy's CA instead.
+- **The seeded demo passwords are measured, not assumed changed**: the
+  server refuses to start in production while one still opens an active
+  account, and Administration shows which (docs/33, REQ-12).
 - **Three settings wait on the sponsor** (accepted in writing,
   `docs/18-amdec-recette.md`): `MERIDIAN_SMTP_URL` before notifications
   actually send, `MERIDIAN_OIDC_*` before Entra sign-in appears, and the

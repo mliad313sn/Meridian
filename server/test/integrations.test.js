@@ -112,7 +112,13 @@ describe("INT-02 · la portée décide, et elle décide seule", () => {
     assert.equal(disco.status, 200);
     assert.deepEqual(disco.body.scopesHeld, []);
     assert.equal(disco.body.integration, "Pas encore branchée");
-    assert.equal(disco.body.endpoints.length, Object.keys(SCOPES).length);
+    /* I-2 : la découverte liste chaque route à portée — lues dans la
+       description, pas recopiées. Chaque portée du vocabulaire est servie
+       par au moins une route, et aucune route ne cite une portée inconnue. */
+    const served = new Set(disco.body.endpoints.map((e) => e.scope));
+    assert.deepEqual([...served].sort(), Object.keys(SCOPES).sort());
+    assert.equal(disco.body.endpoints.length, mountedRoutes().length - 2,
+      "toutes les routes montées sauf les deux ouvertes (découverte, contrat)");
   });
 });
 

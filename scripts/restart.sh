@@ -18,8 +18,8 @@ if [ -n "${PID:-}" ]; then
   sleep 3
 fi
 
-PGLITE_DIR="${PGLITE_DIR:-./server/.data/pgdata}" PORT="$PORT" \
-  node server/src/index.js > /tmp/meridian-server.log 2>&1 &
+PORT="$PORT" \
+  node scripts/dev.mjs > /tmp/meridian-server.log 2>&1 &
 
 for i in $(seq 1 20); do
   if curl -sf "http://localhost:$PORT/api/health" >/dev/null 2>&1; then

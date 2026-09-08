@@ -25,7 +25,12 @@ import { Router } from "express";
 import { loadPortfolio } from "../portfolio.js";
 import { readAudit } from "../audit.js";
 import { requireIntegration } from "../integrations.js";
-import { openApiDocument } from "../openapi.js";
+import { openApiDocument, scopedEndpoints } from "../openapi.js";
+import { packageVersion } from "../env.js";
+import {
+  idempotent, upsertProject, upsertMilestone, upsertRaid, upsertDecision, upsertAction,
+  upsertActivity, upsertWorkItem,
+} from "../v1write.js";
 
 const r = Router();
 
@@ -74,6 +79,32 @@ r.get("/audit", requireIntegration("read:audit"), async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+/* ── I-2 · l'écriture, par identité externe ───────────────────────────
+   Retour de terrain RT365 : « l'API publique est en lecture seule ; toute
+   écriture passe par 144 routes de session non documentées ; sans
+   identifiant externe, l'intégrateur encode son identité dans les
+   titres. » Chaque PUT ci-dessous crée ou met à jour la ligne que
+   l'intégration nomme ELLE-MÊME ; les règles métier sont celles de
+   l'écran (server/src/v1write.js). Idempotency-Key en option. */
+const ext = (req) => {
+  const id = String(req.params.externalId ?? "").trim();
+  if (!id || id.length > 200) throw Object.assign(new Error("externalId is 1 to 200 characters"), { status: 400 });
+  return id;
+};
+const write = (fn) => async (req, res, next) => {
+  try {
+    const out = await fn(req.user, ext(req), req.body ?? {});
+    res.status(out.created ? 201 : 200).json({ ...stamp(), ...out });
+  } catch (e) { next(e); }
+};
+r.put("/projects/:externalId", requireIntegration("write:portfolio"), idempotent(), write(upsertProject));
+r.put("/milestones/:externalId", requireIntegration("write:portfolio"), idempotent(), write(upsertMilestone));
+r.put("/raid/:externalId", requireIntegration("write:portfolio"), idempotent(), write(upsertRaid));
+r.put("/activities/:externalId", requireIntegration("write:portfolio"), idempotent(), write(upsertActivity));
+r.put("/workitems/:externalId", requireIntegration("write:portfolio"), idempotent(), write(upsertWorkItem));
+r.put("/decisions/:externalId", requireIntegration("write:meetings"), idempotent(), write(upsertDecision));
+r.put("/actions/:externalId", requireIntegration("write:meetings"), idempotent(), write(upsertAction));
+
 /**
  * La description OpenAPI de ce contrat, servie par l'instance elle-même.
  *
@@ -88,7 +119,7 @@ r.get("/audit", requireIntegration("read:audit"), async (req, res, next) => {
  */
 r.get("/openapi.json", requireIntegration(), (req, res) => {
   res.json(openApiDocument({
-    version: process.env.MERIDIAN_VERSION || "dev",
+    version: packageVersion(),
     servers: [{ url: `${req.protocol}://${req.get("host")}`, description: "This instance" }],
   }));
 });
@@ -104,10 +135,9 @@ r.get("/", requireIntegration(), (req, res) => {
     integration: req.user.displayName,
     scopesHeld: req.user.scopes,
     describedBy: "/api/v1/openapi.json",
-    endpoints: [
-      { path: "/api/v1/portfolio", scope: "read:portfolio" },
-      { path: "/api/v1/audit", scope: "read:audit" },
-    ],
+    /* Lu dans la description, pas recopié : une route ajoutée là-bas
+       apparaît ici sans qu'on y pense. */
+    endpoints: scopedEndpoints(),
   });
 });
 

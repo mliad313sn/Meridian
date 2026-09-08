@@ -1,0 +1,58 @@
+# I-9 (retour de terrain RT365, M-09) — une version est un tag, et un tag
+# est une livraison. Pousser `vX.Y.Z` :
+#
+#   1. rejoue `npm run verify` (tests, construction, dix portes, audit des
+#      dépendances) sur le commit étiqueté — F10 y vérifie que package.json,
+#      package-lock.json, docs/openapi.v1.json et CHANGELOG.md disent la
+#      même version ;
+#   2. publie une Release GitHub avec la section du CHANGELOG comme
+#      notes, le contrat OpenAPI et le client construit en pièces jointes.
+#
+# L'installateur Windows signé (S-16) n'est PAS produit ici : la signature
+# exige un certificat que le commanditaire détient, et un installateur non
+# signé publié « en attendant » apprendrait à cliquer sur l'avertissement.
+#
+#   git tag -a v5.10.0 -m "5.10.0" && git push origin v5.10.0
+
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: npm }
+      - run: npm ci
+      - run: npm run verify
+
+      - name: The tag names the version package.json carries
+        run: |
+          V=$(node -p "require('./package.json').version")
+          [ "v$V" = "${GITHUB_REF_NAME}" ] || { echo "tag ${GITHUB_REF_NAME} but package.json says $V"; exit 1; }
+
+      - name: Release notes from CHANGELOG.md
+        run: |
+          V=$(node -p "require('./package.json').version")
+          awk -v v="$V" '
+            $0 ~ "^## \\[" v "\\]" { on=1; print; next }
+            on && /^## \[/ { exit }
+            on { print }' CHANGELOG.md > release-notes.md
+          test -s release-notes.md || echo "See CHANGELOG.md." > release-notes.md
+          (cd web && tar czf ../meridian-web-dist-$V.tar.gz dist)
+          cp docs/openapi.v1.json openapi.v1-$V.json
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          body_path: release-notes.md
+          files: |
+            openapi.v1-*.json
+            meridian-web-dist-*.tar.gz

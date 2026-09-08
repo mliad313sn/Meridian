@@ -10,7 +10,7 @@
 
 import { WBS, SLOTS } from "./seed-data.js";
 import { insertMany, allocateId } from "./db.js";
-import { GATES, days, addDays, iso, by, D } from "../../shared/engine.js";
+import { GATES, days, addDays, iso, by, D, normaliseGateModel } from "../../shared/engine.js";
 import { fromM } from "./portfolio.js";
 
 /** Expand a project's template into dated, dependency-linked activities. */
@@ -35,10 +35,11 @@ export function activitiesFor(project) {
   });
 }
 
-/** The four gates, placed proportionally across the project window. */
-export function milestonesFor(project) {
+/** The programme's gates (I-3) — the default four unless it declares
+    its own — placed proportionally across the project window. */
+export function milestonesFor(project, ladder = GATES) {
   const span = Math.max(1, days(project.start, project.finish));
-  return GATES.map((g) => ({
+  return ladder.map((g) => ({
     id: `${project.id}-G${g.n}`,
     name: g.name,
     gate: g.n,
@@ -48,15 +49,27 @@ export function milestonesFor(project) {
 }
 
 /** A draft evidence document per gate, so gate locking has something to read. */
-export function gateDocsFor(project) {
-  return GATES.map((g) => ({
+export function gateDocsFor(project, ladder = GATES) {
+  const last = ladder.length;
+  return ladder.map((g) => ({
     id: null,   // assigned from the atomic counter by scaffoldProject
-    name: g.evidence.split(",")[0] + " — " + project.id,
-    type: g.n === 1 ? "Charter" : g.n === 4 ? "Closure" : g.n === 2 ? "Design" : "Assurance",
+    name: (g.evidence.split(",")[0].trim() || g.name) + " — " + project.id,
+    type: g.n === 1 ? "Charter" : g.n === last ? "Closure" : g.n === 2 ? "Design" : "Assurance",
     gate: g.n,
     status: "Draft",
     revision: "0.1",
   }));
+}
+
+/* I-4 — the ladder's "evidence" list becomes the gate's criteria, one per
+   comma-separated item, posed in advance and waiting for a named reviewer. */
+export function gateCriteriaFor(ladder = GATES) {
+  const out = [];
+  for (const g of ladder) {
+    g.evidence.split(",").map((t) => t.trim()).filter(Boolean)
+      .forEach((text, i) => out.push({ gate: g.n, seq: i, text: text[0].toUpperCase() + text.slice(1) }));
+  }
+  return out;
 }
 
 /**
@@ -95,6 +108,16 @@ export function reschedule(project, existing) {
 export async function scaffoldProject(t, project) {
   const acts = activitiesFor(project);
   const owner = project.pm ?? null;
+  /* I-3 — the programme's ladder, read inside the caller's transaction. */
+  const prog = project.programme
+    ? (await t.query(`SELECT gate_model FROM programme WHERE id = $1`, [project.programme])).rows[0]
+    : null;
+  let ladder = GATES;
+  try {
+    const m = prog?.gate_model;
+    const parsed = typeof m === "string" ? JSON.parse(m) : m;
+    ladder = normaliseGateModel(parsed) ?? GATES;
+  } catch { ladder = GATES; }
 
   await insertMany(t, "activity",
     ["id", "project_id", "name", "stage", "start_date", "end_date",
@@ -112,7 +135,7 @@ export async function scaffoldProject(t, project) {
 
   await insertMany(t, "milestone",
     ["id", "project_id", "name", "due_date", "base_date", "gate", "kind", "owner_id"],
-    milestonesFor(project).map((m) => ({
+    milestonesFor(project, ladder).map((m) => ({
       id: m.id, project_id: project.id, name: m.name,
       due_date: m.date, base_date: m.date, gate: m.gate, kind: "gate", owner_id: owner,
     })));
@@ -120,7 +143,7 @@ export async function scaffoldProject(t, project) {
   /* Evidence identifiers come from the same atomic counter every other
      document uses, so a project created while someone else is adding a
      document cannot collide with them. */
-  const docs = gateDocsFor(project);
+  const docs = gateDocsFor(project, ladder);
   for (const d of docs) d.id = await allocateId(t, "DOC");
   await insertMany(t, "document",
     ["id", "project_id", "name", "doc_type", "gate", "owner_id", "revision", "status", "updated_on"],
@@ -129,6 +152,13 @@ export async function scaffoldProject(t, project) {
       gate: d.gate, owner_id: owner, revision: d.revision, status: d.status,
       updated_on: iso(new Date()),
     })));
+
+  /* I-4 — the criteria each gate was declared with, posed at birth. */
+  const crit = gateCriteriaFor(ladder);
+  for (const c of crit) c.id = await allocateId(t, "GC");
+  await insertMany(t, "gate_criterion",
+    ["id", "project_id", "gate", "seq", "text"],
+    crit.map((c) => ({ id: c.id, project_id: project.id, gate: c.gate, seq: c.seq, text: c.text })));
 
   if (owner) {
     await t.query(
