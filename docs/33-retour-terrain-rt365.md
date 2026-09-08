@@ -489,13 +489,23 @@ answers in three places it can read:
 - **Counterpart.** RT365's Program Orchestrator (docs/PMO.md) is the
   requester of record; its Product Owner agent decides on its side.
   Meridian's Product Owner answers them by name on the issue.
-- **Cadence.** Every `/product-owner` run, and at least weekly while
-  RT365 is live — a Routine on this repository can fire it; the sponsor
-  decides whether to schedule one.
+- **Cadence.** Scheduled, since 08/09: the Routine *Meridian Product
+  Owner — RT365 field-return round* (`trig_01JCnLkW5KAv4bNx4A2x3ELn`)
+  fires a fresh session every weekday at 07:00 UTC. Each firing runs the
+  review probe, captures what is new, drives the highest-value open line,
+  convenes the two counsellors, pushes, and answers the issues it moved.
+  A round that finds nothing new says so in one line and changes nothing —
+  a quiet round is a complete round, not a missed one. The sponsor can
+  pause or re-time it from the Routines list; `/product-owner` still runs
+  on demand between firings.
 - **Acceptance.** A line is `done` when it is on the branch with its
   test; it is `accepted` when the requester says so on the issue (a
   comment, or closing it themselves); it is `released` when a version
-  tag carries it. `docs/requests/rt365.json` carries all three, and a
+  tag carries it. **No line is `released` yet**: `v5.10.0` is tagged
+  locally on `985d6af`, but a session cannot push a tag ref — GitHub
+  answers 403 on it while branch pushes succeed — so a maintainer must
+  push the tag before the release workflow runs. Until then RT365 pins
+  the branch, not the version (D-33.18). `docs/requests/rt365.json` carries all three, and a
   `history` per line.
 - **Escalation.** When RT365 rejects a refusal or a `done`, the line
   goes back to `open` with the objection quoted, and the sponsor of
@@ -533,6 +543,7 @@ ahead — which is the whole reason the probe exists.
 | D-33.13 | 08/09 | The default ladder seeds no criteria; only a declared ladder does. | Seed for all (refused: the code counsellor traced eleven surprise criteria and a group-only clearance on every new site project). | none |
 | D-33.14 | 08/09 | A standing human act is a RAID dependency with a review date, not a meeting action; the API keeps raising actions only in open rooms. | Actions without a room (refused: an action is what a room asked of someone). | none |
 | D-33.15 | 08/09 | The loop gains a counterpart, a cadence, three acceptance states, an escalation rule and a register version (§4). | None. | PMO counsellor asked for it |
+| D-33.18 | 08/09 | The review is scheduled, not remembered: a weekday Routine fires a fresh Product Owner round; and `released` waits on a maintainer's tag push, which a session cannot do (403 on a tag ref). | Rely on the next person to run `/product-owner` (refused: a duty nothing fires is a duty nobody performs — the branch moved sixteen commits between two reads on the first day). Push the tag from a session (refused: it is a permission boundary, not an obstacle to route around). | none |
 | D-33.17 | 08/09 | A milestone date is mandatory but carries a basis; a placeholder is never missed or overdue. | A nullable date (refused: every screen sorts and draws by it; a null would have touched the roadmap, the Gantt, the agenda and the horizon). | none |
 | D-33.16 | 08/09 | `/api/health` stays unauthenticated and names the organisation and the instance — a supervisor holds no session; the proxy can hide it. | Authenticate it (refused: fleet supervision is the point). | code counsellor noted the disclosure |
 

@@ -480,7 +480,19 @@
       "accepted": "the requester said so on the issue",
       "released": "a version tag carries it"
     },
-    "escalation": "a rejected refusal or done goes back to open with the objection quoted; the sponsor of both repositories is the tie-breaker"
+    "escalation": "a rejected refusal or done goes back to open with the objection quoted; the sponsor of both repositories is the tie-breaker",
+    "cadence": {
+      "routine": "Meridian Product Owner — RT365 field-return round",
+      "triggerId": "trig_01JCnLkW5KAv4bNx4A2x3ELn",
+      "schedule": "0 7 * * 1-5 (UTC), a fresh session per firing",
+      "onDemand": "/product-owner",
+      "quietRound": "a round that finds nothing new changes nothing and says so"
+    },
+    "release": {
+      "tag": "v5.10.0",
+      "state": "tagged locally on 985d6af; not pushed — a session gets HTTP 403 on a tag ref, a maintainer must push it",
+      "consequence": "no line is `released` yet; pin the branch claude/meridian-rt365-feedback-d6vo3i, not the version"
+    }
   },
-  "registerVersion": 3
+  "registerVersion": 4
 }
