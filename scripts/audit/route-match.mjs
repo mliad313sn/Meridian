@@ -80,7 +80,7 @@ for (const f of clientFiles) {
    five governance readouts were drawn on the portfolio page, the route
    existed and answered, and F1 still reported the call as a button that
    404s — which is the gate lying in the safe direction, but lying. */
-const mounts = { portfolio: "", signals: "", meetings: "/meetings", admin: "/admin", auth: "/auth", federation: "/federation", importcsv: "/import" };
+const mounts = { portfolio: "", signals: "", ladder: "", meetings: "/meetings", admin: "/admin", auth: "/auth", federation: "/federation", importcsv: "/import" };
 const served = new Set();
 for (const [f, prefix] of Object.entries(mounts)) {
   const s = fs.readFileSync(`server/src/routes/${f}.js`, "utf8");

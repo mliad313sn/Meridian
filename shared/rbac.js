@@ -44,6 +44,11 @@ export const ACTIONS = [
   /* V-13/V-04: anyone who can write may ASK for something; deciding what
      the group will and will not do, and in what order, is group work. */
   "demand.raise", "demand.decide", "priority.write",
+  /* REQ-24 (V-5) : la PONDÉRATION du classement de portefeuille. Elle
+     n'est pas `priority.write` — celle-là note UNE ligne, celle-ci décide
+     comment TOUTES les lignes se comparent, dans tous les programmes à la
+     fois. Voir le `case` plus bas pour le niveau et sa raison. */
+  "priority.weighting",
   /* R-02 : déclarer une absence et son suppléant est un fait du site,
      comme le calendrier des arrêts. */
   "absence.write",
@@ -63,6 +68,11 @@ export const ACTIONS = [
      a une raison de vérifier qu'elles mordent — et il ne DÉCIDE rien :
      il n'ouvre que ce que les chiffres disent déjà. */
   "exception.sweep",
+  /* REQ-27 (V-8) : DÉPLACER un projet déjà né sur l'échelle de jalons de
+     son programme. Ce n'est pas `project.gate` — celui-là franchit un
+     barreau ; celui-ci change les barreaux. Voir le `case` plus bas pour
+     le niveau et sa raison. */
+  "ladder.migrate",
   /* PM-02 : relever un enseignement est le travail de qui l'a vécu ;
      décider qu'il vaut pour les huit sites ne l'est pas. L'adoption est
      ce qui rend l'enseignement visible AILLEURS — sans elle, un registre
@@ -375,6 +385,29 @@ export function can(user, action, resource = {}) {
         : deny("this programme does not land on a site granted to you — concerns follow the work that reaches your site");
     }
 
+    /* REQ-27 (V-8) — déplacer un projet existant sur l'échelle de son
+       programme. Le raisonnement d'`exception.sweep`, appliqué à
+       l'endroit où l'échelle est DÉCLARÉE : le niveau qui pose l'échelle
+       est le niveau qui y fait passer un projet. Une échelle de jalons
+       est une donnée du PROGRAMME (036), donc c'est un geste du bureau de
+       programme, borné par l'habilitation sur ce programme-là — et jamais
+       un geste de site : un site ne possède pas le processus que
+       l'échelle encode, il le subit. Le viewer est déjà refusé plus haut.
+
+       Ce cas ne peut pas tomber dans le défaut projet plus bas : celui-ci
+       accorderait le geste à un chef de site sur ses propres projets. */
+    case "ladder.migrate": {
+      const p = resource.project;
+      if (!p) return deny("no project in scope — a ladder move is made on one named project; open it from the portfolio first");
+      if (user.role !== "group") {
+        return deny("a gate ladder is declared on the programme, and the level that declares it is the level that moves a project onto it — ask your programme office");
+      }
+      const { programmes } = grantsOf(user);
+      return programmes.has(p.programme_id)
+        ? allow()
+        : deny("that programme is outside your grant — ask an administrator to add it, or ask the programme office that holds it");
+    }
+
     /* Q-2 — à l'échelle du portefeuille, donc sans projet à nommer. */
     case "exception.sweep":
       return user.role === "group"
@@ -393,6 +426,31 @@ export function can(user, action, resource = {}) {
       return user.role === "group"
         ? allow()
         : deny("the portfolio is prioritised at group level — your programme office scores and ranks");
+
+    /* REQ-24 — LA PONDÉRATION. Portefeuille-large, donc sans projet à
+       nommer : sans ce `case` elle tomberait dans le défaut projet plus
+       bas et serait refusée à tout le monde pour n'avoir pas de projet
+       en portée — le piège que `data.import`, `period.close` et
+       `lesson.adopt` ont déjà payé dans ce fichier.
+
+       Pourquoi GROUPE, et pas site : le raisonnement d'`exception.sweep`,
+       appliqué à un cran de plus haut. Le niveau qui pose une marge est
+       celui qui la vérifie ; le niveau qui pose une PONDÉRATION est celui
+       qui répond de la coupe qu'elle trace. Cette coupe traverse tous les
+       programmes — elle dit à un site que son projet passe sous la
+       ligne — et un chef de site qui règle les poids de sa propre file ne
+       pose pas un arbitrage, il énonce une préférence.
+
+       Pourquoi pas ADMINISTRATEUR non plus : ce n'est pas un réglage de
+       la machine, c'est la politique d'investissement du groupe, et la
+       confier à l'informatique serait retirer au bureau de programme la
+       seule décision dont il répond devant le comité. Le contrôle contre
+       l'abus n'est pas le niveau, c'est la piste : chaque changement dit
+       ce que le poids valait et ce qu'il est devenu, sous un nom. */
+    case "priority.weighting":
+      return user.role === "group"
+        ? allow()
+        : deny("the level that sets a weighting is the level that answers for the cut it draws — ask your programme office");
 
     case "absence.write":
       /* Same shape as the shutdown calendar: the site keeps its own

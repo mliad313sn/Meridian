@@ -29,6 +29,14 @@ import {
   SIGNAL_TEXT, SIGNAL_ORDER, formatSignal, formatTrend,
 } from "../../../shared/govsignals.js";
 
+/* REQ-24 — the ranking's arithmetic is shared with the server, for the
+   reason govsignals gives: two projections of the same number diverge at
+   the first change, and then the room argues about which screen is right
+   instead of about which project to stop. */
+import {
+  PRIORITY_TEXT, INPUTS, formatScore, formatFte, formatInput, formatShare,
+} from "../../../shared/prioritise.js";
+
 import { meetingsView, invalidateMeetings } from "./meetings.js";
 import { accessPanel, directoryPanel, referencePanel, federationPanel, notificationsPanel, importPanel, continuityPanel, integrationsPanel, invalidateAdmin } from "./administration.js";
 
@@ -2909,6 +2917,10 @@ Views.pipeline = (db) => {
         note: pri.over ? money(pri.over) + t(" over the envelope") : t("everything fits"), accent: pri.unfunded > 0 },
     ]),
 
+    /* REQ-24 (V-5) — the ranking proper: every input on the row, the
+       weighting stated, and the line where the capacity runs out. */
+    prioritisationBlock(db),
+
     h("section", { class: "sec", style: "margin-top:16px" },
       sectionHead(t("Requests"), open.length + t(" awaiting a decision"),
         App.can("demand.raise")
@@ -2945,13 +2957,15 @@ Views.pipeline = (db) => {
               : t("Nothing has been asked for yet. A request records what somebody wants and why, before anyone plans it — and a decline keeps its reason where the person who asked can read it."))),
 
     h("section", { class: "sec", style: "margin-top:16px" },
-      sectionHead(t("The queue"),
+      sectionHead(t("The capital queue"),
         pri.envelope
           ? money(pri.demanded) + t(" demanded against ") + money(pri.envelope)
           : t("no capital envelope agreed"),
         App.can("priority.write")
           ? h("button", { class: "btn btn-sm", onClick: () => setEnvelope(db) }, t("Set the envelope"))
           : null),
+      h("div", { class: "xs muted", style: "margin-bottom:8px;max-width:78ch" },
+        t("The older V-04 queue: four hand notes from 1 to 5, live projects only, against the money alone. It is kept because the notes and the hand-placed rank are still recorded here; the ranking above is the one that reads value, confidence, exposure and capacity.")),
       pri.unscored
         ? h("div", { class: "drop-hint", style: "margin-bottom:10px;max-width:64ch" },
             pri.unscored + t(" project(s) carry no score, so the queue cannot rank them. They sort last rather than worst."))
@@ -2978,6 +2992,353 @@ Views.pipeline = (db) => {
         empty: t("Nothing in flight to rank."),
       })));
 };
+
+/* ═══════════════════════════════════════════════════════════════════
+   REQ-24 (RT365 V-5) · WHAT WE CHOOSE NOT TO DO
+   ───────────────────────────────────────────────────────────────────
+   « Choosing what not to do is where a portfolio creates most of its
+   value. Meridian ranks nothing today; demand carries no score. »
+
+   Three things this block refuses to do, and they are the design:
+
+   · it does not hide an input. Every number that moves a row is ON the
+     row — the raw figure, the points it earns, the weight's share, and
+     the contribution those two make. A ranking whose inputs a reader
+     cannot see is a number they must either believe or ignore, and both
+     are worse than no ranking;
+   · it does not rank a row it cannot rank. A project with no business
+     case has no claimed value; it does not have a value of zero, it does
+     not sort last "for now", and it is not in the order at all. It is
+     listed underneath, with the sentence that says what is missing and
+     where that thing is filled in;
+   · it does not invent the line. With no people in the book there is no
+     capacity and no line is drawn — rather than every row being marked
+     "below" a limit of zero.
+   ═══════════════════════════════════════════════════════════════════ */
+
+function prioritisationBlock(db) {
+  const [data] = liveFetch("prioritisation", () => api.get("/prioritisation"), (r) => [r]);
+  if (!data || !data.weighting) {
+    return h("section", { class: "sec", style: "margin-top:16px" },
+      sectionHead(t(PRIORITY_TEXT.block), t("Reading the book, the register and the allocations…")));
+  }
+  const w = data.weighting, cap = data.capacity, cut = data.cut;
+
+  /* `why` on an input is already the SENTENCE (PRIORITY_TEXT.noCase), not
+     the key. Translating it means passing the sentence through the
+     dictionary, and every one of them has an FR and an ES entry — the
+     i18n gate cannot see these, because they arrive through a variable
+     rather than a literal t("…"), so a missing one would show as a
+     half-French row and nothing would fail. */
+  const say = (sentence) => (sentence ? t(sentence) : null);
+
+  /* One input cell: the number in its own unit, then the arithmetic that
+     turns it into a score. A reader must be able to rebuild the score by
+     looking at the row, so nothing here is a tooltip. */
+  const inputCell = (row, key) => {
+    const inp = row.inputs[key];
+    if (!inp || inp.state !== "measured") {
+      return h("div", null,
+        h("span", { class: "mono small muted" }, "—"),
+        h("div", { class: "xs muted", style: "max-width:28ch" }, say(inp && inp.why)));
+    }
+    const extra = key === "exposure" && inp.open !== undefined
+      ? t(" · ") + inp.open + t(" open of ") + inp.items
+      : key === "capacity" && inp.allocations !== undefined
+        ? t(" · ") + inp.allocations + t(" allocations") : "";
+    return h("div", null,
+      h("span", { class: "mono small strong" }, formatInput(key, inp, money)),
+      h("span", { class: "xs muted" }, extra),
+      row.state === "ranked"
+        ? h("div", { class: "xs muted" },
+            Math.round(inp.points) + t(" pts × ") + formatShare(w.shares[key])
+            + t(" = ") + inp.contribution)
+        : null);
+  };
+
+  /* The line, drawn INSIDE the list rather than described beside it.
+     `table()` has no divider, so the row is put into the tbody once the
+     table is built — which is also the only place that knows how many
+     rows of THIS list sit above the cut. */
+  const withCutLine = (node, rows, cols) => {
+    if (cut.state !== "measured") return node;
+    const body = node.querySelector("tbody");
+    if (!body) return node;
+    const above = rows.filter((r) => r.funded).length;
+    if (above >= rows.length && !cap.exhausted) return node;   // nothing runs out here
+    const line = h("tr", { class: "cut-line" },
+      h("td", { colspan: cols, style: "padding:0" },
+        h("div", { style: "border-top:2px solid var(--sig-red);display:flex;gap:10px;"
+                        + "align-items:baseline;padding:6px 0 5px;flex-wrap:wrap" },
+          h("span", { class: "tag tag-accent" }, t(PRIORITY_TEXT.line)),
+          h("span", { class: "xs" }, say(cut.why)),
+          cap.state === "measured"
+            ? h("span", { class: "mono xs muted" },
+                formatFte(cap.available) + t(" available"))
+            : null)));
+    if (above >= body.children.length) body.appendChild(line);
+    else body.insertBefore(line, body.children[above]);
+    return node;
+  };
+
+  const rankedCols = [
+    { key: "n", label: "#", align: "r", width: "38px",
+      get: (r) => h("span", { class: "mono small muted" }, String(r.rank)) },
+    { key: "row", label: t("Row"), get: (r) => h("div", null,
+        h("span", { class: "strong small" + (r.kind === "project" ? " linkish" : "") },
+          r.kind === "project" ? h("span", { onClick: () => go("#/project/" + r.id) }, r.name) : r.name),
+        /* A project's phase is rendered raw here as it is everywhere else
+           in this product; a request's status has a dictionary entry. */
+        h("div", { class: "xs muted" }, r.id + " · "
+          + (r.kind === "project" ? t("live project") + " · " + r.status
+             : t("request") + " · " + t(r.status)))) },
+    ...INPUTS.map((key) => ({
+      key, label: t(PRIORITY_TEXT[key]), align: "r", get: (r) => inputCell(r, key),
+    })),
+    { key: "score", label: t("Score"), align: "r", get: (r) => h("div", null,
+        h("span", { class: "mono strong" }, formatScore(r)),
+        h("div", { class: "xs muted" }, t("of 100"))) },
+    { key: "cum", label: t("Running capacity"), align: "r", get: (r) => h("div", null,
+        h("span", { class: "mono small" + (r.funded === false ? " bad" : "") },
+          formatFte(r.cumulativeFte)),
+        r.cumulativeCost !== null
+          ? h("div", { class: "mono xs muted" }, money(r.cumulativeCost)) : null) },
+    { key: "line", label: t("Line"), get: (r) => r.funded === null
+        ? h("span", { class: "xs muted" }, "—")
+        : r.funded
+          ? h("span", { class: "tag tag-out" }, t("above"))
+          : h("span", { class: "tag tag-accent" }, t("below")) },
+    { key: "e", label: "", align: "r", get: (r) => canEditInputs(db, r)
+        ? h("button", { class: "btn btn-xs", onClick: () => editRankingInputs(db, r) }, t("Inputs"))
+        : null },
+  ];
+
+  const notPlacedCols = [
+    { key: "row", label: t("Row"), get: (r) => h("div", null,
+        h("span", { class: "strong small" + (r.kind === "project" ? " linkish" : "") },
+          r.kind === "project" ? h("span", { onClick: () => go("#/project/" + r.id) }, r.name) : r.name),
+        h("div", { class: "xs muted" }, r.id + " · "
+          + (r.kind === "project" ? t("live project") : t("request")))) },
+    { key: "missing", label: t("What is missing"), get: (r) => h("div", null,
+        r.missing.map((k) => h("div", { class: "xs", style: "margin-bottom:2px" },
+          h("span", { class: "strong" }, t(PRIORITY_TEXT[k])), " — ",
+          h("span", { class: "muted" }, say(r.inputs[k].why))))) },
+    { key: "fte", label: t("Capacity consumed"), align: "r", get: (r) => h("span",
+        { class: "mono small" }, formatFte(r.fte)) },
+    { key: "e", label: "", align: "r", get: (r) => canEditInputs(db, r)
+        ? h("button", { class: "btn btn-xs", onClick: () => editRankingInputs(db, r) }, t("Inputs"))
+        : null },
+  ];
+
+  /* One list per programme, and the same order in every one of them: a
+     programme's list is a FILTER of the group's ranking, never a second
+     ranking with a line of its own. People are shared across programmes,
+     so a per-programme pool would be a number nobody in this book has
+     agreed — and inventing one is exactly how a supplier's opinion gets
+     presented as arithmetic. */
+  const groups = [...(data.programmes ?? []), data.unassigned]
+    .filter((g) => g.ranked.length || g.notPlaced.length)
+    .map((g) => h("div", { style: "margin-top:18px" },
+      h("div", { class: "kicker" },
+        (g.name || t("No programme")) + " · " + g.ranked.length + t(" ranked, ")
+        + g.notPlaced.length + t(" not placed")),
+      g.ranked.length
+        ? withCutLine(table({ cols: rankedCols, rows: g.ranked,
+            rowClass: (r) => (r.funded === false ? "muted-row" : "") }),
+            g.ranked, rankedCols.length)
+        : h("div", { class: "small muted", style: "padding:6px 0" },
+            t("Nothing in this programme carries all four inputs yet.")),
+      g.notPlaced.length
+        ? h("div", { style: "margin-top:8px" },
+            h("div", { class: "xs muted", style: "margin-bottom:4px;max-width:74ch" },
+              t("Not placed. These are not ranked last and they are not ranked first — they are not in the order at all, because a rank built on an input nobody has recorded is a confident-looking guess.")),
+            table({ cols: notPlacedCols, rows: g.notPlaced }))
+        : null));
+
+  return h("section", { class: "sec", style: "margin-top:16px" },
+    sectionHead(t(PRIORITY_TEXT.block),
+      data.counts.ranked + t(" ranked and ") + data.counts.notPlaced
+        + t(" not placed, as at ") + data.asAt,
+      App.can("priority.weighting")
+        ? h("button", { class: "btn btn-sm", onClick: () => setWeighting(db, w) },
+            t("Set the weighting"))
+        : null),
+
+    /* THE WEIGHTING, STATED. Not a tooltip, not a constant in a file. */
+    h("div", { class: "drop-hint", style: "margin-bottom:12px;max-width:96ch" },
+      h("div", { style: "display:flex;gap:14px;flex-wrap:wrap;align-items:baseline" },
+        h("span", { class: "kicker" }, t(PRIORITY_TEXT.weighting)),
+        ...INPUTS.map((k) => h("span", { class: "small" },
+          h("span", { class: "strong" }, t(PRIORITY_TEXT[k])), " ",
+          h("span", { class: "mono" }, String(w[k])),
+          h("span", { class: "xs muted" }, " (" + formatShare(w.shares[k]) + ")")))),
+      h("div", { class: "xs muted", style: "margin-top:6px;max-width:88ch" },
+        w.state !== "measured"
+          ? say(w.why)
+          : w.reviewed
+            ? t(PRIORITY_TEXT.weightsSet) + " " + w.setBy + " · " + fmtDate(w.setOn)
+              + (w.note ? " · " + w.note : "")
+            : say(PRIORITY_TEXT.weightsShipped)),
+      h("div", { class: "xs muted", style: "margin-top:6px;max-width:88ch" },
+        t("Value and confidence pull a row up; exposure and the people it takes push it down. Each input is put on a 0–100 scale against the largest in the set being ranked, then weighted — so points move when the set changes, and the order of any two rows against each other does not."))),
+
+    /* THE CAPACITY LINE, AND WHERE ITS NUMBER COMES FROM. */
+    h("div", { style: "display:flex;gap:26px;flex-wrap:wrap;margin-bottom:14px" },
+      h("div", null, h("div", { class: "kicker" }, t("Capacity pool")),
+        h("div", { class: "mono strong" }, cap.state === "measured" ? formatFte(cap.pool) : "—"),
+        h("div", { class: "xs muted", style: "max-width:30ch" }, cap.state === "measured"
+          ? cap.people + t(" people at their availability, up to the ") + cap.ceiling + t("% ceiling")
+          : say(cap.why))),
+      h("div", null, h("div", { class: "kicker" }, t("Held outside this ranking")),
+        h("div", { class: "mono strong" }, cap.state === "measured" ? formatFte(cap.held) : "—"),
+        h("div", { class: "xs muted", style: "max-width:30ch" },
+          t("Allocated to work that is closed or could not be placed — those people are busy whether or not their project has been scored."))),
+      h("div", null, h("div", { class: "kicker" }, t("Available to this ranking")),
+        h("div", { class: "mono strong" }, cap.state === "measured" ? formatFte(cap.available) : "—"),
+        h("div", { class: "xs muted", style: "max-width:30ch" },
+          t("Over the next ") + cap.horizonDays + t(" days, from ") + fmtDate(cap.from)
+          + t(" to ") + fmtDate(cap.to))),
+      h("div", null, h("div", { class: "kicker" }, t("Capital envelope")),
+        h("div", { class: "mono strong" }, data.money.state === "measured"
+          ? money(data.money.envelope) : "—"),
+        h("div", { class: "xs muted", style: "max-width:30ch" },
+          data.money.state === "measured"
+            ? t("The second line: the running cost crosses it, or the people run out first.")
+            : say(data.money.why))),
+      h("div", null, h("div", { class: "kicker" }, t(PRIORITY_TEXT.line)),
+        h("div", { class: "mono strong" }, cut.state === "measured"
+          ? (cut.lastAbove ? "#" + cut.lastAbove : t("before the first row")) : "—"),
+        h("div", { class: "xs muted", style: "max-width:30ch" }, say(cut.why)))),
+
+    groups.length
+      ? h("div", null, groups)
+      : h("div", { class: "small muted", style: "max-width:64ch" },
+          t("Nothing is competing for capacity: no live project and no open request.")));
+}
+
+/** Whose call it is to change a row's inputs — the same question the
+    server will ask, asked here so a control nobody may use is absent. */
+function canEditInputs(db, row) {
+  if (row.kind === "demand") return App.can("demand.decide");
+  const p = Engine.project(db, row.id);
+  return p ? may("case.write", p) : false;
+}
+
+/**
+ * The inputs of one row, where they are actually recorded.
+ *
+ * A request carries its own four figures. A project's value and
+ * confidence live on its business case — the payer's word, written at
+ * group level — so this dialog writes the case; its exposure and the
+ * people it takes are not opinions to be typed here at all, they are the
+ * RAID register and the allocations, and the row says so rather than
+ * offering a second place to state them.
+ */
+function editRankingInputs(db, row) {
+  if (row.kind === "demand") {
+    const d = (liveFetch("demand", () => api.get("/demand"), (r) => r.demand) || [])
+      .find((x) => x.id === row.id);
+    if (!d) { toast(t("That request is still loading — try again in a moment.")); return; }
+    return formDialog({
+      title: t("Inputs: ") + d.title, kicker: d.id, wide: true,
+      fields: [
+        { key: "expectedBenefit", label: t("Expected benefit a year (M)"), type: "number", step: "any",
+          value: d.expectedBenefit ?? "",
+          hint: t("The number, not the words. Leave it empty rather than guessing — an empty claim keeps the request out of the order; a guessed one moves it up it.") },
+        { key: "valueConfidence", label: t("Confidence in that figure 1–5"), type: "select",
+          value: String(d.valueConfidence ?? ""),
+          options: [{ value: "", label: "—" }, "1", "2", "3", "4", "5"],
+          hint: t("How far the sponsor would stand behind it. Nobody can compute this, so nothing here computes it.") },
+        { key: "estFte", label: t("People it will take (FTE)"), type: "number", step: "any", min: 0,
+          value: d.estFte ?? "",
+          hint: t("Averaged over the ranking horizon, in the same unit as the allocations a project carries.") },
+        { key: "raidProbability", label: t("Worst case — probability 1–5"), type: "select",
+          value: String(d.raidProbability ?? ""),
+          options: [{ value: "", label: "—" }, "1", "2", "3", "4", "5"] },
+        { key: "raidImpact", label: t("Worst case — impact 1–5"), type: "select",
+          value: String(d.raidImpact ?? ""),
+          options: [{ value: "", label: "—" }, "1", "2", "3", "4", "5"],
+          hint: t("The same 1–5 scale the RAID register uses, so a request and a live project are exposed on one scale.") },
+      ],
+      saveLabel: "Save the inputs",
+      onSave: async (v) => {
+        const ok = await App.write(t("Ranking inputs saved"), (a) => a.patch("/demand/" + d.id, {
+          expectedBenefit: v.expectedBenefit, valueConfidence: v.valueConfidence,
+          estFte: v.estFte, raidProbability: v.raidProbability, raidImpact: v.raidImpact,
+          version: d.version,
+        }), { detail: d.title, refresh: false });
+        if (ok !== false) { delete live.data.demand; delete live.data.prioritisation; App.emit(); }
+        return ok;
+      },
+    });
+  }
+
+  const p = Engine.project(db, row.id);
+  const bc = (db.businessCases ?? []).find((c) => c.project === row.id) ?? null;
+  formDialog({
+    title: t("Inputs: ") + (p ? p.name : row.name), kicker: row.id, wide: true,
+    extra: h("div", { class: "small muted", style: "max-width:62ch" },
+      t("Exposure comes from this project's RAID register and the capacity from its allocations — both are edited on the project, not here, because a second place to state them is a second answer.")),
+    fields: [
+      { key: "summary", label: t("Why this deserves its budget"), type: "textarea", rows: 3, span: 2,
+        required: true, value: bc ? bc.summary : "",
+        hint: t("The payer's justification, read back at every gate.") },
+      { key: "expectedCost", label: t("Expected cost (M)"), type: "number", step: "any",
+        value: bc && bc.expectedCost != null ? bc.expectedCost : "" },
+      { key: "expectedBenefit", label: t("Expected benefit a year (M)"), type: "number", step: "any",
+        value: bc && bc.expectedBenefit != null ? bc.expectedBenefit : "",
+        hint: t("The claimed value the ranking reads. Empty keeps this project out of the order rather than placing it at the bottom of it.") },
+      { key: "valueConfidence", label: t("Confidence in that figure 1–5"), type: "select",
+        value: String(bc && bc.valueConfidence != null ? bc.valueConfidence : ""),
+        options: [{ value: "", label: "—" }, "1", "2", "3", "4", "5"],
+        hint: t("How far the payer would stand behind it. Nobody can compute this, so nothing here computes it.") },
+    ],
+    saveLabel: "Save the inputs",
+    onSave: async (v) => {
+      const ok = await App.write(t("Ranking inputs saved"), (a) => a.put("/projects/" + row.id + "/case", {
+        summary: v.summary, expectedCost: v.expectedCost, expectedBenefit: v.expectedBenefit,
+        valueConfidence: v.valueConfidence, version: bc ? bc.version : undefined,
+      }), { detail: row.name });
+      if (ok !== false) { delete live.data.prioritisation; App.emit(); }
+      return ok;
+    },
+  });
+}
+
+/**
+ * The weighting. Changing one of these four numbers re-orders the whole
+ * portfolio, in every programme at once — so it asks for the reason, it
+ * asserts the row version, and the audit trail keeps what each weight
+ * was and what it became.
+ */
+function setWeighting(db, w) {
+  const field = (k, label, hint) => ({
+    key: k, label, type: "number", min: 0, max: 100, step: 1, value: w[k], hint,
+  });
+  formDialog({
+    title: t("The weighting"), kicker: t("Prioritisation"), wide: true,
+    extra: h("div", { class: "small muted", style: "max-width:62ch" },
+      t("Weights are shares of their own total, so 40/20/20/20 and 4/2/2/2 are the same weighting. Saving re-ranks every programme immediately.")),
+    fields: [
+      field("value", t("Claimed value"), t("What the business case, or the request, says it is worth a year.")),
+      field("confidence", t("Confidence"), t("How far the person who claimed that figure would stand behind it.")),
+      field("exposure", t("RAID exposure"), t("The worst open item, probability × impact. Pushes a row down.")),
+      field("capacity", t("Capacity consumed"), t("The people it takes over the horizon. Pushes a row down.")),
+      { key: "note", label: t("Why these weights"), type: "textarea", rows: 2, span: 2,
+        required: true, value: w.note ?? "",
+        hint: t("Read months later by somebody who disagrees with a rank. A weighting whose reason is not written is a verdict.") },
+    ],
+    saveLabel: "Set the weighting",
+    onSave: async (v) => {
+      const ok = await App.write(t("Weighting set"), (a) => a.patch("/prioritisation/weighting", {
+        value: v.value, confidence: v.confidence, exposure: v.exposure,
+        capacity: v.capacity, note: v.note, version: w.version,
+      }), { detail: INPUTS.map((k) => k + " " + v[k]).join(" · "), refresh: false });
+      if (ok !== false) { delete live.data.prioritisation; App.emit(); }
+      return ok;
+    },
+  });
+}
 
 function demandFields(db, d, deciding) {
   const base = [

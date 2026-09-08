@@ -14,7 +14,7 @@ import { many, one, tx, updateVersioned, allocateId, insertMany, requiredVersion
 import { can, canSeeProject } from "../../../shared/rbac.js";
 import { audited, readAudit, record } from "../audit.js";
 import { HttpError } from "../auth.js";
-import { loadPortfolio, projectFor, fromM, toM, loadSettings } from "../portfolio.js";
+import { loadPortfolio, projectFor, fromM, toM, loadSettings, loadWeighting } from "../portfolio.js";
 import { adoptionBySite } from "../adoption.js";
 import { Engine, GATES, PHASES, LESSON_CATEGORIES, iso, addDays, days, D } from "../../../shared/engine.js";
 import { scaffoldProject, reschedule, phaseFor } from "../wbs.js";
@@ -23,6 +23,7 @@ import { assertPlantWindow } from "../plant.js";
 import { sweepExceptions } from "../exceptions.js";
 import { isEvidenceLocator, EVIDENCE_REFUSAL } from "../evidence.js";
 import { assertCaseReconfirmed, deltaAgainst, reconfirmationsFor } from "../value.js";
+import { prioritise, INPUTS } from "../../../shared/prioritise.js";
 
 
 const r = Router();
@@ -1505,6 +1506,27 @@ const DEMAND_STATES = ["New", "Triaged", "Approved", "Declined", "Converted"];
 const score = (v) => (v === undefined || v === null || v === "" ? null
   : Math.max(1, Math.min(5, Math.round(Number(v)))));
 
+/* REQ-24 — les entrées du classement, refusées plutôt que rabotées.
+   `score()` au-dessus SERRE dans 1–5, ce qui convient à une note de salle
+   qu'on ajuste au doigt ; ces trois-ci nourrissent une arithmétique, et
+   un 9 silencieusement devenu 5 serait un chiffre que personne n'a dit.
+   Vide veut dire « retiré », et c'est un geste légitime : une confiance
+   qu'on n'a plus se retire, elle ne se met pas à 3. */
+const oneToFive = (v, what) => {
+  if (v === undefined || v === null || v === "") return null;
+  const n = Number(v);
+  if (!Number.isInteger(n) || n < 1 || n > 5) bad(what);
+  return n;
+};
+const fteValue = (v) => {
+  if (v === undefined || v === null || v === "") return null;
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < 0) {
+    bad("The people this will take is a number of full-time equivalents, zero or more");
+  }
+  return Math.round(n * 1000) / 1000;
+};
+
 r.get("/demand", async (req, res, next) => {
   try {
     gate(req.user, "portfolio.read");
@@ -1518,6 +1540,16 @@ r.get("/demand", async (req, res, next) => {
         decidedBy: d.decided_label, decidedOn: d.decided_on, decisionNote: d.decision_note,
         project: d.project_id,
         fit: d.fit_score, value: d.value_score, risk: d.risk_score, effort: d.effort_score,
+        /* REQ-24 (046) — ce qu'il faut pour qu'une demande tienne sur la
+           MÊME liste qu'un projet vivant : un montant, une confiance, une
+           exposition sur l'échelle du registre RAID, et des ETP. Nul
+           partout par défaut, et nul veut dire « pas dit ». */
+        expectedBenefit: d.expected_benefit === null || d.expected_benefit === undefined
+          ? null : toM(d.expected_benefit),
+        valueConfidence: d.value_confidence ?? null,
+        estFte: d.est_fte === null || d.est_fte === undefined ? null : Number(d.est_fte),
+        raidProbability: d.raid_probability ?? null,
+        raidImpact: d.raid_impact ?? null,
         version: d.row_version,
       })),
     });
@@ -1536,11 +1568,23 @@ r.post("/demand", async (req, res, next) => {
         id = await allocateId(t, "DEM", { pad: 3 });
         return t.query(
           `INSERT INTO demand (id, title, detail, sponsor, programme_id, site_id,
-                               benefit_note, est_cost, raised_by, raised_label)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+                               benefit_note, est_cost, raised_by, raised_label,
+                               expected_benefit, value_confidence, est_fte,
+                               raid_probability, raid_impact)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
           [id, b.title, b.detail ?? "", b.sponsor ?? "", b.programme || null, b.site || null,
            b.benefitNote ?? "", b.estCost === undefined || b.estCost === "" ? null : fromM(num(b.estCost)),
-           req.user.id, `${req.user.displayName} (${req.user.role})`]);
+           req.user.id, `${req.user.displayName} (${req.user.role})`,
+           /* REQ-24 — le demandeur peut chiffrer sa propre demande dès
+              l'intention. Rien n'est obligatoire : une demande sans
+              chiffres reste une demande, elle n'est simplement pas
+              plaçable dans l'ordre tant qu'elle n'en porte pas. */
+           b.expectedBenefit === undefined || b.expectedBenefit === "" || b.expectedBenefit === null
+             ? null : fromM(num(b.expectedBenefit)),
+           oneToFive(b.valueConfidence, "Confidence is a whole number from 1 to 5, or nothing at all"),
+           fteValue(b.estFte),
+           oneToFive(b.raidProbability, "Probability and impact are whole numbers from 1 to 5, or nothing at all"),
+           oneToFive(b.raidImpact, "Probability and impact are whole numbers from 1 to 5, or nothing at all")]);
       });
     res.status(201).json({ id });
   } catch (e) { next(e); }
@@ -1556,7 +1600,13 @@ r.patch("/demand/:id", async (req, res, next) => {
     /* Editing what was asked for is open; deciding it is not. The split
        is per-field rather than per-route so the funnel stays one object. */
     const decides = b.status !== undefined || b.decisionNote !== undefined ||
-      b.fit !== undefined || b.value !== undefined || b.risk !== undefined || b.effort !== undefined;
+      b.fit !== undefined || b.value !== undefined || b.risk !== undefined || b.effort !== undefined ||
+      /* REQ-24 — ces cinq-là nourrissent le rang d'une ligne contre
+         toutes les autres. Les corriger est du même ordre que la noter :
+         le partage par CHAMP de cette route est justement ce qui permet
+         de le dire sans couper l'objet en deux. */
+      b.expectedBenefit !== undefined || b.valueConfidence !== undefined ||
+      b.estFte !== undefined || b.raidProbability !== undefined || b.raidImpact !== undefined;
     if (decides) gate(req.user, "demand.decide");
     else gate(req.user, "demand.raise");
 
@@ -1571,6 +1621,23 @@ r.patch("/demand/:id", async (req, res, next) => {
     if (b.value !== undefined) patch.value_score = score(b.value);
     if (b.risk !== undefined) patch.risk_score = score(b.risk);
     if (b.effort !== undefined) patch.effort_score = score(b.effort);
+    if (b.expectedBenefit !== undefined) {
+      patch.expected_benefit = b.expectedBenefit === "" || b.expectedBenefit === null
+        ? null : fromM(num(b.expectedBenefit));
+    }
+    if (b.valueConfidence !== undefined) {
+      patch.value_confidence = oneToFive(b.valueConfidence,
+        "Confidence is a whole number from 1 to 5, or nothing at all");
+    }
+    if (b.estFte !== undefined) patch.est_fte = fteValue(b.estFte);
+    if (b.raidProbability !== undefined) {
+      patch.raid_probability = oneToFive(b.raidProbability,
+        "Probability and impact are whole numbers from 1 to 5, or nothing at all");
+    }
+    if (b.raidImpact !== undefined) {
+      patch.raid_impact = oneToFive(b.raidImpact,
+        "Probability and impact are whole numbers from 1 to 5, or nothing at all");
+    }
     if (b.status !== undefined) {
       if (!DEMAND_STATES.includes(b.status)) bad("That is not a request status");
       if (b.status === "Converted") bad("A request becomes Converted by creating its project, not by hand");
@@ -1667,13 +1734,23 @@ r.post("/demand/:id/convert", async (req, res, next) => {
         const note = String(d.benefit_note ?? "").trim();
         const caseId = await allocateId(t, "CAS", { pad: 3 });
         await t.query(
+          /* REQ-24 — la conversion portait les MOTS du demandeur et
+             laissait tomber son CHIFFRE : le cas naissait sans bénéfice
+             attendu, donc le projet naissait sans valeur revendiquée et
+             tombait hors du classement le jour même où l'argent est
+             engagé et où la justification est la plus fraîche. Les deux
+             restent nuls quand la demande ne les portait pas — on ne
+             fabrique pas le chiffre qu'on n'a pas reçu. */
           `INSERT INTO business_case
-             (id, project_id, summary, expected_cost, expected_benefit, basis, written_by)
-           VALUES ($1,$2,$3,$4,NULL,$5,$6)`,
+             (id, project_id, summary, expected_cost, expected_benefit,
+              value_confidence, basis, written_by)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
           [caseId, id,
            note || `Carried from request ${d.id} — the request stated no benefit. ` +
                    `This case is a draft: write what this is for before the next gate.`,
            d.est_cost ?? null,
+           d.expected_benefit ?? null,
+           d.value_confidence ?? null,
            `From request ${d.id}, approved ${d.decided_on ?? "on conversion"}.`,
            req.user.id]);
         await t.query(
@@ -1705,6 +1782,144 @@ r.patch("/projects/:id/priority", async (req, res, next) => {
                  b.rank !== undefined && "rank " + b.rank].filter(Boolean).join(" · ") },
       async (t) => conflict(await updateVersioned(t, "project", p.id,
         requiredVersion(b, "project"), patch)));
+    res.json({ version: out.version });
+  } catch (e) { next(e); }
+});
+
+/* ═══════════════════════════════════════════════════════════════════
+   REQ-24 (RT365 V-5) · WHAT WE CHOOSE NOT TO DO
+   ───────────────────────────────────────────────────────────────────
+   The ranked list, its weighting, and the line where capacity runs out.
+
+   Two routes and one computation. The arithmetic is `shared/prioritise.js`
+   — pure, and the same module the browser imports for its formatters, for
+   the reason `shared/govsignals.js` gives: two projections of the same
+   number diverge at the first change, and then the room is arguing about
+   which screen is right instead of about which project to stop.
+
+   AUTHORITY. Reading the ranking is `portfolio.read`, narrowed by the
+   query itself: every row it emits — a project, a request, a business
+   case figure, a RAID exposure, an allocation — is already readable by an
+   account that can open the pipeline page, and `loadPortfolio` has
+   already refused to put an out-of-scope project into the object (R1.10).
+   Nothing new is disclosed; what is new is the ORDER.
+
+   SETTING THE WEIGHTING is a different question and has its own action,
+   `priority.weighting`, decided in shared/rbac.js and nowhere else.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/** How far ahead capacity is counted. Two quarters, unless asked. */
+function horizonOf(req) {
+  const asked = Number(req.query.days);
+  if (!Number.isFinite(asked)) return 180;
+  return Math.min(730, Math.max(28, Math.floor(asked)));
+}
+
+/** Everything the pure computation needs, gathered for one reader. */
+async function rankingFor(user, horizonDays) {
+  const db = await loadPortfolio(user);
+  /* Requests are not in the serialiser — they are the funnel in front of
+     the portfolio, not part of it — so they are read here. A request is
+     not scoped by project: it names at most a programme and a site, and
+     `portfolio.read` is the action that governs it, exactly as
+     `GET /demand` above already does. */
+  const demandRows = await many(
+    `SELECT * FROM demand WHERE status IN ('New','Triaged','Approved')`);
+  const weighting = await loadWeighting();
+
+  return prioritise({
+    asAt: db.statusDate,
+    horizonDays,
+    weighting,
+    ceiling: db.settings.capacityCeiling,
+    envelope: db.settings.capexEnvelope,
+    programmes: db.programmes,
+    people: db.people,
+    projects: db.projects,
+    cases: db.businessCases,
+    raid: db.raid,
+    allocations: db.allocations,
+    demand: demandRows.map((d) => ({
+      id: d.id, title: d.title, programme: d.programme_id, site: d.site_id,
+      status: d.status,
+      estCost: d.est_cost === null || d.est_cost === undefined ? null : toM(d.est_cost),
+      expectedBenefit: d.expected_benefit === null || d.expected_benefit === undefined
+        ? null : toM(d.expected_benefit),
+      valueConfidence: d.value_confidence ?? null,
+      estFte: d.est_fte === null || d.est_fte === undefined ? null : Number(d.est_fte),
+      raidProbability: d.raid_probability ?? null,
+      raidImpact: d.raid_impact ?? null,
+    })),
+  });
+}
+
+r.get("/prioritisation", async (req, res, next) => {
+  try {
+    gate(req.user, "portfolio.read");
+    res.json(await rankingFor(req.user, horizonOf(req)));
+  } catch (e) { next(e); }
+});
+
+/**
+ * The weighting, changed. Which is to say: the order of the whole
+ * portfolio, changed — so it asserts a row version like every other
+ * mutable row, it is audited inside its own transaction, and the audit
+ * image says what each weight WAS and what it BECAME. That last part is
+ * the point: a rank that moved and cannot be explained is worse than no
+ * rank, and six months later the only thing that can explain it is this
+ * row.
+ */
+r.patch("/prioritisation/weighting", async (req, res, next) => {
+  try {
+    gate(req.user, "priority.weighting");
+    const w = await one(`SELECT * FROM prioritisation_weighting WHERE id = 'default'`);
+    if (!w) throw new HttpError(404, "No weighting row — the book is not migrated");
+    const b = req.body ?? {};
+
+    const weight = (v) => {
+      const n = Number(v);
+      if (!Number.isInteger(n) || n < 0 || n > 100) bad("A weight is a whole number from 0 to 100");
+      return n;
+    };
+    const patch = {};
+    const col = { value: "w_value", confidence: "w_confidence",
+                  exposure: "w_exposure", capacity: "w_capacity" };
+    for (const k of INPUTS) {
+      if (b[k] !== undefined) patch[col[k]] = weight(b[k]);
+    }
+    if (b.note !== undefined) patch.note = String(b.note);
+    if (!Object.keys(patch).length) bad("Nothing recognised to change");
+
+    /* Toutes nulles = plus rien n'est pesé, donc plus rien n'est classé.
+       Refusé ici plutôt que rendu comme un classement vide : le module
+       sait le DIRE (`weightsZero`) parce qu'un livre peut arriver ainsi,
+       mais on ne laisse personne l'écrire exprès. */
+    const after = { ...w, ...patch };
+    if (after.w_value + after.w_confidence + after.w_exposure + after.w_capacity <= 0) {
+      bad("Every weight cannot be zero — a weighting has to weigh something");
+    }
+    /* Une pondération sans sa raison est un verdict. Exigée au PREMIER
+       réglage humain, et à chaque changement de poids ensuite. */
+    const changesWeights = INPUTS.some((k) => b[k] !== undefined);
+    if (changesWeights && !String(b.note ?? w.note ?? "").trim()) {
+      bad("Say why these weights — a ranking whose reason is not written is a verdict");
+    }
+
+    patch.set_by = req.user.id;
+    patch.set_label = `${req.user.displayName} (${req.user.role})`;
+    patch.set_on = iso(new Date());
+
+    const out = await audited(req.user,
+      { action: "Prioritisation weighting set", entity: "prioritisation_weighting",
+        entityId: w.id,
+        detail: INPUTS.map((k) => `${k} ${w[col[k]]} → ${after[col[k]]}`).join(" · "),
+        before: { value: w.w_value, confidence: w.w_confidence,
+                  exposure: w.w_exposure, capacity: w.w_capacity, note: w.note },
+        after: { value: after.w_value, confidence: after.w_confidence,
+                 exposure: after.w_exposure, capacity: after.w_capacity,
+                 note: after.note } },
+      async (t) => conflict(await updateVersioned(t, "prioritisation_weighting", w.id,
+        requiredVersion(b, "weighting"), patch)));
     res.json({ version: out.version });
   } catch (e) { next(e); }
 });
@@ -2184,6 +2399,11 @@ r.put("/projects/:id/case", async (req, res, next) => {
     };
     const cost = num(b.expectedCost, "The expected cost");
     const benefit = num(b.expectedBenefit, "The expected annual benefit");
+    /* REQ-24 — à quel point on croit à CE chiffre-là. Absente tant que
+       personne ne l'a dite : le classement refuse alors de placer la
+       ligne, plutôt que de supposer une confiance moyenne. */
+    const confidence = oneToFive(b.valueConfidence,
+      "Confidence is a whole number from 1 to 5, or nothing at all");
 
     const existing = await one(
       `SELECT * FROM business_case WHERE project_id = $1`, [p.id]);
@@ -2197,9 +2417,10 @@ r.put("/projects/:id/case", async (req, res, next) => {
           id = await allocateId(t, "CAS", { pad: 3 });
           return t.query(
             `INSERT INTO business_case
-               (id, project_id, summary, expected_cost, expected_benefit, basis, written_by)
-             VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-            [id, p.id, b.summary, cost, benefit, b.basis ?? "", req.user.id]);
+               (id, project_id, summary, expected_cost, expected_benefit,
+                value_confidence, basis, written_by)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+            [id, p.id, b.summary, cost, benefit, confidence, b.basis ?? "", req.user.id]);
         });
       return res.status(201).json({ id });
     }
@@ -2211,11 +2432,16 @@ r.put("/projects/:id/case", async (req, res, next) => {
       { action: "Business case updated", entity: "business_case", entityId: existing.id,
         detail: p.id,
         before: { summary: existing.summary, cost: existing.expected_cost,
-                  benefit: existing.expected_benefit },
-        after: { summary: b.summary, cost, benefit } },
+                  benefit: existing.expected_benefit,
+                  confidence: existing.value_confidence },
+        after: { summary: b.summary, cost, benefit, confidence } },
       async (t) => conflict(await updateVersioned(t, "business_case", existing.id,
         requiredVersion(b, "business case"),
         { summary: b.summary, expected_cost: cost, expected_benefit: benefit,
+          /* Omise du corps = inchangée ; envoyée vide = retirée. Une
+             confiance qu'on n'a plus se retire, elle ne se met pas à 3. */
+          value_confidence: b.valueConfidence === undefined
+            ? existing.value_confidence : confidence,
           basis: b.basis ?? existing.basis, updated_on: iso(new Date()) })));
     res.json({ version: out.version });
   } catch (e) { next(e); }

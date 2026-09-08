@@ -50,6 +50,21 @@ export const ES = {
     "la pista de auditoría es visible desde el nivel grupo — pida a su oficina de programa lo que necesite de ella",
   "the portfolio is prioritised at group level — your programme office scores and ranks":
     "la cartera se prioriza a nivel grupo — su oficina de programa puntúa y clasifica",
+  /* REQ-24 (V-5) — la ponderación del ranking, y lo que rechaza. */
+  "the level that sets a weighting is the level that answers for the cut it draws — ask your programme office":
+    "el nivel que fija una ponderación es el que responde del corte que traza — consulte a su oficina de programa",
+  "A weight is a whole number from 0 to 100":
+    "un peso es un número entero de 0 a 100",
+  "Every weight cannot be zero — a weighting has to weigh something":
+    "los pesos no pueden ser todos cero — una ponderación tiene que pesar algo",
+  "Say why these weights — a ranking whose reason is not written is a verdict":
+    "diga por qué estos pesos — un ranking cuya razón no está escrita es un veredicto",
+  "Confidence is a whole number from 1 to 5, or nothing at all":
+    "la confianza es un número entero de 1 a 5, o nada en absoluto",
+  "The people this will take is a number of full-time equivalents, zero or more":
+    "las personas que esto costará son un número de equivalentes a tiempo completo, cero o más",
+  "Probability and impact are whole numbers from 1 to 5, or nothing at all":
+    "la probabilidad y el impacto son números enteros de 1 a 5, o nada en absoluto",
   "management of change is released at group level — ask your programme office to release it":
     "la gestión del cambio se libera a nivel grupo — pida la liberación a su oficina de programa",
 

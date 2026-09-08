@@ -1903,6 +1903,210 @@ export const FR = {
     "La personne sur la parole de qui elle s'est close.",
   "Closed — the date was not recorded":
     "Close — la date n'a pas été consignée",
+
+  /* ── REQ-24 (V-5) · le classement du portefeuille : valeur, confiance,
+     exposition et capacité, la pondération et la ligne. Les phrases de
+     PRIORITY_TEXT arrivent par une VARIABLE et sont donc invisibles pour
+     la porte F5 : elles sont posées ici à la main, exactement comme le
+     tour 5.14.0 a dû le faire pour SIGNAL_TEXT. */
+  "Value and risk against capacity":
+    "Valeur et risque contre capacité",
+  "Not placed":
+    "Non placé",
+  "Claimed value":
+    "Valeur revendiquée",
+  "Confidence":
+    "Confiance",
+  "RAID exposure":
+    "Exposition RAID",
+  "Capacity consumed":
+    "Capacité consommée",
+  "From the business case — expected benefit a year":
+    "Du cas d'affaire — bénéfice attendu par an",
+  "From the request — the benefit its sponsor claims":
+    "De la demande — le bénéfice que son commanditaire revendique",
+  "From the business case — how far the payer trusts that figure":
+    "Du cas d'affaire — à quel point celui qui paie croit à ce chiffre",
+  "From the request — how far the sponsor trusts that figure":
+    "De la demande — à quel point le commanditaire croit à ce chiffre",
+  "The worst open RAID item, probability × impact":
+    "La pire ligne RAID ouverte, probabilité × impact",
+  "From the request — the worst thing its sponsor expects":
+    "De la demande — la pire chose que son commanditaire attend",
+  "From the allocations, averaged over the horizon":
+    "Des affectations, moyennées sur l'horizon",
+  "From the request — the people its sponsor expects to need":
+    "De la demande — les gens que son commanditaire pense qu'il faudra",
+  "No business case — this project has never said what it is worth":
+    "Aucun cas d'affaire — ce projet n'a jamais dit ce qu'il vaut",
+  "The business case states no expected benefit":
+    "Le cas d'affaire n'énonce aucun bénéfice attendu",
+  "The request states no expected benefit — a benefit in words is not a number":
+    "La demande n'énonce aucun bénéfice attendu — un bénéfice en mots n'est pas un chiffre",
+  "Nobody has recorded how far this figure is trusted":
+    "Personne n'a consigné à quel point on croit à ce chiffre",
+  "No RAID item has ever been logged here — the exposure is not known, and it is not zero":
+    "Aucune ligne RAID n'a jamais été consignée ici — l'exposition n'est pas connue, et elle ne vaut pas zéro",
+  "The request records no probability and impact for the worst thing it expects":
+    "La demande ne consigne ni probabilité ni impact pour la pire chose qu'elle attend",
+  "Nobody is allocated to this project — what it consumes is not known, and it is not zero":
+    "Personne n'est affecté à ce projet — ce qu'il consomme n'est pas connu, et cela ne vaut pas zéro",
+  "The request does not estimate the people it will take":
+    "La demande n'estime pas les gens qu'elle prendra",
+  "Ranked on all four inputs":
+    "Classé sur les quatre entrées",
+  "Missing an input — not placed in the order, and not placed last either":
+    "Une entrée manque — pas placé dans l'ordre, et pas placé en dernier non plus",
+  "Weighting":
+    "Pondération",
+  "These are the weights this software shipped with — nobody in this group has reviewed them":
+    "Ce sont les poids livrés avec ce logiciel — personne dans ce groupe ne les a revus",
+  "Set by":
+    "Posée par",
+  "Every weight is zero — nothing is being weighed, so nothing is ranked":
+    "Tous les poids sont nuls — rien n'est pesé, donc rien n'est classé",
+  "Where capacity runs out":
+    "Où la capacité s'épuise",
+  "Capacity runs out here":
+    "La capacité s'épuise ici",
+  "The capital envelope runs out here":
+    "L'enveloppe d'investissement s'épuise ici",
+  "No person in this book carries availability — there is no capacity to rank against, so no line is drawn":
+    "Personne dans ce livre ne porte de disponibilité — il n'y a pas de capacité contre laquelle classer, donc aucune ligne n'est tracée",
+  "Work that is not in this ranking already consumes the whole pool — nothing here is above the line":
+    "Le travail qui n'est pas dans ce classement consomme déjà tout le vivier — rien ici n'est au-dessus de la ligne",
+  "No capital envelope has been agreed — no money line is drawn":
+    "Aucune enveloppe d'investissement n'a été convenue — aucune ligne d'argent n'est tracée",
+  "Some ranked rows carry no cost, so a money line would understate the demand — none is drawn":
+    "Des lignes classées ne portent aucun coût : une ligne d'argent sous-estimerait la demande — aucune n'est tracée",
+  "Everything ranked fits inside the capacity":
+    "Tout ce qui est classé tient dans la capacité",
+  "The capital queue":
+    "La file d'investissement",
+  "The older V-04 queue: four hand notes from 1 to 5, live projects only, against the money alone. It is kept because the notes and the hand-placed rank are still recorded here; the ranking above is the one that reads value, confidence, exposure and capacity.":
+    "L'ancienne file V-04 : quatre notes à la main de 1 à 5, projets vivants seulement, contre l'argent seul. Elle est gardée parce que les notes et le rang posé à la main s'y consignent encore ; le classement ci-dessus est celui qui lit valeur, confiance, exposition et capacité.",
+  "Reading the book, the register and the allocations…":
+    "Lecture du livre, du registre et des affectations…",
+  " open of ":
+    " ouvertes sur ",
+  " allocations":
+    " affectations",
+  " pts × ":
+    " pts × ",
+  " available":
+    " disponibles",
+  "Row":
+    "Ligne",
+  "live project":
+    "projet vivant",
+  "request":
+    "demande",
+  "of 100":
+    "sur 100",
+  "Running capacity":
+    "Capacité cumulée",
+  "Inputs":
+    "Entrées",
+  "What is missing":
+    "Ce qui manque",
+  "No programme":
+    "Sans programme",
+  " ranked, ":
+    " classées, ",
+  " not placed":
+    " non placées",
+  "Nothing in this programme carries all four inputs yet.":
+    "Rien dans ce programme ne porte encore les quatre entrées.",
+  "Not placed. These are not ranked last and they are not ranked first — they are not in the order at all, because a rank built on an input nobody has recorded is a confident-looking guess.":
+    "Non placées. Elles ne sont ni classées dernières ni classées premières — elles ne sont pas dans l'ordre du tout, parce qu'un rang bâti sur une entrée que personne n'a consignée est une supposition qui a l'air sûre.",
+  " ranked and ":
+    " classées et ",
+  " not placed, as at ":
+    " non placées, au ",
+  "Set the weighting":
+    "Poser la pondération",
+  "Value and confidence pull a row up; exposure and the people it takes push it down. Each input is put on a 0–100 scale against the largest in the set being ranked, then weighted — so points move when the set changes, and the order of any two rows against each other does not.":
+    "La valeur et la confiance tirent une ligne vers le haut ; l'exposition et les gens qu'elle prend la poussent vers le bas. Chaque entrée est ramenée sur une échelle de 0 à 100 contre la plus grande de l'ensemble classé, puis pondérée — les points bougent donc quand l'ensemble change, et l'ordre de deux lignes l'une contre l'autre, non.",
+  "Capacity pool":
+    "Vivier de capacité",
+  " people at their availability, up to the ":
+    " personnes à leur disponibilité, jusqu'au plafond de ",
+  "% ceiling":
+    " %",
+  "Held outside this ranking":
+    "Retenue hors de ce classement",
+  "Allocated to work that is closed or could not be placed — those people are busy whether or not their project has been scored.":
+    "Affectée à du travail clos ou impossible à placer — ces gens sont pris que leur projet ait été noté ou non.",
+  "Available to this ranking":
+    "Disponible pour ce classement",
+  "Over the next ":
+    "Sur les ",
+  " days, from ":
+    " prochains jours, du ",
+  " to ":
+    " au ",
+  "Capital envelope":
+    "Enveloppe d'investissement",
+  "The second line: the running cost crosses it, or the people run out first.":
+    "La seconde ligne : le coût cumulé la franchit, ou bien les gens manquent avant.",
+  "before the first row":
+    "avant la première ligne",
+  "Nothing is competing for capacity: no live project and no open request.":
+    "Rien ne se dispute la capacité : aucun projet vivant et aucune demande ouverte.",
+  "That request is still loading — try again in a moment.":
+    "Cette demande charge encore — réessayez dans un instant.",
+  "Inputs: ":
+    "Entrées : ",
+  "Expected benefit a year (M)":
+    "Bénéfice attendu par an (M)",
+  "The number, not the words. Leave it empty rather than guessing — an empty claim keeps the request out of the order; a guessed one moves it up it.":
+    "Le chiffre, pas les mots. Laissez vide plutôt que de deviner — une revendication vide tient la demande hors de l'ordre ; une revendication devinée l'y fait monter.",
+  "Confidence in that figure 1–5":
+    "Confiance dans ce chiffre 1–5",
+  "How far the sponsor would stand behind it. Nobody can compute this, so nothing here computes it.":
+    "À quel point le commanditaire s'en porterait garant. Personne ne peut le calculer, donc rien ici ne le calcule.",
+  "People it will take (FTE)":
+    "Gens que cela prendra (ETP)",
+  "Averaged over the ranking horizon, in the same unit as the allocations a project carries.":
+    "Moyennés sur l'horizon du classement, dans l'unité même des affectations que porte un projet.",
+  "Worst case — probability 1–5":
+    "Pire cas — probabilité 1–5",
+  "Worst case — impact 1–5":
+    "Pire cas — impact 1–5",
+  "The same 1–5 scale the RAID register uses, so a request and a live project are exposed on one scale.":
+    "L'échelle 1–5 du registre RAID, pour qu'une demande et un projet vivant s'exposent sur une seule échelle.",
+  "Ranking inputs saved":
+    "Entrées du classement enregistrées",
+  "Exposure comes from this project's RAID register and the capacity from its allocations — both are edited on the project, not here, because a second place to state them is a second answer.":
+    "L'exposition vient du registre RAID de ce projet et la capacité de ses affectations — les deux se modifient sur le projet, pas ici : un second endroit pour les énoncer serait une seconde réponse.",
+  "Why this deserves its budget":
+    "Pourquoi cela mérite son budget",
+  "The payer's justification, read back at every gate.":
+    "La justification de celui qui paie, relue à chaque jalon.",
+  "Expected cost (M)":
+    "Coût attendu (M)",
+  "The claimed value the ranking reads. Empty keeps this project out of the order rather than placing it at the bottom of it.":
+    "La valeur revendiquée que lit le classement. Vide tient ce projet hors de l'ordre plutôt que de le placer au bas de celui-ci.",
+  "How far the payer would stand behind it. Nobody can compute this, so nothing here computes it.":
+    "À quel point celui qui paie s'en porterait garant. Personne ne peut le calculer, donc rien ici ne le calcule.",
+  "The weighting":
+    "La pondération",
+  "Weights are shares of their own total, so 40/20/20/20 and 4/2/2/2 are the same weighting. Saving re-ranks every programme immediately.":
+    "Les poids sont des parts de leur propre total : 40/20/20/20 et 4/2/2/2 sont la même pondération. Enregistrer reclasse tous les programmes immédiatement.",
+  "What the business case, or the request, says it is worth a year.":
+    "Ce que le cas d'affaire, ou la demande, dit que cela vaut par an.",
+  "How far the person who claimed that figure would stand behind it.":
+    "À quel point celui qui a revendiqué ce chiffre s'en porterait garant.",
+  "The worst open item, probability × impact. Pushes a row down.":
+    "La pire ligne ouverte, probabilité × impact. Pousse une ligne vers le bas.",
+  "The people it takes over the horizon. Pushes a row down.":
+    "Les gens qu'elle prend sur l'horizon. Pousse une ligne vers le bas.",
+  "Why these weights":
+    "Pourquoi ces poids",
+  "Read months later by somebody who disagrees with a rank. A weighting whose reason is not written is a verdict.":
+    "Lu des mois plus tard par quelqu'un qui conteste un rang. Une pondération dont la raison n'est pas écrite est un verdict.",
+  "Weighting set":
+    "Pondération posée",
 };
 
 /* ── enregistrement des dictionnaires ─────────────────────────────────

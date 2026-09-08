@@ -395,6 +395,11 @@ export async function loadPortfolio(user) {
       id: c.id, project: c.project_id, summary: c.summary,
       expectedCost: c.expected_cost == null ? null : toM(c.expected_cost),
       expectedBenefit: c.expected_benefit == null ? null : toM(c.expected_benefit),
+      /* REQ-24 (046) — le bénéfice attendu dit COMBIEN ; il ne dit pas à
+         quel point on y croit. Nul veut dire « personne ne l'a dite » :
+         le classement refuse alors de placer la ligne plutôt que de
+         supposer une confiance moyenne (REQ-33). */
+      valueConfidence: c.value_confidence ?? null,
       basis: c.basis, writtenBy: c.written_by, writtenOn: c.written_on,
       updatedOn: c.updated_on,
       reconfirmedGate: c.reconfirmed_gate, reconfirmedOn: c.reconfirmed_on,
@@ -587,4 +592,24 @@ export async function requireVisibleProject(user, id) {
   if (!p) return { error: 404, message: "No such project" };
   if (!canSeeProject(user, p)) return { error: 404, message: "No such project" };
   return { project: p };
+}
+
+/**
+ * REQ-24 — la pondération du classement de portefeuille (046).
+ *
+ * Une seule ligne pour tout le groupe, et c'est la décision : une
+ * pondération par programme laisserait chaque programme régler les poids
+ * qui font remonter ses propres projets. `setOn` nul veut dire que
+ * personne ici n'a jamais regardé ces poids — l'écran le dit plutôt que
+ * de laisser croire à un arbitrage qui n'a pas eu lieu.
+ */
+export async function loadWeighting() {
+  const w = await one(`SELECT * FROM prioritisation_weighting WHERE id = 'default'`);
+  if (!w) return null;
+  return {
+    value: w.w_value, confidence: w.w_confidence,
+    exposure: w.w_exposure, capacity: w.w_capacity,
+    note: w.note ?? "", setBy: w.set_label ?? "", setOn: w.set_on ?? null,
+    version: w.row_version,
+  };
 }

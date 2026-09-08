@@ -53,6 +53,7 @@ if (!KEEP.length) KEEP.push("admin@meridian.example");
      integration       configuration d'exploitation, pas contenu de démo
      report_period /   l'histoire RAPPORTÉE est append-only ; une remise à
      report_snapshot   zéro ne réécrit pas ce qui a été présenté
+     prioritisation_weighting  réglage de gouvernance, posé par la migration
      schema_migration  jamais rejoué
      session           vidée à part, en dernier */
 const KEEP_TABLES = new Set([
@@ -62,6 +63,13 @@ const KEEP_TABLES = new Set([
   /* I-2 : la mémoire des clés d'idempotence appartient à l'intégration,
      comme sa clé — configuration d'exploitation, pas contenu de démo. */
   "idempotency_key",
+  /* REQ-24 (046) : la pondération du classement est un RÉGLAGE de
+     gouvernance, du même ordre qu'`app_setting` — la politique
+     d'investissement du groupe, pas un contenu de démonstration. Et sa
+     ligne unique est POSÉE PAR LA MIGRATION : la vider laisserait le
+     portefeuille sans pondération du tout, donc sans ordre, et la route
+     répondrait « le livre n'est pas migré » sur une base qui l'est. */
+  "prioritisation_weighting",
 ]);
 
 /* Enfants avant parents ; toutes les FK croisées sont SET NULL ou CASCADE

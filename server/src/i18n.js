@@ -64,6 +64,21 @@ const FR = {
     "la piste d'audit est visible à partir du niveau groupe — demandez à votre bureau de programme ce qu'il vous en faut",
   "the portfolio is prioritised at group level — your programme office scores and ranks":
     "le portefeuille est priorisé au niveau groupe — votre bureau de programme note et classe",
+  /* REQ-24 (V-5) — la pondération du classement, et ce qu'elle refuse. */
+  "the level that sets a weighting is the level that answers for the cut it draws — ask your programme office":
+    "le niveau qui pose une pondération est celui qui répond de la coupe qu'elle trace — voyez votre bureau de programme",
+  "A weight is a whole number from 0 to 100":
+    "un poids est un nombre entier de 0 à 100",
+  "Every weight cannot be zero — a weighting has to weigh something":
+    "les poids ne peuvent pas être tous nuls — une pondération doit peser quelque chose",
+  "Say why these weights — a ranking whose reason is not written is a verdict":
+    "dites pourquoi ces poids — un classement dont la raison n'est pas écrite est un verdict",
+  "Confidence is a whole number from 1 to 5, or nothing at all":
+    "la confiance est un nombre entier de 1 à 5, ou rien du tout",
+  "The people this will take is a number of full-time equivalents, zero or more":
+    "les gens que cela prendra sont un nombre d'équivalents temps plein, zéro ou plus",
+  "Probability and impact are whole numbers from 1 to 5, or nothing at all":
+    "la probabilité et l'impact sont des nombres entiers de 1 à 5, ou rien du tout",
   "management of change is released at group level — ask your programme office to release it":
     "la maîtrise des modifications est levée au niveau groupe — demandez la levée à votre bureau de programme",
 

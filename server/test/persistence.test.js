@@ -37,7 +37,11 @@ describe("schema and migrations (R2.2, R2.7)", () => {
        "038_stakeholders_comms.sql", "039_decision_record.sql", "040_milestone_basis.sql",
        "041_decision_versioned.sql", "042_value_on_the_contract.sql",
        "043_ladder_reaches_everything.sql", "044_wave_is_a_site.sql",
-       "045_what_a_row_rests_on.sql"]);
+       "045_what_a_row_rests_on.sql",
+       /* 046 - REQ-24, the weighting of the portfolio ranking;
+          047 - REQ-27, a project moves onto its programme ladder. */
+       "046_what_we_choose_not_to_do.sql",
+       "047_a_project_moves_onto_its_ladder.sql"]);
     const again = await migrate({ silent: true });
     assert.deepEqual(again, [], "a second run applies nothing");
   });
