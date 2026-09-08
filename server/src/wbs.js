@@ -119,6 +119,16 @@ export async function scaffoldProject(t, project) {
     ladder = normaliseGateModel(parsed) ?? GATES;
   } catch { ladder = GATES; }
 
+  /* E-1 — sous quelle échelle ce projet a été dressé. La 036 pose, à
+     juste titre, qu'une échelle modifiée ne réécrit pas les projets
+     existants : des jalons datés et des preuves déposées ne doivent pas
+     bouger sous les pieds des gens. Mais une organisation réelle adopte
+     un outil avec des projets déjà dedans, et sans cela rien ne DIT
+     qu'un projet suit une échelle que son programme ne déclare plus.
+     On l'écrit donc, au lieu de le deviner plus tard. */
+  await t.query(`UPDATE project SET scaffolded_gates = $2 WHERE id = $1`,
+    [project.id, ladder.length]);
+
   await insertMany(t, "activity",
     ["id", "project_id", "name", "stage", "start_date", "end_date",
      "base_start", "base_end", "weight", "pct", "owner_id"],

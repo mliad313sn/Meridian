@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "meridian-request-register/1",
+  "title": "meridian-request-register/1",
+  "description": "A field repository's request register, as read by Meridian's Product Owner. One file per field repository, in docs/requests/. The register is the field's half of the loop: it says what was asked for, what was delivered, what remains, and what the requester has answered. Additive properties are allowed everywhere on purpose — a field repository may carry its own columns (priority, effort, category) and a reader that ignores them loses nothing.",
+  "type": "object",
+  "required": ["$schema", "source", "productOwner", "channel", "registerVersion", "requests"],
+  "properties": {
+    "$schema": {
+      "const": "meridian-request-register/1",
+      "description": "The identifier of this shape. It is a name, not a URL: the schema that defines it is docs/requests/register.schema.json in the Meridian repository."
+    },
+    "source": {
+      "type": "object",
+      "description": "Where the requests came from, and at which point of the field repository they were read.",
+      "required": ["repository", "branch", "commit", "documents", "reviewedAt"],
+      "properties": {
+        "repository": { "type": "string", "minLength": 1, "description": "owner/name of the field repository." },
+        "remote": { "type": "string", "minLength": 1, "description": "Clone URL, when it is not https://github.com/<repository> — a self-hosted forge, or a path in a test." },
+        "branch": { "type": "string", "minLength": 1, "description": "The branch the requests were read on. The default branch is often not where the material lives." },
+        "commit": { "type": "string", "pattern": "^[0-9a-f]{7,40}$", "description": "The commit read. The review script diffs the branch against it and names the files that moved." },
+        "documents": { "type": "array", "items": { "type": "string" }, "description": "The documents of the field repository the round was read from." },
+        "reviewedAt": { "$ref": "#/$defs/date" },
+        "branchPinned": { "type": "string", "description": "The Meridian branch the field repository pins while no tag carries the work." },
+        "vocabulary": { "$ref": "#/$defs/vocabulary" }
+      }
+    },
+    "productOwner": {
+      "type": "object",
+      "description": "Who answers, on Meridian's side, and under which charter.",
+      "required": ["charter"],
+      "properties": {
+        "charter": { "type": "string", "minLength": 1, "description": "The document that appoints the Product Owner and states the duty." },
+        "command": { "type": "string", "description": "The command that runs a round." },
+        "lastRun": { "$ref": "#/$defs/date" }
+      }
+    },
+    "channel": {
+      "type": "object",
+      "description": "How the two sides talk: where a request is answered, what the three acceptance states mean, and what happens on a disagreement.",
+      "required": ["issues", "rule", "acceptance"],
+      "properties": {
+        "issues": { "type": "string", "minLength": 1, "description": "Where a request is answered — the issue tracker of the answering repository." },
+        "rule": { "type": "string", "minLength": 1 },
+        "counterpart": { "type": "string" },
+        "acceptance": {
+          "type": "object",
+          "description": "The vocabulary of the three states a line passes through, written out so that a reader of the data never has to guess.",
+          "required": ["done", "accepted", "released"],
+          "properties": {
+            "done": { "type": "string", "minLength": 1 },
+            "accepted": { "type": "string", "minLength": 1 },
+            "notAccepted": { "type": "string", "description": "What `accepted: false` means — the requester could answer and has not." },
+            "cannotAnswerYet": { "type": "string", "description": "What `accepted: null` means — the requester is not in a position to answer." },
+            "released": { "type": "string", "minLength": 1 }
+          }
+        },
+        "escalation": { "type": "string" },
+        "cadence": { "type": "object" },
+        "release": { "type": "object" }
+      }
+    },
+    "registerVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Increases on every round. The field repository's tooling diffs against the version it last read."
+    },
+    "requests": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/request" }
+    }
+  },
+  "$defs": {
+    "date": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "description": "A calendar day, ISO 8601."
+    },
+    "vocabulary": {
+      "type": "object",
+      "description": "The identifiers the field repository uses in its own ledgers, as regular expressions without anchors. The review script reads them rather than knowing them: `request` ids name something that should become a request here, `context` ids (decisions, ADRs, pull requests) are listed for the reader and never counted as missing.",
+      "required": ["request"],
+      "properties": {
+        "request": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+        "context": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "note": { "type": "string" }
+      }
+    },
+    "request": {
+      "type": "object",
+      "required": ["id", "origin", "title", "status", "version", "decidedOn", "delivered",
+                   "measure", "remaining", "issue", "accepted", "released", "history"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[A-Z][A-Z0-9]*-[0-9]+$", "description": "The id in THIS register (REQ-07). Ids of the field repository's own ledgers belong in `origin`." },
+        "origin": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "The field repository's own ids that this request answers — the join between the two ledgers." },
+        "title": { "type": "string", "minLength": 1 },
+        "status": { "enum": ["open", "partial", "done", "refused"] },
+        "version": { "type": ["string", "null"], "description": "The Meridian version that carries the work, or null while it is not delivered." },
+        "decidedOn": { "anyOf": [{ "$ref": "#/$defs/date" }, { "type": "null" }] },
+        "delivered": { "type": "array", "items": { "type": "string" }, "description": "What was built, by path or by name. Empty while nothing is." },
+        "measure": { "type": ["string", "null"], "description": "The test or the gate that proves the claim. A `done` line without one is an opinion." },
+        "remaining": { "anyOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }, { "type": "null" }] },
+        "issue": { "type": ["integer", "null"], "description": "The issue of the answering repository where this line is answered, when the requester opened one." },
+        "accepted": {
+          "type": ["boolean", "null"],
+          "description": "The requester's answer. true — they said so on the issue. false — they are in a position to answer and have not. null — they cannot answer yet: nothing is delivered, or they have said they cannot judge it until they adopt it. false and null are NOT the same statement; a silent user and a blocked one are different problems."
+        },
+        "released": { "type": "boolean", "description": "A version tag a third party can fetch carries the line." },
+        "history": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["at", "registerVersion", "status"],
+            "properties": {
+              "at": { "$ref": "#/$defs/date" },
+              "registerVersion": { "type": "integer", "minimum": 1 },
+              "status": { "enum": ["open", "partial", "done", "refused"] },
+              "note": { "type": "string" }
+            }
+          }
+        },
+        "answerToSource": { "type": ["string", "null"], "description": "What the field repository can close on its side, in its own vocabulary." },
+        "observed": { "type": "string", "description": "What the field measured, in its words." },
+        "priority": { "enum": ["highest", "high", "medium", "low"], "description": "The requester's recommendation, not a commitment." },
+        "effort": { "enum": ["S", "M", "L"], "description": "The requester's estimate: S = days, M = weeks, L = a release." },
+        "api": { "type": "object" }
+      },
+      "allOf": [
+        {
+          "description": "A line with nothing delivered cannot have been accepted or refused acceptance — there is nothing to try. E-9: `accepted: false` on an open line reads as silence when it is really absence.",
+          "if": { "properties": { "status": { "const": "open" } }, "required": ["status"] },
+          "then": { "properties": { "accepted": { "const": null } } }
+        },
+        {
+          "description": "A released line names the version that carries it.",
+          "if": { "properties": { "released": { "const": true } }, "required": ["released"] },
+          "then": { "properties": { "version": { "type": "string", "minLength": 1 } } }
+        }
+      ]
+    }
+  }
+}

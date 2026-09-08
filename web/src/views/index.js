@@ -245,8 +245,15 @@ Views.portfolio = (db) => {
     sortableTable({ cols, rows, onRow: r => go("#/project/" + r.p.id),
       empty: { title: t("No projects match this scope"), body: t("Widen the programme, site or health filter in the header.") } }));
 
-  /* right rail */
-  const decisions = Engine.decisions(db);
+  /* right rail — E-6.
+     Les six tuiles se re-cadrent bien sur le programme choisi ; le rail,
+     lui, restait à l'échelle du livre et listait des lignes d'autres
+     programmes sous un filtre qui en nommait un seul. Un directeur de
+     programme ne pouvait donc pas lire SES décisions dues. Les deux
+     aides prennent déjà la liste cadrée en second argument — le tableau
+     de bord de programme les appelle correctement depuis toujours ;
+     cette vue-ci ne la passait simplement pas. */
+  const decisions = Engine.decisions(db, list);
   const rail = h("aside", { class: "sec" },
     sectionHead(t("Decisions owed"), decisions.length + " open"),
     h("div", { style: "margin-bottom:22px" }, decisions.length ? decisions.slice(0, 6).map(d =>
@@ -256,7 +263,7 @@ Views.portfolio = (db) => {
           h("div", { class: "kicker" }, d.kind),
           h("div", { class: "strong small", style: "margin:2px 0 1px" }, d.title),
           h("div", { class: "xs muted" }, d.meta)))) :
-      h("div", { class: "small muted" }, "Nothing is waiting on a decision. The next gate is " + fmtDate((Engine.horizon(db, 1)[0] || {}).date) + ".")),
+      h("div", { class: "small muted" }, "Nothing is waiting on a decision. The next gate is " + fmtDate((Engine.horizon(db, 1, list)[0] || {}).date) + ".")),
 
     /* Your action debt follows you out of the Meetings screen (UX
        committee, value I-4) — an owner who never opens Meetings still
@@ -297,7 +304,7 @@ Views.portfolio = (db) => {
     h("hr", { class: "hr" }),
     h("div", { style: "height:18px" }),
     sectionHead(t("Next on the calendar")),
-    h("div", { style: "margin-bottom:22px" }, Engine.horizon(db, 6).map(m =>
+    h("div", { style: "margin-bottom:22px" }, Engine.horizon(db, 6, list).map(m =>
       h("div", { class: "list-row", style: "gap:12px;cursor:pointer", onClick: () => go("#/project/" + m.project) },
         h("div", { class: "num", style: "width:52px;flex:none;font-size:12px;letter-spacing:.04em" },
           fmtDate(m.date).slice(0, 6).toUpperCase()),
@@ -1105,7 +1112,19 @@ Views.project = (db) => {
   const milestones = Engine.milestones(db, p.id).map(ms => {
     const g = ms.gate ? Engine.gateStatus(db, p.id, ms.gate) : null;
     const late = ms.dateBasis !== "placeholder" && D(ms.date) < D(db.statusDate);
-    const state = g ? g.state : ms.dateBasis === "placeholder" ? "Unscheduled" : (late ? "Cleared" : "Planned");
+    /* E-7 — un jalon ACCEPTÉ se lit accepté.
+       L'état d'un jalon hors échelle se déduisait d'une seule chose : sa
+       date comparée à celle du livre. Le résultat était faux dans les
+       deux sens — un jalon que personne n'avait touché se lisait
+       « Cleared » parce que sa date était passée, et un jalon
+       formellement accepté par une personne nommée se lisait « Planned »
+       parce que la sienne ne l'était pas. `done` n'était jamais lu.
+       PM-04 tient sur le fait que l'acceptation nomme quelqu'un ; le
+       contrôle existait dans la table et pas dans la salle. */
+    const state = g ? g.state
+      : ms.done ? "Cleared"
+      : ms.dateBasis === "placeholder" ? "Unscheduled"
+      : (late ? "Overdue" : "Planned");
     return h("div", { class: "step" },
       h("span", { class: "step-i " + (state === "Cleared" ? "ok" : state === "At risk" || state === "Overdue" ? "no" : "wait") },
         ms.gate ? "G" + ms.gate : "◇"),
@@ -1115,7 +1134,12 @@ Views.project = (db) => {
           (ms.dateBasis === "placeholder" ? " · " + t("placeholder") + (ms.condition ? " — " + t("after: ") + ms.condition : "") : "") +
           (g ? " · evidence " + g.approved + "/" + g.total : "") +
           (g && g.criteria.length ? " · " + t("criteria") + " " + g.criteriaMet + "/" + g.criteria.length : "") +
-          (g && g.risks.length ? " · " + g.risks.length + " " + t("open register item(s) against it") : ""))),
+          (g && g.risks.length ? " · " + g.risks.length + " " + t("open register item(s) against it") : "") +
+          /* Et QUI l'a accepté, et quand : le nom n'apparaissait sur
+             aucune surface de lecture du produit, seulement dans le
+             formulaire qui l'écrit. */
+          (ms.acceptedBy ? " · " + t("accepted by ") + Engine.personName(db, ms.acceptedBy)
+            + (ms.acceptedOn ? " " + fmtDate(ms.acceptedOn) : "") : ""))),
       h("div", { style: "text-align:right" }, statusTag(state),
         ms.gate && g && g.outstanding.length
           ? h("div", { class: "xs linkish muted", style: "margin-top:4px", onClick: () => go("#/documents") }, "see evidence")
@@ -1145,6 +1169,18 @@ Views.project = (db) => {
       may("schedule.write", p)
         ? h("button", { class: "btn btn-sm", onClick: () => addMilestone(db, p) }, icon("plus", 12), "Milestone")
         : null),
+    /* E-1 — ce projet suit-il encore l'échelle que son programme
+       déclare ? La 036 ne réécrit pas les projets existants, et c'est
+       juste ; mais alors « quel jalon vient ensuite » devient faux en
+       silence pour tout adoptant précoce. On le DIT, à l'endroit exact
+       où la question se pose. */
+    p.ladderDiffers
+      ? h("div", { class: "drop-hint", style: "margin-bottom:10px" },
+          h("div", { class: "small strong" }, t("This project is on a ladder its programme no longer declares.")),
+          h("div", { class: "xs muted", style: "margin-top:3px" },
+            t("It was set up with ") + p.scaffoldedGates + t(" gates; the programme now declares ")
+            + Engine.gates(db, p.id).length + t(". Its dated gates and their filed evidence were deliberately left alone — but read “what is next” with that in mind.")))
+      : null,
     h("div", { style: "margin-bottom:8px" }, milestones),
     criteriaBlock(db, p, gate),
     !advance.ok ? h("div", { class: "drop-hint", style: "margin-top:12px" },
@@ -4560,6 +4596,75 @@ function editDoc(db, d) {
 }
 
 /* ── Status reporting ─────────────────────────────────────────────── */
+/**
+ * V-4 — ce que le cas a promis, contre ce que les bénéfices ont mesuré.
+ *
+ * La règle qui gouverne ce bloc est celle du rapport de terrain, et elle
+ * est plus importante que ce qu'il montre : **on ne convertit rien**.
+ * Un facteur qui ramènerait des tonnes ou des points de disponibilité à
+ * une devise est un nombre que quelqu'un invente et que tout le monde
+ * cite ensuite. On additionne l'argent, on LISTE le reste, et on dit
+ * combien on a laissé de côté et dans quelles unités.
+ */
+function valueReportBlock(db, list) {
+  const v = Engine.valueReport(db, list);
+  const tot = v.totals;
+  const num = (x, unit) => x == null ? "—" : x + (unit ? " " + unit : "");
+
+  return h("div", null,
+    h("div", { style: "height:20px" }), h("hr", { class: "hr" }), h("div", { style: "height:20px" }),
+    sectionHead(t("Promised, and measured"),
+      t("what the case said it was for, against what the benefits have actually shown")),
+
+    h("div", { style: "display:flex;gap:26px;flex-wrap:wrap;margin-bottom:14px" },
+      h("div", null, h("div", { class: "kicker" }, t("Expected cost")),
+        h("div", { class: "mono strong" }, money(tot.expectedCost))),
+      h("div", null, h("div", { class: "kicker" }, t("Expected benefit / yr")),
+        h("div", { class: "mono strong" }, money(tot.expectedBenefit))),
+      h("div", null, h("div", { class: "kicker" }, t("No case written")),
+        h("div", { class: "mono strong" }, String(tot.withoutCase + tot.neither))),
+      h("div", null, h("div", { class: "kicker" }, t("Reviews overdue")),
+        h("div", { class: "mono strong" + (tot.overdue ? " bad" : "") }, String(tot.overdue)))),
+
+    /* Ce qui n'est PAS dans le total, dit à voix haute plutôt que
+       silencieusement absent. */
+    tot.excludedBenefits
+      ? h("div", { class: "xs muted", style: "margin-bottom:12px;max-width:70ch" },
+          t("The totals above sum money only. ") + tot.excludedBenefits
+          + t(" benefit(s) are counted in their own units and deliberately left out of any total: ")
+          + tot.excludedUnits.join(", ")
+          + t(". Converting them to a currency would invent a number."))
+      : null,
+
+    v.rows.length ? table({
+      cols: [
+        { key: "p", label: t("Project"), get: (r) => h("div", null,
+            h("div", { class: "small strong truncate" }, r.name),
+            h("div", { class: "xs muted mono" }, r.project + (r.closed ? " · " + t("closed") : ""))) },
+        { key: "c", label: t("The case"), get: (r) => !r.case
+            ? h("span", { class: "xs muted" }, r.benefits.length ? t("benefits, but no case") : t("nothing promised"))
+            : h("div", null,
+                h("div", { class: "mono small" }, money(r.case.expectedCost) + " → " + money(r.case.expectedBenefit)),
+                h("div", { class: "xs muted" },
+                  r.case.reconfirmedGate ? t("reconfirmed at gate ") + r.case.reconfirmedGate : t("never reconfirmed"),
+                  r.case.staleSinceReconfirm ? h("span", { class: "bad" }, t(" · revised since")) : null)) },
+        { key: "b", label: t("What was measured"), get: (r) => !r.benefits.length
+            ? h("span", { class: "xs muted" }, r.case ? t("no benefit named yet") : "—")
+            : h("div", null, r.benefits.map((b) => h("div", { class: "xs", style: "margin-bottom:2px" },
+                h("span", { class: "strong" }, b.title),
+                h("span", { class: "muted" },
+                  " · " + num(b.baseline, b.unit) + " → " + num(b.target, b.unit)
+                  + " · " + (b.actual == null ? t("not measured") : t("now ") + num(b.actual, b.unit))
+                  + (b.attainment != null ? " · " + Math.round(b.attainment * 100) + "%" : "")),
+                b.reviewAgeDays != null && b.reviewAgeDays > 0
+                  ? h("span", { class: "bad" }, " · " + t("review ") + b.reviewAgeDays + t(" days overdue"))
+                  : !b.realiseOn ? h("span", { class: "muted" }, " · " + t("undated")) : null))) },
+      ],
+      rows: v.rows,
+      empty: t("No project in scope."),
+    }) : null);
+}
+
 Views.reports = (db) => {
   const list = App.scopedProjects();
   const roll = Engine.roll(db, list);
@@ -4635,6 +4740,11 @@ Views.reports = (db) => {
        live; a closed period is what was actually said, and it is read
        here rather than recomputed. */
     periodBlock(db),
+
+    /* V-4 — la promesse contre le réalisé, sur la même page que l'état.
+       Les deux moitiés vivaient dans deux tables que le produit ne
+       mettait jamais sur une même ligne. */
+    valueReportBlock(db, list),
 
     h("div", { style: "height:20px" }), h("hr", { class: "hr" }), h("div", { style: "height:20px" }),
 

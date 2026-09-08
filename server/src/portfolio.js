@@ -176,6 +176,18 @@ export async function loadPortfolio(user) {
     inScope(`SELECT * FROM case_reconfirmation WHERE project_id = ANY($1) ORDER BY project_id, gate`),
   ]);
 
+  /* La longueur d'échelle déclarée par chaque programme, lue une fois :
+     cent projets ne doivent pas coûter cent lectures. */
+  const ladderByProgramme = new Map(programmes.map((pr) => {
+    let n = 4;
+    try {
+      const m = typeof pr.gate_model === "string" ? JSON.parse(pr.gate_model) : pr.gate_model;
+      if (Array.isArray(m) && m.length) n = m.length;
+    } catch { /* une échelle illisible se lit comme la défaut */ }
+    return [pr.id, n];
+  }));
+  const ladderOf = (programmeId) => ladderByProgramme.get(programmeId) ?? 4;
+
   const depsByActivity = new Map();
   for (const d of deps) {
     if (!depsByActivity.has(d.activity_id)) depsByActivity.set(d.activity_id, []);
@@ -263,6 +275,15 @@ export async function loadPortfolio(user) {
       desc: p.description, phase: p.phase, gate: p.gate,
       healthOverride: p.health_override, healthOverrideWhy: p.health_override_why,
       closed: p.closed, origin: p.origin ?? "local",
+      /* E-1 — sous quelle échelle ce projet a été dressé, et si ce n'est
+         plus celle que son programme déclare. La 036 ne réécrit pas les
+         projets existants — c'est voulu — mais rien ne DISAIT que « quel
+         jalon vient ensuite » était devenu faux pour eux. `null` veut
+         dire « dressé avant que nous l'écrivions » : on ne l'invente
+         pas, on dit qu'on ne sait pas. */
+      scaffoldedGates: p.scaffolded_gates ?? null,
+      ladderDiffers: p.scaffolded_gates != null
+        && p.scaffolded_gates !== ladderOf(p.programme_id),
       // the post-implementation verdict, where one has been given (V-01)
       pirOn: p.pir_on ?? null, pirVerdict: p.pir_verdict ?? null, pirNote: p.pir_note ?? "",
       /* PM-08 — les trois signatures de la clôture. */

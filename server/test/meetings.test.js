@@ -9,6 +9,7 @@
 import { test, before, after, describe } from "node:test";
 import assert from "node:assert/strict";
 import { boot, shutdown, as } from "./harness.js";
+import { many } from "../src/db.js";
 import { buildAgenda, nextOccurrenceDate, periodLabel, seriesProjects } from "../../shared/meetings.js";
 import { iso, addDays, D } from "../../shared/engine.js";
 
@@ -352,3 +353,48 @@ function emptyBook() {
     columns: [], allocations: [], narrative: {},
   };
 }
+
+/**
+ * E-8 — la même décision, consignée deux fois dans la même séance.
+ *
+ * Constaté par mesure, sur la route que l'écran emploie : deux POST
+ * identiques, deux lignes, et le procès-verbal porte la décision deux
+ * fois. Le chemin par identifiant externe était gardé depuis I-2 ; la
+ * route de session ne l'était pas.
+ */
+describe("E-8 · un procès-verbal ne porte pas deux fois la même ligne", () => {
+  test("la même décision et la même action, deux fois dans la même séance, sont refusées", async () => {
+    const pmo = await as("pmo");
+    const s = await nextOf(pmo, GROUP_MONTHLY);
+    const id = s.next.id;
+    await pmo.post(`/api/meetings/occurrences/${id}/open`);
+
+    const headline = "E-8 · the corridor test date holds";
+    const first = await pmo.post(`/api/meetings/occurrences/${id}/decisions`, { headline });
+    assert.equal(first.status, 201, first.text);
+    const again = await pmo.post(`/api/meetings/occurrences/${id}/decisions`, { headline });
+    assert.equal(again.status, 409, again.text);
+    assert.match(again.body.error, /already recorded in this meeting/);
+    const rows = await many(
+      `SELECT id FROM meeting_decision WHERE occurrence_id = $1 AND headline = $2`, [id, headline]);
+    assert.equal(rows.length, 1, "une décision, une ligne");
+
+    const title = "E-8 · confirm the corridor slot with the vendor";
+    const a1 = await pmo.post(`/api/meetings/occurrences/${id}/actions`, { title, owner: "PE-14" });
+    assert.equal(a1.status, 201, a1.text);
+    const a2 = await pmo.post(`/api/meetings/occurrences/${id}/actions`, { title, owner: "PE-14" });
+    assert.equal(a2.status, 409, a2.text);
+    assert.match(a2.body.error, /already raised in this meeting/);
+
+    /* La portée du garde est LA SÉANCE : la même phrase reste
+       légitimement consignable dans une séance ultérieure — c'est le cas
+       normal d'un point revu, et le casser serait pire que le doublon. */
+    await pmo.post(`/api/meetings/occurrences/${id}/close`);
+    const s2 = await nextOf(pmo, GROUP_MONTHLY);
+    if (s2.next && s2.next.id !== id) {
+      await pmo.post(`/api/meetings/occurrences/${s2.next.id}/open`);
+      const later = await pmo.post(`/api/meetings/occurrences/${s2.next.id}/decisions`, { headline });
+      assert.equal(later.status, 201, "la même décision, une autre séance : c'est un point revu");
+    }
+  });
+});

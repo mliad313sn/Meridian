@@ -197,3 +197,72 @@ describe("PM-03 · la justification continue", () => {
       "reconfirmer le vide est le geste de complaisance que PM-03 ferme");
   });
 });
+
+/**
+ * V-15 — porter la promesse par-dessus la conversion.
+ *
+ * Rapport de terrain RT365 : « La route copie les quatre notes,
+ * `est_cost → budget` et `detail → description`, et laisse tomber
+ * `benefit_note` — le champ dont le commentaire de schéma dit "ce à quoi
+ * ça SERT, dans les mots du demandeur" — et ne crée aucun cas d'affaire.
+ * L'en-tête de la 028 décrit la chaîne demande → cas → bénéfice → revue ;
+ * la conversion est l'endroit où cette chaîne se rompt, au moment exact
+ * où l'argent est engagé et où la justification est la plus fraîche. »
+ */
+describe("V-15 · la demande devient un projet, et sa promesse la suit", () => {
+  test("le cas est créé, porte les mots du demandeur et cite la demande", async () => {
+    const pmo = await as("pmo");
+    const admin = await as("admin");
+    const db = (await admin.get("/api/bootstrap")).body.db;
+
+    const d = await pmo.post("/api/demand", {
+      title: "Retire the overnight reconciliation",
+      detail: "Two people spend every morning on it.",
+      benefitNote: "So that nobody starts their day undoing last night.",
+      estCost: 0.6, programme: db.programmes[0].id, site: db.sites[0].id,
+    });
+    assert.equal(d.status, 201, d.text);
+    const raised = (await pmo.get("/api/demand")).body.demand.find((x) => x.id === d.body.id);
+    const ok = await pmo.patch(`/api/demand/${d.body.id}`, { status: "Approved", version: raised.version });
+    assert.equal(ok.status, 200, ok.text);
+
+    const conv = await pmo.post(`/api/demand/${d.body.id}/convert`, {
+      start: "2026-10-01", finish: "2027-03-31", governanceLevel: "group",
+    });
+    assert.equal(conv.status, 201, conv.text);
+
+    const bc = (await admin.get("/api/bootstrap")).body.db.businessCases
+      .find((c) => c.project === conv.body.id);
+    assert.ok(bc, "la chaîne demande → cas ne se rompt plus à son premier maillon");
+    assert.equal(bc.summary, "So that nobody starts their day undoing last night.",
+      "les mots du demandeur, pas une reformulation");
+    assert.equal(bc.expectedCost, 0.6, "et ce que la demande estimait, en millions");
+    assert.match(bc.basis, new RegExp(d.body.id), "le cas se relit jusqu'à la demande qui l'a justifié");
+    assert.equal(bc.reconfirmedOn, null, "porté n'est pas reconfirmé");
+  });
+
+  test("une demande sans promesse donne un brouillon qui le dit, jamais une justification inventée", async () => {
+    const pmo = await as("pmo");
+    const admin = await as("admin");
+    const db = (await admin.get("/api/bootstrap")).body.db;
+
+    const d = await pmo.post("/api/demand", {
+      title: "Replace the tape library", detail: "It is out of support.",
+      estCost: 0.2, programme: db.programmes[0].id, site: db.sites[0].id,
+    });
+    assert.equal(d.status, 201, d.text);
+    const raised2 = (await pmo.get("/api/demand")).body.demand.find((x) => x.id === d.body.id);
+    await pmo.patch(`/api/demand/${d.body.id}`, { status: "Approved", version: raised2.version });
+    const conv = await pmo.post(`/api/demand/${d.body.id}/convert`, {
+      start: "2026-10-01", finish: "2027-01-31", governanceLevel: "group",
+    });
+    assert.equal(conv.status, 201, conv.text);
+
+    const bc = (await admin.get("/api/bootstrap")).body.db.businessCases
+      .find((c) => c.project === conv.body.id);
+    assert.ok(bc, "la conversion réussit quand même");
+    assert.match(bc.summary, /stated no benefit/,
+      "le brouillon dit qu'il en est un — fabriquer une justification serait pire que n'en avoir aucune");
+    assert.match(bc.summary, /before the next gate/);
+  });
+});

@@ -690,6 +690,20 @@ answers in three places it can read:
 
   `docs/requests/rt365.json` carries all three states, and a `history`
   per line.
+- **`accepted` is three-valued** (E-9, filed by RT365 against this
+  register). `true` — the requester said so on the issue. `false` — the
+  requester is in a position to answer and has not. `null` — the
+  requester **cannot** answer yet: nothing is delivered to try, or they
+  have said they cannot judge the line until they adopt the feature. All
+  31 lines used to read `false`, which made a silent user and a blocked
+  one identical to anyone scanning the register. Applied at
+  `registerVersion` 8: the thirteen `open` lines are `null` (there is
+  nothing to accept), and REQ-02, REQ-04 and REQ-05 are `null` because
+  RT365 wrote that it cannot confirm them without adopting them — a real
+  integration, a real gate, a connector. The schema refuses `accepted:
+  false` on an `open` line, so a later round cannot re-introduce the
+  confusion; `channel.acceptance` in the JSON carries the sentence for
+  each state (D-33.37).
 - **Escalation.** When RT365 rejects a refusal or a `done`, the line
   goes back to `open` with the objection quoted, and the sponsor of
   both repositories is the tie-breaker, named in the next D-33.n.
@@ -697,13 +711,20 @@ answers in three places it can read:
   round; RT365's tooling diffs against the version it last read.
 
 **Cadence.** The Product Owner reviews RT365 on every `/product-owner`
-run and at least weekly while RT365 is live. `scripts/rt365-review.mjs`
-fetches every branch of RT365, extracts every line that names Meridian
-(assessment findings, RAID rows, human acts, ADRs, the sync script) and
-prints what the JSON register does not yet carry; the issues on this
-repository are read with the GitHub tools. The first run of the probe,
-minutes after the register was written, found the branch six commits
-ahead — which is the whole reason the probe exists.
+run and at least weekly while RT365 is live. `npm run review:field`
+(`scripts/field-review.mjs`; `scripts/rt365-review.mjs` is the same round
+under the name RT365 has written down) fetches every branch of RT365,
+extracts every line that names Meridian with the ids **the register
+declares** in `source.vocabulary` — M/I findings, O RAID rows, H human
+acts, D/ADR/PR for context — and prints what the JSON register does not
+yet carry; the issues on this repository are read with the GitHub tools.
+The register path, the repository, its clone URL and the vocabulary are
+all configuration: the loop is published as a pattern in
+**`docs/35-field-return-loop.md`**, its shape in
+`docs/requests/register.schema.json`, and a second field repository is
+reviewed end to end by `server/test/fieldreturn.test.js` (D-33.36). The
+first run of the probe, minutes after the register was written, found the
+branch six commits ahead — which is the whole reason the probe exists.
 
 ---
 
@@ -750,6 +771,15 @@ ahead — which is the whole reason the probe exists.
 | D-33.33 | 08/09 | Passing a gate is refused when the case has not been reconfirmed at that gate — but only where a case EXISTS. | Require a case on every project (refused: the product would demand a document it never asked for, and every book in the field would stop at its next gate). Warn instead of refusing (refused: V-3 asks for the control that is most often skipped, and a warning is how it gets skipped). | none |
 | D-33.34 | 08/09 | The patch of every upsert is filtered to what actually CHANGED, not what was sent. | Leave it and document the churn (refused: 285 audit events and 285 version bumps for a load that changed nothing makes the trail unreadable and moves a version under a reader who did nothing — the trail is the product's headline claim). | integrator measured it |
 | D-33.35 | 08/09 | Two gates that were looking the wrong way are fixed rather than worked around: `business_case` is declared to the CRUD gate, and the field-help gate reads a whole field with balanced braces. | Reformat the field so the existing regex could see its hint (refused: the gate would have stayed blind for every future field with inline options — the defect was the gate, and a gate nobody can trust is worse than no gate). | none |
+
+| D-33.36 | 08/09 | The loop is published as a pattern, not kept as a script: `meridian-request-register/1` becomes a JSON Schema held by a gate (F11), the review takes the register path, the repository, the remote and the **id vocabulary** as configuration, and a fixture field repository with its own vocabulary is reviewed end to end in a test. `scripts/rt365-review.mjs` stays as the entry point RT365 has written down. | Rename the command and update our own callers only (refused: the command is written down in a repository we do not control, and a loop that renames its entry point on the field's behalf is not published). Pull in ajv for the validation (refused: four runtime dependencies is a decision this product has already made, the schema is ours, and the subset it uses is closed — a hundred lines that shout at an unknown keyword beats a dependency that silently ignores one). | none |
+| D-33.37 | 08/09 | `accepted` is three-valued: `false` is a silence, `null` is an inability to answer (E-9). The `open` lines and the three RT365 named as unconfirmable-without-adoption become `null`; the schema refuses `false` on an `open` line. | Add a separate `acceptedWhy` string (refused for now: a free-text field beside a boolean is where the meaning goes to hide — the three states are the mechanic RT365 asked for, and `channel.acceptance` carries the sentences). Mark every line `null` because filing upstream is a human act on their side, H-31 (refused: that is true of all 31 and would delete the distinction the request exists to create). | RT365 filed it as a process finding for their own Product Owner as much as ours |
+
+| D-33.38 | 08/09 | A team is composed for the consolidated report rather than one engineer taking it in order: an interoperability engineer on the reusable loop, a verification engineer on the three claims RT365 tagged `[Open]`, and the delivery engineer on the two entangled groups (ladder integrity, value verbs). | One engineer, in RT365's sequence (refused: the three `[Open]` claims are measurements, not builds, and settling them changed what was worth building — one turned out not to be a defect at all). Four parallel builders (refused: three of the four groups touch the same files, and two agents editing one tree is how a green suite hides a lost edit). | none |
+| D-33.39 | 08/09 | RT365's V-8 is re-filed as they themselves re-filed it. They corrected their own record mid-report: `scaffoldProject` reads ONE ladder, and the duplicate gates in their book came from their loader. The narrower request — a book adopted before the ladder existed — is answered with the read-side signal they offered as the cheaper of two remedies. | Re-scaffold existing projects onto the new ladder (refused, and 036 refused it first: dated gates and filed evidence would move under the people who filed them). Close V-8 as not-a-defect (refused: their measurement was real and the narrower need is real). | RT365 corrected it before we did |
+| D-33.40 | 08/09 | The V-4 report never converts a unit. Money-denominated benefits are summed; everything else is listed in its own unit, and the page states how many were excluded and in which units. | A portfolio value in one currency (refused, and RT365 forbade it in the acceptance criterion: a factor from tonnes or availability points to currency is a number somebody invents and everybody then quotes). | none |
+| D-33.41 | 08/09 | E-6 is answered with a measurement that contradicts it, and the smaller defect it uncovered is fixed. The six tiles do rescope; the right rail did not. | Accept E-6 as filed (refused: it is not true, and a register that records a wrong finding as delivered is worse than one that argues). | verification engineer measured both states |
+| D-33.42 | 08/09 | V-9 (governance quality signals) is left OPEN with a written reason rather than carried silently, on RT365's own concern 6: "fifteen more requests from an enthusiastic field repository is a way to lose your own roadmap." | Take all fifteen (refused for that reason). Drop it (refused: it is the cheapest item left and needs no new data entry). | RT365 asked us to decline with a reason rather than carry debt |
 
 *(one line per decision, appended by each run)*
 

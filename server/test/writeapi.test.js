@@ -690,3 +690,101 @@ describe("second round · what the counsellors found (docs/33 §5)", () => {
     assert.equal(fixed.status, 201, "the refused request did not burn the key");
   });
 });
+
+/**
+ * V-4 — la promesse contre le réalisé, sur la même ligne, sans jamais
+ * convertir une unité en une autre.
+ *
+ * Rapport de terrain RT365 : « Le produit sait dire combien de bénéfices
+ * ont été promis, mesurés et statués, il sait dire ce que le cas
+ * attendait, et il ne met jamais les deux sur la même ligne. » Et leur
+ * critère d'acceptation porte une interdiction explicite : **aucune
+ * conversion monétaire dérivée n'apparaît nulle part**.
+ */
+describe("V-4 · ce qui a été promis, contre ce qui a été mesuré", () => {
+  test("le rapport confronte les deux moitiés, en unités mêlées, sans rien convertir", async () => {
+    const admin = await as("admin");
+    const readKey = await mint(admin, "Value reader", "read:portfolio");
+    const h = { "X-API-Key": readKey.key };
+
+    /* Son propre projet : E01 porte déjà un cas écrit par un test plus
+       haut, et un projet n'en a qu'un. */
+    const mk = await put("/api/v1/projects/V4-PRJ", {
+      name: "Mixed units", programme: PROG, site: SITE, pm: PM,
+      start: "2026-09-07", finish: "2027-06-30", budget: 2,
+    });
+    assert.equal(mk.status, 201, mk.text);
+
+    /* Un bénéfice en argent, un autre en heures : ils ne s'additionnent pas. */
+    const wc = await put("/api/v1/business-case/CASE-V4", {
+      project: "V4-PRJ", summary: "Fewer halts pays for itself.", expectedCost: 2, expectedBenefit: 5,
+    });
+    assert.equal(wc.status, 201, wc.text);
+    const wm = await put("/api/v1/benefits/BEN-V4-MONEY", {
+      project: "V4-PRJ", kind: "Cost", title: "Fines avoided", unit: "$M",
+      baseline: 0, target: 4, actual: 3, measuredOn: "2026-08-31",
+    });
+    assert.equal(wm.status, 201, wm.text);
+    const wh = await put("/api/v1/benefits/BEN-V4-HOURS", {
+      project: "V4-PRJ", kind: "Availability", title: "Operator hours returned", unit: "hours",
+      baseline: 0, target: 900, actual: 450, measuredOn: "2026-08-31",
+    });
+    assert.equal(wh.status, 201, wh.text);
+
+    /* Le rapport parle en identifiants Meridian ; « E01 » est le nom que
+       l'intégration donne à SA ligne. On résout par le cas qu'on vient
+       d'écrire, comme le ferait un appelant. */
+    const caseRow = await one(`SELECT project_id FROM business_case WHERE external_id = $1`, ["CASE-V4"]);
+    const pid = caseRow.project_id;
+
+    const r = await c.get("/api/v1/value", h);
+    assert.equal(r.status, 200, r.text);
+    const row = r.body.value.rows.find((x) => x.project === pid);
+    assert.ok(row, "le projet est une ligne du rapport");
+    assert.ok(row.case, "avec ce que le cas a promis");
+    assert.equal(row.case.expectedBenefit, 5);
+    assert.equal(row.benefits.length, 2, "et chaque bénéfice, dans SON unité");
+
+    const hours = row.benefits.find((b) => b.unit === "hours");
+    assert.equal(hours.actual, 450);
+    assert.equal(hours.money, false, "des heures ne sont pas de l'argent");
+    assert.equal(Math.round(hours.attainment * 100), 50);
+
+    const t = r.body.value.totals;
+    /* La règle qui compte : le total n'additionne QUE l'argent, et dit
+       tout haut ce qu'il a laissé dehors. */
+    assert.equal(t.moneyBenefitsCounted, 1);
+    assert.ok(t.excludedBenefits >= 1);
+    assert.ok(t.excludedUnits.includes("hours"),
+      "les unités écartées sont nommées, pas silencieusement absentes");
+    /* Et nulle part une conversion : aucun total ne peut valoir la somme
+       des deux chiffres, qui ne sont pas additionnables. */
+    assert.notEqual(t.moneyActual, 3 + 450);
+
+    /* Les deux silences se voient. */
+    const noCase = r.body.value.rows.find((x) => x.benefitsWithoutCase);
+    const noBenefit = r.body.value.rows.find((x) => x.caseWithoutBenefits);
+    assert.ok(noCase || noBenefit || r.body.value.rows.some((x) => x.neither),
+      "un projet sans cas, ou sans bénéfice, est visible comme tel plutôt qu'absent");
+
+    /* Une clé sans la portée est refusée comme partout ailleurs. */
+    assert.equal((await c.get("/api/v1/value", { "X-API-Key": MEET_KEY })).status, 403);
+  });
+
+  test("une promesse dont la date est passée porte son âge de revue", async () => {
+    const admin = await as("admin");
+    const readKey = await mint(admin, "Value reader 2", "read:portfolio");
+    const late0 = await put("/api/v1/benefits/BEN-V4-LATE", {
+      project: "V4-PRJ", kind: "Production", title: "Throughput", unit: "tonnes",
+      baseline: 100, target: 140, realiseOn: "2026-01-31",
+    });
+    assert.equal(late0.status, 201, late0.text);
+    const caseRow = await one(`SELECT project_id FROM business_case WHERE external_id = $1`, ["CASE-V4"]);
+    const r = await c.get("/api/v1/value", { "X-API-Key": readKey.key });
+    const row = r.body.value.rows.find((x) => x.project === caseRow.project_id);
+    const late = row.benefits.find((b) => b.title === "Throughput");
+    assert.ok(late.reviewAgeDays > 0, "elle attend d'être mesurée depuis un nombre de jours");
+    assert.equal(late.actual, null);
+    assert.ok(row.overdue >= 1);
+  });
+});

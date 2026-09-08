@@ -1591,6 +1591,31 @@ r.post("/demand/:id/convert", async (req, res, next) => {
           id, name: b.name ?? d.title, programme, site,
           pm: b.pm ?? null, method: b.method ?? "Hybrid", start: b.start, finish: b.finish,
         });
+        /* V-15 — porter la promesse par-dessus la conversion.
+           La route copiait les quatre notes, `est_cost` dans le budget et
+           `detail` dans la description, et LAISSAIT TOMBER
+           `benefit_note` — le champ dont le commentaire de schéma dit
+           « ce à quoi ça SERT, dans les mots du demandeur » — sans créer
+           de cas d'affaire. L'en-tête de la 028 décrit pourtant la chaîne
+           voulue : demande → cas → bénéfice → revue. Elle se rompait à
+           son premier maillon, au moment exact où l'argent est engagé et
+           où la justification est la plus fraîche.
+
+           Le cas créé ici est un BROUILLON honnête : il porte les mots du
+           demandeur, ou dit qu'il n'y en avait pas. Fabriquer une
+           justification serait pire que n'en avoir aucune. */
+        const note = String(d.benefit_note ?? "").trim();
+        const caseId = await allocateId(t, "CAS", { pad: 3 });
+        await t.query(
+          `INSERT INTO business_case
+             (id, project_id, summary, expected_cost, expected_benefit, basis, written_by)
+           VALUES ($1,$2,$3,$4,NULL,$5,$6)`,
+          [caseId, id,
+           note || `Carried from request ${d.id} — the request stated no benefit. ` +
+                   `This case is a draft: write what this is for before the next gate.`,
+           d.est_cost ?? null,
+           `From request ${d.id}, approved ${d.decided_on ?? "on conversion"}.`,
+           req.user.id]);
         await t.query(
           `UPDATE demand SET status = 'Converted', project_id = $2, row_version = row_version + 1
             WHERE id = $1`, [d.id, id]);
@@ -2210,7 +2235,17 @@ r.post("/lessons", async (req, res, next) => {
     if (!b.title) bad("A lesson needs a title");
     if (b.category && !LESSON_CATEGORIES.includes(b.category)) bad("That is not a lesson category");
     const gateN = b.gate === undefined || b.gate === null || b.gate === "" ? null : Number(b.gate);
-    if (gateN !== null && !(gateN >= 1 && gateN <= 4)) bad("A gate is 1, 2, 3 or 4");
+    /* V-13 — l'échelle du programme, pas les quatre jalons de 2024. Sur
+       une échelle à six, un enseignement ne pouvait pas être rattaché aux
+       jalons 5 et 6 : la contrainte refusait la ligne sans rien dire.
+       Brider en silence est pire que de ne pas avoir d'échelle
+       configurable, parce que la panne est invisible jusqu'à l'essai. */
+    if (gateN !== null) {
+      const n = await ladderLength(p.id);
+      if (!(Number.isInteger(gateN) && gateN >= 1 && gateN <= n)) {
+        bad(`A lesson is tagged to a gate 1..${n} of this project's programme ladder`);
+      }
+    }
 
     let id = null;
     await audited(req.user,

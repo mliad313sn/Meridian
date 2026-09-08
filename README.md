@@ -220,6 +220,7 @@ never a silent overwrite.
 | [`docs/32-comite-recette-processus.md`](docs/32-comite-recette-processus.md) | Process-acceptance committee (FR) — the ordered journey of a new organisation, and the seams it found |
 | [`docs/33-retour-terrain-rt365.md`](docs/33-retour-terrain-rt365.md) | **The RT365 field return** — the first real programme's twelve findings, the request register in detail, the Product Owner's charter and decisions, the communication loop; [`docs/requests/rt365.json`](docs/requests/rt365.json) is the same as data |
 | [`docs/34-exploitation.md`](docs/34-exploitation.md) | Operating it for real — PostgreSQL, backup and the restore drill that proves it, second instance, proxy, upgrade tenant by tenant, fleet template |
+| [`docs/35-field-return-loop.md`](docs/35-field-return-loop.md) | **The field-return loop as a pattern** (EN) — how a programme files a request register, how every branch of it is reviewed, the three acceptance states, and how a second field repository joins; the shape is published in [`docs/requests/register.schema.json`](docs/requests/register.schema.json) |
 | [`docs/security-policy-template.md`](docs/security-policy-template.md) | The written security policy SECURITY.md says is yours — as a page to fill in |
 | [`docs/en/`](docs/en/) | The committee record 16–32 in English (the French originals govern) |
 

@@ -90,6 +90,20 @@ const DOCS = {
     scope: "read:audit",
     returns: { contract: "string", generatedAt: "date-time", events: "object[]" },
   },
+  /* V-4 — ce que le cas a promis, contre ce que les bénéfices ont
+     mesuré, sans jamais convertir une unité en une autre. */
+  "GET /api/v1/value": {
+    summary: "Forecast against realised — what was promised, what was measured, and what is not yet known",
+    description:
+      "One row per project: the business case's expected cost and benefit with its basis and " +
+      "reconfirmation state, and every benefit in ITS OWN unit with its attainment and how long " +
+      "its review has been outstanding. **No currency conversion appears anywhere**: the totals " +
+      "sum money-denominated benefits only and state how many others were excluded and in which " +
+      "units. A project with a case and no benefits, and one with benefits and no case, are each " +
+      "visible as such rather than absent. Filter: programme.",
+    scope: "read:portfolio",
+    returns: { contract: "string", generatedAt: "date-time", programme: "string", value: "object" },
+  },
   /* REQ-15 — écrire sans pouvoir relire n'est pas un contrat. */
   "GET /api/v1/decisions": {
     summary: "The decision register — what was decided, by whom, and on what basis",

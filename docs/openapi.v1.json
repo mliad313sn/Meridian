@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Meridian IT-PMO",
-    "version": "5.11.0",
+    "version": "5.12.0",
     "summary": "Read a governed project portfolio, and the trail of how it got that way",
     "description": "The surface other systems read. It is versioned in the path: the day the shape has to change it becomes /api/v2, so that nobody has to guess. Authentication is a key issued per connected system, carrying explicit scopes; the product never stores the key itself, only its fingerprint.\n\nWrites arrived with the first real integrator (RT365, docs/33): PUT by your own identifier on projects, milestones, register items, stage progress, work items, decisions and actions, under two write scopes, with an optional Idempotency-Key. A scope is only published once a route honours it: declaring one earlier would advertise a door that does not exist and imply it is guarded.",
     "license": {
@@ -1636,6 +1636,51 @@
           },
           "422": {
             "description": "Idempotency-Key reused with a different request"
+          }
+        }
+      }
+    },
+    "/api/v1/value": {
+      "get": {
+        "summary": "Forecast against realised — what was promised, what was measured, and what is not yet known",
+        "description": "One row per project: the business case's expected cost and benefit with its basis and reconfirmation state, and every benefit in ITS OWN unit with its attainment and how long its review has been outstanding. **No currency conversion appears anywhere**: the totals sum money-denominated benefits only and state how many others were excluded and in which units. A project with a case and no benefits, and one with benefits and no case, are each visible as such rather than absent. Filter: programme.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scope": "read:portfolio",
+        "responses": {
+          "200": {
+            "description": "The document described above",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "contract": {
+                      "type": "string"
+                    },
+                    "generatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "programme": {
+                      "type": "string"
+                    },
+                    "value": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No key, an unknown key, or a revoked key — the three are indistinguishable on purpose"
+          },
+          "403": {
+            "description": "The key is live but does not carry the scope this route requires"
           }
         }
       }

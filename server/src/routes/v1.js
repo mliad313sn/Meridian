@@ -24,6 +24,7 @@
 import { Router } from "express";
 import { loadPortfolio } from "../portfolio.js";
 import { many } from "../db.js";
+import { Engine } from "../../../shared/engine.js";
 import { readAudit } from "../audit.js";
 import { requireIntegration } from "../integrations.js";
 import { openApiDocument, scopedEndpoints } from "../openapi.js";
@@ -77,6 +78,23 @@ r.get("/audit", requireIntegration("read:audit"), async (req, res, next) => {
       action: str(req.query.action), limit: req.query.limit, before: str(req.query.before),
     });
     res.json({ ...stamp(), events: rows });
+  } catch (e) { next(e); }
+});
+
+/**
+ * V-4 — la promesse contre le réalisé, servie telle que la page la
+ * montre. Même objet, même sérialiseur : deux projections divergeraient
+ * au premier changement, et le commanditaire lirait des chiffres que
+ * personne ne voit à l'écran.
+ *
+ * Sous `read:portfolio` : c'est du portefeuille, pas de la gouvernance.
+ */
+r.get("/value", requireIntegration("read:portfolio"), async (req, res, next) => {
+  try {
+    const db = await loadPortfolio(req.user);
+    const wanted = String(req.query.programme ?? "").trim();
+    const projects = wanted ? db.projects.filter((p) => p.programme === wanted) : db.projects;
+    res.json({ ...stamp(), programme: wanted || null, value: Engine.valueReport(db, projects) });
   } catch (e) { next(e); }
 });
 

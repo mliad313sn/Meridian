@@ -28,9 +28,12 @@ The field repository is live. Nothing in the register is trusted to be
 current until you have read the source again.
 
 ```bash
-node scripts/rt365-review.mjs            # fetches every branch of mliad313sn/RT365,
-                                         # extracts every line naming Meridian,
-                                         # prints what docs/requests/rt365.json does not carry
+npm run review:field                     # every register in docs/requests/: fetches every branch
+                                         # of the field repository, extracts every line naming
+                                         # Meridian with the ids that register declares, and
+                                         # prints what the register does not carry
+node scripts/field-review.mjs --register docs/requests/rt365.json    # one register only
+node scripts/rt365-review.mjs            # the same, under the name RT365 knows (docs/35)
 ```
 
 Then read, on every branch that changed since `source.reviewedAt`:
@@ -56,9 +59,13 @@ For each new finding, request, workaround or question:
    its numbers), **Requested** (in its words), **Decision** (accept /
    refuse with reason / outside the software), and leave **Delivered** and
    **Measure** empty until §DRIVE fills them;
-3. add the object to `docs/requests/rt365.json` with `status: open`;
+3. add the object to `docs/requests/rt365.json` with `status: open` and
+   `accepted: null` — nothing is delivered, so there is nothing for the
+   requester to have accepted (E-9). The shape is
+   `docs/requests/register.schema.json`; `node scripts/audit/register-schema.mjs`
+   (gate F11, in `npm run audit`) refuses a register that drifts from it;
 4. append a `D-33.n` line to §5 for any decision that is not a plain accept;
-5. update `source.commit` and `source.reviewedAt`.
+5. update `source.commit`, `source.reviewedAt` and `registerVersion`.
 
 A refusal is a decision with a reason, written where RT365 will read it.
 "Not now" is `open` with an order, never silence.

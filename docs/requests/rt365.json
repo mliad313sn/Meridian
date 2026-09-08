@@ -3,7 +3,7 @@
   "source": {
     "repository": "mliad313sn/RT365",
     "branch": "claude/project-owner-agent-setup-hi3xqu",
-    "commit": "02b9e9e",
+    "commit": "92b223a",
     "documents": [
       "docs/ADRs/ADR-017.md",
       "docs/IMPROVEMENT_REGISTER.md",
@@ -12,10 +12,26 @@
       "docs/PMO_MERIDIAN_ASSESSMENT.md",
       "docs/PMO_MERIDIAN_ASSESSMENT.md §8 (V-1..V-12)",
       "docs/RAID_LOG.md",
+      "docs/REPORTS/PMO_MERIDIAN_REPORT_EVIDENCE.md (E-1..E-9, G-1..G-9)",
+      "docs/REPORTS/PMO_MERIDIAN_REPORT_VALUE.md (V-1..V-15)",
       "scripts/meridian_sync.py"
     ],
     "reviewedAt": "2026-09-08",
-    "branchPinned": "claude/meridian-rt365-feedback-d6vo3i"
+    "branchPinned": "claude/meridian-rt365-feedback-d6vo3i",
+    "vocabulary": {
+      "request": [
+        "M-\\d{2}",
+        "I-\\d{1,2}",
+        "O-\\d{2,3}",
+        "H-\\d{2}"
+      ],
+      "context": [
+        "D-\\d{3}",
+        "ADR-\\d{3}",
+        "PR-\\d{2}"
+      ],
+      "note": "RT365 ledger ids: M/I = assessment findings and improvements, O = RAID rows, H = human acts; D/ADR/PR are decisions, architecture records and pull requests — read for context, never counted as a missing request."
+    }
   },
   "productOwner": {
     "charter": "docs/33-retour-terrain-rt365.md#1",
@@ -100,7 +116,7 @@
       "remaining": "structure (sites, programmes, people) stays on the session API and CSV import — D-33.4",
       "answerToSource": "O-74 can be closed; meridian_sync.py can move to PUT /api/v1/* with its own ids and unpin the commit.",
       "issue": 2,
-      "accepted": false,
+      "accepted": null,
       "released": false,
       "history": [
         {
@@ -166,7 +182,7 @@
       "measure": "server/test/gates.test.js",
       "remaining": null,
       "issue": 4,
-      "accepted": false,
+      "accepted": null,
       "released": false,
       "history": [
         {
@@ -193,7 +209,7 @@
       "measure": "server/test/writeapi.test.js",
       "remaining": "connectors INT-10/11/12 and cost lines by external id — written from the source side (D-33.5)",
       "issue": 5,
-      "accepted": false,
+      "accepted": null,
       "released": false,
       "history": [
         {
@@ -430,7 +446,8 @@
       "delivered": [],
       "measure": null,
       "remaining": "accepted for the next round (D-33.7)",
-      "accepted": false,
+      "issue": null,
+      "accepted": null,
       "released": false,
       "history": [
         {
@@ -523,7 +540,7 @@
         "server/src/v1write.js#upsertAction (series + raiseIn: next)",
         "server/src/routes/v1.js"
       ],
-      "accepted": false,
+      "accepted": null,
       "released": false,
       "answerToSource": "D-33.14 holds: the API still never OPENS a meeting.",
       "observed": "Two session calls per run, every run, are the last recurring session dependency; when the chair has closed the room a human act is 409 with no public remedy, and the documented workaround moves it out of the actions register.",
@@ -553,7 +570,7 @@
         "PUT /api/v1/{sites,programmes,people}",
         "programme.gateModel on the contract"
       ],
-      "accepted": false,
+      "accepted": null,
       "released": false,
       "answerToSource": "To be put to the interoperability committee first, as D-33.4 said.",
       "observed": "A first load still needs an administrator's password beside the integration key, and because the gate ladder lives on the programme, REQ-03's own prerequisite is off the contract.",
@@ -581,7 +598,7 @@
       "remaining": [
         "closedOn / closedBy on the RAID write body"
       ],
-      "accepted": false,
+      "accepted": null,
       "released": false,
       "answerToSource": null,
       "observed": "status: Closed answers 200 and reads back closed while closed_on stays null: the ledger's closure date is lost on every row a sync closes.",
@@ -610,7 +627,7 @@
         "project.date_basis / condition",
         "the write API refuses unknown fields instead of accepting them silently"
       ],
-      "accepted": false,
+      "accepted": null,
       "released": false,
       "answerToSource": null,
       "observed": "dateBasis on a project is accepted and dropped; RT365's project finish dates are placeholders for the same reason its gate dates are (D-057). Behind it: category on a register item, sponsor and acceptanceCriteria on a project, and status: Closed on a project all answer 200 having done nothing.",
@@ -745,25 +762,33 @@
       ],
       "issue": null,
       "title": "Forecast versus realised as one report: per programme, expected benefit from the case against measured actuals in their own units, with counts by status and those overdue for review",
-      "status": "open",
+      "status": "done",
       "priority": "high",
-      "version": null,
+      "version": "5.12.0",
       "decidedOn": "2026-09-08",
-      "delivered": [],
-      "measure": null,
-      "remaining": [
-        "One page and one /api/v1 resource returning, per project: case expected cost and benefit, each benefit's baseline/target/actual with unit, status, review age; no derived money conversion of non-money units."
+      "delivered": [
+        "shared/engine.js#valueReport + isMoneyUnit",
+        "GET /api/v1/value",
+        "web/src/views/index.js#valueReportBlock (on the reporting page)"
       ],
-      "accepted": false,
+      "measure": "server/test/writeapi.test.js (V-4, two tests)",
+      "remaining": null,
+      "accepted": null,
       "released": false,
       "observed": "The two halves exist in two tables and are never confronted. The confrontation is the report the sponsor wants.",
-      "answerToSource": null,
+      "answerToSource": "Delivered with your hardest clause held: NO derived currency conversion appears anywhere. Each benefit is reported in its own unit with its attainment and how many days its review has been outstanding; the totals sum money-denominated benefits only and say out loud how many others were left out and in which units. A project with a case and no benefits, one with benefits and no case, and one with neither are each visible as such. The page and GET /api/v1/value are the same object.",
       "history": [
         {
           "at": "2026-09-08",
           "registerVersion": 6,
           "status": "open",
           "note": "Filed by RT365 in docs/PMO_MERIDIAN_ASSESSMENT.md §8 after re-testing 5.10.0, and read into this register by the standing review duty."
+        },
+        {
+          "at": "2026-09-08",
+          "registerVersion": 9,
+          "status": "done",
+          "note": "Delivered in 5.12.0 from the consolidated field report; proven by test and walked in a real browser (F4 30/30)."
         }
       ]
     },
@@ -783,7 +808,7 @@
       "remaining": [
         "A ranked list per programme with every input visible and editable, a stated weighting, and a line showing where committed capacity runs out; changing a weight re-ranks and is audited."
       ],
-      "accepted": false,
+      "accepted": null,
       "released": false,
       "observed": "Choosing what not to do is where a portfolio creates most of its value. Meridian ranks nothing today; demand carries no score.",
       "answerToSource": null,
@@ -812,7 +837,7 @@
       "remaining": [
         "Each wave carries an adoption measure with its source and date; a benefit's page shows the adoption trend of the waves feeding it; a wave below its own threshold raises an exception."
       ],
-      "accepted": false,
+      "accepted": null,
       "released": false,
       "observed": "A delivered change nobody adopts realises nothing, and adoption is the earliest signal a forecast benefit is in trouble.",
       "answerToSource": null,
@@ -841,7 +866,7 @@
       "remaining": [
         "At a gate the reviewer sees the lessons tagged to that gate from closed projects of the same programme and records considered / not-applicable per lesson; the gate record keeps that list."
       ],
-      "accepted": false,
+      "accepted": null,
       "released": false,
       "observed": "Lessons only stored are lessons not learned; the moment of use is the next gate of the same kind.",
       "answerToSource": null,
@@ -901,16 +926,28 @@
       "remaining": [
         "Each metric computed from existing timestamps, shown per programme with its trend and available on /api/v1; no new data entry required."
       ],
-      "accepted": false,
+      "accepted": null,
       "released": false,
       "observed": "A PMO that cannot see its own throughput cannot improve it, and these five are the leading indicators of a programme quietly stalling.",
-      "answerToSource": null,
+      "answerToSource": "Not taken this round, and deliberately: your own concern 6 says a list of fifteen is a way to lose our roadmap, and this round already carried four of your highest plus three measured defects. It stays open at your priority (medium) and is the cheapest thing left on the list — five metrics from timestamps that already exist, no new data entry.",
       "history": [
         {
           "at": "2026-09-08",
           "registerVersion": 6,
           "status": "open",
           "note": "Filed by RT365 in docs/PMO_MERIDIAN_ASSESSMENT.md §8 after re-testing 5.10.0, and read into this register by the standing review duty."
+        },
+        {
+          "at": "2026-09-08",
+          "registerVersion": 9,
+          "status": "open",
+          "note": "Delivered in 5.12.0 from the consolidated field report; proven by test and walked in a real browser (F4 30/30)."
+        },
+        {
+          "at": "2026-09-08",
+          "registerVersion": 9,
+          "status": "open",
+          "note": "Reviewed and kept open with a reason rather than carried silently."
         }
       ]
     },
@@ -930,7 +967,7 @@
       "remaining": [
         "A criterion can carry a typed external reference with a commit or checksum; the gate record shows what was cited and by whom; changing the reference after the gate is a new version, never an edit."
       ],
-      "accepted": false,
+      "accepted": null,
       "released": false,
       "observed": "REQ-04 gave criteria a reviewer; the evidence is still a link to a mutable document, which is not evidence of anything.",
       "answerToSource": null,
@@ -959,7 +996,7 @@
       "remaining": [
         "One printable page generated from the objects above with no manual entry, and a snapshot stored per reporting period so a claim made in March can be re-read in December."
       ],
-      "accepted": false,
+      "accepted": null,
       "released": false,
       "observed": "The portfolio view answers 'is it on time and on budget'; nobody can answer 'is it worth it'.",
       "answerToSource": null,
@@ -988,7 +1025,7 @@
       "remaining": [
         "A documented schema and command let a second repository file its register and see its requests tracked, without Meridian-specific code in that repository."
       ],
-      "accepted": false,
+      "accepted": null,
       "released": false,
       "observed": "The strongest thing this product now has is evidence that a real programme's findings reached a release in a day. That is a capability, not an anecdote.",
       "answerToSource": null,
@@ -1000,6 +1037,208 @@
           "note": "Filed by RT365 in docs/PMO_MERIDIAN_ASSESSMENT.md §8 after re-testing 5.10.0, and read into this register by the standing review duty."
         }
       ]
+    },
+    {
+      "id": "REQ-32",
+      "origin": [
+        "V-13"
+      ],
+      "issue": null,
+      "title": "The value and learning objects follow the configurable ladder: lesson.gate_n and the reconfirmation bound match what the programme declares",
+      "status": "done",
+      "priority": "high",
+      "version": "5.12.0",
+      "decidedOn": "2026-09-08",
+      "delivered": [
+        "server/migrations/043_ladder_reaches_everything.sql",
+        "server/src/routes/portfolio.js (lesson gate reads the ladder)",
+        "server/migrations/042 already freed business_case.reconfirmed_gate"
+      ],
+      "measure": "server/test/gates.test.js (V-13, two tests)",
+      "remaining": null,
+      "accepted": null,
+      "released": false,
+      "answerToSource": "Closed. On a six-gate ladder a lesson is now tagged to gates 5 and 6, and a gate outside the programme's declared ladder is refused with a named bound. Four-gate books are untouched, and the migration alters no stored value. You were right that this blocked the others and right that capping in silence is worse than not having the ladder configurable at all — the client form was already offering gates 5 and 6 that the server then refused.",
+      "history": [
+        {
+          "at": "2026-09-08",
+          "registerVersion": 9,
+          "status": "done",
+          "note": "Opened and closed in the same round, from the consolidated field report."
+        }
+      ]
+    },
+    {
+      "id": "REQ-33",
+      "origin": [
+        "V-15"
+      ],
+      "issue": null,
+      "title": "Carry the promise across the conversion: an approved demand becomes a project with a business case seeded from its benefit_note and est_cost",
+      "status": "done",
+      "priority": "high",
+      "version": "5.12.0",
+      "decidedOn": "2026-09-08",
+      "delivered": [
+        "server/src/routes/portfolio.js POST /demand/:id/convert"
+      ],
+      "measure": "server/test/case.test.js (V-15, two tests) + server/test/journey.test.js",
+      "remaining": null,
+      "accepted": null,
+      "released": false,
+      "answerToSource": "Closed. The case is created at conversion, carries the requester's own words verbatim, records the estimate, and cites the request it came from. A demand with no benefit_note still converts and the case says in as many words that the request stated no benefit and must be written before the next gate — a draft that admits it, never a fabricated justification.",
+      "history": [
+        {
+          "at": "2026-09-08",
+          "registerVersion": 9,
+          "status": "done",
+          "note": "Opened and closed in the same round, from the consolidated field report."
+        }
+      ]
+    },
+    {
+      "id": "REQ-34",
+      "origin": [
+        "V-14"
+      ],
+      "issue": null,
+      "title": "Not measured is not within tolerance: the benefit dimension distinguishes no margin set, nothing measured, and within margin",
+      "status": "done",
+      "priority": "high",
+      "version": "5.12.0",
+      "decidedOn": "2026-09-08",
+      "delivered": [
+        "shared/engine.js#tolerance (third state)",
+        "server/src/exceptions.js (per-project count)"
+      ],
+      "measure": "server/test/tolerance.test.js (REQ-21/V-14)",
+      "remaining": null,
+      "accepted": null,
+      "released": false,
+      "answerToSource": "Closed. Engine.tolerance now reports state 'nothing measured' with the count, alongside 'measured'; breached stays false because it is not a breach and breaches() must not invent one. The sweep raises one exception per project naming how many benefits are past their date unmeasured and since when, independently of whether a tolerance was ever set. A project with no benefits raises nothing and stays with the uncased count, as you asked.",
+      "history": [
+        {
+          "at": "2026-09-08",
+          "registerVersion": 9,
+          "status": "done",
+          "note": "Opened and closed in the same round, from the consolidated field report."
+        }
+      ]
+    },
+    {
+      "id": "REQ-35",
+      "origin": [
+        "E-6"
+      ],
+      "issue": null,
+      "title": "The portfolio right rail rescopes with the PROGRAMME filter, as the tiles already did",
+      "status": "done",
+      "priority": "high",
+      "version": "5.12.0",
+      "decidedOn": "2026-09-08",
+      "delivered": [
+        "web/src/views/index.js (decisions and horizon take the scoped list)"
+      ],
+      "measure": "F4 browser walk",
+      "remaining": null,
+      "accepted": null,
+      "released": false,
+      "answerToSource": "Your E-6 as stated is NOT a defect and we are glad you flagged it as a question: all six KPI tiles do rescope — measured, $51.3M/12 projects at 'All programmes' becomes $14.7M/3 for one. The $51.3M you saw was the demonstration book's own total at an unfiltered filter, and your budget-less projects were counted apart by ADR-10, which the tile said in its own note. But the question found a real one next to it: the right rail (Decisions owed, Next on the calendar) was book-wide regardless of the filter, which is where your 'Decisions owed 36' came from. Three call sites, fixed.",
+      "history": [
+        {
+          "at": "2026-09-08",
+          "registerVersion": 9,
+          "status": "done",
+          "note": "Opened and closed in the same round, from the consolidated field report."
+        }
+      ]
+    },
+    {
+      "id": "REQ-36",
+      "origin": [
+        "E-7"
+      ],
+      "issue": null,
+      "title": "A milestone marked done with a named accepter reads as accepted, and the accepter's name has a read surface",
+      "status": "done",
+      "priority": "high",
+      "version": "5.12.0",
+      "decidedOn": "2026-09-08",
+      "delivered": [
+        "web/src/views/index.js (milestone state consults done; the accepter and date are drawn)"
+      ],
+      "measure": "F4 browser walk",
+      "remaining": null,
+      "accepted": null,
+      "released": false,
+      "answerToSource": "Confirmed exactly as you suspected: the write was always correct — done, accepted_by and accepted_on were all stored — and the page derived state from date-versus-status-date alone, so it was wrong in both directions: an untouched milestone whose date had passed read Cleared, and a formally accepted one read Planned. Worse, the accepter's name appeared on no read surface in the product at all, only in the form that writes it. PM-04's control was in the table and not in the room, as you put it.",
+      "history": [
+        {
+          "at": "2026-09-08",
+          "registerVersion": 9,
+          "status": "done",
+          "note": "Opened and closed in the same round, from the consolidated field report."
+        }
+      ]
+    },
+    {
+      "id": "REQ-37",
+      "origin": [
+        "E-8"
+      ],
+      "issue": null,
+      "title": "The same decision or action recorded twice in the same meeting is refused",
+      "status": "done",
+      "priority": "high",
+      "version": "5.12.0",
+      "decidedOn": "2026-09-08",
+      "delivered": [
+        "server/src/routes/meetings.js (both session POST routes)"
+      ],
+      "measure": "server/test/meetings.test.js (E-8)",
+      "remaining": null,
+      "accepted": null,
+      "released": false,
+      "answerToSource": "Confirmed and closed. Two identical posts made two rows and the minute carried the decision twice. The guard is scoped to the OCCURRENCE, deliberately: the same headline stays legitimately recordable in a later meeting, which is the normal case of a revisited item and which your cross-occurrence observation depends on.",
+      "history": [
+        {
+          "at": "2026-09-08",
+          "registerVersion": 9,
+          "status": "done",
+          "note": "Opened and closed in the same round, from the consolidated field report."
+        }
+      ]
+    },
+    {
+      "id": "REQ-38",
+      "origin": [
+        "E-1"
+      ],
+      "issue": null,
+      "title": "A project says which ladder it was scaffolded under, and whether its programme still declares that one",
+      "status": "done",
+      "priority": "high",
+      "version": "5.12.0",
+      "decidedOn": "2026-09-08",
+      "delivered": [
+        "server/migrations/043 (project.scaffolded_gates)",
+        "server/src/wbs.js",
+        "server/src/portfolio.js (ladderDiffers)",
+        "web/src/views/index.js (said where the question is asked)"
+      ],
+      "measure": "server/test/gates.test.js (E-1)",
+      "remaining": null,
+      "accepted": null,
+      "released": false,
+      "answerToSource": "Closed with the cheaper of the two remedies you offered — the read-side signal. Declaring a ladder still does not rewrite existing projects (036 is right, and dated gates with filed evidence must not move under people), but the project now carries the ladder it was built on and the screen says plainly when that is no longer what its programme declares. Thank you for correcting your own record on V-8: scaffoldProject reads one ladder, and we had recorded your duplication as ours to fix.",
+      "history": [
+        {
+          "at": "2026-09-08",
+          "registerVersion": 9,
+          "status": "done",
+          "note": "Opened and closed in the same round, from the consolidated field report."
+        }
+      ]
     }
   ],
   "channel": {
@@ -1009,6 +1248,8 @@
     "acceptance": {
       "done": "on the branch with its test",
       "accepted": "the requester said so on the issue",
+      "notAccepted": "the requester is in a position to answer and has not — silence, or an objection not yet filed",
+      "cannotAnswerYet": "accepted is null: nothing is delivered to try, or the requester has said it cannot judge the line until it adopts the feature (E-9)",
       "released": "a version tag carries it"
     },
     "escalation": "a rejected refusal or done goes back to open with the objection quoted; the sponsor of both repositories is the tie-breaker",
@@ -1025,5 +1266,5 @@
       "consequence": "no line is `released` yet; pin the branch claude/meridian-rt365-feedback-d6vo3i, not the version"
     }
   },
-  "registerVersion": 7
+  "registerVersion": 9
 }

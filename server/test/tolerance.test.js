@@ -296,7 +296,11 @@ describe("REQ-21 · un bénéfice non mesuré à sa date est chassé, pas espér
       [SITE_PROJECT_GRU]);
     assert.ok(exc, "la date est passée et personne n'a rien constaté — c'est une exception");
     assert.match(exc.detail, /Fewer emergency callouts/);
-    assert.match(exc.detail, /has not been measured/);
+    /* V-14 — le constat dit COMBIEN de bénéfices ne sont pas mesurés, et
+       depuis quand : « où en est ce projet » est la question du comité,
+       pas « ce bénéfice-ci est en retard ». */
+    assert.match(exc.detail, /benefit\(s\) on this project are past their realisation date and unmeasured/);
+    assert.match(exc.detail, /^1 benefit/);
     assert.ok(Number(exc.measured) > 0, "et elle porte depuis combien de jours");
 
     const trail = await one(

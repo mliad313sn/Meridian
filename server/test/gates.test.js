@@ -211,3 +211,105 @@ describe("REQ-14 · une date de jalon dit sur quoi elle repose (RT365 D-057)", (
     assert.equal(db3.milestones.find((m) => m.id === put.body.id).dateBasis, "placeholder");
   });
 });
+
+/**
+ * V-13 / E-1 — ce que la 036 a libéré, et que deux tables n'avaient pas
+ * suivi. Rapport de terrain RT365 : « Brider en silence les deux
+ * contrôles de plus grande valeur au jalon 4 est PIRE que de ne pas
+ * avoir d'échelle configurable, parce que la panne est invisible jusqu'à
+ * ce que quelqu'un essaie. »
+ */
+describe("V-13 · les objets de valeur et d'apprentissage suivent l'échelle", () => {
+  test("un enseignement se rattache aux jalons 5 et 6 d'une échelle qui en compte six", async () => {
+    const admin = await as("admin");
+    /* Son propre programme : un test plus haut retire délibérément
+       l'échelle de RBT pour montrer que la retirer ne réécrit rien, et
+       s'appuyer sur l'état d'un autre test est comment on mesure autre
+       chose que ce qu'on croit. */
+    const db0 = (await admin.get("/api/bootstrap")).body.db;
+    const pr = await admin.post("/api/admin/programmes", { id: "SIXG", name: "Six gates", gateModel: LADDER });
+    assert.equal(pr.status, 201, pr.text);
+    const made = await admin.post("/api/projects", {
+      name: "Runs on six", programme: "SIXG", site: db0.sites[0].id,
+      governanceLevel: "group", start: "2026-09-07", finish: "2027-06-30",
+    });
+    assert.equal(made.status, 201, made.text);
+    const p = { id: made.body.id };
+
+    for (const g of [5, 6]) {
+      const r = await admin.post("/api/lessons", {
+        project: p.id, gate: g, category: "Governance",
+        title: `Tagged to gate ${g}`, recommendation: "Read it at the same gate next time.",
+      });
+      assert.equal(r.status, 201, r.text);
+      const row = await one(`SELECT gate_n FROM lesson WHERE id = $1`, [r.body.id]);
+      assert.equal(row.gate_n, g, "la contrainte de la 024 bridait à 4 et refusait la ligne");
+    }
+    /* Au-delà de l'échelle déclarée, le refus nomme la borne. */
+    const over = await admin.post("/api/lessons", {
+      project: p.id, gate: 7, title: "Beyond the ladder", recommendation: "x",
+    });
+    assert.equal(over.status, 400);
+    assert.match(over.body.error, /1\.\.6/);
+  });
+
+  test("un livre à quatre jalons n'est pas touché", async () => {
+    const admin = await as("admin");
+    const db = (await admin.get("/api/bootstrap")).body.db;
+    const p = db.projects.find((x) => !["RBT", "SIXG", "LATE"].includes(x.programme));
+    const ok = await admin.post("/api/lessons", {
+      project: p.id, gate: 4, title: "Still four here", recommendation: "x",
+    });
+    assert.equal(ok.status, 201, ok.text);
+    const over = await admin.post("/api/lessons", {
+      project: p.id, gate: 5, title: "Not on this ladder", recommendation: "x",
+    });
+    assert.equal(over.status, 400);
+    assert.match(over.body.error, /1\.\.4/);
+  });
+});
+
+/**
+ * E-1 — RT365 corrige ici son propre compte rendu et le nôtre : la
+ * 5.10.0 ne dresse PAS deux échelles, `scaffoldProject` en lit une
+ * seule ; le doublon de leur livre venait de leur chargeur. La demande,
+ * plus étroite, est celle-ci : « une organisation réelle adopte un outil
+ * avec des projets déjà dedans, et sans chemin de reprise, tout adoptant
+ * précoce reste indéfiniment sur l'échelle par défaut, et "quel jalon
+ * vient ensuite" est indéfiniment faux pour lui. » Ils demandent le
+ * signal de lecture, moins cher que la reprise.
+ */
+describe("E-1 · un projet dit sous quelle échelle il a été dressé", () => {
+  test("déclarer une échelle après coup ne réécrit rien, et se voit", async () => {
+    const admin = await as("admin");
+    /* Un programme SANS échelle : son projet naît sur les quatre par défaut. */
+    const pr = await admin.post("/api/admin/programmes", { id: "LATE", name: "Ladder declared late" });
+    assert.equal(pr.status, 201, pr.text);
+    const db0 = (await admin.get("/api/bootstrap")).body.db;
+    const made = await admin.post("/api/projects", {
+      id: "LATE-1", name: "Adopted before the ladder", programme: "LATE",
+      site: db0.sites[0].id, start: "2026-09-07", finish: "2026-12-18", governanceLevel: "group",
+    });
+    assert.equal(made.status, 201, made.text);
+
+    let p = (await admin.get("/api/bootstrap")).body.db.projects.find((x) => x.id === made.body.id);
+    assert.equal(p.scaffoldedGates, 4, "il a été dressé sur les quatre jalons par défaut");
+    assert.equal(p.ladderDiffers, false, "et son programme n'en déclarait pas d'autre");
+    const before = (await many(`SELECT id, due_date FROM milestone WHERE project_id = $1 AND kind = 'gate'`, [p.id]));
+    assert.equal(before.length, 4);
+
+    /* Le programme déclare six jalons APRÈS coup. */
+    const prog = (await admin.get("/api/bootstrap")).body.db.programmes.find((x) => x.id === "LATE");
+    const upd = await admin.patch("/api/admin/programmes/LATE", { gateModel: LADDER, version: prog.version });
+    assert.equal(upd.status, 200, upd.text);
+
+    const after = (await many(`SELECT id, due_date FROM milestone WHERE project_id = $1 AND kind = 'gate'`, [p.id]));
+    assert.deepEqual(after.map((m) => m.id), before.map((m) => m.id),
+      "036 est claire : une échelle modifiée ne réécrit pas les projets existants");
+
+    p = (await admin.get("/api/bootstrap")).body.db.projects.find((x) => x.id === made.body.id);
+    assert.equal(p.scaffoldedGates, 4);
+    assert.equal(p.ladderDiffers, true,
+      "…mais le produit le DIT maintenant, au lieu de laisser « quel jalon vient ensuite » être faux en silence");
+  });
+});

@@ -618,17 +618,33 @@ export const Engine = {
       /* L'atteinte la plus BASSE du projet : une tolérance de bénéfice
          qui se contenterait de la moyenne laisserait un bénéfice manqué
          se cacher derrière un bénéfice dépassé. */
-      const scores = (db.benefits ?? [])
-        .filter((b) => b.project === p.id)
-        .map((b) => Engine.attainment(b))
-        .filter((x) => x != null);
+      const mine = (db.benefits ?? []).filter((b) => b.project === p.id);
+      const scores = mine.map((b) => Engine.attainment(b)).filter((x) => x != null);
       if (scores.length) {
         const worst = Math.min(...scores);
         const shortfall = Math.round((1 - worst) * 100 * 100) / 100;
         out.benefit = {
           measured: shortfall, allowed: Number(tol.benefitPct),
           breached: shortfall > Number(tol.benefitPct),
+          state: "measured",
           unit: "points below target", what: "the weakest benefit on the project",
+        };
+      } else if (mine.length) {
+        /* V-14 — la troisième réponse. Sans elle il n'y en avait que
+           deux : « dans la marge » et « dépassée ». Un projet qui n'a
+           JAMAIS rien mesuré ne produisait aucune atteinte, donc aucune
+           dimension, donc aucun dépassement — et se lisait comme un
+           projet dans sa marge. C'est exactement inversé pour la valeur :
+           mesurer et manquer était visible, ne jamais mesurer ne l'était
+           pas. Le principe du produit — « un bénéfice non mesuré n'est
+           pas un zéro » — s'étend ici : il n'est pas non plus une
+           conformité. `breached` reste faux : ce n'est pas un
+           dépassement, et `breaches()` ne doit pas en inventer un. */
+        out.benefit = {
+          measured: null, allowed: Number(tol.benefitPct),
+          breached: false, state: "nothing measured",
+          unmeasured: mine.length,
+          unit: "points below target", what: "nothing on this project has been measured yet",
         };
       }
     }
@@ -678,6 +694,103 @@ export const Engine = {
       hitRate: decided ? states.Realised / decided : null,
       attainment: scored.length ? sum(scored, x => x) / scored.length : null,
     };
+  },
+
+  /**
+   * V-4 — la promesse contre le réalisé, sur la même ligne.
+   *
+   * Rapport de terrain RT365 : « Le produit sait dire combien de
+   * bénéfices ont été promis, mesurés et statués, il sait dire ce que le
+   * cas attendait, et il ne met jamais les deux sur la même ligne. Cette
+   * confrontation est le rapport que réclame un commanditaire et le seul
+   * qui change les comportements. »
+   *
+   * Une règle domine tout le reste, et elle est la leur : **on ne
+   * convertit rien**. La 008 a raison — la valeur n'a pas toujours la
+   * forme d'une monnaie — et un facteur de conversion des tonnes ou des
+   * points de disponibilité vers une devise est un nombre que quelqu'un
+   * invente et que tout le monde cite ensuite. On additionne donc les
+   * seuls bénéfices libellés en argent, et on DIT combien d'autres ont
+   * été laissés de côté, et dans quelles unités.
+   */
+  valueReport(db, projects, asOf) {
+    const on = asOf ?? db.statusDate;
+    const list = projects ?? db.projects ?? [];
+    const caseOf = new Map((db.businessCases ?? []).map((c) => [c.project, c]));
+    const byProject = new Map();
+    for (const b of (db.benefits ?? [])) {
+      if (!byProject.has(b.project)) byProject.set(b.project, []);
+      byProject.get(b.project).push(b);
+    }
+
+    const rows = list.map((p) => {
+      const c = caseOf.get(p.id) ?? null;
+      const benefits = (byProject.get(p.id) ?? []).map((b) => ({
+        id: b.id, title: b.title, kind: b.kind, unit: b.unit, measure: b.measure,
+        baseline: b.baseline, target: b.target, actual: b.actual,
+        status: b.status, realiseOn: b.realiseOn, measuredOn: b.measuredOn,
+        attainment: Engine.attainment(b),
+        money: Engine.isMoneyUnit(b.unit),
+        /* Depuis combien de jours cette promesse attend d'être mesurée.
+           `null` quand elle n'a pas de date : non datée n'est pas en
+           retard, et le rapport la liste à part plutôt que de l'omettre. */
+        reviewAgeDays: b.realiseOn && b.actual == null ? days(b.realiseOn, on) : null,
+      }));
+      return {
+        project: p.id, name: p.name, programme: p.programme, closed: !!p.closed,
+        case: c ? {
+          id: c.id, expectedCost: c.expectedCost, expectedBenefit: c.expectedBenefit,
+          basis: c.basis, reconfirmedGate: c.reconfirmedGate,
+          staleSinceReconfirm: !!c.staleSinceReconfirm,
+        } : null,
+        benefits,
+        /* Les deux silences qu'un lecteur doit voir plutôt que de les
+           déduire d'une absence de ligne. */
+        caseWithoutBenefits: !!c && benefits.length === 0,
+        benefitsWithoutCase: !c && benefits.length > 0,
+        neither: !c && benefits.length === 0,
+        undated: benefits.filter((b) => !b.realiseOn).length,
+        overdue: benefits.filter((b) => b.reviewAgeDays != null && b.reviewAgeDays > 0).length,
+      };
+    });
+
+    const all = rows.flatMap((r) => r.benefits);
+    const money = all.filter((b) => b.money);
+    const other = all.filter((b) => !b.money);
+    const excludedUnits = [...new Set(other.map((b) => b.unit || "(no unit)"))].sort();
+    return {
+      asAt: on,
+      rows,
+      totals: {
+        /* Le cas est en millions comme partout ailleurs ; on somme ce qui
+           est déjà comparable, et rien d'autre. */
+        expectedCost: sum(rows.filter((r) => r.case), (r) => r.case.expectedCost ?? 0),
+        expectedBenefit: sum(rows.filter((r) => r.case), (r) => r.case.expectedBenefit ?? 0),
+        moneyBenefitsCounted: money.length,
+        moneyActual: money.some((b) => b.actual != null)
+          ? sum(money.filter((b) => b.actual != null), (b) => Number(b.actual)) : null,
+        /* Ce qui n'est PAS dans le total, dit explicitement. */
+        excludedBenefits: other.length,
+        excludedUnits,
+        withoutCase: rows.filter((r) => r.benefitsWithoutCase).length,
+        withoutBenefits: rows.filter((r) => r.caseWithoutBenefits).length,
+        neither: rows.filter((r) => r.neither).length,
+        undated: rows.reduce((n, r) => n + r.undated, 0),
+        overdue: rows.reduce((n, r) => n + r.overdue, 0),
+      },
+    };
+  },
+
+  /**
+   * Une unité est-elle de l'argent ? La question est posée EXPLICITEMENT
+   * plutôt que devinée au cas par cas, parce que la réponse décide de ce
+   * qui entre dans un total — et un total dont la règle d'entrée est
+   * implicite est un total que personne ne peut vérifier.
+   */
+  isMoneyUnit(unit) {
+    const u = String(unit ?? "").trim();
+    if (!u) return false;
+    return /^(\$|€|£|¥)/.test(u) || /^(usd|eur|gbp|chf|cad|aud|jpy|xof|xaf|m\$|\$m|k\$|\$k)$/i.test(u);
   },
 
   overlapHours(a, b) {

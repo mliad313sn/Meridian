@@ -22,6 +22,110 @@ Nothing yet.
 
 ---
 
+## [5.12.0] — 2026-09-08
+
+RT365 consolidated its field work into two reports — one on **value**, one
+on **evidence** — and they are the most exacting thing this product has
+been handed. The value report's argument is a single sentence: *everything
+in the model is a noun, and value gets realised by verbs.* It names five
+missing verbs, each pointed at a file and a line, and it corrects its own
+earlier findings in three places where reading the code changed what was
+true.
+
+A team was composed for it rather than one engineer working the list in
+order (D-33.38): an interoperability engineer on the reusable loop, a
+verification engineer on the three claims RT365 had honestly tagged
+`[Open]` rather than asserted, and the delivery engineer on the two
+entangled groups. Settling the open claims first was the right call — one
+of the three turned out not to be a defect at all.
+
+### Added
+
+- **Forecast against realised, as one report** (V-4). `Engine.valueReport`,
+  `GET /api/v1/value`, and a block on the reporting page — the same object
+  in both. What the case promised sits on the same line as what the
+  benefits measured, for the first time. RT365's hardest clause is held
+  literally: **no derived currency conversion appears anywhere.** Each
+  benefit is reported in its own unit with its attainment and how many
+  days its review has been outstanding; the totals sum money-denominated
+  benefits only and say out loud how many were excluded and in which
+  units. A project with a case and no benefits, one with benefits and no
+  case, and one with neither are each visible as such rather than absent.
+- **The promise survives the conversion** (V-15). An approved demand
+  becoming a project now creates its business case, carrying the
+  requester's own `benefit_note` verbatim, its estimate, and a citation
+  back to the request. Migration 028's header describes the chain demand →
+  case → benefit → review; the conversion route was where it broke, at the
+  exact moment the money is committed and the justification is freshest. A
+  demand with no stated benefit still converts, and the case says so in as
+  many words — a draft that admits it, never a fabricated justification.
+- **Not measured is not within tolerance** (V-14). The benefit dimension
+  had two answers, *within margin* and *breached*; a project that never
+  measured anything produced no attainment, so no dimension, so no breach,
+  and read as compliant. It now has a third: *nothing measured*, with the
+  count. `breached` stays false, because it is not a breach and
+  `breaches()` must not invent one. The sweep raises one exception per
+  project naming how many benefits are past their date unmeasured, and
+  since when.
+- **The lesson and the case follow the ladder** (V-13, migration 043).
+  036 freed the gate ladder to twelve and two tables did not travel with
+  it. On RT365's six-gate ladder a lesson could not be tagged to gates 5
+  or 6 — and the client form was already offering them, so the server
+  refused what the screen invited. Their judgement was right: capping in
+  silence is worse than not having the ladder configurable at all, because
+  the failure is invisible until somebody tries.
+- **A project says which ladder it was built on** (E-1). Declaring a
+  ladder still does not rewrite existing projects — 036 is right, and
+  dated gates with filed evidence must not move under the people who filed
+  them — but a project now carries `scaffoldedGates`, and the screen says
+  plainly, where the question is actually asked, when that is no longer
+  what its programme declares. RT365 corrected its own V-8 in this report:
+  `scaffoldProject` reads one ladder, and the duplicate gates in their
+  book were their loader's.
+- **The field-return loop is a published pattern, not an anecdote**
+  (V-12). A JSON Schema for `meridian-request-register/1`, a gate that
+  validates every register in CI, a review script whose register path and
+  id vocabulary are configuration rather than one repository's
+  conventions, a fixture second field repository reviewed end to end in a
+  test, and one page of English documentation of the round.
+
+### Fixed
+
+- **The portfolio right rail ignored the programme filter.** Measured
+  against RT365's E-6, which asked whether the executive tiles rescope:
+  they do — all six, verified in a browser. The rail beside them did not,
+  and listed other programmes' decisions and dates under a filter naming
+  one. That is where their "Decisions owed 36" came from. Both helpers
+  already took the scoped list; this view simply never passed it.
+- **A milestone accepted by a named person read as PLANNED** (E-7). The
+  write was always correct. The page derived state from date-versus-status-date
+  and never read `done`, so it was wrong in both directions: an untouched
+  milestone whose date had passed read Cleared, and a formally accepted one
+  read Planned. The accepter's name had no read surface anywhere in the
+  product — only the form that writes it. PM-04's control was in the table
+  and not in the room.
+- **The same decision could be minuted twice** (E-8). Two identical posts
+  to the session route made two rows, and the minute carried the decision
+  twice. The `PUT /api/v1/…/:externalId` path has been idempotent since
+  I-2; the route the screen uses was not. The guard is scoped to the
+  occurrence, so the same headline stays legitimately recordable in a
+  later meeting — a revisited item, which is the normal case.
+- **`accepted: false` and "cannot answer yet" read identically** (E-9).
+  RT365 pointed out that their silence and their inability to confirm a
+  feature they have not adopted looked the same in the register. `accepted`
+  is now three-valued, and the schema makes the ambiguous combination
+  impossible in a future round.
+
+### Not taken, with a reason
+
+V-9 (governance quality signals) stays open at RT365's own priority. Their
+concern 6 asked us not to let their list crowd out our committees' backlog,
+and to decline with a reason rather than carry debt — this round already
+took four of their highest-priority items and three measured defects.
+V-5, V-6, V-7, V-10 and V-11 remain open in their sequence.
+
+---
+
 ## [5.11.0] — 2026-09-08
 
 RT365 re-tested 5.10.0 and filed a second list, V-1…V-12, under a heading

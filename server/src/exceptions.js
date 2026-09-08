@@ -47,8 +47,9 @@ const WORDING = {
                   `${b.allowed} were allowed`,
   /* REQ-21 — celle-ci n'est pas un dépassement mais une ABSENCE : la
      date est passée et personne n'a rien constaté. */
-  "benefit-review": (b) => `${b.title} was due to realise ${b.due} and has not been ` +
-                           `measured; ${b.measured} day(s) have passed`,
+  "benefit-review": (b) => `${b.unmeasured} benefit(s) on this project are past their realisation date ` +
+                           `and unmeasured; the oldest is "${b.title}", due ${b.due}, ` +
+                           `${b.measured} day(s) ago`,
 };
 
 /**
@@ -106,14 +107,30 @@ export async function sweepExceptions() {
      que rien ne relance est la manière dont le compte rendu de valeur
      meurt ». Un projet CLOS compte ici — c'est même le cas normal. */
   const asOf = db.statusDate;
+  /* V-14 — un constat PAR PROJET, qui dit COMBIEN. Une ligne par
+     bénéfice aurait dit « celui-ci est en retard » là où la question du
+     comité est « où en est ce projet » ; et le rapport demande
+     explicitement que le constat nomme combien de bénéfices ne sont pas
+     mesurés, et depuis quand. */
+  const overdue = new Map();
   for (const b of (db.benefits ?? [])) {
     if (b.status !== "Forecast" || !b.realiseOn) continue;
     if (D(b.realiseOn) >= D(asOf)) continue;
-    if (open.has(`${b.project}|benefit-review`)) continue;
-    const p = db.projects.find((x) => x.id === b.project);
+    if (b.actual !== null && b.actual !== undefined) continue;
+    if (!overdue.has(b.project)) overdue.set(b.project, []);
+    overdue.get(b.project).push(b);
+  }
+  for (const [projectId, list] of overdue) {
+    if (open.has(`${projectId}|benefit-review`)) continue;
+    const p = db.projects.find((x) => x.id === projectId);
     if (!p) continue;
+    /* Le plus ancien porte la date : c'est celui qui dit depuis quand ce
+       projet a cessé de rendre des comptes sur ce qu'il avait promis. */
+    list.sort((x, y) => x.realiseOn.localeCompare(y.realiseOn));
+    const b = list[0];
     const late = days(b.realiseOn, asOf);
-    const detail = WORDING["benefit-review"]({ title: b.title, due: b.realiseOn, measured: late });
+    const detail = WORDING["benefit-review"]({
+      title: b.title, due: b.realiseOn, measured: late, unmeasured: list.length });
     let id = null;
     await tx(async (t) => {
       id = await allocateId(t, "EXC", { pad: 3 });
@@ -125,7 +142,7 @@ export async function sweepExceptions() {
       await record(t, SWEEPER, {
         action: "Exception raised", entity: "project_exception", entityId: id,
         detail: `${p.id} benefit-review — ${detail}`,
-        after: { benefit: b.id, dueOn: b.realiseOn, daysLate: late },
+        after: { unmeasured: list.length, oldest: b.id, dueOn: b.realiseOn, daysLate: late },
       });
     });
     open.add(`${p.id}|benefit-review`);

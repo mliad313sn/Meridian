@@ -530,6 +530,23 @@ r.post("/occurrences/:id/decisions", async (req, res, next) => {
     const b = req.body ?? {};
     if (!b.headline) throw new HttpError(400, "A decision needs a headline");
 
+    /* E-8 — la même décision, consignée deux fois dans la MÊME séance,
+       créait deux lignes. Le chemin par identifiant externe est gardé
+       depuis I-2 (`idempotent()` sur PUT /v1/decisions/:externalId) ; la
+       route de session, celle que l'écran emploie, ne l'était pas — un
+       double clic, une reprise de chargeur, et le procès-verbal porte la
+       décision deux fois. La portée du contrôle est L'OCCURRENCE : la
+       même phrase reste légitimement consignable dans une séance
+       ULTÉRIEURE, ce qui est le cas normal d'un point revu. */
+    const twice = await one(
+      `SELECT id FROM meeting_decision WHERE occurrence_id = $1 AND headline = $2`,
+      [o.id, String(b.headline)]);
+    if (twice) {
+      throw new HttpError(409,
+        `That decision is already recorded in this meeting (${twice.id}). ` +
+        `Record a different one, or amend the minute rather than repeating it.`);
+    }
+
     /* Referral (governance committee, rhythm-1): a room may record
        "this is beyond us — refer up" instead of a decision. Only a
        narrower room refers upward; the group room decides or nothing. */
@@ -596,6 +613,18 @@ r.post("/occurrences/:id/actions", async (req, res, next) => {
     if (o.status === "closed") throw new HttpError(409, "This meeting is closed");
     const b = req.body ?? {};
     if (!b.title) throw new HttpError(400, "An action needs a title");
+
+    /* E-8 — même garde que pour la décision, même portée : la salle qui
+       a soulevé l'action. La même action revient légitimement dans une
+       séance suivante ; deux fois dans la même est une répétition. */
+    const twice = await one(
+      `SELECT id FROM meeting_action WHERE raised_in = $1 AND title = $2`,
+      [o.id, String(b.title)]);
+    if (twice) {
+      throw new HttpError(409,
+        `That action is already raised in this meeting (${twice.id}). ` +
+        `Update it, or raise a different one.`);
+    }
 
     let id = null;
     await audited(req.user,

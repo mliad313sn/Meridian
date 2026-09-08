@@ -224,8 +224,23 @@ describe("5 · cadrage — le cas d'affaire, les jalons, la référence", () => 
     };
     const refuse = await lead.put(`/api/projects/${PROJECT}/case`, CASE);
     assert.equal(refuse.status, 403, "qui paie écrit");
-    const r = await pmo.put(`/api/projects/${PROJECT}/case`, CASE);
-    assert.equal(r.status, 201, JSON.stringify(r.body));
+
+    /* V-15 — ce projet est né d'une demande approuvée, et la conversion
+       porte désormais la promesse : le cas existe DÉJÀ, en brouillon,
+       avec les mots du demandeur. Écrire la justification est donc une
+       révision, pas une création — ce qui est exactement ce que le
+       rapport de terrain demandait, la chaîne demande → cas → bénéfice →
+       revue ne devant plus se rompre à son premier maillon. */
+    const carried = (await pmo.get("/api/bootstrap")).body.db.businessCases
+      .find((c) => c.project === PROJECT);
+    assert.ok(carried, "la conversion a porté la promesse dans un cas");
+    assert.match(carried.basis, /From request/, "et le cas cite la demande dont il vient");
+
+    const r = await pmo.put(`/api/projects/${PROJECT}/case`, { ...CASE, version: carried.version });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    const written = (await pmo.get("/api/bootstrap")).body.db.businessCases
+      .find((c) => c.project === PROJECT);
+    assert.equal(written.expectedBenefit, 1.4, "et la justification écrite remplace le brouillon");
   });
 
   test("PM-04 · un jalon avec critères d'acceptation posés d'avance", async () => {
