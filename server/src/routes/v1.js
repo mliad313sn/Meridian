@@ -23,13 +23,14 @@
 
 import { Router } from "express";
 import { loadPortfolio } from "../portfolio.js";
+import { many } from "../db.js";
 import { readAudit } from "../audit.js";
 import { requireIntegration } from "../integrations.js";
 import { openApiDocument, scopedEndpoints } from "../openapi.js";
 import { packageVersion } from "../env.js";
 import {
   idempotent, upsertProject, upsertMilestone, upsertRaid, upsertDecision, upsertAction,
-  upsertActivity, upsertWorkItem, upsertCriterion,
+  upsertActivity, upsertWorkItem, upsertCriterion, upsertBenefit, upsertBusinessCase,
 } from "../v1write.js";
 
 const r = Router();
@@ -79,6 +80,92 @@ r.get("/audit", requireIntegration("read:audit"), async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+/**
+ * REQ-15 — le registre des décisions, et les actions.
+ *
+ * L'intégrateur a rechargé tout le programme RT365 par le contrat — 285
+ * écritures, une seconde passe sans une seule création — puis n'a rien
+ * pu relire. Trois conséquences mesurées : `adopt` sur une décision ou
+ * une action existante n'avait aucun chemin de découverte (le seul
+ * indice public était de chercher un intitulé dans le `detail` de
+ * /api/v1/audit) ; aucune réconciliation de ce qu'une salle a décidé
+ * n'était possible sans session ; et un synchroniseur ne voyait pas
+ * qu'un humain avait clos une action — H-01 marquée Done à l'écran,
+ * rouverte en Open par une re-passe inchangée.
+ *
+ * Sous `read:meetings` et non `read:portfolio` : INT-02 a séparé la
+ * piste d'audit pour qu'un entrepôt décisionnel n'emporte pas la
+ * gouvernance avec les chiffres, et un registre de décisions est de la
+ * même eau. C'est le miroir de `write:meetings`.
+ */
+r.get("/decisions", requireIntegration("read:meetings"), async (req, res, next) => {
+  try {
+    const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 200));
+    const rows = await many(
+      `SELECT d.id, d.headline, d.rationale, d.alternatives, d.dissent, d.decided_by,
+              d.project_id, d.cr_id, d.raid_id, d.milestone_id, d.supersedes,
+              COALESCE(o.meets_on, d.decided_on) AS decided_on,
+              d.external_source, d.external_id, d.council, d.evidence_uri, d.provenance,
+              d.status, d.ratified_by, d.row_version,
+              s.name AS series_name, pe.name AS decided_by_name
+         FROM meeting_decision d
+         LEFT JOIN meeting_occurrence o ON o.id = d.occurrence_id
+         LEFT JOIN meeting_series s ON s.id = o.series_id
+         LEFT JOIN person pe ON pe.id = d.decided_by
+        ORDER BY COALESCE(o.meets_on, d.decided_on) DESC, d.id DESC
+        LIMIT $1`, [limit]);
+    res.json({
+      ...stamp(),
+      decisions: rows.map((d) => ({
+        id: d.id, headline: d.headline, rationale: d.rationale,
+        alternatives: d.alternatives ?? "", dissent: d.dissent ?? "",
+        decidedBy: d.decided_by, decidedByName: d.decided_by_name ?? null,
+        decidedOn: d.decided_on, council: d.council ?? "",
+        series: d.series_name ?? null,
+        project: d.project_id ?? null, cr: d.cr_id ?? null, raid: d.raid_id ?? null,
+        milestone: d.milestone_id ?? null, supersedes: d.supersedes ?? null,
+        evidenceUri: d.evidence_uri ?? "", provenance: d.provenance ?? "",
+        status: d.status ?? "Ratified", ratifiedBy: d.ratified_by ?? "",
+        /* Ce que l'adoption vient chercher : la ligne est-elle déjà à
+           quelqu'un, et si oui sous quel nom. */
+        externalSource: d.external_source ?? null, externalId: d.external_id ?? null,
+        version: d.row_version,
+      })),
+    });
+  } catch (e) { next(e); }
+});
+
+r.get("/actions", requireIntegration("read:meetings"), async (req, res, next) => {
+  try {
+    const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 200));
+    const rows = await many(
+      `SELECT a.*, s.name AS series_name, p.name AS owner_name,
+              o.status AS raised_in_status
+         FROM meeting_action a
+         JOIN meeting_series s ON s.id = a.series_id
+         LEFT JOIN meeting_occurrence o ON o.id = a.raised_in
+         LEFT JOIN person p ON p.id = a.owner_id
+        WHERE ($1::text IS NULL OR a.status = $1)
+        ORDER BY a.due_date NULLS LAST, a.id
+        LIMIT $2`, [req.query.status ?? null, limit]);
+    res.json({
+      ...stamp(),
+      actions: rows.map((a) => ({
+        id: a.id, title: a.title, detail: a.detail,
+        owner: a.owner_id, ownerName: a.owner_name ?? null,
+        project: a.project_id ?? null, dueDate: a.due_date, status: a.status,
+        series: a.series_id, seriesName: a.series_name,
+        raisedIn: a.raised_in, closedIn: a.closed_in ?? null,
+        /* Fermée dans une salle close : une re-passe qui réécrirait
+           `Open` par-dessus écrase la minute d'une séance. */
+        raisedInStatus: a.raised_in_status ?? null,
+        externalSource: a.external_source ?? null, externalId: a.external_id ?? null,
+        version: a.row_version,
+      })),
+    });
+  } catch (e) { next(e); }
+});
+
 /* ── I-2 · l'écriture, par identité externe ───────────────────────────
    Retour de terrain RT365 : « l'API publique est en lecture seule ; toute
    écriture passe par 144 routes de session non documentées ; sans
@@ -103,6 +190,10 @@ r.put("/raid/:externalId", requireIntegration("write:portfolio"), idempotent(), 
 r.put("/activities/:externalId", requireIntegration("write:portfolio"), idempotent(), write(upsertActivity));
 r.put("/workitems/:externalId", requireIntegration("write:portfolio"), idempotent(), write(upsertWorkItem));
 r.put("/criteria/:externalId", requireIntegration("write:portfolio"), idempotent(), write(upsertCriterion));
+/* REQ-20 (V-1) — la valeur est du portefeuille : ce qu'un projet promet
+   et ce qu'il rend se synchronisent comme ce qu'il livre. */
+r.put("/benefits/:externalId", requireIntegration("write:portfolio"), idempotent(), write(upsertBenefit));
+r.put("/business-case/:externalId", requireIntegration("write:portfolio"), idempotent(), write(upsertBusinessCase));
 r.put("/decisions/:externalId", requireIntegration("write:meetings"), idempotent(), write(upsertDecision));
 r.put("/actions/:externalId", requireIntegration("write:meetings"), idempotent(), write(upsertAction));
 

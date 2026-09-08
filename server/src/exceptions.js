@@ -32,7 +32,7 @@ import { many, tx } from "./db.js";
 import { record } from "./audit.js";
 import { allocateId } from "./db.js";
 import { loadPortfolio } from "./portfolio.js";
-import { Engine } from "../../shared/engine.js";
+import { Engine, D, days } from "../../shared/engine.js";
 import { queue } from "./notify.js";
 
 /** Le principal du balayage : personne. La piste écrit « system ». */
@@ -45,6 +45,10 @@ const WORDING = {
                `${b.allowed}% was allowed`,
   benefit: (b) => `The weakest benefit is ${b.measured} points below target; ` +
                   `${b.allowed} were allowed`,
+  /* REQ-21 — celle-ci n'est pas un dépassement mais une ABSENCE : la
+     date est passée et personne n'a rien constaté. */
+  "benefit-review": (b) => `${b.title} was due to realise ${b.due} and has not been ` +
+                           `measured; ${b.measured} day(s) have passed`,
 };
 
 /**
@@ -61,7 +65,10 @@ export async function sweepExceptions() {
   });
 
   const tolByProject = new Map((db.tolerances ?? []).map((t) => [t.project, t]));
-  if (!tolByProject.size) return { considered: 0, opened: 0 };
+  /* Le balayage des bénéfices ne dépend PAS d'une marge : un projet sans
+     tolérance a quand même promis quelque chose. Ne sortir ici que si
+     rien du tout n'est à constater. */
+  if (!tolByProject.size && !(db.benefits ?? []).length) return { considered: 0, opened: 0 };
 
   /* Ce qui est DÉJÀ ouvert ne se rouvre pas. Lu une fois, pas par
      projet : cent projets ne doivent pas coûter cent requêtes. */
@@ -74,12 +81,70 @@ export async function sweepExceptions() {
       [[...new Set((db.tolerances ?? []).map((t) => t.setBy).filter(Boolean))]]
     )).map((u) => [u.id, u.email]));
 
+  /* L'adresse de qui mesure un bénéfice — une personne, pas un compte :
+     on remonte au compte par son adresse, comme ailleurs. */
+  const ownerIds = [...new Set((db.benefits ?? []).map((b) => b.owner).filter(Boolean))];
+  const ownerRows = ownerIds.length
+    ? await many(
+        `SELECT p.id AS person_id, u.id AS user_id, u.email
+           FROM person p JOIN app_user u ON u.person_id = p.id
+          WHERE p.id = ANY($1) AND u.active`, [ownerIds])
+    : [];
+  const ownerEmail = new Map(ownerRows.map((r) => [r.person_id, r.email]));
+  const ownerUser = new Map(ownerRows.map((r) => [r.person_id, r.user_id]));
+
   const open = new Set(
     (await many(`SELECT project_id, dimension FROM project_exception WHERE status = 'Open'`))
       .map((r) => `${r.project_id}|${r.dimension}`));
 
   let considered = 0;
   const opened = [];
+
+  /* REQ-21 (V-2) — le bénéfice promis pour une date qui est passée, et
+     que personne n'a mesuré. RT365 : « les bénéfices se réalisent après
+     la clôture, quand l'équipe s'est dispersée ; une date dans une table
+     que rien ne relance est la manière dont le compte rendu de valeur
+     meurt ». Un projet CLOS compte ici — c'est même le cas normal. */
+  const asOf = db.statusDate;
+  for (const b of (db.benefits ?? [])) {
+    if (b.status !== "Forecast" || !b.realiseOn) continue;
+    if (D(b.realiseOn) >= D(asOf)) continue;
+    if (open.has(`${b.project}|benefit-review`)) continue;
+    const p = db.projects.find((x) => x.id === b.project);
+    if (!p) continue;
+    const late = days(b.realiseOn, asOf);
+    const detail = WORDING["benefit-review"]({ title: b.title, due: b.realiseOn, measured: late });
+    let id = null;
+    await tx(async (t) => {
+      id = await allocateId(t, "EXC", { pad: 3 });
+      await t.query(
+        `INSERT INTO project_exception
+           (id, project_id, tolerance_id, dimension, measured, allowed, detail)
+         VALUES ($1,$2,NULL,'benefit-review',$3,0,$4)`,
+        [id, p.id, late, detail]);
+      await record(t, SWEEPER, {
+        action: "Exception raised", entity: "project_exception", entityId: id,
+        detail: `${p.id} benefit-review — ${detail}`,
+        after: { benefit: b.id, dueOn: b.realiseOn, daysLate: late },
+      });
+    });
+    open.add(`${p.id}|benefit-review`);
+    opened.push({ id, project: p.id, dimension: "benefit-review", detail });
+
+    /* On prévient le propriétaire du bénéfice — c'est lui qui mesure. */
+    const to = ownerEmail.get(b.owner);
+    if (to) {
+      await queue({
+        userId: ownerUser.get(b.owner), email: to, kind: "benefit-review-due", severity: "attention",
+        subject: `${b.title} was due to realise and has not been measured`,
+        body: `${detail}.
+
+Answer it: record the measurement, or say the benefit ` +
+              `was missed or withdrawn and why.`,
+        groupKey: `exception:${id}`,
+      }).catch(() => { /* la file ne doit jamais faire tomber le constat */ });
+    }
+  }
 
   for (const p of db.projects) {
     const tol = tolByProject.get(p.id);

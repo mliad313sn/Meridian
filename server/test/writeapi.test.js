@@ -54,7 +54,15 @@ describe("I-2 · la serrure avant la porte", () => {
     assert.equal(r.status, 200);
     const paths = r.body.endpoints.map((e) => e.method + " " + e.path);
     assert.ok(paths.includes("PUT /api/v1/projects/:externalId"));
-    assert.equal(r.body.endpoints.find((e) => e.path.includes("decisions")).scope, "write:meetings");
+    /* Deux routes portent désormais « decisions » — l'écriture et la
+       lecture (REQ-15) — et chacune dit SA portée : elles sont le miroir
+       l'une de l'autre, pas la même. */
+    const find = (m, path) => r.body.endpoints.find((e) => e.method === m && e.path === path);
+    assert.equal(find("PUT", "/api/v1/decisions/:externalId").scope, "write:meetings");
+    assert.equal(find("GET", "/api/v1/decisions").scope, "read:meetings");
+    assert.equal(find("GET", "/api/v1/actions").scope, "read:meetings");
+    assert.equal(find("PUT", "/api/v1/benefits/:externalId").scope, "write:portfolio");
+    assert.equal(find("PUT", "/api/v1/business-case/:externalId").scope, "write:portfolio");
     const doc = (await c.get("/api/v1/openapi.json", { "X-API-Key": KEY })).body;
     /* OpenAPI nomme un paramètre `{nom}` ; la découverte, elle, rend les
        routes telles que le routeur les monte. */
@@ -517,6 +525,158 @@ describe("second round · what the counsellors found (docs/33 §5)", () => {
     const written = JSON.stringify(ev.before_json);
     assert.ok(!written.includes("S3CRET-SIGNING-KEY"), "le secret de signature ne part pas dans une piste que rien ne corrige");
     assert.match(written, /redacted/);
+  });
+
+  /* ── REQ-15 / REQ-20 · la valeur sur le contrat, et la relecture ─── */
+
+  test("REQ-15 · what you wrote reads back: the decision register and the actions, under their own scope", async () => {
+    const admin = await as("admin");
+    const readKey = await mint(admin, "Reconciler", "read:meetings");
+    const h = { "X-API-Key": readKey.key };
+
+    const made = await c.put("/api/v1/decisions/D-090",
+      { headline: "Readable back", council: "ARB", rationale: "Because a write you cannot read is not a contract." },
+      { "X-API-Key": MEET_KEY });
+    assert.equal(made.status, 201, made.text);
+
+    const reg = await c.get("/api/v1/decisions", h);
+    assert.equal(reg.status, 200, reg.text);
+    const mine = reg.body.decisions.find((d) => d.externalId === "D-090");
+    assert.ok(mine, "the row an integration wrote is findable by its own identifier");
+    assert.equal(mine.id, made.body.id);
+    assert.equal(mine.headline, "Readable back");
+    assert.equal(mine.council, "ARB");
+    assert.ok(mine.version >= 1, "and carries the version an update asserts");
+
+    const acts = await c.get("/api/v1/actions", h);
+    assert.equal(acts.status, 200, acts.text);
+    assert.ok(Array.isArray(acts.body.actions));
+    /* `raisedInStatus` est ce qui dit à un synchroniseur qu'une action
+       vit dans une salle close — la minute qu'une re-passe écraserait. */
+    for (const a of acts.body.actions) assert.ok("raisedInStatus" in a);
+
+    /* La portée est réellement séparée : une clé de portefeuille, même en
+       écriture, ne lit pas la gouvernance. */
+    assert.equal((await c.get("/api/v1/decisions", { "X-API-Key": KEY })).status, 403);
+    assert.equal((await c.get("/api/v1/actions", { "X-API-Key": KEY })).status, 403);
+    assert.equal((await c.get("/api/v1/decisions", {})).status, 401);
+  });
+
+  test("REQ-20 · a benefit round-trips every field, keeps its own unit, and adopts a row born on a screen", async () => {
+    const admin = await as("admin");
+    const before = (await admin.get("/api/bootstrap")).body.db;
+    const proj = before.projects[0].id;
+
+    const made = await put("/api/v1/benefits/BEN-EXT-1", {
+      project: "E01", kind: "Availability", title: "Fewer trading halts",
+      detail: "Measured on the venue's own feed", measure: "halts per quarter", unit: "halts",
+      baseline: 12, target: 3, owner: PM, realiseOn: "2027-03-31",
+    });
+    assert.equal(made.status, 201, made.text);
+
+    /* Un réalisé sans date de mesure est refusé : un chiffre que personne
+       ne peut situer un an plus tard n'est pas une mesure. */
+    const undated = await put("/api/v1/benefits/BEN-EXT-1", { actual: 5 });
+    assert.equal(undated.status, 400, undated.text);
+    assert.match(undated.body.error, /measuredOn/);
+
+    const measured = await put("/api/v1/benefits/BEN-EXT-1",
+      { actual: 5, measuredOn: "2026-12-31", status: "Partially realised" });
+    assert.equal(measured.status, 200, measured.text);
+
+    const row = await one(`SELECT * FROM benefit WHERE id = $1`, [made.body.id]);
+    assert.equal(row.kind, "Availability");
+    assert.equal(row.title, "Fewer trading halts");
+    assert.equal(row.measure, "halts per quarter");
+    assert.equal(row.unit, "halts");
+    /* SON unité, jamais divisée par le million comme l'argent. */
+    assert.equal(Number(row.baseline), 12);
+    assert.equal(Number(row.target), 3);
+    assert.equal(Number(row.actual), 5);
+    assert.equal(row.owner_id, PM);
+    assert.equal(row.status, "Partially realised");
+    assert.equal(row.external_id, "BEN-EXT-1");
+
+    /* Idempotence : la même écriture ne crée rien et n'invente pas une version. */
+    const again = await put("/api/v1/benefits/BEN-EXT-1", { actual: 5, measuredOn: "2026-12-31", status: "Partially realised" });
+    assert.equal(again.status, 200);
+    assert.equal(again.body.created, false);
+    assert.equal(again.body.version, measured.body.version, "rien n'a changé, la version non plus");
+
+    /* Et il se relit là où l'écran le lit. */
+    const seen = (await admin.get("/api/bootstrap")).body.db.benefits.find((x) => x.externalId === "BEN-EXT-1");
+    assert.ok(seen, "le bénéfice écrit par le contrat est celui que l'écran montre");
+    assert.equal(seen.actual, 5);
+
+    /* `adopt` : une ligne née à l'écran prend l'identité de la source. */
+    const screen = await admin.post("/api/benefits", { project: proj, kind: "Cost", title: "Born on a screen" });
+    assert.equal(screen.status, 201, screen.text);
+    const adopted = await put("/api/v1/benefits/BEN-EXT-2", { adopt: screen.body.id, target: 9 });
+    assert.equal(adopted.status, 200, adopted.text);
+    assert.equal(adopted.body.id, screen.body.id, "pas de doublon");
+    assert.equal((await one(`SELECT external_id FROM benefit WHERE id = $1`, [screen.body.id])).external_id, "BEN-EXT-2");
+
+    const kind = await put("/api/v1/benefits/BEN-EXT-3", { project: "E01", title: "x", kind: "Vibes" });
+    assert.equal(kind.status, 400, "un genre inventé est refusé, pas coercé");
+  });
+
+  test("REQ-20 · the business case is written by the contract, in millions, one per project", async () => {
+    const first = await put("/api/v1/business-case/CASE-E01", {
+      project: "E01", summary: "The venue fines us for every halt; the fix pays for itself in a year.",
+      expectedCost: 1.5, expectedBenefit: 4.25, basis: "Two years of fine notices, and the vendor quote.",
+    });
+    assert.equal(first.status, 201, first.text);
+    const row = await one(`SELECT * FROM business_case WHERE id = $1`, [first.body.id]);
+    /* L'argent est en millions à l'entrée et en unités entières en base,
+       la même conversion qu'à l'écran. */
+    assert.equal(Number(row.expected_cost), 1_500_000);
+    assert.equal(Number(row.expected_benefit), 4_250_000);
+    assert.equal(row.external_id, "CASE-E01");
+    assert.equal(row.updated_on, null, "écrire n'est pas réviser");
+
+    const revised = await put("/api/v1/business-case/CASE-E01", { expectedBenefit: 3.1 });
+    assert.equal(revised.status, 200, revised.text);
+    const after = await one(`SELECT * FROM business_case WHERE id = $1`, [first.body.id]);
+    assert.equal(Number(after.expected_benefit), 3_100_000);
+    assert.ok(after.updated_on, "réviser repose la date que la reconfirmation regarde");
+
+    /* Un projet n'a qu'UN cas : le second dit lequel adopter plutôt que
+       de heurter une contrainte d'unicité sans rien expliquer. */
+    const second = await put("/api/v1/business-case/CASE-E01-BIS", { project: "E01", summary: "A second case" });
+    assert.equal(second.status, 400, second.text);
+    assert.match(second.body.error, /adopt/);
+
+    const negative = await put("/api/v1/business-case/CASE-E02", { project: "E02", summary: "x", expectedCost: -1 });
+    assert.equal(negative.status, 400);
+  });
+
+  test("integrator · a re-run that changes nothing writes nothing: no audit event, no version bump", async () => {
+    const body = { project: "E01", type: "Issue", title: "Unchanged between runs",
+                   detail: "The ledger did not move.", p: 3, i: 3, status: "Open" };
+    const made = await put("/api/v1/raid/O-NOOP", body);
+    assert.equal(made.status, 201, made.text);
+    const events = async () => (await many(
+      `SELECT id FROM audit_event WHERE entity = 'raid_item' AND entity_id = $1`, [made.body.id])).length;
+    const after = await events();
+    const v = (await one(`SELECT row_version FROM raid_item WHERE id = $1`, [made.body.id])).row_version;
+
+    /* Le patch était bâti des champs ENVOYÉS, pas des champs MODIFIÉS :
+       une re-passe identique écrivait un événement et incrémentait la
+       version de chaque ligne — mesuré par l'intégrateur à 285 lignes et
+       285 événements pour un chargement qui n'avait rien changé. */
+    for (let i = 0; i < 3; i++) {
+      const again = await put("/api/v1/raid/O-NOOP", body);
+      assert.equal(again.status, 200, again.text);
+      assert.equal(again.body.created, false);
+      assert.equal(again.body.version, v, "la version ne bouge pas sous les pieds d'un lecteur");
+    }
+    assert.equal(await events(), after, "et la piste ne se remplit pas de non-événements");
+
+    /* Un vrai changement, lui, s'écrit et s'audite comme avant. */
+    const moved = await put("/api/v1/raid/O-NOOP", { ...body, p: 5 });
+    assert.equal(moved.status, 200);
+    assert.equal(moved.body.version, v + 1);
+    assert.equal(await events(), after + 1);
   });
 
   test("Idempotency-Key: key order does not matter; a refused request frees its key", async () => {

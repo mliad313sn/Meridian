@@ -192,7 +192,13 @@ export const App = {
     /* PM-02 — le registre est une collection comme une autre ; adopter
        change une ligne, pas le portefeuille. */
     "Business case written": ["businessCases"], "Business case updated": ["businessCases"],
-    "Business case reconfirmed": ["businessCases"],
+    /* REQ-22 — reconfirmer écrit DEUX choses : le résumé sur le cas, et
+       la ligne du jalon. Ne rafraîchir que la première laissait l'écran
+       dire « reconfirmé au jalon 1 » en en-tête et « reconfirmé à aucun
+       jalon » deux lignes plus bas. Trouvé au parcours navigateur, pas
+       par un test : les deux écritures étaient justes chacune de son
+       côté. */
+    "Business case reconfirmed": ["businessCases", "caseReconfirmations"],
     "Lesson raised": ["lessons"], "Lesson updated": ["lessons"],
     "Lesson removed": ["lessons"], "Lesson adopted": ["lessons"],
   },

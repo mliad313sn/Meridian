@@ -20,6 +20,7 @@ import { Engine, GATES, PHASES, LESSON_CATEGORIES, iso, addDays, days, D } from 
 import { scaffoldProject, reschedule, phaseFor } from "../wbs.js";
 import { ladderLength } from "../v1write.js";
 import { assertPlantWindow } from "../plant.js";
+import { assertCaseReconfirmed, deltaAgainst, reconfirmationsFor } from "../value.js";
 
 
 const r = Router();
@@ -519,6 +520,10 @@ r.patch("/milestones/:id", async (req, res, next) => {
        too, and both are audited like any milestone change. */
     if (b.dateBasis !== undefined) patch.date_basis = dateBasis(b.dateBasis);
     if (b.condition !== undefined) patch.condition = String(b.condition ?? "").slice(0, 500);
+    /* REQ-22 (V-3) — franchir un jalon de gouvernance est la décision de
+       continuer à dépenser : le cas doit avoir été reconfirmé à CE jalon.
+       Lu ici, avant toute transaction (garde de db.js). */
+    if (b.done !== undefined) await assertCaseReconfirmed(p, m, { done: !!b.done });
     /* Moving a cutover, or newly marking one as intrusive, asks the same
        freeze question the original planning did. */
     const wantsIntrusive = b.intrusive === undefined ? m.intrusive : !!b.intrusive;
@@ -2116,14 +2121,58 @@ r.post("/projects/:id/case/reconfirm", async (req, res, next) => {
     const existing = await one(`SELECT * FROM business_case WHERE project_id = $1`, [p.id]);
     if (!existing) bad("There is no business case to reconfirm — write it first");
     const g = Number(req.body?.gate ?? p.gate ?? 0);
-    if (!(g >= 1 && g <= 4)) bad("Reconfirmation happens at a gate — 1 to 4");
+    /* La borne suit l'échelle du programme (036), plus les quatre jalons
+       câblés de la 028 : un programme à six jalons ne pouvait pas
+       reconfirmer son cas aux jalons 5 et 6. */
+    const ladder = await ladderLength(p.id);
+    if (!(g >= 1 && g <= ladder)) bad(`Reconfirmation happens at a gate — 1 to ${ladder} on this project's ladder`);
+    const verdict = VERDICTS.includes(req.body?.verdict) ? req.body.verdict : "Continue";
+    const note = String(req.body?.note ?? "").slice(0, 2000);
+    /* Qui reconfirme est une personne de l'annuaire, pas seulement le
+       compte qui tape : le cas est reconfirmé par celui qui paie. */
+    let who = null;
+    if (req.body?.reconfirmedBy) {
+      who = await one(`SELECT id FROM person WHERE id = $1 AND active`, [String(req.body.reconfirmedBy)]);
+      if (!who) bad("The reconfirmer must be an active person in the directory");
+      who = who.id;
+    }
+    /* Ce que la reconfirmation précédente avait vu — lu AVANT la
+       transaction, pour dire l'écart sans relire un historique. */
+    const previous = await one(
+      `SELECT * FROM case_reconfirmation WHERE case_id = $1 AND gate < $2 ORDER BY gate DESC LIMIT 1`,
+      [existing.id, g]);
+    const delta = deltaAgainst(previous, existing.expected_cost, existing.expected_benefit);
 
     const out = await audited(req.user,
       { action: "Business case reconfirmed", entity: "business_case", entityId: existing.id,
-        detail: `${p.id} — still worth doing, at gate ${g}`,
+        /* « Continuer » se dit dans les mots du geste, pas dans ceux de
+           la colonne : ce qu'on inscrit à la piste est la phrase qu'un
+           lecteur comprendra dans un an. */
+        detail: `${p.id} — ${verdict === "Continue" ? "still worth doing"
+                            : verdict === "Stop" ? "STOP — no longer worth doing"
+                            : "worth doing, with conditions"}, at gate ${g}`
+          + (delta && (delta.cost || delta.benefit)
+             ? ` — since gate ${delta.sinceGate}: cost ${delta.cost ?? "?"}M, benefit ${delta.benefit ?? "?"}M` : ""),
         before: { gate: existing.reconfirmed_gate, on: existing.reconfirmed_on },
-        after: { gate: g } },
-      async (t) => conflict(await updateVersioned(t, "business_case", existing.id,
+        after: { gate: g, verdict } },
+      async (t) => {
+        /* Une reconfirmation par (cas, jalon) : reconfirmer deux fois le
+           même jalon CORRIGE, ne s'empile pas. */
+        const rid = await allocateId(t, "CRC", { pad: 3 });
+        await t.query(
+          `INSERT INTO case_reconfirmation
+             (id, case_id, project_id, gate, expected_cost, expected_benefit,
+              verdict, note, reconfirmed_by, recorded_by)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+           ON CONFLICT (case_id, gate) DO UPDATE SET
+             expected_cost = EXCLUDED.expected_cost,
+             expected_benefit = EXCLUDED.expected_benefit,
+             verdict = EXCLUDED.verdict, note = EXCLUDED.note,
+             reconfirmed_by = EXCLUDED.reconfirmed_by, recorded_by = EXCLUDED.recorded_by,
+             reconfirmed_on = CURRENT_DATE, row_version = case_reconfirmation.row_version + 1`,
+          [rid, existing.id, p.id, g, existing.expected_cost, existing.expected_benefit,
+           verdict, note, who, req.user.id]);
+        return conflict(await updateVersioned(t, "business_case", existing.id,
         requiredVersion(req.body, "business case"),
         /* updated_on repasse à NULL : la reconfirmation couvre le texte
            PRÉSENT. Comparer deux dates ne suffit pas — une révision le
@@ -2131,8 +2180,9 @@ r.post("/projects/:id/case/reconfirm", async (req, res, next) => {
            reconfirmation du matin. L'ordre des événements se code par
            l'effacement, pas par l'horloge. */
         { reconfirmed_gate: g, reconfirmed_on: iso(new Date()), reconfirmed_by: req.user.id,
-          updated_on: null })));
-    res.json({ version: out.version });
+          updated_on: null }));
+      });
+    res.json({ version: out.version, gate: g, verdict, delta });
   } catch (e) { next(e); }
 });
 
@@ -3238,6 +3288,11 @@ r.get("/decisions/log", async (req, res, next) => {
    Retour de terrain RT365 (I-10). Écriture de projet ordinaire
    (project.write) : connaître ses parties prenantes et dire qui informer
    est le travail de qui livre, pas un acte de gouvernance. */
+/* REQ-22 — ce qu'un reconfirmant peut dire : continuer, continuer sous
+   condition, ou arrêter. « Arrêter » n'est pas décoratif : le jalon
+   suivant est alors refusé (server/src/value.js). */
+const VERDICTS = ["Continue", "Continue with conditions", "Stop"];
+
 const ATTITUDES = ["Champion", "Supporter", "Neutral", "Sceptic", "Opponent"];
 const ENGAGEMENTS = ["Inform", "Consult", "Involve", "Partner"];
 const scale5 = (v, fallback = 3) => Math.max(1, Math.min(5, num(v, fallback)));

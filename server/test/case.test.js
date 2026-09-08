@@ -108,6 +108,86 @@ describe("PM-03 · la justification continue", () => {
       "…mais l'acte passé n'est pas effacé : il a eu lieu, il est daté");
   });
 
+  test("REQ-22 · un jalon ne se franchit pas sur un cas non reconfirmé à CE jalon", async () => {
+    const group = await as("groupDCH");
+    const admin = await as("admin");
+    const db = (await admin.get("/api/bootstrap")).body.db;
+    /* Le projet porte un cas, reconfirmé au jalon 2 par les tests
+       ci-dessus — et rien au jalon 3. */
+    const gates = db.milestones
+      .filter((m) => m.project === SITE_PROJECT_GRU && m.kind === "gate" && !m.done)
+      .sort((a, b) => a.gate - b.gate);
+    const next = gates.find((m) => m.gate === 3) ?? gates[0];
+    assert.ok(next, "il reste un jalon de gouvernance à franchir");
+
+    const refused = await group.patch(`/api/milestones/${next.id}`,
+      { done: true, acceptedBy: db.people[0].id, version: next.version });
+    assert.equal(refused.status, 409, refused.text);
+    assert.match(refused.body.error, new RegExp(`not been reconfirmed at gate ${next.gate}`),
+      "et le refus dit quoi faire, pas seulement non");
+    assert.match(refused.body.error, /reconfirm the case at this gate first/);
+
+    /* Reconfirmé à CE jalon, le même geste passe. */
+    let bc = (await group.get("/api/bootstrap")).body.db.businessCases
+      .find((c) => c.project === SITE_PROJECT_GRU);
+    const ok = await group.post(`/api/projects/${SITE_PROJECT_GRU}/case/reconfirm`,
+      { gate: next.gate, verdict: "Continue", version: bc.version });
+    assert.equal(ok.status, 200, ok.text);
+    /* L'écart avec la reconfirmation précédente est ce qui rend le geste
+       utile plutôt que rituel. */
+    assert.equal(ok.body.delta.sinceGate, 2);
+    assert.equal(typeof ok.body.delta.cost, "number");
+
+    const after = (await admin.get("/api/bootstrap")).body.db.milestones.find((m) => m.id === next.id);
+    const passed = await group.patch(`/api/milestones/${next.id}`,
+      { done: true, acceptedBy: db.people[0].id, version: after.version });
+    assert.equal(passed.status, 200, passed.text);
+
+    /* Et la suite se lit : une ligne par jalon, avec les deux chiffres
+       qu'elle a vus. */
+    const rec = (await admin.get("/api/bootstrap")).body.db.caseReconfirmations
+      .filter((r) => r.project === SITE_PROJECT_GRU);
+    assert.ok(rec.length >= 1);
+    const atGate = rec.find((r) => r.gate === next.gate);
+    assert.ok(atGate, "la reconfirmation de ce jalon est dans le livre");
+    assert.equal(atGate.verdict, "Continue");
+    assert.equal(typeof atGate.expectedCost, "number", "en millions, comme tout l'écran");
+  });
+
+  test("REQ-22 · « arrêter » n'est pas décoratif : le jalon suivant est refusé", async () => {
+    const group = await as("groupDCH");
+    const admin = await as("admin");
+    const db = (await admin.get("/api/bootstrap")).body.db;
+    const next = db.milestones
+      .filter((m) => m.project === SITE_PROJECT_GRU && m.kind === "gate" && !m.done)
+      .sort((a, b) => a.gate - b.gate)[0];
+    if (!next) return;                       // le livre a franchi toute son échelle
+
+    const bc = (await group.get("/api/bootstrap")).body.db.businessCases
+      .find((c) => c.project === SITE_PROJECT_GRU);
+    const stop = await group.post(`/api/projects/${SITE_PROJECT_GRU}/case/reconfirm`,
+      { gate: next.gate, verdict: "Stop", note: "The venue withdrew the fine regime.", version: bc.version });
+    assert.equal(stop.status, 200, stop.text);
+
+    const refused = await group.patch(`/api/milestones/${next.id}`,
+      { done: true, acceptedBy: db.people[0].id, version: next.version });
+    assert.equal(refused.status, 409, refused.text);
+    assert.match(refused.body.error, /decided to end/);
+  });
+
+  test("REQ-22 · la reconfirmation suit l'échelle du programme, pas les quatre jalons de 2024", async () => {
+    const group = await as("groupDCH");
+    const bc = (await group.get("/api/bootstrap")).body.db.businessCases
+      .find((c) => c.project === SITE_PROJECT_GRU);
+    /* La 028 bornait à `BETWEEN 1 AND 4` : un programme à six jalons ne
+       pouvait pas reconfirmer son cas aux jalons 5 et 6, et la contrainte
+       refusait la ligne sans rien expliquer. */
+    const r = await group.post(`/api/projects/${SITE_PROJECT_GRU}/case/reconfirm`,
+      { gate: 99, version: bc.version });
+    assert.equal(r.status, 400);
+    assert.match(r.body.error, /on this project's ladder/);
+  });
+
   test("on ne reconfirme pas un cas qui n'existe pas", async () => {
     const group = await as("groupCBP");
     /* PRJ-101 (CBP) n'a pas de cas d'affaire. */

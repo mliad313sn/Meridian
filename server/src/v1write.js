@@ -45,6 +45,7 @@ import { fromM, loadSettings } from "./portfolio.js";
 import { scaffoldProject, reschedule, phaseFor } from "./wbs.js";
 import { iso, D } from "../../shared/engine.js";
 import { assertPlantWindow } from "./plant.js";
+import { assertCaseReconfirmed } from "./value.js";
 import { canRatifyDecision } from "../../shared/rbac.js";
 
 const bad = (msg) => { throw new HttpError(400, msg); };
@@ -104,7 +105,7 @@ export async function resolvePerson(ref, what) {
   return p.id;
 }
 
-const HAS_EXTERNAL_ID = new Set(["project", "milestone", "raid_item", "meeting_decision", "meeting_action", "activity", "work_item", "gate_criterion"]);
+const HAS_EXTERNAL_ID = new Set(["project", "milestone", "raid_item", "meeting_decision", "meeting_action", "activity", "work_item", "gate_criterion", "benefit", "business_case"]);
 async function resolveRef(table, source, ref, projectId, what) {
   if (!ref) return null;
   /* Une demande de modification n'a pas d'identité externe (035) : elle
@@ -128,6 +129,41 @@ const stamp = (created, id, externalId, version) => ({ id, externalId, created, 
  * entre la lecture et l'écriture donnait un 409 « périmé » à qui n'avait
  * rien envoyé — conseiller code, docs/33 §5).
  */
+/**
+ * Ce qui a RÉELLEMENT changé.
+ *
+ * Le `patch` était bâti à partir des champs ENVOYÉS, pas des champs
+ * modifiés. L'intégrateur l'a mesuré en rejouant son chargement : une
+ * re-passe sans le moindre changement écrivait 285 événements d'audit et
+ * incrémentait `row_version` sur 285 lignes — une piste que personne ne
+ * peut plus lire, et une version qui bouge sous les pieds d'un lecteur
+ * qui n'avait rien fait. Le chemin des décisions filtrait déjà ainsi ;
+ * c'est maintenant la règle de toutes les collections.
+ *
+ * La comparaison est tolérante à la FORME que rend le pilote : un
+ * `numeric` revient en chaîne, une `date` en Date ou en chaîne. Comparer
+ * `12` à `"12.00"` avec `!==` déclarait un changement à chaque passe,
+ * ce qui aurait rendu ce filtre inutile précisément là où il sert.
+ */
+const sameValue = (a, b) => {
+  if (a === b) return true;
+  if (a === null || a === undefined || b === null || b === undefined) return false;
+  if (a instanceof Date || b instanceof Date) {
+    const d = (v) => (v instanceof Date ? iso(v) : String(v).slice(0, 10));
+    return d(a) === d(b);
+  }
+  if (typeof a === "boolean" || typeof b === "boolean") return Boolean(a) === Boolean(b);
+  const na = Number(a), nb = Number(b);
+  if (Number.isFinite(na) && Number.isFinite(nb) && String(a).trim() !== "" && String(b).trim() !== "") {
+    return na === nb;
+  }
+  return String(a) === String(b);
+};
+export function changedOnly(patch, row) {
+  if (!row) return patch;
+  return Object.fromEntries(Object.entries(patch).filter(([k, v]) => !sameValue(v, row[k])));
+}
+
 async function writeRow(t, table, id, version, patch, what) {
   if (version !== undefined) {
     const rv = await updateVersioned(t, table, id, version, patch);
@@ -254,7 +290,7 @@ export async function upsertProject(user, externalId, b) {
   }
 
   if (existing.origin === "sdp") throw new HttpError(403, "This project is synchronised from the SDP roadmap — it is edited there");
-  const patch = {};
+  let patch = {};
   if (name !== undefined) patch.name = name;
   if (pm !== undefined) patch.pm_id = pm;
   if (method !== undefined) patch.method = method;
@@ -269,6 +305,7 @@ export async function upsertProject(user, externalId, b) {
                   (patch.finish_date && patch.finish_date !== existing.finish_date);
   const statusToday = shifted ? ((await loadSettings()).statusDate ?? iso(new Date())) : null;
   const version = sentVersion(b);
+  patch = changedOnly(patch, existing);            // ne réécrire que ce qui bouge
   Object.assign(patch, binding);   // H-2 — la liaison valide avec l'écriture
   if (!Object.keys(patch).length) return stamp(false, existing.id, externalId, existing.row_version);
 
@@ -334,6 +371,14 @@ export async function upsertMilestone(user, externalId, b) {
     await assertPlantWindow(plant, { date: date ?? existing?.due_date, intrusive: true });
   }
 
+  /* REQ-22 (V-3) — et la même question de cas d'affaire que l'écran :
+     franchir un jalon de gouvernance est la décision de continuer à
+     dépenser. Un contrôle posé sur un seul des deux chemins n'est pas un
+     contrôle (conseiller code, sur le gel d'usine). */
+  if (b.done !== undefined && existing) {
+    await assertCaseReconfirmed(p, existing, { done: !!b.done });
+  }
+
   if (!existing) {
     if (!date) bad("A milestone needs a date");
     /* Créer ET cocher dans le même PUT : la règle d'acceptation (PM-04) se
@@ -364,7 +409,7 @@ export async function upsertMilestone(user, externalId, b) {
   }
 
   if (existing.origin === "sdp") throw new HttpError(403, "This milestone is synchronised from the SDP roadmap — it is edited there");
-  const patch = {};
+  let patch = {};
   if (name !== undefined) patch.name = name;
   if (date) patch.due_date = date;
   if (owner !== undefined) patch.owner_id = owner;
@@ -385,6 +430,7 @@ export async function upsertMilestone(user, externalId, b) {
     }
     if (!patch.done) { patch.accepted_by = null; patch.accepted_on = null; }
   }
+  patch = changedOnly(patch, existing);            // ne réécrire que ce qui bouge
   Object.assign(patch, binding);   // H-2 — la liaison valide avec l'écriture
   if (!Object.keys(patch).length) return stamp(false, existing.id, externalId, existing.row_version);
   const version = sentVersion(b);
@@ -458,7 +504,7 @@ export async function upsertRaid(user, externalId, b) {
     return stamp(true, id, externalId, 1);
   }
 
-  const patch = {};
+  let patch = {};
   if (title !== undefined) patch.title = title;
   if (detail !== undefined) patch.detail = detail;
   if (kind !== undefined) patch.kind = kind;
@@ -472,6 +518,7 @@ export async function upsertRaid(user, externalId, b) {
   if (gateN !== undefined) patch.gate = gateN;
   if (cr !== undefined) patch.cr_id = cr;
   if (status !== undefined) patch.status = status;
+  patch = changedOnly(patch, existing);            // ne réécrire que ce qui bouge
   Object.assign(patch, binding);   // H-2 — la liaison valide avec l'écriture
   if (!Object.keys(patch).length) return stamp(false, existing.id, externalId, existing.row_version);
   const version = sentVersion(b);
@@ -662,7 +709,7 @@ export async function upsertCriterion(user, externalId, b) {
        compte ses créations comptait faux. (Intégrateur, docs/33 §5.) */
     born = true;
   }
-  const patch = {};
+  let patch = {};
   if (textV !== undefined) patch.text = textV;
   if (note !== undefined) patch.note = note;
   if (doc !== undefined) patch.document_id = doc?.id ?? null;
@@ -678,6 +725,7 @@ export async function upsertCriterion(user, externalId, b) {
       patch.met = true; patch.reviewed_by = who; patch.reviewed_on = iso(new Date());
     } else { patch.met = false; patch.reviewed_by = null; patch.reviewed_on = null; }
   }
+  patch = changedOnly(patch, existing);            // ne réécrire que ce qui bouge
   Object.assign(patch, binding);   // H-2 — la liaison valide avec l'écriture
   if (!Object.keys(patch).length) return stamp(born, existing.id, externalId, existing.row_version);
   const version = sentVersion(b);
@@ -745,7 +793,7 @@ export async function upsertAction(user, externalId, b) {
     return stamp(true, id, externalId, 1);
   }
 
-  const patch = {};
+  let patch = {};
   if (title !== undefined) patch.title = title;
   if (detail !== undefined) patch.detail = detail;
   if (owner !== undefined) patch.owner_id = owner;
@@ -755,6 +803,7 @@ export async function upsertAction(user, externalId, b) {
     patch.status = status;
     if (status === "Done" || status === "Cancelled") patch.closed_at = new Date().toISOString();
   }
+  patch = changedOnly(patch, existing);            // ne réécrire que ce qui bouge
   Object.assign(patch, binding);   // H-2 — la liaison valide avec l'écriture
   if (!Object.keys(patch).length) return stamp(false, existing.id, externalId, existing.row_version);
   const version = sentVersion(b);
@@ -794,7 +843,7 @@ export async function upsertActivity(user, externalId, b) {
     existing = await one(`SELECT * FROM activity WHERE id = $1`, [a.id]);
     if (b.pct === undefined) return stamp(true, a.id, externalId, existing.row_version);
   }
-  const patch = {};
+  let patch = {};
   if (b.pct !== undefined) {
     const n = Math.round(Number(b.pct));
     if (!Number.isFinite(n) || n < 0 || n > 100) bad("pct is a whole number from 0 to 100");
@@ -855,7 +904,7 @@ export async function upsertWorkItem(user, externalId, b) {
       });
     return stamp(true, id, externalId, 1);
   }
-  const patch = {};
+  let patch = {};
   if (title !== undefined) patch.title = title;
   if (column !== undefined) patch.column_id = column;
   if (assignee !== undefined) patch.assignee_id = assignee;
@@ -870,6 +919,179 @@ export async function upsertWorkItem(user, externalId, b) {
     async (t) => {
       return writeRow(t, "work_item", existing.id, version, patch, "work item");
     });
+  return stamp(false, existing.id, externalId, out.version);
+}
+
+/* ── la valeur : le cas d'affaire et les bénéfices (REQ-20 · V-1) ─────
+   RT365, après avoir rejoué son évaluation sur la 5.10.0 : « REQ-02 a
+   rendu les faits de LIVRAISON synchronisables depuis le dépôt de
+   terrain ; les faits de VALEUR doivent toujours être saisis à la main,
+   de sorte que la seule chose que lit un dirigeant est la seule chose
+   qui se périme. Notre chargeur pousse 256 écritures de livraison et ne
+   peut pousser un seul bénéfice. »
+
+   Mêmes règles que les huit autres collections : la source nomme SA
+   ligne, `adopt` reprend une ligne née à l'écran, `version` s'asserte si
+   elle est envoyée, et l'audit porte le nom de l'intégration. */
+
+const BENEFIT_KINDS = ["Production", "Availability", "Cost", "Risk", "Compliance"];
+const BENEFIT_STATUS = ["Forecast", "Realised", "Partially realised", "Missed", "Withdrawn"];
+
+/** Un nombre de bénéfice garde SON unité : jamais divisé par le million. */
+const measureNum = (v, what) => {
+  if (v === undefined) return undefined;
+  if (v === null || v === "") return null;
+  const n = Number(v);
+  if (!Number.isFinite(n)) bad(`${what} must be a number, or null`);
+  return n;
+};
+
+export async function upsertBenefit(user, externalId, b) {
+  const source = user.id;
+  let existing = await one(
+    `SELECT * FROM benefit WHERE external_source = $1 AND external_id = $2`, [source, externalId]);
+  let binding = {};
+  if (!existing && b.adopt) {
+    const plan = await planAdoption(user, "benefit", externalId, b.adopt, "benefit");
+    existing = plan.row; binding = plan.binding;
+  }
+  const title = text(b.title, 300, "title", !existing);
+  const detail = text(b.detail, 2000, "detail");
+  const measure = text(b.measure, 300, "measure");
+  const unit = text(b.unit, 40, "unit");
+  const kind = b.kind === undefined ? undefined
+    : BENEFIT_KINDS.includes(b.kind) ? b.kind : bad("kind is " + BENEFIT_KINDS.join(", "));
+  const status = b.status === undefined ? undefined
+    : BENEFIT_STATUS.includes(b.status) ? b.status : bad("status is " + BENEFIT_STATUS.join(", "));
+  const baseline = measureNum(b.baseline, "baseline");
+  const target = measureNum(b.target, "target");
+  const actual = measureNum(b.actual, "actual");
+  const owner = b.owner !== undefined ? await resolvePerson(b.owner, "owner") : undefined;
+  const realiseOn = b.realiseOn === undefined ? undefined : isoDate(b.realiseOn, "realiseOn");
+  const measuredOn = b.measuredOn === undefined ? undefined : isoDate(b.measuredOn, "measuredOn");
+  /* Un réalisé sans date de mesure est un chiffre que personne ne peut
+     situer un an plus tard — c'est la règle de la 008, tenue ici aussi. */
+  if (actual !== undefined && actual !== null && measuredOn === undefined
+      && !(existing && existing.measured_on)) {
+    bad("An actual needs measuredOn — the date it was measured, or the figure cannot be situated later");
+  }
+
+  if (!existing) {
+    const p = await resolveProject(source, b.project);
+    if (!p) bad("A benefit belongs to a project — a Meridian id, or an external id you created");
+    let id = null;
+    await audited(user,
+      () => ({ action: "Benefit added", entity: "benefit", entityId: id,
+               detail: `${kind ?? "Cost"} — ${title} — from ${user.displayName} (${externalId})` }),
+      async (t) => {
+        id = await allocateId(t, "BEN", { pad: 2 });
+        await t.query(
+          `INSERT INTO benefit
+             (id, project_id, kind, title, detail, measure, unit, baseline, target, actual,
+              owner_id, realise_on, measured_on, status, external_source, external_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+          [id, p.id, kind ?? "Cost", title, detail ?? "", measure ?? "", unit ?? "",
+           baseline ?? null, target ?? null, actual ?? null, owner ?? null,
+           realiseOn ?? null, measuredOn ?? null, status ?? "Forecast", source, externalId]);
+      });
+    return stamp(true, id, externalId, 1);
+  }
+  let patch = {};
+  if (title !== undefined) patch.title = title;
+  if (detail !== undefined) patch.detail = detail;
+  if (measure !== undefined) patch.measure = measure;
+  if (unit !== undefined) patch.unit = unit;
+  if (kind !== undefined) patch.kind = kind;
+  if (status !== undefined) patch.status = status;
+  if (baseline !== undefined) patch.baseline = baseline;
+  if (target !== undefined) patch.target = target;
+  if (actual !== undefined) patch.actual = actual;
+  if (owner !== undefined) patch.owner_id = owner;
+  if (realiseOn !== undefined) patch.realise_on = realiseOn;
+  if (measuredOn !== undefined) patch.measured_on = measuredOn;
+  patch = changedOnly(patch, existing);            // ne réécrire que ce qui bouge
+  Object.assign(patch, binding);   // H-2 — la liaison valide avec l'écriture
+  if (!Object.keys(patch).length) return stamp(false, existing.id, externalId, existing.row_version);
+  const version = sentVersion(b);
+  const out = await audited(user,
+    { action: patch.actual !== undefined && patch.actual !== existing.actual
+        ? "Benefit measured" : "Benefit updated",
+      entity: "benefit", entityId: existing.id,
+      detail: `${patch.title ?? existing.title} — from ${user.displayName} (${externalId})`,
+      before: { actual: existing.actual, status: existing.status },
+      after: { actual: patch.actual ?? existing.actual, status: patch.status ?? existing.status } },
+    async (t) => writeRow(t, "benefit", existing.id, version, patch, "benefit"));
+  return stamp(false, existing.id, externalId, out.version);
+}
+
+export async function upsertBusinessCase(user, externalId, b) {
+  const source = user.id;
+  let existing = await one(
+    `SELECT * FROM business_case WHERE external_source = $1 AND external_id = $2`, [source, externalId]);
+  let binding = {};
+  if (!existing && b.adopt) {
+    const plan = await planAdoption(user, "business_case", externalId, b.adopt, "business case");
+    existing = plan.row; binding = plan.binding;
+  }
+  const summary = text(b.summary, 4000, "summary", !existing);
+  const basis = text(b.basis, 4000, "basis");
+  /* L'argent d'un cas est en millions à l'entrée, comme à l'écran, et en
+     unités entières en base — `fromM`, la même conversion partout. */
+  const money = (v, what) => {
+    if (v === undefined) return undefined;
+    if (v === null || v === "") return null;
+    const n = Number(v);
+    if (!Number.isFinite(n) || n < 0) bad(`${what} must be zero or more, in millions`);
+    return fromM(n);
+  };
+  const cost = money(b.expectedCost, "expectedCost");
+  const benefit = money(b.expectedBenefit, "expectedBenefit");
+
+  if (!existing) {
+    const p = await resolveProject(source, b.project);
+    if (!p) bad("A business case belongs to a project — a Meridian id, or an external id you created");
+    /* Un projet n'a qu'UN cas (contrainte UNIQUE de la 028) : si l'écran
+       en a déjà écrit un, l'adopter est le geste, pas en créer un second
+       qui serait refusé par la base sans rien expliquer. */
+    const already = await one(`SELECT id, external_id FROM business_case WHERE project_id = $1`, [p.id]);
+    if (already) {
+      bad(`${p.id} already has a business case (${already.id}) — adopt it with adopt: "${already.id}" rather than writing a second`);
+    }
+    let id = null;
+    await audited(user,
+      () => ({ action: "Business case written", entity: "business_case", entityId: id,
+               detail: `${p.id} — ${summary.slice(0, 80)} — from ${user.displayName} (${externalId})` }),
+      async (t) => {
+        id = await allocateId(t, "CAS", { pad: 3 });
+        await t.query(
+          `INSERT INTO business_case
+             (id, project_id, summary, expected_cost, expected_benefit, basis, external_source, external_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [id, p.id, summary, cost ?? null, benefit ?? null, basis ?? "", source, externalId]);
+      });
+    return stamp(true, id, externalId, 1);
+  }
+  let patch = {};
+  if (summary !== undefined) patch.summary = summary;
+  if (basis !== undefined) patch.basis = basis;
+  if (cost !== undefined) patch.expected_cost = cost;
+  if (benefit !== undefined) patch.expected_benefit = benefit;
+  patch = changedOnly(patch, existing);            // ne réécrire que ce qui bouge
+  /* Réviser le cas repose `updated_on` : le sérialiseur en déduit que la
+     dernière reconfirmation ne couvre plus ce qui est écrit (028). Posé
+     APRÈS le filtre — une re-passe identique ne révise rien, et ne doit
+     donc pas périmer une reconfirmation qui tient toujours. */
+  if (Object.keys(patch).length) patch.updated_on = iso(new Date());
+  Object.assign(patch, binding);   // H-2 — la liaison valide avec l'écriture
+  if (!Object.keys(patch).length) return stamp(false, existing.id, externalId, existing.row_version);
+  const version = sentVersion(b);
+  const out = await audited(user,
+    { action: "Business case updated", entity: "business_case", entityId: existing.id,
+      detail: `${existing.project_id} — from ${user.displayName} (${externalId})`,
+      before: { cost: existing.expected_cost, benefit: existing.expected_benefit },
+      after: { cost: patch.expected_cost ?? existing.expected_cost,
+               benefit: patch.expected_benefit ?? existing.expected_benefit } },
+    async (t) => writeRow(t, "business_case", existing.id, version, patch, "business case"));
   return stamp(false, existing.id, externalId, out.version);
 }
 
@@ -957,4 +1179,10 @@ export const WRITE_BODIES = {
   activities: { activity: "string", pct: "integer", source: "string", measuredAt: "date-time", name: "string", version: "integer" },
   workitems: { project: "string", title: "string", column: "string", assignee: "string", points: "integer",
     priority: "string", version: "integer" },
+  /* REQ-20 (V-1) — la valeur, aux mêmes règles que la livraison. */
+  benefits: { adopt: "string", project: "string", kind: "string", title: "string", detail: "string",
+    measure: "string", unit: "string", baseline: "number", target: "number", actual: "number",
+    owner: "string", realiseOn: "date", measuredOn: "date", status: "string", version: "integer" },
+  "business-case": { adopt: "string", project: "string", summary: "string", basis: "string",
+    expectedCost: "number", expectedBenefit: "number", version: "integer" },
 };

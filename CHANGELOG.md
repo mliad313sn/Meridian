@@ -22,6 +22,93 @@ Nothing yet.
 
 ---
 
+## [5.11.0] — 2026-09-08
+
+RT365 re-tested 5.10.0 and filed a second list, V-1…V-12, under a heading
+that named the point: *requirements for Meridian as the tool that drives
+projects to business value*. Its argument was one sentence long and hard
+to answer — **REQ-02 made delivery facts syncable from the field
+repository; value facts still have to be typed in, so the one thing an
+executive reads is the one thing that goes stale.** Their loader pushes
+256 delivery writes and cannot push a single benefit.
+
+This release takes the three RT365 ranked highest, plus the one change
+the integrator ranked highest of its own three.
+
+### Added
+
+- **Value objects on the write API** (REQ-20 · V-1). `PUT
+  /api/v1/benefits/{externalId}` and `PUT
+  /api/v1/business-case/{externalId}` under `write:portfolio`, with the
+  same eight rules as the delivery collections: your own identifier,
+  `adopt` for a row born on a screen, `Idempotency-Key`, `version`
+  asserted when sent, and audit under the integration's name. A benefit
+  keeps ITS unit — percent, hours, ounces, currency — and is never
+  divided by a million; an `actual` without `measuredOn` is refused,
+  because a figure nobody can situate a year later is not a measurement.
+  One case per project: a second is refused, naming the one to adopt.
+- **The decision register and the actions are readable back** (REQ-15).
+  `GET /api/v1/decisions` and `GET /api/v1/actions`, under a new
+  `read:meetings` scope that mirrors `write:meetings` rather than riding
+  on `read:portfolio` — INT-02 separated the audit trail so that a
+  warehouse feed would not carry governance, and a decision register is
+  the same. Writing without being able to read was not a contract: `adopt`
+  had no discovery path for the two collections whose legacy rows exist,
+  no reconciliation of what a room decided was possible without a
+  session, and a sync could not see that a human had closed an action
+  before it reopened it. Actions carry `raisedInStatus`, so a caller
+  knows when it is about to write `Open` over the minute of a meeting.
+- **The business case is reconfirmed at every gate, and the gate cannot
+  pass without it** (REQ-22 · V-3). The fields have existed since
+  migration 028 and nothing forced them. A gate milestone on a project
+  that has a case is now refused unless the case was reconfirmed at THAT
+  gate, on both write paths — the screen and `PUT /api/v1/milestones` —
+  because a control on one of two paths is not a control. Reconfirming is
+  a decision rather than a checkbox: a verdict (Continue, Continue with
+  conditions, or **Stop**, which refuses the next gate), a named
+  reconfirmer from the directory, a note, and the two figures as they
+  stood, so the next gate reads the delta since the last one.
+- **A benefit past its realisation date is chased, not hoped for**
+  (REQ-21 · V-2). `realise_on` has been in the schema since migration 008
+  and drove nothing. An unmeasured benefit whose date has passed now
+  raises a portfolio exception like a tolerance breach, notifies the
+  person who owns it, and appears on the next agenda of a board that sees
+  the project, marked OVERDUE with its target in its own unit. Closed
+  projects count — that is the normal case, and exactly why nothing ever
+  chased the date.
+
+### Fixed
+
+- **A re-run that changes nothing now writes nothing.** Every upsert built
+  its patch from the fields that were SENT rather than the fields that
+  CHANGED, so an unchanged reload wrote an audit event and bumped
+  `row_version` on every row it touched — the integrator measured 285 of
+  each for a load that changed nothing. A trail that fills with
+  non-events cannot be read, and a version that moves under a reader who
+  did nothing is worse than useless. The decision path already filtered
+  this way; it is now the rule for all ten collections, with a comparison
+  tolerant of the shapes a driver returns (a `numeric` comes back as a
+  string, a `date` as a Date).
+- **Reconfirming the case updated the header and not the list.** The
+  screen said "reconfirmed at gate 1" two lines above "not reconfirmed at
+  any gate yet": the write touches two collections and the refresh named
+  only one. Found by walking it in a browser, not by a test — both writes
+  were correct on their own.
+- **Migration 028 capped case reconfirmation at gate 4**, the four
+  hard-wired gates of the day. Since 036 a ladder can carry twelve, so a
+  programme that declared six gates could not reconfirm its case at gates
+  5 and 6: the constraint refused the row without explaining itself. The
+  bound now follows the project's own ladder.
+- **Two gates were looking the wrong way.** `business_case` was declared
+  nowhere in the CRUD gate, so neither its verbs nor its columns were ever
+  checked — on a table shipped in migration 028. And the field-help gate
+  read a field only as far as its first `}`, so any field whose options
+  are written out in full ended before its own `hint` and was reported as
+  having none; it now reads a whole field with balanced braces, which
+  makes it stricter, not kinder.
+
+---
+
 ## [5.10.0] — 2026-09-08
 
 The RT365 field return (docs/33). For the first time a programme that is

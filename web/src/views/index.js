@@ -3359,17 +3359,52 @@ function caseDialog(db, p, bc) {
   });
 }
 
-async function reconfirmCase(db, p, bc) {
-  const ok = await confirmDialog({
-    title: t("Still worth doing?"),
-    message: t("This records that the justification holds, at the current gate, under your name."),
-    detail: t("If the case no longer holds, do not reconfirm it — revise it, or take the project to the steering committee."),
-    confirmLabel: t("It still holds"),
+/**
+ * REQ-22 (V-3) — reconfirmer est une décision, pas une case à cocher.
+ *
+ * C'était un « oui » sans verdict, sans jalon choisi et sans nom : on
+ * enregistrait que quelqu'un avait cliqué. Ce que RT365 demande — et ce
+ * que la porte du jalon lit maintenant — est la décision de continuer à
+ * dépenser, prise À UN JALON, par une personne, avec la possibilité de
+ * dire non.
+ */
+function reconfirmCase(db, p, bc) {
+  const gates = Engine.gates(db, p);
+  const current = Math.max(1, Math.min(gates.length || 1, p.gate || 1));
+  const done = (db.caseReconfirmations ?? []).filter((r) => r.project === p.id);
+  const at = (n) => done.find((r) => r.gate === n);
+  formDialog({
+    title: t("Is it still worth doing?"), kicker: p.id, wide: true,
+    extra: h("div", { class: "drop-hint" },
+      h("div", { class: "xs muted" },
+        t("A gate cannot be passed until the case has been reconfirmed at that gate: passing a gate is the decision to carry on spending."))),
+    fields: [
+      { key: "gate", label: t("At which gate"), type: "select", value: String(current),
+        options: (gates.length ? gates : [{ name: "Gate 1" }]).map((g, i) => ({
+          value: String(i + 1),
+          label: (g.name || t("Gate ") + (i + 1)) + (at(i + 1) ? t(" — already reconfirmed") : ""),
+        })) },
+      { key: "verdict", label: t("The verdict"), type: "select", value: "Continue",
+        options: [
+          { value: "Continue", label: t("Continue — it still holds") },
+          { value: "Continue with conditions", label: t("Continue, with conditions") },
+          { value: "Stop", label: t("Stop — it is no longer worth doing") },
+        ],
+        hint: t("Stop is not decoration: the next gate is refused until somebody says otherwise.") },
+      { key: "reconfirmedBy", label: t("Who reconfirmed it"), type: "select", value: db.currentUser ?? "",
+        options: [{ value: "", label: "—" }].concat(db.people.map((q) => ({ value: q.id, label: q.name }))),
+        hint: t("The case is reconfirmed by whoever pays for it, named — not by whoever typed.") },
+      { key: "note", label: t("What changed since the last one"), type: "textarea", rows: 2, span: 2,
+        value: "", advanced: true,
+        hint: t("Read at the next gate beside the two figures: this is what makes the act useful rather than ritual.") },
+    ],
+    saveLabel: t("Record the reconfirmation"),
+    onSave: (v) => App.write("Business case reconfirmed",
+      (a) => a.post("/projects/" + p.id + "/case/reconfirm",
+        { gate: +v.gate, verdict: v.verdict, note: v.note,
+          reconfirmedBy: v.reconfirmedBy || null, version: bc.version }),
+      { detail: v.verdict + t(" at gate ") + v.gate }),
   });
-  if (!ok) return;
-  await App.write("Business case reconfirmed",
-    (a) => a.post("/projects/" + p.id + "/case/reconfirm",
-      { gate: Math.max(1, p.gate || 1), version: bc.version }));
 }
 
 function businessCaseBlock(db, p, bc) {
@@ -3408,7 +3443,48 @@ function businessCaseBlock(db, p, bc) {
           ? t("gate ") + bc.reconfirmedGate + " · " + fmtDate(bc.reconfirmedOn)
           : h("span", { class: "muted" }, t("never"))))),
     bc.basis ? h("p", { class: "xs muted", style: "max-width:64ch" },
-      t("Basis: ") + bc.basis) : null);
+      t("Basis: ") + bc.basis) : null,
+    /* REQ-22 — la SUITE des reconfirmations, pas seulement la dernière :
+       « le cas a-t-il été reconfirmé à CE jalon » est une question par
+       jalon, et l'écart entre deux est ce qui se lit. */
+    (() => {
+      const rows = (db.caseReconfirmations ?? [])
+        .filter((r) => r.project === p.id).sort((a, b) => a.gate - b.gate);
+      if (!rows.length) {
+        return h("p", { class: "xs muted", style: "margin-top:10px" },
+          t("Not reconfirmed at any gate yet — the next gate will ask for it."));
+      }
+      const names = Engine.gates(db, p);
+      return h("div", { style: "margin-top:14px" },
+        h("div", { class: "kicker" }, t("Reconfirmed at")),
+        h("div", null, rows.map((r, i) => {
+          const prev = rows[i - 1];
+          const move = (now, was) => (now == null || was == null) ? null : now - was;
+          const dc = move(r.expectedCost, prev?.expectedCost);
+          const dbn = move(r.expectedBenefit, prev?.expectedBenefit);
+          return h("div", { class: "list-row", style: "align-items:center;gap:10px;padding:5px 0" },
+            h("span", { class: "mono small muted", style: "width:96px;flex:none" },
+              (names[r.gate - 1]?.name) || t("Gate ") + r.gate),
+            h("div", { style: "flex:1;min-width:0" },
+              h("div", { class: "small" },
+                statusTag(r.verdict === "Stop" ? "Rejected"
+                  : r.verdict === "Continue" ? "Approved" : "In review"),
+                h("span", { class: "small", style: "margin-left:8px" }, t(r.verdict))),
+              r.note ? h("div", { class: "xs muted truncate" }, r.note) : null),
+            h("div", { class: "xs muted", style: "text-align:right" },
+              h("div", null, fmtDate(r.reconfirmedOn)
+                + (r.reconfirmedBy ? " · " + Engine.personName(db, r.reconfirmedBy) : "")),
+              /* L'écart depuis la reconfirmation précédente : sans lui,
+                 « reconfirmé » ne dit pas si la promesse a bougé d'un
+                 dixième ou de moitié entre deux jalons. */
+              prev && (dc || dbn)
+                ? h("div", { class: "mono xs" },
+                    (dc ? t("cost ") + signedMoney(dc) : "")
+                    + (dc && dbn ? " · " : "")
+                    + (dbn ? t("benefit ") + signedMoney(dbn) : ""))
+                : null));
+        })));
+    })());
 }
 
 /* ── PM-01 · la marge, et les dépassements ────────────────────────────

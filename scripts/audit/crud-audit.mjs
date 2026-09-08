@@ -119,6 +119,19 @@ const ENTITIES = {
   stakeholder: { c: /post\("\/stakeholders"/, u: /patch\("\/stakeholders\/:id"/, d: /delete\("\/stakeholders\/:id"/ },
   comms_plan: { c: /post\("\/comms"/, u: /patch\("\/comms\/:id"/, d: /delete\("\/comms\/:id"/ },
 
+  /* PM-03 — la promesse contre laquelle le réalisé se relira. Un seul cas
+     par projet : le PUT écrit ou révise, selon qu'il existe. Cette table
+     n'était déclarée NULLE PART ici — donc ni ses verbes ni ses colonnes
+     n'étaient regardés par cette porte, sur une table vieille de la 028.
+     C'est exactement la classe de défaut que F2 existe pour prendre. */
+  business_case: { c: /put\("\/projects\/:id\/case"/, u: /put\("\/projects\/:id\/case"/,
+    d: NA("A case is revised, never deleted — the promise it made has to stay readable against the outturn") },
+  /* REQ-22 (V-3) — une reconfirmation par jalon. Reconfirmer deux fois le
+     même jalon corrige la ligne (ON CONFLICT), ne l'empile pas. */
+  case_reconfirmation: { c: /post\("\/projects\/:id\/case\/reconfirm"/,
+    u: /post\("\/projects\/:id\/case\/reconfirm"/,
+    d: NA("A reconfirmation happened, at a date, with a verdict — like a decision it is superseded by the next, never removed") },
+
   meeting_series: { c: /post\("\/series"/, u: /patch\("\/series\/:id"/,
     d: NA("Retired via active=false — its history must remain readable") },
   meeting_occurrence: { c: /post\("\/series\/:id\/occurrences"/, u: /occurrences\/:id\/(open|close)/,

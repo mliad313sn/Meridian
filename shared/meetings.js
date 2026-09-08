@@ -286,6 +286,49 @@ export function buildAgenda(db, series, occurrence, openActions = [], extras = {
     });
   }
 
+  /* 6b · REQ-21 (V-2) — les bénéfices dont la date de réalisation est
+     passée sans que personne les ait mesurés.
+
+     RT365 : « Les bénéfices se réalisent APRÈS la clôture, quand l'équipe
+     s'est dispersée. Une date dans une table que rien ne relance est la
+     manière dont le compte rendu de valeur meurt dans toutes les
+     organisations. » Le produit portait `realise_on` depuis la 008 et ne
+     s'en servait pour rien : la date passait, et rien n'arrivait.
+
+     Un bénéfice « Forecast » dont la date est passée revient donc ici,
+     comme un point de registre en retard revient au-dessus — et il y
+     reste jusqu'à ce que quelqu'un le mesure ou le statue. */
+  const benefitsDue = (db.benefits ?? [])
+    .filter(b => ids.has(b.project))
+    .filter(b => b.status === "Forecast" && b.realiseOn)
+    .filter(b => days(asOf, b.realiseOn) <= lookOn)
+    .sort((a, b) => a.realiseOn.localeCompare(b.realiseOn))
+    .slice(0, monthly ? 12 : 6);
+  if (benefitsDue.length) {
+    sections.push({
+      key: "benefits",
+      title: "Benefits due to be measured",
+      weight: 2,
+      items: benefitsDue.map(b => {
+        const late = D(b.realiseOn) < D(asOf);
+        const unit = b.unit ? " " + b.unit : "";
+        return {
+          headline: (late ? "OVERDUE · " : "") + b.id + " · " + b.title,
+          detail: (late
+              ? "was due to realise " + fmtDate(b.realiseOn) + " (" + days(b.realiseOn, asOf) + " days ago)"
+              : "realises " + fmtDate(b.realiseOn) + " (in " + days(asOf, b.realiseOn) + " days)")
+            + " · owner " + Engine.personName(db, b.owner)
+            /* La cible dans SON unité — jamais convertie en argent : la
+               008 a raison, toute valeur n'a pas la forme d'une monnaie. */
+            + (b.target !== null && b.target !== undefined ? " · target " + b.target + unit : "")
+            + (b.baseline !== null && b.baseline !== undefined ? " (from " + b.baseline + unit + ")" : ""),
+          entity: "benefit", entityId: b.id,
+          urgent: late,
+        };
+      }),
+    });
+  }
+
   /* 7 · Capacity — weekly cares about the next fortnight only. */
   if (db.settings.capacityAlerts) {
     const over = Engine.overAllocated(db, monthly ? 12 : 4)

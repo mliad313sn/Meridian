@@ -1,9 +1,9 @@
 {
   "name": "meridian-itpmo",
-  "version": "5.10.0",
+  "version": "5.11.0",
   "private": true,
   "type": "module",
-  "description": "Meridian group IT-PMO \u2014 multi-site project portfolio management",
+  "description": "Meridian group IT-PMO — multi-site project portfolio management",
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "dev:web": "vite --config web/vite.config.js",

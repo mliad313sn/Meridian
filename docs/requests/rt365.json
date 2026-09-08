@@ -478,17 +478,19 @@
       ],
       "issue": null,
       "title": "Read back what you wrote: decisions and actions in the v1 portfolio read",
-      "status": "open",
-      "version": null,
+      "status": "done",
+      "version": "5.11.0",
       "decidedOn": "2026-09-08",
-      "delivered": [],
-      "measure": null,
-      "remaining": [
-        "server/src/portfolio.js#loadPortfolio (decisions, actions)"
+      "delivered": [
+        "server/src/routes/v1.js (GET /api/v1/decisions, GET /api/v1/actions)",
+        "server/src/integrations.js (read:meetings)",
+        "server/src/openapi.js"
       ],
+      "measure": "server/test/writeapi.test.js (REQ-15)",
+      "remaining": null,
       "accepted": false,
       "released": false,
-      "answerToSource": "The integrator ranked this the highest-value change of the three.",
+      "answerToSource": "Both reads are live, under a `read:meetings` scope that mirrors `write:meetings` rather than riding on `read:portfolio` — INT-02 separated the audit trail so a warehouse feed would not carry governance, and a decision register is the same. Each row carries its `externalId` (which is how `adopt` finds a row you wrote before it had an identity) and its `version`. Actions carry `raisedInStatus`, so a sync can see that an action lives in a closed room before it writes `Open` over the minute of a meeting.",
       "observed": "Without them, adopt on a legacy decision or action has no discovery path, no reconciliation of a room is possible without a session, and a sync reopens an action a human closed (measured: H-01 Done on the screen, reopened to Open by an unchanged re-run).",
       "history": [
         {
@@ -496,6 +498,12 @@
           "registerVersion": 5,
           "status": "open",
           "note": "Opened by the third-round committee: the integrator rewrote meridian_sync.py against the published contract and measured what it still could not do."
+        },
+        {
+          "at": "2026-09-08",
+          "registerVersion": 7,
+          "status": "done",
+          "note": "Delivered in 5.11.0, proven by test and walked in a real browser (F4 28/28)."
         }
       ]
     },
@@ -622,25 +630,35 @@
       ],
       "issue": null,
       "title": "Value objects in the write API v1: PUT /api/v1/business-case/{externalId} and /benefits/{externalId} under write:portfolio, with the same external-id, idempotency and audit rules as the delivery collections",
-      "status": "open",
+      "status": "done",
       "priority": "highest",
-      "version": null,
+      "version": "5.11.0",
       "decidedOn": "2026-09-08",
-      "delivered": [],
-      "measure": null,
-      "remaining": [
-        "An external integration creates and updates a business case and three benefits by external id; a second identical run makes zero creating writes; both appear in /api/v1/portfolio and in the audit trail under the integration's name."
+      "delivered": [
+        "server/migrations/042_value_on_the_contract.sql",
+        "server/src/v1write.js (upsertBenefit, upsertBusinessCase)",
+        "PUT /api/v1/benefits/{externalId}",
+        "PUT /api/v1/business-case/{externalId}",
+        "server/src/portfolio.js (externalId on both)"
       ],
+      "measure": "server/test/writeapi.test.js (REQ-20, two blocks)",
+      "remaining": null,
       "accepted": false,
       "released": false,
       "observed": "REQ-02 made delivery facts syncable; value facts still have to be typed in, so the one thing an executive reads is the one thing that goes stale. RT365 pushes 256 delivery writes and cannot push a single benefit.",
-      "answerToSource": null,
+      "answerToSource": "Delivered as asked: external id, Idempotency-Key, `adopt`, `version`, and audit under the integration's name — the same eight rules as the delivery collections. A benefit keeps ITS unit and is never divided by a million; an `actual` without `measuredOn` is refused, because a figure nobody can situate a year later is not a measurement. One case per project: a second is refused naming the one to adopt.",
       "history": [
         {
           "at": "2026-09-08",
           "registerVersion": 6,
           "status": "open",
           "note": "Filed by RT365 in docs/PMO_MERIDIAN_ASSESSMENT.md §8 after re-testing 5.10.0, and read into this register by the standing review duty."
+        },
+        {
+          "at": "2026-09-08",
+          "registerVersion": 7,
+          "status": "done",
+          "note": "Delivered in 5.11.0, proven by test and walked in a real browser (F4 28/28)."
         }
       ]
     },
@@ -651,25 +669,33 @@
       ],
       "issue": null,
       "title": "The benefit review is a scheduled act: when realise_on passes, an agenda item appears on the owning board's next occurrence, and an unreviewed benefit past its date is a portfolio exception like a tolerance breach",
-      "status": "open",
+      "status": "done",
       "priority": "highest",
-      "version": null,
+      "version": "5.11.0",
       "decidedOn": "2026-09-08",
-      "delivered": [],
-      "measure": null,
-      "remaining": [
-        "A benefit with realise_on in the past appears automatically on the next meeting agenda and in the exception list; recording a benefit.review clears it; the trail shows who reviewed and against which measurement."
+      "delivered": [
+        "server/migrations/042 (project_exception dimension benefit-review)",
+        "server/src/exceptions.js (benefit sweep + notification)",
+        "shared/meetings.js (Benefits due to be measured)"
       ],
+      "measure": "server/test/tolerance.test.js (REQ-21, two tests)",
+      "remaining": null,
       "accepted": false,
       "released": false,
       "observed": "Benefits realise after closure, when the team has dispersed. A date in a table that nothing chases is how value reporting dies.",
-      "answerToSource": null,
+      "answerToSource": "A benefit whose realisation date has passed unmeasured now raises a portfolio exception like a tolerance breach, notifies the person who owns it, and appears on the next agenda of a board that sees the project — marked OVERDUE, with its target in its own unit. Measuring it clears both. Closed projects count: that is the normal case, which is exactly why the date was never chased.",
       "history": [
         {
           "at": "2026-09-08",
           "registerVersion": 6,
           "status": "open",
           "note": "Filed by RT365 in docs/PMO_MERIDIAN_ASSESSMENT.md §8 after re-testing 5.10.0, and read into this register by the standing review duty."
+        },
+        {
+          "at": "2026-09-08",
+          "registerVersion": 7,
+          "status": "done",
+          "note": "Delivered in 5.11.0, proven by test and walked in a real browser (F4 28/28)."
         }
       ]
     },
@@ -680,25 +706,35 @@
       ],
       "issue": null,
       "title": "The business case is re-confirmed at every gate and the gate cannot pass without it: extend reconfirmed_gate into a criterion the ladder enforces, comparing expected cost and benefit against the last version",
-      "status": "open",
+      "status": "done",
       "priority": "highest",
-      "version": null,
+      "version": "5.11.0",
       "decidedOn": "2026-09-08",
-      "delivered": [],
-      "measure": null,
-      "remaining": [
-        "Passing a gate on a project whose case has not been reconfirmed at that gate is refused with a named reason; the gate record shows the case version, the delta against the previous one and who reconfirmed."
+      "delivered": [
+        "server/migrations/042 (case_reconfirmation, gate bound follows the ladder)",
+        "server/src/value.js (assertCaseReconfirmed, deltaAgainst)",
+        "server/src/routes/portfolio.js (reconfirm records a row per gate)",
+        "server/src/v1write.js (the same guard on PUT /api/v1/milestones)",
+        "web/src/views/index.js (verdict, reconfirmer, note, and the history with its delta)"
       ],
+      "measure": "server/test/case.test.js (REQ-22, three tests)",
+      "remaining": null,
       "accepted": false,
       "released": false,
       "observed": "The fields exist; nothing forces them. A stop/continue decision at each gate is the highest-value control a PMO owns and the one most often skipped.",
-      "answerToSource": null,
+      "answerToSource": "A gate cannot be cleared on a project whose case has not been reconfirmed at THAT gate; the refusal names the gate and the command that answers it. The reconfirmation is a decision, not a checkbox: a verdict (Continue / Continue with conditions / Stop), a named reconfirmer from the directory, a note, and the two figures as they stood — so the next gate reads the delta. `Stop` refuses the next gate. The 1..4 bound of migration 028 now follows the programme's ladder, so a six-gate programme can reconfirm at gates 5 and 6, which it could not before.",
       "history": [
         {
           "at": "2026-09-08",
           "registerVersion": 6,
           "status": "open",
           "note": "Filed by RT365 in docs/PMO_MERIDIAN_ASSESSMENT.md §8 after re-testing 5.10.0, and read into this register by the standing review duty."
+        },
+        {
+          "at": "2026-09-08",
+          "registerVersion": 7,
+          "status": "done",
+          "note": "Delivered in 5.11.0, proven by test and walked in a real browser (F4 28/28)."
         }
       ]
     },
@@ -989,5 +1025,5 @@
       "consequence": "no line is `released` yet; pin the branch claude/meridian-rt365-feedback-d6vo3i, not the version"
     }
   },
-  "registerVersion": 6
+  "registerVersion": 7
 }

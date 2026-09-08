@@ -452,7 +452,7 @@ past its date is not missed, the same date committed is; a gate
 milestone in placeholder is `Unscheduled`; the write API speaks the same
 vocabulary.
 
-### REQ-15 · Read back what you wrote: `decisions` and `actions` in the v1 portfolio — `open` (integrator, third round)
+### REQ-15 · Read back what you wrote — `done` 08/09, 5.11.0 (integrator, third round)
 
 **Observed.** The integrator rewrote `meridian_sync.py` against the
 published contract and loaded RT365's whole programme through it: 285
@@ -468,10 +468,22 @@ human closed an action before it reopens it — the integrator marked H-01
 `Open` with a 200. The minute of a meeting was overwritten by a stale
 ledger.
 
-**To deliver.** `decisions` and `actions` in `loadPortfolio`
-(`server/src/portfolio.js`, beside `raid:` and `criteria:`), under the
-scope that already governs them. The integrator ranked this the single
-highest-value change.
+**Delivered**, and not where it was asked for. The integrator proposed
+`decisions` and `actions` inside `loadPortfolio`, which would have put
+the decision register into the screen's own bootstrap — handing
+governance to a warehouse feed carrying `read:portfolio`, and to the
+roles the screens refuse it. So: `GET /api/v1/decisions` and
+`GET /api/v1/actions`, under a new `read:meetings` scope that mirrors
+`write:meetings`. INT-02 separated the audit trail for exactly this
+reason; a decision register is the same kind of thing. Each row carries
+its `externalId` — which is how `adopt` finds a row written before it had
+an identity — and its `version`. Actions carry `raisedInStatus`, so a
+caller knows when it is about to write `Open` over the minute of a
+meeting.
+
+**Measure.** `server/test/writeapi.test.js` (REQ-15): a decision written
+by the contract is findable by its own identifier, and a `write:portfolio`
+key is refused on both reads.
 
 ---
 
@@ -541,7 +553,7 @@ thing quietly.
 
 ---
 
-### REQ-20…REQ-31 · What RT365 asked for after re-testing 5.10.0 (V-1…V-12) — `open`, one `partial`
+### REQ-20…REQ-31 · What RT365 asked for after re-testing 5.10.0 (V-1…V-12) — three `done`, one `partial`, eight `open`
 
 RT365 re-ran the whole assessment against 5.10.0 (`docs/PMO.md` §4,
 `docs/PMO_MERIDIAN_ASSESSMENT.md` §7): 513 tests, the first hour working
@@ -554,9 +566,9 @@ are read in here as REQ-20…REQ-31, in the priority RT365 gave them.
 
 | Ours | Theirs | Priority | What it asks for |
 |---|---|---|---|
-| REQ-20 | V-1 | highest | Business case and benefits on the write API, under the same external-id, idempotency and audit rules as the delivery collections |
-| REQ-21 | V-2 | highest | A benefit past its realisation date raises an agenda item and a portfolio exception, instead of sitting in a table nothing chases |
-| REQ-22 | V-3 | highest | The business case is reconfirmed at every gate, and the gate cannot pass without it |
+| REQ-20 | V-1 | highest | **`done` 5.11.0** — business case and benefits on the write API, under the same external-id, idempotency and audit rules as the delivery collections |
+| REQ-21 | V-2 | highest | **`done` 5.11.0** — a benefit past its realisation date raises an agenda item and a portfolio exception, instead of sitting in a table nothing chases |
+| REQ-22 | V-3 | highest | **`done` 5.11.0** — the business case is reconfirmed at every gate, and the gate cannot pass without it |
 | REQ-23 | V-4 | high | Forecast against realised, per programme, in each benefit's own units |
 | REQ-24 | V-5 | high | Prioritisation by value, confidence, risk exposure and capacity, with a visible weighting |
 | REQ-25 | V-6 | medium | Adoption measured per rollout wave, linked to the benefits it should move |
@@ -566,6 +578,28 @@ are read in here as REQ-20…REQ-31, in the priority RT365 gave them.
 | REQ-29 | V-10 | medium | A gate criterion may cite a commit or a checksum, not only a mutable document |
 | REQ-30 | V-11 | medium | A value dashboard, printable, snapshotted per reporting period |
 | REQ-31 | V-12 | high | The loop itself packaged as a pattern a second field repository can adopt |
+
+**The three RT365 ranked highest were taken in the same round they were
+filed**, with REQ-15 beside them because the integrator ranked it highest
+of its own three (5.11.0; `CHANGELOG.md`). What each answers, in RT365's
+own terms:
+
+- **V-1** — 256 delivery writes and not one benefit: both value objects
+  are now on the contract, under the same eight rules as the delivery
+  collections. A benefit keeps its own unit and an `actual` without a
+  measurement date is refused, because a figure nobody can situate a year
+  later is not a measurement.
+- **V-2** — "a date in a table that nothing chases is how value reporting
+  dies": an unmeasured benefit past its date now raises a portfolio
+  exception, notifies the person who owns it, and lands on the next
+  agenda of a board that sees the project. Closed projects count, which
+  is the case that mattered.
+- **V-3** — "the single highest-value control a PMO owns, and the one
+  most often skipped": a gate is refused until the case has been
+  reconfirmed at THAT gate, on both write paths. Reconfirming carries a
+  verdict — including `Stop`, which refuses the next gate — a named
+  reconfirmer, and the two figures as they stood, so the next gate reads
+  the delta.
 
 **REQ-27 (V-8) is `partial`, and it is the one this round measured
 rather than accepted.** RT365 filed it as a defect: "ten milestones where
@@ -710,6 +744,12 @@ ahead — which is the whole reason the probe exists.
 | D-33.29 | 08/09 | V-8 is answered with a measurement, not an apology: a project created under a laddered programme carries exactly that ladder (proved again on a running instance), so the accepted gap is the MIGRATION of projects scaffolded before their programme declared one — and `adopt` on milestones is the working answer until it ships. | Rewrite existing projects when a ladder is declared (refused, D-33.2: dated gates and filed evidence would move under people's feet). Close V-8 as already-done (refused: RT365 measured ten milestones where it expected six, and the number is right — what it names is real). | RT365 filed it as a defect, not a preference |
 
 | D-33.30 | 08/09 | The tag stays a maintainer's act. Attempted again on `125d16c` once the committee's five blocking findings were closed, and refused again: branch refs push, tag refs answer 403. Four attempts on three different commits establish it as a permission boundary of the session credential, not a transient failure. The command a maintainer runs is in §4. | Route around it (refused: it is a boundary, and the proxy status shows no relay failure for the host — the remote itself refuses the ref). Ship untagged and call it released (refused: `released` in this register means a tag a third party can fetch). | none |
+
+| D-33.31 | 08/09 | The three RT365 ranked highest (V-1, V-2, V-3) are taken in the same round they were filed, with REQ-15 beside them; the other nine wait. | Take the whole list of twelve (refused: the value of the loop is that a request is answered in days, and twelve at once is how none of them is); take none until the tag is pushed (refused: the tag is blocked on a permission boundary, and holding delivery hostage to it would let a boundary set the roadmap). | none |
+| D-33.32 | 08/09 | `decisions` and `actions` are read under a NEW `read:meetings` scope, not inside `loadPortfolio` where the integrator asked for them. | Put them in the portfolio serialiser as proposed (refused: that is the screen's own bootstrap, so a decision register would reach every `read:portfolio` warehouse feed and every role the screens refuse it — INT-02 separated the audit trail for exactly this reason). | integrator ranked it their highest-value change, and this delivers it by another route |
+| D-33.33 | 08/09 | Passing a gate is refused when the case has not been reconfirmed at that gate — but only where a case EXISTS. | Require a case on every project (refused: the product would demand a document it never asked for, and every book in the field would stop at its next gate). Warn instead of refusing (refused: V-3 asks for the control that is most often skipped, and a warning is how it gets skipped). | none |
+| D-33.34 | 08/09 | The patch of every upsert is filtered to what actually CHANGED, not what was sent. | Leave it and document the churn (refused: 285 audit events and 285 version bumps for a load that changed nothing makes the trail unreadable and moves a version under a reader who did nothing — the trail is the product's headline claim). | integrator measured it |
+| D-33.35 | 08/09 | Two gates that were looking the wrong way are fixed rather than worked around: `business_case` is declared to the CRUD gate, and the field-help gate reads a whole field with balanced braces. | Reformat the field so the existing regex could see its hint (refused: the gate would have stayed blind for every future field with inline options — the defect was the gate, and a gate nobody can trust is worse than no gate). | none |
 
 *(one line per decision, appended by each run)*
 

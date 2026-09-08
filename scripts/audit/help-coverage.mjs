@@ -67,6 +67,40 @@ function helpThroughHelpers(body, allSrc) {
   return false;
 }
 
+/**
+ * Le corps d'UN champ, accolades équilibrées.
+ *
+ * La lecture précédente s'arrêtait à la première `}` rencontrée. Un champ
+ * dont les options sont écrites en toutes lettres — `options: [{ value,
+ * label }, …]` — se terminait donc AVANT son `hint`, et cette porte
+ * déclarait sans aide un champ qui en portait une. Elle était aveugle
+ * exactement là où elle sert : sur les champs les plus écrits à la main.
+ */
+function fieldBodies(body) {
+  const out = [];
+  const re = /\{\s*key\s*:\s*"([^"]+)"/g;
+  let m;
+  while ((m = re.exec(body))) {
+    let depth = 1;
+    let i = m.index + 1;
+    while (i < body.length && depth > 0) {
+      const ch = body[i];
+      if (ch === "{") depth++;
+      else if (ch === "}") depth--;
+      /* Une accolade dans une chaîne ou une expression régulière n'en est
+         pas une : on saute le littéral entier. */
+      else if (ch === '"' || ch === "'" || ch === "`") {
+        const quote = ch;
+        i++;
+        while (i < body.length && body[i] !== quote) i += body[i] === "\\" ? 2 : 1;
+      }
+      i++;
+    }
+    out.push({ key: m[1], body: body.slice(m.index, i) });
+  }
+  return out;
+}
+
 let forms = 0, withHelp = 0, criticalTotal = 0, criticalWithHelp = 0;
 const bare = [];
 
@@ -79,11 +113,10 @@ for (const f of files) {
     forms++;
     if (/\bhint\s*:/.test(body) || helpThroughHelpers(body, src)) withHelp++;
 
-    for (const fm of body.matchAll(/\{\s*key\s*:\s*"([^"]+)"([\s\S]*?)\}/g)) {
-      const key = fm[1];
+    for (const { key, body: fieldBody } of fieldBodies(body)) {
       if (!READ_BY_OTHERS.includes(key)) continue;
       criticalTotal++;
-      if (/\bhint\s*:/.test(fm[2])) criticalWithHelp++;
+      if (/\bhint\s*:/.test(fieldBody)) criticalWithHelp++;
       else bare.push(`${path.basename(f)} · ${key}`);
     }
   }

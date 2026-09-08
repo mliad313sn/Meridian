@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Meridian IT-PMO",
-    "version": "5.10.0",
+    "version": "5.11.0",
     "summary": "Read a governed project portfolio, and the trail of how it got that way",
     "description": "The surface other systems read. It is versioned in the path: the day the shape has to change it becomes /api/v2, so that nobody has to guess. Authentication is a key issued per connected system, carrying explicit scopes; the product never stores the key itself, only its fingerprint.\n\nWrites arrived with the first real integrator (RT365, docs/33): PUT by your own identifier on projects, milestones, register items, stage progress, work items, decisions and actions, under two write scopes, with an optional Idempotency-Key. A scope is only published once a route honours it: declaring one earlier would advertise a door that does not exist and imply it is guarded.",
     "license": {
@@ -29,7 +29,8 @@
       "read:portfolio": "Read the portfolio — projects, schedule, money, risks, benefits",
       "read:audit": "Read the audit trail — every recorded decision and change",
       "write:portfolio": "Write projects, milestones, register items, stage progress and work items, keyed by your own identifiers",
-      "write:meetings": "Record decisions and actions, keyed by your own identifiers"
+      "write:meetings": "Record decisions and actions, keyed by your own identifiers",
+      "read:meetings": "Read the decision register and the actions — what was decided, by whom, and what remains to do"
     }
   },
   "security": [
@@ -190,6 +191,51 @@
           },
           "422": {
             "description": "Idempotency-Key reused with a different request"
+          }
+        }
+      }
+    },
+    "/api/v1/actions": {
+      "get": {
+        "summary": "The actions — what a room asked of someone, and whether it is done",
+        "description": "Read them before you write them: an action closed on a screen and rewritten `Open` by an unchanged re-run overwrites the minute of a meeting. `raisedInStatus` says whether the occurrence that raised it is still open. Filters: status, limit (default 200, max 500).",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scope": "read:meetings",
+        "responses": {
+          "200": {
+            "description": "The document described above",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "contract": {
+                      "type": "string"
+                    },
+                    "generatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "actions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No key, an unknown key, or a revoked key — the three are indistinguishable on purpose"
+          },
+          "403": {
+            "description": "The key is live but does not carry the scope this route requires"
           }
         }
       }
@@ -368,6 +414,241 @@
                       "items": {
                         "type": "object"
                       }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No key, an unknown key, or a revoked key — the three are indistinguishable on purpose"
+          },
+          "403": {
+            "description": "The key is live but does not carry the scope this route requires"
+          }
+        }
+      }
+    },
+    "/api/v1/benefits/{externalId}": {
+      "put": {
+        "summary": "Create or update a benefit, keyed by your own identifier",
+        "description": "Creates the a benefit when nothing carries this externalId for your integration, updates it otherwise. The identity is (integration, externalId): two connected systems may both say \"E01\" without colliding. `version` is optional — when sent it is asserted (409 if stale); when omitted your system is the master of this row and the last write wins. Optional `Idempotency-Key` header: the same key with the same body replays the recorded answer (Idempotent-Replayed: true); the same key with another body is refused (422) — one key names ONE request, not a run. `adopt: \"<Meridian id>\"` binds your externalId to a row that already exists (created on a screen, or scaffolded) instead of creating another. The same business rules as the screens apply. A benefit keeps ITS unit — percent, hours, ounces, currency — and is never divided by a million: `baseline`, `target` and `actual` are passed through as sent. An `actual` needs `measuredOn`, because a figure with no measurement date cannot be situated a year later. `kind` is Production, Availability, Cost, Risk or Compliance; `status` is Forecast, Realised, Partially realised, Missed or Withdrawn.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scope": "write:portfolio",
+        "parameters": [
+          {
+            "name": "externalId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "Your own identifier for this row — stable across runs, unique within your integration"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "One key names ONE request. The same key with the same body replays the recorded answer (response header Idempotent-Replayed: true); the same key with a different body is refused (422)."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "adopt": {
+                    "type": "string"
+                  },
+                  "project": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "detail": {
+                    "type": "string"
+                  },
+                  "measure": {
+                    "type": "string"
+                  },
+                  "unit": {
+                    "type": "string"
+                  },
+                  "baseline": {
+                    "type": "number"
+                  },
+                  "target": {
+                    "type": "number"
+                  },
+                  "actual": {
+                    "type": "number"
+                  },
+                  "owner": {
+                    "type": "string"
+                  },
+                  "realiseOn": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "measuredOn": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "status": {
+                    "type": "string"
+                  },
+                  "version": {
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The document described above",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "contract": {
+                      "type": "string"
+                    },
+                    "generatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "externalId": {
+                      "type": "string"
+                    },
+                    "created": {
+                      "type": "boolean"
+                    },
+                    "version": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created — the row did not exist for this externalId",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "contract": {
+                      "type": "string"
+                    },
+                    "generatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "externalId": {
+                      "type": "string"
+                    },
+                    "created": {
+                      "type": "boolean"
+                    },
+                    "version": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body breaks a rule the screens enforce too; the message says which"
+          },
+          "401": {
+            "description": "No key, an unknown key, or a revoked key — the three are indistinguishable on purpose"
+          },
+          "403": {
+            "description": "The key is live but does not carry the scope this route requires"
+          },
+          "409": {
+            "description": "A stale version, an immutable decision, or a meeting that is not open"
+          },
+          "422": {
+            "description": "Idempotency-Key reused with a different request"
+          }
+        }
+      }
+    },
+    "/api/v1/business-case/{externalId}": {
+      "put": {
+        "summary": "Create or update the business case, keyed by your own identifier",
+        "description": "Creates the the business case when nothing carries this externalId for your integration, updates it otherwise. The identity is (integration, externalId): two connected systems may both say \"E01\" without colliding. `version` is optional — when sent it is asserted (409 if stale); when omitted your system is the master of this row and the last write wins. Optional `Idempotency-Key` header: the same key with the same body replays the recorded answer (Idempotent-Replayed: true); the same key with another body is refused (422) — one key names ONE request, not a run. `adopt: \"<Meridian id>\"` binds your externalId to a row that already exists (created on a screen, or scaffolded) instead of creating another. The same business rules as the screens apply. One case per project (a second is refused, naming the one to `adopt`). Money is in millions, as everywhere else. Revising the case does NOT erase a past reconfirmation — it happened, it is dated — but it does mean the reconfirmation no longer covers what is written, which the read says as `staleSinceReconfirm`.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scope": "write:portfolio",
+        "parameters": [
+          {
+            "name": "externalId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "Your own identifier for this row — stable across runs, unique within your integration"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The document described above",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "contract": {
+                      "type": "string"
+                    },
+                    "generatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "externalId": {
+                      "type": "string"
+                    },
+                    "created": {
+                      "type": "boolean"
+                    },
+                    "version": {
+                      "type": "integer"
                     }
                   }
                 }
@@ -708,6 +989,51 @@
           },
           "422": {
             "description": "Idempotency-Key reused with a different request"
+          }
+        }
+      }
+    },
+    "/api/v1/decisions": {
+      "get": {
+        "summary": "The decision register — what was decided, by whom, and on what basis",
+        "description": "Every decision, whether it was minuted in a meeting or taken outside one by somebody who holds the authority (I-7). Each row carries its `externalId` when an integration owns it, which is how `adopt` finds a row it wrote before it had an external identity, and its `version`, which is what an update asserts. Its own scope, mirroring `write:meetings`: a warehouse feed carries figures, not governance. Filter: limit (default 200, max 500).",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scope": "read:meetings",
+        "responses": {
+          "200": {
+            "description": "The document described above",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "contract": {
+                      "type": "string"
+                    },
+                    "generatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "decisions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No key, an unknown key, or a revoked key — the three are indistinguishable on purpose"
+          },
+          "403": {
+            "description": "The key is live but does not carry the scope this route requires"
           }
         }
       }

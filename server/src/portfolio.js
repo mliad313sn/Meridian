@@ -108,7 +108,7 @@ export async function loadPortfolio(user) {
     activities, deps, milestones, ledger, raidRows, crRows, stepRows,
     allocations, docs, columns, items, crossDeps, narrativeRows, extLinks,
     benefits, waves, commitments, timesheets, lessonRows, tolerances, exceptions, caseRows, criterionRows,
-    stakeholderRows, commsRows,
+    stakeholderRows, commsRows, reconfirmRows,
   ] = await Promise.all([
     inScope(`SELECT * FROM activity WHERE project_id = ANY($1) ORDER BY project_id, stage`),
     inScope(`SELECT d.* FROM activity_dep d JOIN activity a ON a.id = d.activity_id
@@ -170,6 +170,10 @@ export async function loadPortfolio(user) {
     /* PM-05 / PM-11 — qui compte, et qui on informe. */
     inScope(`SELECT * FROM stakeholder WHERE project_id = ANY($1) ORDER BY project_id, influence DESC, interest DESC, name`),
     inScope(`SELECT * FROM comms_plan WHERE project_id = ANY($1) ORDER BY project_id, next_on NULLS LAST, id`),
+    /* REQ-22 — la suite des reconfirmations : « le cas a-t-il été
+       reconfirmé À CE jalon » est une question par jalon, qu'une colonne
+       unique ne pouvait pas porter. */
+    inScope(`SELECT * FROM case_reconfirmation WHERE project_id = ANY($1) ORDER BY project_id, gate`),
   ]);
 
   const depsByActivity = new Map();
@@ -286,7 +290,11 @@ export async function loadPortfolio(user) {
       target: b.target === null ? null : Number(b.target),
       actual: b.actual === null ? null : Number(b.actual),
       owner: b.owner_id, realiseOn: b.realise_on, measuredOn: b.measured_on,
-      status: b.status, version: b.row_version,
+      status: b.status,
+      /* REQ-20 — ce que l'adoption vient chercher : la ligne est-elle
+         déjà à quelqu'un, et sous quel nom. */
+      externalSource: b.external_source ?? null, externalId: b.external_id ?? null,
+      version: b.row_version,
     })),
 
     activities: activities.map((a) => ({
@@ -370,7 +378,20 @@ export async function loadPortfolio(user) {
          l'horloge : reconfirmer efface updated_on, réviser le repose —
          deux dates du même jour ne savent pas dire qui fut premier. */
       staleSinceReconfirm: !!(c.reconfirmed_on && c.updated_on),
+      externalSource: c.external_source ?? null, externalId: c.external_id ?? null,
       version: c.row_version,
+    })),
+
+    /* REQ-22 (V-3) — une reconfirmation par jalon, avec les deux chiffres
+       qu'elle a vus : c'est ce qui permet de dire l'écart depuis la
+       précédente sans relire un historique qui n'existe pas. */
+    caseReconfirmations: reconfirmRows.map((r) => ({
+      id: r.id, case: r.case_id, project: r.project_id, gate: r.gate,
+      expectedCost: r.expected_cost == null ? null : toM(r.expected_cost),
+      expectedBenefit: r.expected_benefit == null ? null : toM(r.expected_benefit),
+      verdict: r.verdict, note: r.note,
+      reconfirmedBy: r.reconfirmed_by, reconfirmedOn: r.reconfirmed_on,
+      version: r.row_version,
     })),
 
     /* PM-02 — ce qu'on a appris, et qui doit survivre au projet.
@@ -458,6 +479,18 @@ export async function loadPortfolio(user) {
       reviewedBy: c.reviewed_by ?? null, reviewedOn: c.reviewed_on ?? null, note: c.note ?? "",
       externalSource: c.external_source ?? null, externalId: c.external_id ?? null,
       version: c.row_version,
+    })),
+
+    /* REQ-22 (V-3) — une reconfirmation par jalon, avec les deux chiffres
+       qu'elle a vus : c'est ce qui permet de dire l'écart depuis la
+       précédente sans relire un historique qui n'existe pas. */
+    caseReconfirmations: reconfirmRows.map((r) => ({
+      id: r.id, case: r.case_id, project: r.project_id, gate: r.gate,
+      expectedCost: r.expected_cost == null ? null : toM(r.expected_cost),
+      expectedBenefit: r.expected_benefit == null ? null : toM(r.expected_benefit),
+      verdict: r.verdict, note: r.note,
+      reconfirmedBy: r.reconfirmed_by, reconfirmedOn: r.reconfirmed_on,
+      version: r.row_version,
     })),
 
     /* PM-05 — the stakeholder register: interest × influence, attitude,

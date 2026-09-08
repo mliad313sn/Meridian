@@ -90,6 +90,29 @@ const DOCS = {
     scope: "read:audit",
     returns: { contract: "string", generatedAt: "date-time", events: "object[]" },
   },
+  /* REQ-15 — écrire sans pouvoir relire n'est pas un contrat. */
+  "GET /api/v1/decisions": {
+    summary: "The decision register — what was decided, by whom, and on what basis",
+    description:
+      "Every decision, whether it was minuted in a meeting or taken outside one by " +
+      "somebody who holds the authority (I-7). Each row carries its `externalId` when " +
+      "an integration owns it, which is how `adopt` finds a row it wrote before it had " +
+      "an external identity, and its `version`, which is what an update asserts. " +
+      "Its own scope, mirroring `write:meetings`: a warehouse feed carries figures, " +
+      "not governance. Filter: limit (default 200, max 500).",
+    scope: "read:meetings",
+    returns: { contract: "string", generatedAt: "date-time", decisions: "object[]" },
+  },
+  "GET /api/v1/actions": {
+    summary: "The actions — what a room asked of someone, and whether it is done",
+    description:
+      "Read them before you write them: an action closed on a screen and rewritten " +
+      "`Open` by an unchanged re-run overwrites the minute of a meeting. " +
+      "`raisedInStatus` says whether the occurrence that raised it is still open. " +
+      "Filters: status, limit (default 200, max 500).",
+    scope: "read:meetings",
+    returns: { contract: "string", generatedAt: "date-time", actions: "object[]" },
+  },
 };
 
 /* I-2 — les sept écritures, décrites une fois chacune. Le corps est lu
@@ -133,6 +156,17 @@ const WRITE_DOCS = {
     "A sentence posed in advance on (project, gate — within the programme's ladder). `met: true` needs " +
     "`reviewedBy`, a named person who does not own the `document` cited; the gate is ready only when every " +
     "criterion is met. Adopt a scaffolded criterion with `adopt`."),
+  "PUT /api/v1/benefits/:externalId": upsert("a benefit", "write:portfolio",
+    "A benefit keeps ITS unit — percent, hours, ounces, currency — and is never divided by a " +
+    "million: `baseline`, `target` and `actual` are passed through as sent. An `actual` needs " +
+    "`measuredOn`, because a figure with no measurement date cannot be situated a year later. " +
+    "`kind` is Production, Availability, Cost, Risk or Compliance; `status` is Forecast, " +
+    "Realised, Partially realised, Missed or Withdrawn."),
+  "PUT /api/v1/business-case/:externalId": upsert("the business case", "write:portfolio",
+    "One case per project (a second is refused, naming the one to `adopt`). Money is in millions, " +
+    "as everywhere else. Revising the case does NOT erase a past reconfirmation — it happened, it " +
+    "is dated — but it does mean the reconfirmation no longer covers what is written, which the " +
+    "read says as `staleSinceReconfirm`."),
   "PUT /api/v1/decisions/:externalId": upsert("a decision outside a meeting", "write:meetings",
     "Named by `decidedBy` (a person) or `council` (the deciding body). The substance — headline, rationale, " +
     "alternatives, dissent — is immutable: a different substance answers 409 — record a new decision naming " +
