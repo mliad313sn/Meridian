@@ -43,10 +43,13 @@ the delivery agent under this charter; the decisions of that run are in
 
 RT365 (`mliad313sn/RT365`, branch
 `claude/project-owner-agent-setup-hi3xqu`, commit `12a20a8`; re-read at
-`25b0483` the same afternoon and again at `a90b1ae` — which brought
+`25b0483` the same afternoon, again at `a90b1ae` — which brought
 D-057 and REQ-14 — the branch had moved six commits, filed
 the twelve issues, and added E-4 "two-way Meridian link once I-2 exists"
-and PC-5 "nothing real in a demo book until H-28") decided on
+and PC-5 "nothing real in a demo book until H-28"; and a fourth time at
+`02b9e9e`, by which point RT365 had **re-tested 5.10.0**, recorded all
+twelve improvements as taken, and filed a new list V-1…V-12 for this
+register, read in here as REQ-20…REQ-31) decided on
 8 September 2026 to run its whole project lifecycle in Meridian
 (ADR-017, D-049). It cloned Meridian 5.9.0 at `77c4b49`, ran the tests
 (449/449), seeded it, loaded its programme through the API — sixteen
@@ -538,6 +541,55 @@ thing quietly.
 
 ---
 
+### REQ-20…REQ-31 · What RT365 asked for after re-testing 5.10.0 (V-1…V-12) — `open`, one `partial`
+
+RT365 re-ran the whole assessment against 5.10.0 (`docs/PMO.md` §4,
+`docs/PMO_MERIDIAN_ASSESSMENT.md` §7): 513 tests, the first hour working
+with no `.env` and no `PGLITE_DIR`, 16 projects and 122 register items
+loaded in 256 writes with a clean second run. It records all twelve of
+its original improvements as taken, closes M-01…M-03 and M-05 in its own
+findings table, and files a **new** list — V-1…V-12 — explicitly "for
+Meridian's Product Owner through the register mechanism it created". They
+are read in here as REQ-20…REQ-31, in the priority RT365 gave them.
+
+| Ours | Theirs | Priority | What it asks for |
+|---|---|---|---|
+| REQ-20 | V-1 | highest | Business case and benefits on the write API, under the same external-id, idempotency and audit rules as the delivery collections |
+| REQ-21 | V-2 | highest | A benefit past its realisation date raises an agenda item and a portfolio exception, instead of sitting in a table nothing chases |
+| REQ-22 | V-3 | highest | The business case is reconfirmed at every gate, and the gate cannot pass without it |
+| REQ-23 | V-4 | high | Forecast against realised, per programme, in each benefit's own units |
+| REQ-24 | V-5 | high | Prioritisation by value, confidence, risk exposure and capacity, with a visible weighting |
+| REQ-25 | V-6 | medium | Adoption measured per rollout wave, linked to the benefits it should move |
+| REQ-26 | V-7 | medium | Lessons offered as a checklist at the gate that would use them |
+| REQ-27 | V-8 | high | **One ladder per project** — see below |
+| REQ-28 | V-9 | medium | Decision latency, action ageing, gate cycle time, RAID review compliance, exception age |
+| REQ-29 | V-10 | medium | A gate criterion may cite a commit or a checksum, not only a mutable document |
+| REQ-30 | V-11 | medium | A value dashboard, printable, snapshotted per reporting period |
+| REQ-31 | V-12 | high | The loop itself packaged as a pattern a second field repository can adopt |
+
+**REQ-27 (V-8) is `partial`, and it is the one this round measured
+rather than accepted.** RT365 filed it as a defect: "ten milestones where
+six were intended", two ladders on the same project, and "which gate are
+we at" therefore unanswerable. Half of it is already true, and this round
+proved it again on a running instance — a programme was declared with a
+six-gate ladder, a project created under it, and the project carried
+exactly six gate milestones and none of the default four
+(`server/src/wbs.js#scaffoldProject` reads the programme's ladder and
+nothing else). What RT365 saw is the other half: its sixteen projects
+were scaffolded **before** `RBT` carried a gate model, and a declared
+ladder deliberately does not rewrite projects that already exist
+(D-33.2 — dated gates and filed evidence would move under people's feet).
+
+So the gap is the **migration**, and it is accepted as a gap: an explicit
+act that moves an existing project onto its programme's ladder, adopting
+the milestones that already match and refusing to duplicate the rest.
+Until it ships there is a working answer today — `adopt` on
+`PUT /api/v1/milestones` binds RT365's `Gate A…F` rows to the scaffolded
+ones by their predictable ids instead of adding to them, which the
+integrator confirmed on a full load.
+
+---
+
 ## 4 · The communication loop with RT365
 
 The programme that raised the requests keeps its own ledgers (RAID
@@ -643,6 +695,9 @@ ahead — which is the whole reason the probe exists.
 | D-33.25 | 08/09 | The drill counts every table the book holds, discovered at run time, not a list of nineteen written once. `/api/health` reports the last **proven** restore separately from the last attempt. | Extend the list to fifty-two names (refused: the next table added would fall out of the proof the same way, and nothing would say so). | none |
 | D-33.26 | 08/09 | The published contract speaks OpenAPI, not Express: `{externalId}`, and the `Idempotency-Key` header declared as a parameter rather than described in prose. | Leave the prose (refused: REQ-02 rests on that header, and no generated client exposed it). | none |
 | D-33.27 | 08/09 | The gaps the integrator found that are not defects — `decisions` and `actions` absent from the v1 read, no public write for structure, no way to open a meeting from the API, no closure date on a register item, a project date with no basis — are recorded as REQ-15…REQ-19 for the next round, not smuggled into a release being tagged. | Take them now (refused: five blocking findings were already open on a release that was meant to be tagged; widening it is how the next five get missed). | integrator ranked the first three as the highest-value changes |
+
+| D-33.28 | 08/09 | RT365's post-5.10.0 list V-1…V-12 is read into this register whole, as REQ-20…REQ-31, in the priority RT365 gave it — before any of it is scheduled. | Take the three "highest" now (refused: a release with five blocking findings open was already being tagged; the register exists so that reading a request and scheduling it are separate acts). | none |
+| D-33.29 | 08/09 | V-8 is answered with a measurement, not an apology: a project created under a laddered programme carries exactly that ladder (proved again on a running instance), so the accepted gap is the MIGRATION of projects scaffolded before their programme declared one — and `adopt` on milestones is the working answer until it ships. | Rewrite existing projects when a ladder is declared (refused, D-33.2: dated gates and filed evidence would move under people's feet). Close V-8 as already-done (refused: RT365 measured ten milestones where it expected six, and the number is right — what it names is real). | RT365 filed it as a defect, not a preference |
 
 *(one line per decision, appended by each run)*
 

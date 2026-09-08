@@ -3,15 +3,16 @@
   "source": {
     "repository": "mliad313sn/RT365",
     "branch": "claude/project-owner-agent-setup-hi3xqu",
-    "commit": "28284ac",
+    "commit": "02b9e9e",
     "documents": [
-      "docs/PMO_MERIDIAN_ASSESSMENT.md",
-      "docs/PMO.md",
       "docs/ADRs/ADR-017.md",
-      "docs/RAID_LOG.md",
+      "docs/IMPROVEMENT_REGISTER.md",
       "docs/MISSING_ACTIONS.md",
-      "scripts/meridian_sync.py",
-      "docs/IMPROVEMENT_REGISTER.md"
+      "docs/PMO.md",
+      "docs/PMO_MERIDIAN_ASSESSMENT.md",
+      "docs/PMO_MERIDIAN_ASSESSMENT.md §8 (V-1..V-12)",
+      "docs/RAID_LOG.md",
+      "scripts/meridian_sync.py"
     ],
     "reviewedAt": "2026-09-08",
     "branchPinned": "claude/meridian-rt365-feedback-d6vo3i"
@@ -613,6 +614,356 @@
           "note": "Opened by the third-round committee: the integrator rewrote meridian_sync.py against the published contract and measured what it still could not do."
         }
       ]
+    },
+    {
+      "id": "REQ-20",
+      "origin": [
+        "V-1"
+      ],
+      "issue": null,
+      "title": "Value objects in the write API v1: PUT /api/v1/business-case/{externalId} and /benefits/{externalId} under write:portfolio, with the same external-id, idempotency and audit rules as the delivery collections",
+      "status": "open",
+      "priority": "highest",
+      "version": null,
+      "decidedOn": "2026-09-08",
+      "delivered": [],
+      "measure": null,
+      "remaining": [
+        "An external integration creates and updates a business case and three benefits by external id; a second identical run makes zero creating writes; both appear in /api/v1/portfolio and in the audit trail under the integration's name."
+      ],
+      "accepted": false,
+      "released": false,
+      "observed": "REQ-02 made delivery facts syncable; value facts still have to be typed in, so the one thing an executive reads is the one thing that goes stale. RT365 pushes 256 delivery writes and cannot push a single benefit.",
+      "answerToSource": null,
+      "history": [
+        {
+          "at": "2026-09-08",
+          "registerVersion": 6,
+          "status": "open",
+          "note": "Filed by RT365 in docs/PMO_MERIDIAN_ASSESSMENT.md §8 after re-testing 5.10.0, and read into this register by the standing review duty."
+        }
+      ]
+    },
+    {
+      "id": "REQ-21",
+      "origin": [
+        "V-2"
+      ],
+      "issue": null,
+      "title": "The benefit review is a scheduled act: when realise_on passes, an agenda item appears on the owning board's next occurrence, and an unreviewed benefit past its date is a portfolio exception like a tolerance breach",
+      "status": "open",
+      "priority": "highest",
+      "version": null,
+      "decidedOn": "2026-09-08",
+      "delivered": [],
+      "measure": null,
+      "remaining": [
+        "A benefit with realise_on in the past appears automatically on the next meeting agenda and in the exception list; recording a benefit.review clears it; the trail shows who reviewed and against which measurement."
+      ],
+      "accepted": false,
+      "released": false,
+      "observed": "Benefits realise after closure, when the team has dispersed. A date in a table that nothing chases is how value reporting dies.",
+      "answerToSource": null,
+      "history": [
+        {
+          "at": "2026-09-08",
+          "registerVersion": 6,
+          "status": "open",
+          "note": "Filed by RT365 in docs/PMO_MERIDIAN_ASSESSMENT.md §8 after re-testing 5.10.0, and read into this register by the standing review duty."
+        }
+      ]
+    },
+    {
+      "id": "REQ-22",
+      "origin": [
+        "V-3"
+      ],
+      "issue": null,
+      "title": "The business case is re-confirmed at every gate and the gate cannot pass without it: extend reconfirmed_gate into a criterion the ladder enforces, comparing expected cost and benefit against the last version",
+      "status": "open",
+      "priority": "highest",
+      "version": null,
+      "decidedOn": "2026-09-08",
+      "delivered": [],
+      "measure": null,
+      "remaining": [
+        "Passing a gate on a project whose case has not been reconfirmed at that gate is refused with a named reason; the gate record shows the case version, the delta against the previous one and who reconfirmed."
+      ],
+      "accepted": false,
+      "released": false,
+      "observed": "The fields exist; nothing forces them. A stop/continue decision at each gate is the highest-value control a PMO owns and the one most often skipped.",
+      "answerToSource": null,
+      "history": [
+        {
+          "at": "2026-09-08",
+          "registerVersion": 6,
+          "status": "open",
+          "note": "Filed by RT365 in docs/PMO_MERIDIAN_ASSESSMENT.md §8 after re-testing 5.10.0, and read into this register by the standing review duty."
+        }
+      ]
+    },
+    {
+      "id": "REQ-23",
+      "origin": [
+        "V-4"
+      ],
+      "issue": null,
+      "title": "Forecast versus realised as one report: per programme, expected benefit from the case against measured actuals in their own units, with counts by status and those overdue for review",
+      "status": "open",
+      "priority": "high",
+      "version": null,
+      "decidedOn": "2026-09-08",
+      "delivered": [],
+      "measure": null,
+      "remaining": [
+        "One page and one /api/v1 resource returning, per project: case expected cost and benefit, each benefit's baseline/target/actual with unit, status, review age; no derived money conversion of non-money units."
+      ],
+      "accepted": false,
+      "released": false,
+      "observed": "The two halves exist in two tables and are never confronted. The confrontation is the report the sponsor wants.",
+      "answerToSource": null,
+      "history": [
+        {
+          "at": "2026-09-08",
+          "registerVersion": 6,
+          "status": "open",
+          "note": "Filed by RT365 in docs/PMO_MERIDIAN_ASSESSMENT.md §8 after re-testing 5.10.0, and read into this register by the standing review duty."
+        }
+      ]
+    },
+    {
+      "id": "REQ-24",
+      "origin": [
+        "V-5"
+      ],
+      "issue": null,
+      "title": "Portfolio prioritisation by value and risk against capacity: score demand and live projects on claimed value, confidence, RAID exposure and capacity consumed, ordered against available capacity",
+      "status": "open",
+      "priority": "high",
+      "version": null,
+      "decidedOn": "2026-09-08",
+      "delivered": [],
+      "measure": null,
+      "remaining": [
+        "A ranked list per programme with every input visible and editable, a stated weighting, and a line showing where committed capacity runs out; changing a weight re-ranks and is audited."
+      ],
+      "accepted": false,
+      "released": false,
+      "observed": "Choosing what not to do is where a portfolio creates most of its value. Meridian ranks nothing today; demand carries no score.",
+      "answerToSource": null,
+      "history": [
+        {
+          "at": "2026-09-08",
+          "registerVersion": 6,
+          "status": "open",
+          "note": "Filed by RT365 in docs/PMO_MERIDIAN_ASSESSMENT.md §8 after re-testing 5.10.0, and read into this register by the standing review duty."
+        }
+      ]
+    },
+    {
+      "id": "REQ-25",
+      "origin": [
+        "V-6"
+      ],
+      "issue": null,
+      "title": "Adoption and outcome telemetry per rollout wave: measured adoption on rollout_wave, and a link from wave to the benefits it is meant to move",
+      "status": "open",
+      "priority": "medium",
+      "version": null,
+      "decidedOn": "2026-09-08",
+      "delivered": [],
+      "measure": null,
+      "remaining": [
+        "Each wave carries an adoption measure with its source and date; a benefit's page shows the adoption trend of the waves feeding it; a wave below its own threshold raises an exception."
+      ],
+      "accepted": false,
+      "released": false,
+      "observed": "A delivered change nobody adopts realises nothing, and adoption is the earliest signal a forecast benefit is in trouble.",
+      "answerToSource": null,
+      "history": [
+        {
+          "at": "2026-09-08",
+          "registerVersion": 6,
+          "status": "open",
+          "note": "Filed by RT365 in docs/PMO_MERIDIAN_ASSESSMENT.md §8 after re-testing 5.10.0, and read into this register by the standing review duty."
+        }
+      ]
+    },
+    {
+      "id": "REQ-26",
+      "origin": [
+        "V-7"
+      ],
+      "issue": null,
+      "title": "Lessons become a checklist, not an archive: lesson rows tagged to a gate and offered at the same gate on later projects, with a record of whether each was considered",
+      "status": "open",
+      "priority": "medium",
+      "version": null,
+      "decidedOn": "2026-09-08",
+      "delivered": [],
+      "measure": null,
+      "remaining": [
+        "At a gate the reviewer sees the lessons tagged to that gate from closed projects of the same programme and records considered / not-applicable per lesson; the gate record keeps that list."
+      ],
+      "accepted": false,
+      "released": false,
+      "observed": "Lessons only stored are lessons not learned; the moment of use is the next gate of the same kind.",
+      "answerToSource": null,
+      "history": [
+        {
+          "at": "2026-09-08",
+          "registerVersion": 6,
+          "status": "open",
+          "note": "Filed by RT365 in docs/PMO_MERIDIAN_ASSESSMENT.md §8 after re-testing 5.10.0, and read into this register by the standing review duty."
+        }
+      ]
+    },
+    {
+      "id": "REQ-27",
+      "origin": [
+        "V-8"
+      ],
+      "issue": null,
+      "title": "One ladder per project: a project under a programme with a declared ladder carries exactly that ladder, and an existing book migrates onto it without duplicates",
+      "status": "partial",
+      "priority": "high",
+      "version": null,
+      "decidedOn": "2026-09-08",
+      "delivered": [
+        "server/src/wbs.js#scaffoldProject reads the programme's ladder only"
+      ],
+      "measure": "Measured on 5.10.0: a programme declared with a six-gate ladder, then a project created under it, carries exactly six gate milestones (Gate A..F, gates 1..6) and no default four.",
+      "remaining": [
+        "A project created under a programme with a ladder has exactly that programme's gates; an existing book migrates without duplicates; the loader's second run still makes no creating writes."
+      ],
+      "accepted": false,
+      "released": false,
+      "observed": "RT365 measured ten milestones where six were intended, and filed it as a defect rather than a preference.",
+      "answerToSource": "Half of V-8 is already true and was measured again on this round: a project created under a programme that carries a ladder gets exactly that ladder's gates, never both. What you saw is the other half: your sixteen projects were scaffolded BEFORE RBT carried a gate model, and a declared ladder deliberately does not rewrite projects that already exist (D-33.2 — dated gates and filed evidence would move under people's feet). So the gap is the MIGRATION, and it is accepted as such: an explicit act that moves an existing project onto its programme's ladder, adopting the milestones that already match and refusing to duplicate. Until it ships, `adopt` on PUT /api/v1/milestones binds your Gate A..F rows to the scaffolded ones by their predictable ids rather than adding to them.",
+      "history": [
+        {
+          "at": "2026-09-08",
+          "registerVersion": 6,
+          "status": "open",
+          "note": "Filed by RT365 in docs/PMO_MERIDIAN_ASSESSMENT.md §8 after re-testing 5.10.0, and read into this register by the standing review duty."
+        }
+      ]
+    },
+    {
+      "id": "REQ-28",
+      "origin": [
+        "V-9"
+      ],
+      "issue": null,
+      "title": "Governance quality signals on the portfolio page: decision latency, action ageing, gate cycle time, RAID review compliance, exception age",
+      "status": "open",
+      "priority": "medium",
+      "version": null,
+      "decidedOn": "2026-09-08",
+      "delivered": [],
+      "measure": null,
+      "remaining": [
+        "Each metric computed from existing timestamps, shown per programme with its trend and available on /api/v1; no new data entry required."
+      ],
+      "accepted": false,
+      "released": false,
+      "observed": "A PMO that cannot see its own throughput cannot improve it, and these five are the leading indicators of a programme quietly stalling.",
+      "answerToSource": null,
+      "history": [
+        {
+          "at": "2026-09-08",
+          "registerVersion": 6,
+          "status": "open",
+          "note": "Filed by RT365 in docs/PMO_MERIDIAN_ASSESSMENT.md §8 after re-testing 5.10.0, and read into this register by the standing review duty."
+        }
+      ]
+    },
+    {
+      "id": "REQ-29",
+      "origin": [
+        "V-10"
+      ],
+      "issue": null,
+      "title": "Evidence provenance for gate criteria: a typed external reference (repository, commit, artefact, checksum) the reviewer confirms, instead of a document link",
+      "status": "open",
+      "priority": "medium",
+      "version": null,
+      "decidedOn": "2026-09-08",
+      "delivered": [],
+      "measure": null,
+      "remaining": [
+        "A criterion can carry a typed external reference with a commit or checksum; the gate record shows what was cited and by whom; changing the reference after the gate is a new version, never an edit."
+      ],
+      "accepted": false,
+      "released": false,
+      "observed": "REQ-04 gave criteria a reviewer; the evidence is still a link to a mutable document, which is not evidence of anything.",
+      "answerToSource": null,
+      "history": [
+        {
+          "at": "2026-09-08",
+          "registerVersion": 6,
+          "status": "open",
+          "note": "Filed by RT365 in docs/PMO_MERIDIAN_ASSESSMENT.md §8 after re-testing 5.10.0, and read into this register by the standing review duty."
+        }
+      ]
+    },
+    {
+      "id": "REQ-30",
+      "origin": [
+        "V-11"
+      ],
+      "issue": null,
+      "title": "A value dashboard for the executive: spend against case, benefits by status, overdue reviews, top risks by exposure, gates due, exceptions open",
+      "status": "open",
+      "priority": "medium",
+      "version": null,
+      "decidedOn": "2026-09-08",
+      "delivered": [],
+      "measure": null,
+      "remaining": [
+        "One printable page generated from the objects above with no manual entry, and a snapshot stored per reporting period so a claim made in March can be re-read in December."
+      ],
+      "accepted": false,
+      "released": false,
+      "observed": "The portfolio view answers 'is it on time and on budget'; nobody can answer 'is it worth it'.",
+      "answerToSource": null,
+      "history": [
+        {
+          "at": "2026-09-08",
+          "registerVersion": 6,
+          "status": "open",
+          "note": "Filed by RT365 in docs/PMO_MERIDIAN_ASSESSMENT.md §8 after re-testing 5.10.0, and read into this register by the standing review duty."
+        }
+      ]
+    },
+    {
+      "id": "REQ-31",
+      "origin": [
+        "V-12"
+      ],
+      "issue": null,
+      "title": "A public reference implementation of the loop: package scripts/rt365-review.mjs and the request register as a documented pattern any field repository can adopt",
+      "status": "open",
+      "priority": "high",
+      "version": null,
+      "decidedOn": "2026-09-08",
+      "delivered": [],
+      "measure": null,
+      "remaining": [
+        "A documented schema and command let a second repository file its register and see its requests tracked, without Meridian-specific code in that repository."
+      ],
+      "accepted": false,
+      "released": false,
+      "observed": "The strongest thing this product now has is evidence that a real programme's findings reached a release in a day. That is a capability, not an anecdote.",
+      "answerToSource": null,
+      "history": [
+        {
+          "at": "2026-09-08",
+          "registerVersion": 6,
+          "status": "open",
+          "note": "Filed by RT365 in docs/PMO_MERIDIAN_ASSESSMENT.md §8 after re-testing 5.10.0, and read into this register by the standing review duty."
+        }
+      ]
     }
   ],
   "channel": {
@@ -638,5 +989,5 @@
       "consequence": "no line is `released` yet; pin the branch claude/meridian-rt365-feedback-d6vo3i, not the version"
     }
   },
-  "registerVersion": 5
+  "registerVersion": 6
 }
