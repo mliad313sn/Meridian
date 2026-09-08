@@ -153,7 +153,14 @@ const upsert = (what, scope, extra) => ({
 const WRITE_DOCS = {
   "PUT /api/v1/projects/:externalId": upsert("a project", "write:portfolio",
     "Creation needs programme, site, start and finish; the schedule, the gate milestones and the " +
-    "evidence documents are scaffolded as when a person creates one. Money is in millions."),
+    "evidence documents are scaffolded as when a person creates one. Money is in millions. " +
+    "`dateBasis: \"placeholder\"` with a `condition` says the finish date is a position on the " +
+    "timeline and not a commitment: it is never drawn or reported as late until you make it " +
+    "`committed` (REQ-19, the same rule milestones carry since REQ-14). `sponsor` is the person " +
+    "who answers for the business case, `acceptanceCriteria` what \"finished\" will mean. " +
+    "`status: \"Closed\"` closes it under the same three signatures the screen asks for (PM-08): " +
+    "`opsAcceptedBy`, `benefitsTo` and an optional `closureNote`; the closure date is stamped and " +
+    "read back as `closedOn`. A closed project is not reopened by this route (409)."),
   "PUT /api/v1/milestones/:externalId": upsert("a milestone", "write:portfolio",
     "`project` is a Meridian id or an externalId you created. A milestone with acceptanceCriteria " +
     "cannot be marked done without acceptedBy — the person who checked them (PM-04). `dateBasis: " +
@@ -161,7 +168,11 @@ const WRITE_DOCS = {
     "it is never reported missed or overdue until you make it `committed` (REQ-14)."),
   "PUT /api/v1/raid/:externalId": upsert("a register item (risk, issue, assumption, dependency)", "write:portfolio",
     "`gate` links it to a governance gate of the project, `cr` to a change request of the same project (I-8). " +
-    "Omit `project` for a portfolio-wide item."),
+    "Omit `project` for a portfolio-wide item. `category` is your own free classification label, kept " +
+    "beside `type` — which stays the RAID contract the engine reads (REQ-13). `status: \"Closed\"` " +
+    "records the closure with its date: send `closedOn` when your register knows it, otherwise today " +
+    "is stamped, and `closedBy` names the person on whose word it closed. Reopening clears both, " +
+    "because an open item has no closure (REQ-18)."),
   "PUT /api/v1/activities/:externalId": upsert("the link to a schedule stage, and its measured progress", "write:portfolio",
     "Stages are not created by integrations — the plan belongs to the project. The first call binds " +
     "your id to an existing stage (`activity`); every call may carry `pct`, stamped with `source` and " +

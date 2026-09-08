@@ -240,9 +240,16 @@ Views.portfolio = (db) => {
        would read as "on plan", which nothing measured. */
     { key: "spi", label: "SPI", align: "r", sort: r => r.m.spi, get: r => r.p.budget > 0 ? indexCell(r.m, "spi", db.settings.amberSpi) : h("span", { class: "mono muted", title: "No budget — outside EVM" }, "—") },
     { key: "cpi", label: "CPI", align: "r", sort: r => r.m.cpi, get: r => r.p.budget > 0 ? indexCell(r.m, "cpi", db.settings.amberCpi) : h("span", { class: "mono muted", title: "No budget — outside EVM" }, "—") },
+    /* REQ-19 — une date de fin qui n'est qu'une POSITION ne se lit pas
+       comme un engagement : elle se dit placeholder et ne porte jamais
+       « en retard de N jours », qui compare à aujourd'hui une promesse
+       que personne n'a faite. Même règle que le jalon depuis REQ-14. */
     { key: "finish", label: "Finish", align: "r", sort: r => r.p.finish, get: r => h("div", null,
-        h("div", { class: "mono small" }, fmtDate(r.p.finish)),
-        r.m.slipDays > 7 ? h("div", { class: "xs bad strong" }, "forecast +" + r.m.slipDays + "d") : null) },
+        h("div", { class: "mono small", style: r.p.dateBasis === "placeholder" ? "opacity:.6" : null },
+          fmtDate(r.p.finish)),
+        r.p.dateBasis === "placeholder"
+          ? h("div", { class: "xs muted", title: r.p.condition || t("No condition recorded") }, t("placeholder"))
+          : r.m.slipDays > 7 ? h("div", { class: "xs bad strong" }, "forecast +" + r.m.slipDays + "d") : null) },
   ];
   const rows = list.map(p => {
     const m = Engine.metrics(db, p.id);
@@ -979,8 +986,28 @@ function projectFields(db, p) {
     { key: "start", label: "Start", type: "date", required: true, value: p ? p.start : iso(db.statusDate) },
     { key: "finish", label: "Planned finish", type: "date", required: true, value: p ? p.finish : iso(addMonths(db.statusDate, 12)),
       validate: (v, st) => D(v) <= D(st.start) ? "Finish must fall after the start" : "" },
+    /* REQ-19 (RT365, 3e tour) — ce que la date de fin VAUT, exactement
+       comme un jalon depuis REQ-14 : « nos dates de fin de projet sont
+       des remplissages pour la même raison que nos dates de porte ». */
+    { key: "dateBasis", label: t("The date is"), type: "select", value: p?.dateBasis ?? "committed",
+      options: [{ value: "committed", label: t("a commitment") },
+                { value: "placeholder", label: t("a placeholder — no calendar date yet") }],
+      hint: t("A placeholder is drawn where it sits but is never reported missed or overdue; make it a commitment once the condition below has been measured.") },
+    { key: "condition", label: t("Dated after"), value: p?.condition ?? "",
+      placeholder: t("the capacity model at gate C…"),
+      hint: t("What has to happen, or be measured, before this date can be promised.") },
     { key: "budget", label: "Budget ($M)", type: "number", step: 0.1, min: 0.1, required: true, value: p ? p.budget : 1 },
     { key: "contingency", label: "Contingency ($M)", type: "number", step: 0.05, min: 0, value: p ? p.contingency : 0.1 },
+    /* REQ-19 — le sponsor répond du CAS D'AFFAIRE, le chef de projet de
+       la livraison ; et ce que « fini » voudra dire, posé d'avance comme
+       un jalon le fait depuis PM-04. */
+    { key: "sponsor", label: t("Sponsor"), type: "select", value: p?.sponsor ?? "", advanced: true,
+      options: [{ value: "", label: t("Not named") }]
+        .concat(db.people.map(x => ({ value: x.id, label: x.name + " — " + x.role }))),
+      hint: t("The person who answers for the business case, not for the delivery.") },
+    { key: "acceptanceCriteria", label: t("Acceptance criteria"), type: "textarea", span: 2, rows: 2,
+      value: p?.acceptanceCriteria ?? "", advanced: true,
+      hint: t("What has to be true for this project to be finished. Written before it is, or it is an opinion afterwards.") },
     { key: "desc", label: "What this delivers", type: "textarea", span: 2, rows: 3, value: p ? p.desc : "" },
   ];
 }
@@ -997,6 +1024,8 @@ function newProject(db) {
           governanceLevel: v.governanceLevel, pm: v.pm, method: v.method,
           start: v.start, finish: v.finish, budget: +v.budget,
           contingency: +v.contingency || 0, desc: v.desc,
+          dateBasis: v.dateBasis, condition: v.condition,
+          sponsor: v.sponsor || null, acceptanceCriteria: v.acceptanceCriteria,
         });
         return r.id;
       }, { detail: v.name });
@@ -1013,7 +1042,10 @@ function editProject(db, p) {
       name: v.name, programme: v.programme, site: v.site,
       governanceLevel: v.governanceLevel, pm: v.pm, method: v.method,
       start: v.start, finish: v.finish, budget: +v.budget,
-      contingency: +v.contingency || 0, desc: v.desc, version: p.version,
+      contingency: +v.contingency || 0, desc: v.desc,
+      dateBasis: v.dateBasis, condition: v.condition,
+      sponsor: v.sponsor || null, acceptanceCriteria: v.acceptanceCriteria,
+      version: p.version,
     }), { detail: p.id + " · " + v.name }),
   });
 }
@@ -1062,8 +1094,16 @@ Views.project = (db) => {
         h("div", { class: "xs muted", style: "display:flex;justify-content:space-between;margin-top:6px" },
           h("span", null, "Start " + fmtDate(p.start)),
           h("span", null, "Finish " + fmtDate(p.finish))),
-        m.slipDays > 3 ? h("div", { class: "xs bad strong", style: "margin-top:4px" },
-          "Forecast " + fmtDate(m.forecastFinish) + " — " + m.slipDays + " days late at the current rate") : null)),
+        /* REQ-19 — sur une date qui n'est qu'une position, « N jours de
+           retard » compare aujourd'hui à une promesse que personne n'a
+           faite. On dit ce que la date vaut, et ce qui produira la
+           vraie, au lieu d'annoncer un manquement. */
+        p.dateBasis === "placeholder"
+          ? h("div", { class: "xs muted", style: "margin-top:4px" },
+              t("The finish date is a placeholder — not a commitment."),
+              p.condition ? " " + t("Dated after") + " : " + p.condition : "")
+          : m.slipDays > 3 ? h("div", { class: "xs bad strong", style: "margin-top:4px" },
+              "Forecast " + fmtDate(m.forecastFinish) + " — " + m.slipDays + " days late at the current rate") : null)),
     h("div", { class: "btn-row", style: "margin-top:16px" },
       mayWrite(p) && !fromSdp(p)
         ? h("button", { class: "btn btn-sm", onClick: () => editProject(db, p) }, icon("pencil", 12), "Edit project")
@@ -1533,7 +1573,11 @@ function copyStatus(db, p, m) {
       return w ? sum(acts, a => Number(a.weight) * a.pct) / w / 100 : 0;
     })()) + " reported (no budget — outside EVM)"}`);
   if (funded) L.push(`- SPI ${m.measurable ? idx(m.spi) : "—"} · CPI ${m.measurable ? idx(m.cpi) : "—"}${m.measurable ? "" : " (too early to measure)"}`);
-  L.push(`- Finish: planned ${fmtDate(p.finish)}${m.slipDays > 3 ? `, forecast ${fmtDate(m.forecastFinish)} (+${m.slipDays}d)` : " — on forecast"}`);
+  /* REQ-19 — le même refus dans l'extrait qu'on colle dans un courriel :
+     une position ne se rapporte pas « en avance » ni « en retard ». */
+  L.push(p.dateBasis === "placeholder"
+    ? `- Finish: ${fmtDate(p.finish)} — PLACEHOLDER, not a commitment${p.condition ? ` (after: ${p.condition})` : ""}`
+    : `- Finish: planned ${fmtDate(p.finish)}${m.slipDays > 3 ? `, forecast ${fmtDate(m.forecastFinish)} (+${m.slipDays}d)` : " — on forecast"}`);
   if (raid.length) {
     L.push(`- Top register items:`);
     raid.slice(0, 3).forEach(r => L.push(`  - ${r.id} ${r.title} (exposure ${Engine.exposure(r)})`));
@@ -2468,6 +2512,16 @@ function raidDetail(db, r) {
           h("div", { class: "kpi-v", style: "font-size:19px" }, e.level), h("div", { class: "kpi-n" }, e.why))),
       h("hr", { class: "hr" }),
       h("p", { style: "margin:14px 0" }, r.detail || "No detail recorded."),
+      /* REQ-18 — « quand, et sur la parole de qui ». Une ligne close
+         avant la 045 le dit franchement plutôt que d'inventer un jour. */
+      r.status === "Closed"
+        ? h("div", { class: "small" },
+            r.closedOn
+              ? t("Closed ") + fmtDateLong(r.closedOn) +
+                (r.closedBy ? " · " + t("Closed by") + " " + Engine.personName(db, r.closedBy) : "")
+              : t("Closed — the date was not recorded"))
+        : null,
+      r.category ? h("div", { class: "small muted" }, t("Category") + " · " + r.category) : null,
       h("div", { class: "small muted" }, "Next review " + fmtDateLong(r.review)),
       r.gate || r.cr
         ? h("div", { class: "xs muted", style: "margin-top:6px" },
@@ -2528,6 +2582,23 @@ function raidFields(db, r, projectId) {
       options: [{ value: "", label: t("Not linked to a change") }]
         .concat(db.crs.filter(c => !projectId && !r ? true : c.project === (r ? r.project : projectId))
           .map(c => ({ value: c.id, label: c.id + " · " + c.title }))) },
+    /* REQ-13 (RT365, implied by meridian_sync.py#RAID_KIND) — leur mot
+       de classement, à côté du nôtre. `type` reste Risk/Issue/Assumption/
+       Dependency : c'est le contrat que le moteur lit. */
+    { key: "category", label: t("Category"), value: r ? (r.category ?? "") : "", advanced: true,
+      placeholder: t("safety, supply, regulatory…"),
+      hint: t("Your own classification, kept beside the RAID type the engine reads.") },
+    /* REQ-18 — une clôture a une date et un nom. Renseignés tout seuls
+       au moment où l'on clôt ; ici pour les CORRIGER, parce qu'une ligne
+       close hier sur un registre repris n'a pas été close aujourd'hui. */
+    ...(r && r.status === "Closed" ? [
+      { key: "closedOn", label: t("Closed on"), type: "date", value: r.closedOn ?? "", advanced: true,
+        hint: t("The day this item actually closed — stamped when it was closed here, corrected when it was closed elsewhere.") },
+      { key: "closedBy", label: t("Closed by"), type: "select", value: r.closedBy ?? "", advanced: true,
+        options: [{ value: "", label: t("Not named") }]
+          .concat(db.people.map(x => ({ value: x.id, label: x.name }))),
+        hint: t("The person on whose word it closed.") },
+    ] : []),
   ];
 }
 
@@ -3843,7 +3914,7 @@ function newRaid(db, projectId) {
       const ok = await App.write("RAID item raised", (a) => a.post("/raid", {
         type: v.type, project: v.project || null, title: v.title, detail: v.detail,
         p: +v.p, i: +v.i, response: v.response, owner: v.owner, review: v.review,
-        tp: v.tp, ti: v.ti, gate: v.gate || null, cr: v.cr || null,
+        tp: v.tp, ti: v.ti, gate: v.gate || null, cr: v.cr || null, category: v.category,
       }), { detail: v.title });
       if (ok !== false) {
         const exposure = v.p * v.i;
@@ -3862,7 +3933,11 @@ function editRaid(db, r) {
     onSave: (v) => App.write("RAID item updated", (a) => a.patch("/raid/" + r.id, {
       title: v.title, detail: v.detail, p: +v.p, i: +v.i, response: v.response,
       owner: v.owner, review: v.review, status: v.status, version: r.version,
-      tp: v.tp, ti: v.ti, gate: v.gate || null, cr: v.cr || null,
+      tp: v.tp, ti: v.ti, gate: v.gate || null, cr: v.cr || null, category: v.category,
+      /* REQ-18 — n'envoyer la clôture que sur une ligne close : sur une
+         ligne ouverte les champs n'existent pas, et envoyer `undefined`
+         effacerait ce qu'on n'a pas montré. */
+      ...(r.status === "Closed" ? { closedOn: v.closedOn || null, closedBy: v.closedBy || null } : {}),
     }), { detail: r.id }),
   });
 }

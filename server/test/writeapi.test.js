@@ -828,25 +828,28 @@ describe("REQ-19 · un corps que la collection ne comprend pas est refusé", () 
     assert.equal(r.status, 201, r.text);
   });
 
-  test("les champs mesurés sur le terrain sont refusés, et le refus nomme ce qui est accepté", async () => {
-    const two = await put("/api/v1/projects/REQ19-P", { sponsor: "Board", acceptanceCriteria: "signed off" });
+  /* Les QUATRE champs que le terrain a mesurés — `sponsor`,
+     `acceptanceCriteria`, `status` sur un projet, `category` sur une
+     ligne de registre — ne sont plus refusés : la 045 les a faits
+     RÉELS, et c'est ce qui rend la sévérité tenable (voir les blocs
+     REQ-18 / REQ-19 / REQ-13 plus bas, qui prouvent qu'ils s'écrivent).
+     Ce test-ci garde l'autre moitié : un champ que le contrat ne déclare
+     PAS est refusé, et le refus dit quoi envoyer à la place. */
+  test("un champ hors contrat est refusé, et le refus nomme ce qui est accepté", async () => {
+    const two = await put("/api/v1/projects/REQ19-P", { health: "AMBER", phase: "Closure" });
     assert.equal(two.status, 400, two.text);
-    assert.match(two.body.error, /projects does not accept "sponsor", "acceptanceCriteria"/);
+    assert.match(two.body.error, /projects does not accept "health", "phase"/);
     /* Le refus n'est utile que s'il dit la suite : ce qui EST accepté,
        et où lire le contrat entier. */
     assert.match(two.body.error, /accepts: adopt, name, programme, site/);
     assert.match(two.body.error, /openapi\.json/);
     assert.match(two.body.error, /nothing was written/);
 
-    const closed = await put("/api/v1/projects/REQ19-P", { status: "Closed" });
-    assert.equal(closed.status, 400, closed.text);
-    assert.match(closed.body.error, /does not accept "status"/);
-
     const cat = await put("/api/v1/raid/REQ19-R", {
-      project: "REQ19-P", type: "Risk", title: "model drift", category: "technical",
+      project: "REQ19-P", type: "Risk", title: "model drift", severity: "high",
     });
     assert.equal(cat.status, 400, cat.text);
-    assert.match(cat.body.error, /raid does not accept "category"/);
+    assert.match(cat.body.error, /raid does not accept "severity"/);
     /* Et la ligne n'existe pas : un refus à la création ne crée rien à
        moitié. */
     assert.equal(await one(`SELECT id FROM raid_item WHERE external_id = $1`, ["REQ19-R"]), null);
@@ -857,7 +860,7 @@ describe("REQ-19 · un corps que la collection ne comprend pas est refusé", () 
     const before = await many(
       `SELECT id FROM audit_event WHERE entity = 'project' AND entity_id = $1`, [row.id]);
 
-    for (const body of [{ sponsor: "Board" }, { status: "Closed" }, { health: "AMBER" }]) {
+    for (const body of [{ rag: "R" }, { closed: true }, { health: "AMBER" }]) {
       assert.equal((await put("/api/v1/projects/REQ19-P", body)).status, 400);
     }
 
@@ -935,7 +938,7 @@ describe("REQ-19 · un corps que la collection ne comprend pas est refusé", () 
 
   test("un corps refusé ne consomme pas la clé d'idempotence", async () => {
     const key = { "Idempotency-Key": "REQ19-K1" };
-    const refused = await put("/api/v1/projects/REQ19-K", { name: "x", sponsor: "Board" }, key);
+    const refused = await put("/api/v1/projects/REQ19-K", { name: "x", health: "AMBER" }, key);
     assert.equal(refused.status, 400, refused.text);
     /* Le refus est posé AVANT la réservation : la même clé, corrigée,
        reprend son travail au lieu de répondre 422 « clé déjà employée
@@ -945,5 +948,255 @@ describe("REQ-19 · un corps que la collection ne comprend pas est refusé", () 
       start: "2026-02-02", finish: "2026-11-30",
     }, key);
     assert.equal(fixed.status, 201, fixed.text);
+  });
+});
+
+/**
+ * ═══════════════════════════════════════════════════════════════════
+ * REQ-18 · REQ-19 · REQ-13 — retour de terrain RT365, troisième tour.
+ *
+ * L'intégrateur a RÉÉCRIT `meridian_sync.py` contre le contrat publié,
+ * puis a MESURÉ ce qu'il ne pouvait toujours pas faire. Trois pertes
+ * silencieuses, toutes du même genre : 200 sur un corps non écrit.
+ *
+ *   REQ-18  « status: Closed répond 200 et se relit close pendant que
+ *            closed_on reste null ».
+ *   REQ-19  « dateBasis sur un projet est accepté et abandonné » ; et
+ *            derrière : sponsor, acceptanceCriteria, status: Closed.
+ *   REQ-13  une catégorie libre sur une ligne de registre.
+ *
+ * Chacun se prouve de la même façon : on écrit par le contrat, ET ON
+ * RELIT. Un test qui ne relit pas aurait rendu vert exactement l'état
+ * que le terrain a mesuré.
+ * ═══════════════════════════════════════════════════════════════════
+ */
+describe("REQ-18 · une ligne de registre dit quand, et par qui, elle s'est close", () => {
+  test("clore par le contrat écrit la date et le nom — la perte mesurée", async () => {
+    const raised = await put("/api/v1/raid/REQ18-A", {
+      project: "REQ19-P", type: "Risk", title: "supplier lead time", p: 4, i: 4,
+    });
+    assert.equal(raised.status, 201, raised.text);
+
+    /* Le geste EXACT que le terrain a mesuré : `status: "Closed"`, seul. */
+    const closed = await put("/api/v1/raid/REQ18-A", { status: "Closed" });
+    assert.equal(closed.status, 200, closed.text);
+
+    const row = await one(
+      `SELECT status, closed_on, closed_by FROM raid_item WHERE external_id = $1`, ["REQ18-A"]);
+    assert.equal(row.status, "Closed");
+    assert.ok(row.closed_on, "REQ-18 : la date de clôture du grand livre n'est plus perdue");
+  });
+
+  test("le synchroniseur donne SA date et SON nom, et ils sont relus tels quels", async () => {
+    const r = await put("/api/v1/raid/REQ18-B", {
+      project: "REQ19-P", type: "Issue", title: "permit lapsed",
+      status: "Closed", closedOn: "2026-03-17", closedBy: PM,
+    });
+    assert.equal(r.status, 201, r.text);
+    const row = await one(
+      `SELECT status, closed_on, closed_by FROM raid_item WHERE external_id = $1`, ["REQ18-B"]);
+    assert.equal(String(row.closed_on).slice(0, 10), "2026-03-17");
+    assert.equal(row.closed_by, PM);
+
+    /* Et le portefeuille les rend : un champ écrit qui n'atteint aucun
+       lecteur est la même perte, déplacée d'un cran. */
+    const db = (await c.get("/api/v1/portfolio", { "X-API-Key": KEY })).body.portfolio;
+    const item = db.raid.find((x) => x.externalId === "REQ18-B");
+    assert.equal(String(item.closedOn).slice(0, 10), "2026-03-17");
+    assert.equal(item.closedBy, PM);
+  });
+
+  test("rouvrir efface la clôture — une ligne ouverte n'a pas de date de clôture", async () => {
+    const r = await put("/api/v1/raid/REQ18-B", { status: "Open" });
+    assert.equal(r.status, 200, r.text);
+    const row = await one(
+      `SELECT status, closed_on, closed_by FROM raid_item WHERE external_id = $1`, ["REQ18-B"]);
+    assert.equal(row.status, "Open");
+    assert.equal(row.closed_on, null);
+    assert.equal(row.closed_by, null);
+  });
+
+  test("une date de clôture sans clôture est refusée, et le refus dit le geste", async () => {
+    const r = await put("/api/v1/raid/REQ18-A2", {
+      project: "REQ19-P", type: "Risk", title: "no closure here", closedOn: "2026-03-17",
+    });
+    assert.equal(r.status, 400, r.text);
+    assert.match(r.body.error, /belong to a closure/);
+  });
+
+  test("l'écran clôt de la même façon : la date, et la personne derrière le compte", async () => {
+    const admin = await as("admin");
+    const db = (await admin.get("/api/bootstrap")).body.db;
+    const target = db.raid.find((x) => x.status === "Open" && x.project);
+    const before = await one(`SELECT closed_on FROM raid_item WHERE id = $1`, [target.id]);
+    assert.equal(before.closed_on, null);
+
+    const r = await admin.patch("/api/raid/" + target.id, { status: "Closed", version: target.version });
+    assert.equal(r.status, 200, r.text);
+    const row = await one(
+      `SELECT status, closed_on, closed_by FROM raid_item WHERE id = $1`, [target.id]);
+    assert.equal(row.status, "Closed");
+    assert.ok(row.closed_on, "le chemin de l'écran portait le MÊME trou, et ne le porte plus");
+
+    /* Et le geste est audité, comme toute mutation. */
+    const trail = await many(
+      `SELECT action FROM audit_event WHERE entity = 'raid_item' AND entity_id = $1 ORDER BY id DESC`,
+      [target.id]);
+    assert.equal(trail[0].action, "Item closed");
+  });
+});
+
+describe("REQ-13 · une catégorie libre sur une ligne de registre", () => {
+  test("la catégorie s'écrit par le contrat, se relit, et ne touche pas au genre RAID", async () => {
+    const r = await put("/api/v1/raid/REQ13-A", {
+      project: "REQ19-P", type: "Dependency", title: "MOC sign-off", category: "regulatory",
+    });
+    assert.equal(r.status, 201, r.text);
+    const row = await one(
+      `SELECT kind, category FROM raid_item WHERE external_id = $1`, ["REQ13-A"]);
+    assert.equal(row.category, "regulatory");
+    /* `kind` reste le contrat que le moteur lit : la catégorie s'ajoute
+       à côté, elle ne s'y substitue pas. */
+    assert.equal(row.kind, "Dependency");
+
+    const db = (await c.get("/api/v1/portfolio", { "X-API-Key": KEY })).body.portfolio;
+    assert.equal(db.raid.find((x) => x.externalId === "REQ13-A").category, "regulatory");
+  });
+
+  test("l'écran la saisit aussi, et la relit", async () => {
+    const admin = await as("admin");
+    const db = (await admin.get("/api/bootstrap")).body.db;
+    const p = db.projects[0];
+    const made = await admin.post("/api/raid", {
+      project: p.id, type: "Assumption", title: "REQ-13 on the screen", category: "supply",
+    });
+    assert.equal(made.status, 201, made.text);
+    const back = (await admin.get("/api/bootstrap")).body.db.raid.find((x) => x.id === made.body.id);
+    assert.equal(back.category, "supply");
+  });
+});
+
+describe("REQ-19 · une date de projet dit sur quoi elle repose", () => {
+  test("dateBasis et condition ne sont plus acceptés puis abandonnés", async () => {
+    const r = await put("/api/v1/projects/REQ19-P", {
+      dateBasis: "placeholder", condition: "after the capacity model at gate C",
+    });
+    assert.equal(r.status, 200, r.text);
+    const row = await one(
+      `SELECT date_basis, condition FROM project WHERE external_id = $1`, ["REQ19-P"]);
+    assert.equal(row.date_basis, "placeholder");
+    assert.equal(row.condition, "after the capacity model at gate C");
+
+    const db = (await c.get("/api/v1/portfolio", { "X-API-Key": KEY })).body.portfolio;
+    const p = db.projects.find((x) => x.externalId === "REQ19-P");
+    assert.equal(p.dateBasis, "placeholder");
+    assert.equal(p.condition, "after the capacity model at gate C");
+  });
+
+  test("une base inconnue est refusée, et le refus nomme les deux valeurs", async () => {
+    const r = await put("/api/v1/projects/REQ19-P", { dateBasis: "guess" });
+    assert.equal(r.status, 400, r.text);
+    assert.match(r.body.error, /committed or placeholder/);
+  });
+
+  test("sponsor et acceptanceCriteria s'écrivent, et le sponsor est une personne de l'annuaire", async () => {
+    const r = await put("/api/v1/projects/REQ19-P", {
+      sponsor: PM, acceptanceCriteria: "Both sites cut over and the ledger reconciles",
+    });
+    assert.equal(r.status, 200, r.text);
+    const row = await one(
+      `SELECT sponsor_id, acceptance_criteria FROM project WHERE external_id = $1`, ["REQ19-P"]);
+    assert.equal(row.sponsor_id, PM);
+    assert.match(row.acceptance_criteria, /reconciles/);
+
+    /* Un sponsor qui ne résout pas n'est pas une responsabilité. */
+    const nobody = await put("/api/v1/projects/REQ19-P", { sponsor: "The Board" });
+    assert.equal(nobody.status, 400, nobody.text);
+    assert.match(nobody.body.error, /sponsor: no active person/);
+  });
+
+  test("status: Closed clôt réellement — et sous les trois signatures de PM-08", async () => {
+    /* Sans les deux noms, le refus dit lesquels : c'est la règle de
+       l'écran, et une route d'intégration n'est pas une porte dérobée. */
+    const bare = await put("/api/v1/projects/REQ19-P", { status: "Closed" });
+    assert.equal(bare.status, 400, bare.text);
+    assert.match(bare.body.error, /opsAcceptedBy/);
+
+    const half = await put("/api/v1/projects/REQ19-P", { status: "Closed", opsAcceptedBy: PM });
+    assert.equal(half.status, 400, half.text);
+    assert.match(half.body.error, /benefitsTo/);
+
+    const ok = await put("/api/v1/projects/REQ19-P", {
+      status: "Closed", opsAcceptedBy: PM, benefitsTo: PM, closureNote: "handed to operations",
+    });
+    assert.equal(ok.status, 200, ok.text);
+    const row = await one(
+      `SELECT id, closed, phase, closed_on, ops_accepted_by, benefits_owner_id, closure_note
+         FROM project WHERE external_id = $1`, ["REQ19-P"]);
+    assert.equal(row.closed, true);
+    assert.equal(row.phase, "Closed");
+    assert.ok(row.closed_on, "REQ-19 : `project.closed_on` existait depuis la 032 et l'API ne l'écrivait jamais");
+    assert.equal(row.ops_accepted_by, PM);
+    assert.equal(row.benefits_owner_id, PM);
+    assert.match(row.closure_note, /handed to operations/);
+
+    /* Et la clôture porte son propre nom dans la piste. */
+    const trail = await many(
+      `SELECT action FROM audit_event WHERE entity = 'project' AND entity_id = $1 ORDER BY id DESC`,
+      [row.id]);
+    assert.equal(trail[0].action, "Project closed");
+  });
+
+  test("un projet clos ne se rouvre pas par cette route, et le refus dit quoi faire", async () => {
+    const r = await put("/api/v1/projects/REQ19-P", { status: "Open" });
+    assert.equal(r.status, 409, r.text);
+    assert.match(r.body.error, /closure is signed and dated/);
+  });
+
+  test("on ne naît pas clos : la clôture est un acte daté à elle seule", async () => {
+    const r = await put("/api/v1/projects/REQ19-NEW", {
+      name: "born closed", programme: PROG, site: SITE,
+      start: "2026-01-05", finish: "2026-06-30", status: "Closed",
+      opsAcceptedBy: PM, benefitsTo: PM,
+    });
+    assert.equal(r.status, 400, r.text);
+    assert.match(r.body.error, /not created closed/);
+    assert.equal(await one(`SELECT id FROM project WHERE external_id = $1`, ["REQ19-NEW"]), null);
+  });
+
+  test("une date qui n'est qu'une position ne fait pas avancer la phase toute seule", async () => {
+    /* `phaseFor` lit la fraction de fenêtre écoulée AUJOURD'HUI : sur une
+       date de remplissage placée dans le passé, elle glisserait le projet
+       en Closure sur une date que personne n'a promise. */
+    const r = await put("/api/v1/projects/REQ19-PH", {
+      name: "placeholder finish", programme: PROG, site: SITE, pm: PM,
+      start: "2026-01-05", finish: "2026-12-18", budget: 1,
+      dateBasis: "placeholder", condition: "after the D-057 measurement",
+    });
+    assert.equal(r.status, 201, r.text);
+    const before = await one(`SELECT id, phase FROM project WHERE external_id = $1`, ["REQ19-PH"]);
+
+    const moved = await put("/api/v1/projects/REQ19-PH", { start: "2024-01-05", finish: "2024-06-30" });
+    assert.equal(moved.status, 200, moved.text);
+    const after = await one(`SELECT phase FROM project WHERE id = $1`, [before.id]);
+    assert.equal(after.phase, before.phase,
+      "une position n'avance pas une phase — la porte le fait, la gouvernance le fait");
+  });
+
+  test("l'écran écrit les quatre champs, et les relit", async () => {
+    const admin = await as("admin");
+    const db = (await admin.get("/api/bootstrap")).body.db;
+    const p = db.projects.find((x) => !x.closed);
+    const r = await admin.patch("/api/projects/" + p.id, {
+      dateBasis: "placeholder", condition: "after the capacity model",
+      sponsor: PM, acceptanceCriteria: "cut over at both sites",
+      version: p.version,
+    });
+    assert.equal(r.status, 200, r.text);
+    const back = (await admin.get("/api/bootstrap")).body.db.projects.find((x) => x.id === p.id);
+    assert.equal(back.dateBasis, "placeholder");
+    assert.equal(back.condition, "after the capacity model");
+    assert.equal(back.sponsor, PM);
+    assert.equal(back.acceptanceCriteria, "cut over at both sites");
   });
 });

@@ -24,6 +24,11 @@
 import { ES, ES_PREFIX } from "./i18n-es.js";
 
 const FR = {
+  /* REQ-19 (045) — la base d'une date de projet, refusée à l'écran comme
+     à l'API : ce que la 040 a donné au jalon, la 045 le donne au projet. */
+  "dateBasis is committed or placeholder":
+    "dateBasis vaut committed (un engagement) ou placeholder (une position)",
+
   // authority
   "not authenticated — sign in again, your session may have ended":
     "non authentifié — reconnectez-vous, votre session a peut-être expiré",

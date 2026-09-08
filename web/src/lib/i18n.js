@@ -1845,6 +1845,35 @@ export const FR = {
     "après : ",
 
   "Unscheduled": "Sans date",
+
+  // ── REQ-13 / REQ-18 / REQ-19 (RT365, 3e tour) — ce sur quoi une ligne
+  //    repose, et quand elle s'est close.
+  "What has to happen, or be measured, before this date can be promised.":
+    "Ce qui doit arriver, ou être mesuré, avant que cette date puisse être promise.",
+  "No condition recorded":
+    "Aucune condition consignée",
+  "The finish date is a placeholder — not a commitment.":
+    "La date de fin est un remplissage — ce n'est pas un engagement.",
+  "Not named":
+    "Non nommé",
+  "The person who answers for the business case, not for the delivery.":
+    "La personne qui répond du cas d'affaire, pas de la livraison.",
+  "What has to be true for this project to be finished. Written before it is, or it is an opinion afterwards.":
+    "Ce qui doit être vrai pour que ce projet soit fini. Écrit avant qu'il le soit, sinon ce n'est qu'un avis après coup.",
+  "safety, supply, regulatory…":
+    "sécurité, approvisionnement, réglementaire…",
+  "Your own classification, kept beside the RAID type the engine reads.":
+    "Votre propre classement, gardé à côté du genre RAID que le moteur lit.",
+  "Closed on":
+    "Close le",
+  "The day this item actually closed — stamped when it was closed here, corrected when it was closed elsewhere.":
+    "Le jour où cette ligne s'est réellement close — apposé quand on la clôt ici, corrigé quand elle a été close ailleurs.",
+  "Closed by":
+    "Close par",
+  "The person on whose word it closed.":
+    "La personne sur la parole de qui elle s'est close.",
+  "Closed — the date was not recorded":
+    "Close — la date n'a pas été consignée",
 };
 
 /* ── enregistrement des dictionnaires ─────────────────────────────────

@@ -180,6 +180,13 @@ r.post("/projects", async (req, res, next) => {
 
     if (!b.start || !b.finish) bad("A project needs a start and a finish date");
     if (D(b.finish) < D(b.start)) bad("A project cannot finish before it starts");
+    /* REQ-19 (045) — la date de fin dit sur quoi elle repose, comme celle
+       d'un jalon depuis REQ-14. La même règle des deux côtés : ce que
+       l'API accepte, l'écran l'écrit, sinon l'un des deux chemins ment. */
+    if (b.dateBasis !== undefined && !["committed", "placeholder"].includes(b.dateBasis)) {
+      bad("dateBasis is committed or placeholder");
+    }
+    const basis = b.dateBasis === "placeholder" ? "placeholder" : "committed";
 
     let id = null;
     await audited(req.user,
@@ -195,11 +202,13 @@ r.post("/projects", async (req, res, next) => {
           `INSERT INTO project
              (id, name, programme_id, site_id, governance_level, pm_id, method,
               start_date, finish_date, baseline_finish, budget, contingency,
-              description, phase)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'Initiation')`,
+              description, phase, date_basis, condition, sponsor_id, acceptance_criteria)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'Initiation',$14,$15,$16,$17)`,
           [id, b.name, b.programme, b.site, level, b.pm ?? null, b.method ?? "Hybrid",
            b.start, b.finish, b.baselineFinish ?? b.finish,
-           fromM(num(b.budget)), fromM(num(b.contingency)), b.desc ?? ""]
+           fromM(num(b.budget)), fromM(num(b.contingency)), b.desc ?? "",
+           basis, String(b.condition ?? "").slice(0, 500),
+           b.sponsor || null, String(b.acceptanceCriteria ?? "").slice(0, 4000)]
         );
         /* The schedule, the four gates, their evidence and the project
            manager's own allocation come with the project. A bare project
@@ -251,6 +260,17 @@ r.patch("/projects/:id", async (req, res, next) => {
     if (b.governanceLevel !== undefined) patch.governance_level = b.governanceLevel;
     if (b.programme !== undefined) patch.programme_id = b.programme;
     if (b.site !== undefined) patch.site_id = b.site;
+    /* REQ-19 (045) — ce sur quoi la date repose, qui répond du cas
+       d'affaire, et ce que « fini » voudra dire. */
+    if (b.dateBasis !== undefined) {
+      if (!["committed", "placeholder"].includes(b.dateBasis)) bad("dateBasis is committed or placeholder");
+      patch.date_basis = b.dateBasis;
+    }
+    if (b.condition !== undefined) patch.condition = String(b.condition ?? "").slice(0, 500);
+    if (b.sponsor !== undefined) patch.sponsor_id = b.sponsor || null;
+    if (b.acceptanceCriteria !== undefined) {
+      patch.acceptance_criteria = String(b.acceptanceCriteria ?? "").slice(0, 4000);
+    }
 
     /* Moving the window re-stretches the activities but leaves the
        baseline alone: re-planning is not re-baselining, and merging the
@@ -303,7 +323,7 @@ r.patch("/projects/:id", async (req, res, next) => {
         const rv = conflict(await updateVersioned(t, "project", p.id, requiredVersion(b, "project"), patch));
         if (shifted) {
           const fresh = (await t.query(
-            `SELECT id, method, start_date, finish_date FROM project WHERE id = $1`, [p.id])).rows[0];
+            `SELECT id, method, start_date, finish_date, date_basis FROM project WHERE id = $1`, [p.id])).rows[0];
           const acts = (await t.query(
             `SELECT id, stage FROM activity WHERE project_id = $1`, [p.id])).rows;
           const restretched = reschedule({
@@ -315,10 +335,18 @@ r.patch("/projects/:id", async (req, res, next) => {
               `UPDATE activity SET start_date = $2, end_date = $3, row_version = row_version + 1
                 WHERE id = $1`, [m.id, m.start, m.end]);
           }
-          await t.query(`UPDATE project SET phase = $2 WHERE id = $1`, [
-            p.id,
-            phaseFor({ start: fresh.start_date, finish: fresh.finish_date }, statusToday),
-          ]);
+          /* REQ-19 — `phaseFor` lit la fraction de la fenêtre écoulée
+             AUJOURD'HUI : sur une date de fin qui n'est qu'une position,
+             elle ferait glisser le projet en Transition puis en Closure
+             toute seule, sur une date que personne n'a promise. Une
+             position n'avance pas une phase ; la phase reste où la
+             gouvernance l'a mise, et se lève à la porte. */
+          if (fresh.date_basis !== "placeholder") {
+            await t.query(`UPDATE project SET phase = $2 WHERE id = $1`, [
+              p.id,
+              phaseFor({ start: fresh.start_date, finish: fresh.finish_date }, statusToday),
+            ]);
+          }
         }
         return rv;
       });
@@ -862,8 +890,8 @@ r.post("/raid", async (req, res, next) => {
         return t.query(
           `INSERT INTO raid_item
              (id, project_id, kind, title, detail, probability, impact, status, response, owner_id, opened_on, review_on, origin_site,
-              target_probability, target_impact, gate, cr_id)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,'Open',$8,$9,CURRENT_DATE,$10,$11,$12,$13,$14,$15)`,
+              target_probability, target_impact, gate, cr_id, category)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,'Open',$8,$9,CURRENT_DATE,$10,$11,$12,$13,$14,$15,$16)`,
           [id, b.project || null, kind, b.title, b.detail ?? "",
            Math.max(1, Math.min(5, num(b.p, 3))), Math.max(1, Math.min(5, num(b.i, 3))),
            b.response ?? "Monitor", b.owner ?? null, b.review ?? null, originSite,
@@ -872,7 +900,10 @@ r.post("/raid", async (req, res, next) => {
            b.ti === undefined || b.ti === "" || b.ti === null ? null : Math.max(1, Math.min(5, num(b.ti))),
            /* I-8 — contre quoi ce risque se lève : le jalon de gouvernance
               qu'il menace, la modification qui le porte. */
-           gateN, crId]);
+           gateN, crId,
+           /* REQ-13 — le mot du registre qui tient cette ligne, à côté du
+              nôtre : `kind` reste le contrat que le moteur lit. */
+           String(b.category ?? "").slice(0, 120)]);
       });
     res.status(201).json({ id });
   } catch (e) { next(e); }
@@ -900,7 +931,34 @@ r.patch("/raid/:id", async (req, res, next) => {
       b.tp === "" || b.tp === null ? null : Math.max(1, Math.min(5, num(b.tp)));
     if (b.ti !== undefined) patch.target_impact =
       b.ti === "" || b.ti === null ? null : Math.max(1, Math.min(5, num(b.ti)));
-    if (b.status !== undefined) patch.status = b.status === "Closed" ? "Closed" : "Open";
+    if (b.category !== undefined) patch.category = String(b.category ?? "").slice(0, 120);
+    if (b.status !== undefined) {
+      patch.status = b.status === "Closed" ? "Closed" : "Open";
+      /* REQ-18 — mesuré par l'intégrateur sur le chemin de l'API, et le
+         même trou ici : l'écran fermait une ligne sans jamais dire QUAND
+         ni SUR LA PAROLE DE QUI. Une clôture sans date n'est pas une
+         clôture, c'est un état courant sans histoire. Le nom est celui de
+         la PERSONNE derrière le compte (`person_id`) — la piste d'audit
+         porte déjà le compte ; ce qui reste au registre est le nom. */
+      if (patch.status === "Closed" && item.status !== "Closed") {
+        patch.closed_on = b.closedOn || iso(new Date());
+        patch.closed_by = b.closedBy || req.user.personId || null;
+      }
+      /* Rouvrir efface les deux : une ligne ouverte n'a pas de clôture,
+         et garder la vieille date serait le mensonge symétrique. */
+      if (patch.status === "Open" && item.status === "Closed") {
+        patch.closed_on = null;
+        patch.closed_by = null;
+      }
+    }
+    /* Rectifier la clôture d'une ligne déjà close : ce sont des faits
+       consignés, pas des verrous. */
+    if (b.closedOn !== undefined && patch.closed_on === undefined) {
+      patch.closed_on = b.closedOn || null;
+    }
+    if (b.closedBy !== undefined && patch.closed_by === undefined) {
+      patch.closed_by = b.closedBy || null;
+    }
     if (b.response !== undefined) patch.response = b.response;
     if (b.owner !== undefined) patch.owner_id = b.owner || null;
     if (b.review !== undefined) patch.review_on = b.review || null;

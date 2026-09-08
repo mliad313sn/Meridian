@@ -29,6 +29,7 @@ import adminRoutes from "./routes/admin.js";
 import importRoutes from "./routes/importcsv.js";
 import federationRoutes from "./routes/federation.js";
 import v1Routes from "./routes/v1.js";
+import signalsRoutes from "./routes/signals.js";
 import federationServiceRoutes from "./routes/federationService.js";
 import { translate } from "./pgerror.js";
 import { say, localeOf } from "./i18n.js";
@@ -202,6 +203,12 @@ export function buildApp() {
      qui appelle est une machine, pas une personne. Chaque route porte sa
      propre portée ; une clé qui ne l'a pas est refusée là, pas ici. */
   app.use("/api/v1", v1Routes);
+
+  /* REQ-28 — les signaux de gouvernance servent DEUX portes (la session et
+     le contrat) depuis un seul calcul, et doivent donc être montés du même
+     côté du mur que /api/v1 ; la route de session repose le mur elle-même
+     (server/src/routes/signals.js). */
+  app.use("/api", signalsRoutes);
 
   // R1.1 — everything past this point needs a session.
   app.use("/api", requireUser());

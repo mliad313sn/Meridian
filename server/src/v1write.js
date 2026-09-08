@@ -259,8 +259,32 @@ export async function upsertProject(user, externalId, b) {
   const budget = money(b.budget, "budget");
   const contingency = money(b.contingency, "contingency");
   const desc = text(b.desc, 4000, "desc");
+  /* REQ-19 (045) — la même question qu'un jalon depuis REQ-14 : cette
+     date est-elle un engagement, ou une position qui attend la mesure
+     qui la produira ? RT365 : « nos dates de fin de projet sont des
+     remplissages pour la même raison que nos dates de porte ». */
+  let basis;
+  if (b.dateBasis !== undefined) {
+    if (!["committed", "placeholder"].includes(b.dateBasis)) bad("dateBasis is committed or placeholder");
+    basis = b.dateBasis;
+  }
+  const condition = text(b.condition, 500, "condition");
+  /* Le sponsor répond du CAS D'AFFAIRE ; le chef de projet répond de la
+     livraison. Une personne de l'annuaire, comme `pm` : un sponsor qui
+     ne résout pas est une chaîne, pas une responsabilité. */
+  const sponsor = b.sponsor !== undefined ? await resolvePerson(b.sponsor, "sponsor") : undefined;
+  const criteria = text(b.acceptanceCriteria, 4000, "acceptanceCriteria");
+  const status = b.status === undefined ? undefined
+    : ["Open", "Closed"].includes(b.status) ? b.status
+    : bad("status is Open or Closed");
 
   if (!existing) {
+    /* Clore est un ACTE SIGNÉ, daté, audité pour lui-même (PM-08) : on ne
+       naît pas clos. Le refus dit le geste à faire, il ne dit pas non. */
+    if (status === "Closed") {
+      bad("A project is not created closed — create it, then close it with status: \"Closed\", " +
+          "opsAcceptedBy and benefitsTo, so the closure is its own dated act");
+    }
     if (!b.programme || !b.site) bad("A project needs a programme and a site");
     const prog = await one(`SELECT id FROM programme WHERE id = $1 AND active`, [String(b.programme)]);
     if (!prog) bad(`No such programme: ${b.programme}`);
@@ -279,11 +303,13 @@ export async function upsertProject(user, externalId, b) {
           `INSERT INTO project
              (id, name, programme_id, site_id, governance_level, pm_id, method,
               start_date, finish_date, baseline_finish, budget, contingency,
-              description, phase, external_source, external_id)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'Initiation',$14,$15)`,
+              description, phase, external_source, external_id,
+              date_basis, condition, sponsor_id, acceptance_criteria)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'Initiation',$14,$15,$16,$17,$18,$19)`,
           [id, name, prog.id, site.id, level, pm ?? null, method ?? "Hybrid",
            start, finish, isoDate(b.baselineFinish, "baselineFinish") ?? finish,
-           budget ?? 0, contingency ?? 0, desc ?? "", source, externalId]);
+           budget ?? 0, contingency ?? 0, desc ?? "", source, externalId,
+           basis ?? "committed", condition ?? "", sponsor ?? null, criteria ?? ""]);
         await scaffoldProject(t, { id, name, programme: prog.id, site: site.id,
           pm: pm ?? null, method: method ?? "Hybrid", start, finish });
       });
@@ -300,6 +326,40 @@ export async function upsertProject(user, externalId, b) {
   if (desc !== undefined) patch.description = desc;
   if (budget !== undefined) patch.budget = budget;
   if (contingency !== undefined) patch.contingency = contingency;
+  if (basis !== undefined) patch.date_basis = basis;
+  if (condition !== undefined) patch.condition = condition;
+  if (sponsor !== undefined) patch.sponsor_id = sponsor;
+  if (criteria !== undefined) patch.acceptance_criteria = criteria;
+  /* PM-08 par l'API — les MÊMES trois signatures que l'écran. Une route
+     d'intégration n'est pas une porte dérobée vers moins de règles :
+     sans exploitant nommé, le jour où ça tombe en panne c'est l'équipe
+     dissoute qu'on appelle ; sans propriétaire de bénéfice, « les
+     bénéfices restent au projet » veut dire « à personne ». C'est ici
+     que `closed_on` — colonne de la 032 — cesse d'être perdue : le
+     chemin d'écriture ne connaissait tout simplement pas `status`, et
+     répondait 200 sans rien écrire (REQ-19, observation). */
+  const closing = status === "Closed" && !existing.closed;
+  if (closing) {
+    const ops = await resolvePerson(b.opsAcceptedBy, "opsAcceptedBy");
+    if (!ops) bad("Closing needs opsAcceptedBy — the named operations owner who takes this over");
+    const benefits = await resolvePerson(b.benefitsTo, "benefitsTo");
+    if (!benefits) bad("Closing needs benefitsTo — the named benefits owner; benefits realise AFTER closure");
+    patch.closed = true;
+    patch.phase = "Closed";
+    patch.closed_on = iso(new Date());
+    patch.ops_accepted_by = ops;
+    patch.benefits_owner_id = benefits;
+    patch.closure_note = text(b.closureNote, 2000, "closureNote") ?? "";
+  } else if (status === "Open" && existing.closed) {
+    /* Rouvrir effacerait la date et les deux noms qui ont signé. Le
+       registre garde ce qui a eu lieu ; ce qui reprend est un nouveau
+       travail, avec sa propre décision. */
+    throw new HttpError(409,
+      `Project ${existing.id} is closed, and a closure is signed and dated — ` +
+      "record a decision that reopens the work, or raise the follow-on project");
+  } else if (status !== undefined && b.closureNote !== undefined) {
+    patch.closure_note = text(b.closureNote, 2000, "closureNote") ?? "";
+  }
   const s0 = patch.start_date ?? existing.start_date, f0 = patch.finish_date ?? existing.finish_date;
   if (D(f0) < D(s0)) bad("A project cannot finish before it starts");
   const shifted = (patch.start_date && patch.start_date !== existing.start_date) ||
@@ -311,21 +371,27 @@ export async function upsertProject(user, externalId, b) {
   if (!Object.keys(patch).length) return stamp(false, existing.id, externalId, existing.row_version);
 
   const out = await audited(user,
-    { action: "Project updated", entity: "project", entityId: existing.id,
+    { action: closing ? "Project closed" : "Project updated", entity: "project", entityId: existing.id,
       detail: `${patch.name ?? existing.name} — from ${user.displayName} (${externalId})` },
     async (t) => {
       const rv = await writeRow(t, "project", existing.id, version, patch, "project");
       if (shifted) {
         /* Même geste que PATCH /projects/:id : déplacer la fenêtre
            ré-étire le plan, jamais la référence (A1). */
-        const fresh = (await t.query(`SELECT id, method, start_date, finish_date FROM project WHERE id = $1`, [existing.id])).rows[0];
+        const fresh = (await t.query(`SELECT id, method, start_date, finish_date, date_basis FROM project WHERE id = $1`, [existing.id])).rows[0];
         const acts = (await t.query(`SELECT id, stage FROM activity WHERE project_id = $1`, [existing.id])).rows;
         for (const m of reschedule({ id: fresh.id, method: fresh.method, start: fresh.start_date, finish: fresh.finish_date }, acts)) {
           await t.query(`UPDATE activity SET start_date = $2, end_date = $3, row_version = row_version + 1 WHERE id = $1`,
             [m.id, m.start, m.end]);
         }
-        await t.query(`UPDATE project SET phase = $2 WHERE id = $1`,
-          [existing.id, phaseFor({ start: fresh.start_date, finish: fresh.finish_date }, statusToday)]);
+        /* REQ-19 — une date de fin qui n'est qu'une position ne fait pas
+           avancer la phase : `phaseFor` mesure la fraction écoulée
+           aujourd'hui, et la ferait glisser toute seule vers Closure sur
+           une date que personne n'a promise (même règle qu'à l'écran). */
+        if (fresh.date_basis !== "placeholder") {
+          await t.query(`UPDATE project SET phase = $2 WHERE id = $1`,
+            [existing.id, phaseFor({ start: fresh.start_date, finish: fresh.finish_date }, statusToday)]);
+        }
       }
       return rv;
     });
@@ -483,6 +549,18 @@ export async function upsertRaid(user, externalId, b) {
   }
   const cr = b.cr === undefined ? undefined : await resolveRef("change_request", source, b.cr, p?.id ?? null, "cr");
   const status = b.status === undefined ? undefined : b.status === "Closed" ? "Closed" : "Open";
+  /* REQ-13 — le mot du système qui tient CE registre, à côté du nôtre.
+     `type` reste Risk/Issue/Assumption/Dependency : c'est le contrat que
+     le moteur lit (exposition, escalade), et il ne s'ouvre pas. */
+  const category = text(b.category, 120, "category");
+  /* REQ-18 — quand, et sur la parole de qui. Mesuré : « status: Closed
+     répond 200 et se relit close pendant que closed_on reste null ». */
+  const closedOn = b.closedOn === undefined ? undefined : isoDate(b.closedOn, "closedOn");
+  const closedBy = b.closedBy !== undefined ? await resolvePerson(b.closedBy, "closedBy") : undefined;
+  if ((closedOn || closedBy) && status !== "Closed" && !(existing && existing.status === "Closed" && status === undefined)) {
+    bad("closedOn and closedBy belong to a closure — send status: \"Closed\" with them, " +
+        "or correct them on an item that is already closed");
+  }
 
   if (!existing) {
     const k = kind ?? "Risk";
@@ -496,11 +574,18 @@ export async function upsertRaid(user, externalId, b) {
         await t.query(
           `INSERT INTO raid_item
              (id, project_id, kind, title, detail, probability, impact, status, response, owner_id,
-              opened_on, review_on, target_probability, target_impact, gate, cr_id, external_source, external_id)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,CURRENT_DATE,$11,$12,$13,$14,$15,$16,$17)`,
+              opened_on, review_on, target_probability, target_impact, gate, cr_id, external_source, external_id,
+              category, closed_on, closed_by)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,CURRENT_DATE,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
           [id, p?.id ?? null, k, title, detail ?? "", clampScale(b.p, 3), clampScale(b.i, 3),
            status ?? "Open", response ?? "Monitor", owner ?? null, review ?? null,
-           clampScale(b.tp), clampScale(b.ti), gateN ?? null, cr ?? null, source, externalId]);
+           clampScale(b.tp), clampScale(b.ti), gateN ?? null, cr ?? null, source, externalId,
+           category ?? "",
+           /* Une ligne chargée DÉJÀ close porte sa date de clôture : sans
+              elle, un registre repris arriverait clos sans histoire — la
+              perte que REQ-18 a mesurée, au chargement initial. */
+           status === "Closed" ? (closedOn ?? iso(new Date())) : null,
+           status === "Closed" ? (closedBy ?? null) : null]);
       });
     return stamp(true, id, externalId, 1);
   }
@@ -518,7 +603,24 @@ export async function upsertRaid(user, externalId, b) {
   if (review !== undefined) patch.review_on = review;
   if (gateN !== undefined) patch.gate = gateN;
   if (cr !== undefined) patch.cr_id = cr;
+  if (category !== undefined) patch.category = category;
   if (status !== undefined) patch.status = status;
+  /* REQ-18 — la clôture porte sa date. `closedOn` envoyé fait foi (un
+     synchroniseur connaît la date de SON registre) ; sinon aujourd'hui.
+     Rouvrir efface les deux : une ligne ouverte n'a pas de clôture, et
+     laisser la vieille date derrière serait le mensonge symétrique. */
+  if (status === "Closed" && existing.status !== "Closed") {
+    patch.closed_on = closedOn ?? iso(new Date());
+    patch.closed_by = closedBy ?? null;
+  } else if (status === "Open" && existing.status === "Closed") {
+    patch.closed_on = null;
+    patch.closed_by = null;
+  } else {
+    /* Corriger la clôture d'une ligne déjà close : la date se rectifie,
+       le nom aussi — ce sont des faits consignés, pas des verrous. */
+    if (closedOn !== undefined) patch.closed_on = closedOn;
+    if (closedBy !== undefined) patch.closed_by = closedBy;
+  }
   patch = changedOnly(patch, existing);            // ne réécrire que ce qui bouge
   Object.assign(patch, binding);   // H-2 — la liaison valide avec l'écriture
   if (!Object.keys(patch).length) return stamp(false, existing.id, externalId, existing.row_version);
@@ -1164,14 +1266,23 @@ export async function purgeIdempotencyKeys(days = IDEMPOTENCY_DAYS) {
 
 /** Pour le contrat OpenAPI : ce que chaque collection accepte. */
 export const WRITE_BODIES = {
+  /* REQ-19 — `dateBasis`/`condition` (ce sur quoi la date de fin repose,
+     comme un jalon depuis REQ-14), `sponsor` et `acceptanceCriteria`
+     (mesurés « acceptés et perdus »), et `status` avec les trois
+     signatures de PM-08 : c'est par là que `project.closed_on`, colonne
+     de la 032, cessait d'exister pour l'API. */
   projects: { adopt: "string", name: "string", programme: "string", site: "string", governanceLevel: "string", pm: "string",
     method: "string", start: "date", finish: "date", baselineFinish: "date", budget: "number",
-    contingency: "number", desc: "string", version: "integer" },
+    contingency: "number", desc: "string", dateBasis: "string", condition: "string",
+    sponsor: "string", acceptanceCriteria: "string", status: "string",
+    opsAcceptedBy: "string", benefitsTo: "string", closureNote: "string", version: "integer" },
   milestones: { adopt: "string", project: "string", name: "string", date: "date", dateBasis: "string", condition: "string",
     owner: "string", acceptanceCriteria: "string", done: "boolean", acceptedBy: "string", intrusive: "boolean", version: "integer" },
+  /* REQ-13 `category` (leur mot à côté du nôtre) et REQ-18
+     `closedOn`/`closedBy` (une clôture a une date et un nom). */
   raid: { adopt: "string", project: "string", type: "string", title: "string", detail: "string", p: "integer", i: "integer",
     tp: "integer", ti: "integer", response: "string", owner: "string", review: "date", status: "string",
-    gate: "integer", cr: "string", version: "integer" },
+    gate: "integer", cr: "string", category: "string", closedOn: "date", closedBy: "string", version: "integer" },
   criteria: { adopt: "string", project: "string", gate: "integer", text: "string", document: "string", note: "string",
     met: "boolean", reviewedBy: "string", version: "integer" },
   decisions: { adopt: "string", headline: "string", rationale: "string", alternatives: "string", dissent: "string",

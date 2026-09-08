@@ -1715,6 +1715,34 @@ export const ES = {
     "tras: ",
 
   "Unscheduled": "Sin fecha",
+
+  // ── REQ-13 / REQ-18 / REQ-19 (RT365, tercera ronda)
+  "What has to happen, or be measured, before this date can be promised.":
+    "Lo que debe ocurrir, o medirse, antes de que esta fecha pueda prometerse.",
+  "No condition recorded":
+    "Ninguna condición registrada",
+  "The finish date is a placeholder — not a commitment.":
+    "La fecha de fin es un marcador de posición — no es un compromiso.",
+  "Not named":
+    "Sin nombrar",
+  "The person who answers for the business case, not for the delivery.":
+    "La persona que responde por el caso de negocio, no por la entrega.",
+  "What has to be true for this project to be finished. Written before it is, or it is an opinion afterwards.":
+    "Lo que debe ser cierto para que este proyecto esté terminado. Escrito antes de estarlo, o después solo es una opinión.",
+  "safety, supply, regulatory…":
+    "seguridad, suministro, regulatorio…",
+  "Your own classification, kept beside the RAID type the engine reads.":
+    "Su propia clasificación, guardada junto al tipo RAID que lee el motor.",
+  "Closed on":
+    "Cerrada el",
+  "The day this item actually closed — stamped when it was closed here, corrected when it was closed elsewhere.":
+    "El día en que esta línea se cerró realmente — sellado al cerrarla aquí, corregido cuando se cerró en otro sitio.",
+  "Closed by":
+    "Cerrada por",
+  "The person on whose word it closed.":
+    "La persona por cuya palabra se cerró.",
+  "Closed — the date was not recorded":
+    "Cerrada — la fecha no se registró",
 };
 
 /* ── fragments composés autour de nombres vivants (R-15) ────────────── */

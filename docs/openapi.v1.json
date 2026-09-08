@@ -1392,7 +1392,7 @@
     "/api/v1/projects/{externalId}": {
       "put": {
         "summary": "Create or update a project, keyed by your own identifier",
-        "description": "Creates the a project when nothing carries this externalId for your integration, updates it otherwise. The identity is (integration, externalId): two connected systems may both say \"E01\" without colliding. `version` is optional — when sent it is asserted (409 if stale); when omitted your system is the master of this row and the last write wins. Optional `Idempotency-Key` header: the same key with the same body replays the recorded answer (Idempotent-Replayed: true); the same key with another body is refused (422) — one key names ONE request, not a run. `adopt: \"<Meridian id>\"` binds your externalId to a row that already exists (created on a screen, or scaffolded) instead of creating another. A field this collection does not declare is REFUSED (400) and nothing is written or audited: the properties below are the whole of what a body may carry (REQ-19). The same business rules as the screens apply. Creation needs programme, site, start and finish; the schedule, the gate milestones and the evidence documents are scaffolded as when a person creates one. Money is in millions.",
+        "description": "Creates the a project when nothing carries this externalId for your integration, updates it otherwise. The identity is (integration, externalId): two connected systems may both say \"E01\" without colliding. `version` is optional — when sent it is asserted (409 if stale); when omitted your system is the master of this row and the last write wins. Optional `Idempotency-Key` header: the same key with the same body replays the recorded answer (Idempotent-Replayed: true); the same key with another body is refused (422) — one key names ONE request, not a run. `adopt: \"<Meridian id>\"` binds your externalId to a row that already exists (created on a screen, or scaffolded) instead of creating another. A field this collection does not declare is REFUSED (400) and nothing is written or audited: the properties below are the whole of what a body may carry (REQ-19). The same business rules as the screens apply. Creation needs programme, site, start and finish; the schedule, the gate milestones and the evidence documents are scaffolded as when a person creates one. Money is in millions. `dateBasis: \"placeholder\"` with a `condition` says the finish date is a position on the timeline and not a commitment: it is never drawn or reported as late until you make it `committed` (REQ-19, the same rule milestones carry since REQ-14). `sponsor` is the person who answers for the business case, `acceptanceCriteria` what \"finished\" will mean. `status: \"Closed\"` closes it under the same three signatures the screen asks for (PM-08): `opsAcceptedBy`, `benefitsTo` and an optional `closureNote`; the closure date is stamped and read back as `closedOn`. A closed project is not reopened by this route (409).",
         "security": [
           {
             "apiKey": []
@@ -1468,6 +1468,30 @@
                     "type": "number"
                   },
                   "desc": {
+                    "type": "string"
+                  },
+                  "dateBasis": {
+                    "type": "string"
+                  },
+                  "condition": {
+                    "type": "string"
+                  },
+                  "sponsor": {
+                    "type": "string"
+                  },
+                  "acceptanceCriteria": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string"
+                  },
+                  "opsAcceptedBy": {
+                    "type": "string"
+                  },
+                  "benefitsTo": {
+                    "type": "string"
+                  },
+                  "closureNote": {
                     "type": "string"
                   },
                   "version": {
@@ -1563,7 +1587,7 @@
     "/api/v1/raid/{externalId}": {
       "put": {
         "summary": "Create or update a register item (risk, issue, assumption, dependency), keyed by your own identifier",
-        "description": "Creates the a register item (risk, issue, assumption, dependency) when nothing carries this externalId for your integration, updates it otherwise. The identity is (integration, externalId): two connected systems may both say \"E01\" without colliding. `version` is optional — when sent it is asserted (409 if stale); when omitted your system is the master of this row and the last write wins. Optional `Idempotency-Key` header: the same key with the same body replays the recorded answer (Idempotent-Replayed: true); the same key with another body is refused (422) — one key names ONE request, not a run. `adopt: \"<Meridian id>\"` binds your externalId to a row that already exists (created on a screen, or scaffolded) instead of creating another. A field this collection does not declare is REFUSED (400) and nothing is written or audited: the properties below are the whole of what a body may carry (REQ-19). The same business rules as the screens apply. `gate` links it to a governance gate of the project, `cr` to a change request of the same project (I-8). Omit `project` for a portfolio-wide item.",
+        "description": "Creates the a register item (risk, issue, assumption, dependency) when nothing carries this externalId for your integration, updates it otherwise. The identity is (integration, externalId): two connected systems may both say \"E01\" without colliding. `version` is optional — when sent it is asserted (409 if stale); when omitted your system is the master of this row and the last write wins. Optional `Idempotency-Key` header: the same key with the same body replays the recorded answer (Idempotent-Replayed: true); the same key with another body is refused (422) — one key names ONE request, not a run. `adopt: \"<Meridian id>\"` binds your externalId to a row that already exists (created on a screen, or scaffolded) instead of creating another. A field this collection does not declare is REFUSED (400) and nothing is written or audited: the properties below are the whole of what a body may carry (REQ-19). The same business rules as the screens apply. `gate` links it to a governance gate of the project, `cr` to a change request of the same project (I-8). Omit `project` for a portfolio-wide item. `category` is your own free classification label, kept beside `type` — which stays the RAID contract the engine reads (REQ-13). `status: \"Closed\"` records the closure with its date: send `closedOn` when your register knows it, otherwise today is stamped, and `closedBy` names the person on whose word it closed. Reopening clears both, because an open item has no closure (REQ-18).",
         "security": [
           {
             "apiKey": []
@@ -1643,6 +1667,16 @@
                     "type": "integer"
                   },
                   "cr": {
+                    "type": "string"
+                  },
+                  "category": {
+                    "type": "string"
+                  },
+                  "closedOn": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "closedBy": {
                     "type": "string"
                   },
                   "version": {

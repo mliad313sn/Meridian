@@ -289,6 +289,11 @@ export async function loadPortfolio(user) {
       /* PM-08 — les trois signatures de la clôture. */
       opsAcceptedBy: p.ops_accepted_by ?? null, benefitsTo: p.benefits_owner_id ?? null,
       closureNote: p.closure_note ?? "", closedOn: p.closed_on ?? null,
+      /* REQ-19 (045) — ce sur quoi la date de fin repose, et ce qui
+         produira la vraie ; puis qui répond du cas d'affaire et ce que
+         « fini » voudra dire. Même forme que le jalon depuis la 040. */
+      dateBasis: p.date_basis ?? "committed", condition: p.condition ?? "",
+      sponsor: p.sponsor_id ?? null, acceptanceCriteria: p.acceptance_criteria ?? "",
       // what this reaches into, and whether it has been released (V-03)
       plantImpact: p.plant_impact ?? "none", mocRef: p.moc_ref ?? "",
       mocApprovedOn: p.moc_approved_on ?? null, mocApprovedBy: p.moc_approved_label ?? "",
@@ -455,6 +460,13 @@ export async function loadPortfolio(user) {
         /* I-8 — contre quoi il se lève : le jalon de gouvernance menacé,
            la modification qui le porte. */
         gate: r.gate ?? null, cr: r.cr_id ?? null,
+        /* REQ-13 (045) — le mot du système qui tient ce registre, à côté
+           du nôtre : `type` reste le contrat du moteur. */
+        category: r.category ?? "",
+        /* REQ-18 (045) — quand, et sur la parole de qui, elle s'est
+           close. Nul sur une ligne close avant que nous sachions le
+           noter : on ne rétro-date pas. */
+        closedOn: r.closed_on ?? null, closedBy: r.closed_by ?? null,
         externalSource: r.external_source ?? null, externalId: r.external_id ?? null,
         originSite: r.origin_site ?? null,   // a site concern names its raising site
         version: r.row_version,

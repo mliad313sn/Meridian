@@ -110,6 +110,10 @@ const ES_NOTIFY = {
   " cannot pass its next gate while ": " no puede pasar su próxima puerta mientras ",
   " evidence document(s) remain unapproved.": " documento(s) de evidencia siguen sin aprobar.",
   "Open the project's document list in Meridian.": "Abra la lista de documentos del proyecto en Meridian.",
+  // REQ-19 (045) — la base de una fecha de proyecto.
+  "dateBasis is committed or placeholder":
+    "dateBasis es committed (un compromiso) o placeholder (una posición)",
+
 };
 Object.assign(ES, ES_NOTIFY);
 
