@@ -3377,7 +3377,13 @@ function raiseDemand(db) {
         title: v.title, sponsor: v.sponsor, estCost: v.estCost, programme: v.programme,
         site: v.site, benefitNote: v.benefitNote, detail: v.detail,
       }), { detail: v.title, refresh: false });
-      if (ok !== false) { delete live.data.demand; App.emit(); }
+      /* REQ-24 — a new request is a new candidate for the group's people,
+         so the ranking on this same screen is stale the moment it exists.
+         Found in the browser: the request appeared in the funnel above and
+         NOT in the ranking below, and nothing failed. These two writes are
+         the pair that does not refresh the book (`refresh: false`), so the
+         cache they leave behind has to be dropped by hand. */
+      if (ok !== false) { delete live.data.demand; delete live.data.prioritisation; App.emit(); }
       return ok;
     },
   });
@@ -3392,7 +3398,9 @@ function decideDemand(db, d) {
         status: v.status, decisionNote: v.decisionNote,
         fit: v.fit, value: v.value, risk: v.risk, effort: v.effort, version: d.version,
       }), { detail: v.status, refresh: false });
-      if (ok !== false) { delete live.data.demand; App.emit(); }
+      /* Declining a request takes it OUT of the ranking; approving keeps it
+         in. Either way the list below is wrong until it is re-read. */
+      if (ok !== false) { delete live.data.demand; delete live.data.prioritisation; App.emit(); }
       return ok;
     },
   });
