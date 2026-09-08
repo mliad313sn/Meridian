@@ -442,12 +442,18 @@
         "scripts/meridian_sync.py#RAID_KIND"
       ],
       "title": "Implied by the sync: a free category label on register items; standing human acts (H-nn) modelled as RAID dependencies with a review date (D-33.14)",
-      "status": "open",
-      "version": null,
+      "status": "partial",
+      "version": "5.14.0",
       "decidedOn": "2026-09-08",
-      "delivered": [],
-      "measure": null,
-      "remaining": "accepted for the next round (D-33.7)",
+      "delivered": [
+        "server/migrations/045_what_a_row_rests_on.sql (raid_item.category)",
+        "server/src/v1write.js#upsertRaid",
+        "web/src/views/index.js#raidFields"
+      ],
+      "measure": "server/test/writeapi.test.js (REQ-13, two tests)",
+      "remaining": [
+        "H-nn standing human acts modelled as RAID dependencies with a review date (D-33.14)"
+      ],
       "issue": null,
       "accepted": null,
       "released": false,
@@ -456,8 +462,15 @@
           "at": "2026-09-08",
           "registerVersion": 1,
           "status": "open"
+        },
+        {
+          "at": "2026-09-08",
+          "registerVersion": 11,
+          "status": "partial",
+          "note": "Delivered in 5.14.0; proven by test and walked in a real browser as four roles."
         }
-      ]
+      ],
+      "answerToSource": "Half closed, and the half you can use now. `category` is your word, free, beside ours: it writes through the contract, reads back, reaches the screen in all three languages, and no arithmetic reads it. `kind` stays Risk/Issue/Assumption/Dependency because it is the contract the engine reads and it does not open. The other half — standing human acts H-nn modelled as dependencies carrying a review date — stays open deliberately: it is a modelling decision about what a register item IS, not a field, and it deserves its own round rather than being smuggled in beside a label."
     },
     {
       "id": "REQ-14",
@@ -592,17 +605,21 @@
       ],
       "issue": null,
       "title": "A register item records when, and by whom, it closed",
-      "status": "open",
-      "version": null,
+      "status": "done",
+      "version": "5.14.0",
       "decidedOn": "2026-09-08",
-      "delivered": [],
-      "measure": null,
-      "remaining": [
-        "closedOn / closedBy on the RAID write body"
+      "delivered": [
+        "server/migrations/045_what_a_row_rests_on.sql",
+        "server/src/v1write.js#upsertRaid",
+        "server/src/routes/portfolio.js",
+        "server/src/portfolio.js",
+        "web/src/views/index.js#raidFields"
       ],
+      "measure": "server/test/writeapi.test.js (REQ-18, five tests)",
+      "remaining": null,
       "accepted": null,
       "released": false,
-      "answerToSource": null,
+      "answerToSource": "Closed, and it was worse than you filed it. You reported an API defect; the SCREEN had the same hole — every closure made through the interface also lost its date and its closer. `raid_item` now carries `closed_on` and `closed_by`. Nothing is back-dated: a row closed before this migration is closed on a day nobody recorded, and null says exactly that rather than inventing `opened_on` or the migration's own date. `closed_by` names a person from the directory, not the account that pushed the button — the audit trail already carries the second, and what an auditor asks a year later is on whose word the risk was lifted. Your sync may send its own date and name and they are read back unchanged; send none and closing stamps today and the person behind the account. Reopening clears both, and a closure date with no closure is refused naming the gesture.",
       "observed": "status: Closed answers 200 and reads back closed while closed_on stays null: the ledger's closure date is lost on every row a sync closes.",
       "history": [
         {
@@ -610,6 +627,12 @@
           "registerVersion": 5,
           "status": "open",
           "note": "Opened by the third-round committee: the integrator rewrote meridian_sync.py against the published contract and measured what it still could not do."
+        },
+        {
+          "at": "2026-09-08",
+          "registerVersion": 11,
+          "status": "done",
+          "note": "Delivered in 5.14.0; proven by test and walked in a real browser as four roles."
         }
       ]
     },
@@ -620,18 +643,21 @@
       ],
       "issue": null,
       "title": "A project date says what it rests on, as a milestone's does",
-      "status": "open",
-      "version": null,
+      "status": "done",
+      "version": "5.14.0",
       "decidedOn": "2026-09-08",
-      "delivered": [],
-      "measure": null,
-      "remaining": [
-        "project.date_basis / condition",
-        "the write API refuses unknown fields instead of accepting them silently"
+      "delivered": [
+        "server/migrations/045_what_a_row_rests_on.sql",
+        "project.date_basis / condition / sponsor_id / acceptance_criteria",
+        "server/src/v1write.js (strict bodies on every mounted PUT)",
+        "shared/meetings.js (a placeholder finish is never reported late)",
+        "web/src/views/index.js"
       ],
+      "measure": "server/test/writeapi.test.js (REQ-19, eight tests) + server/test/meetings.test.js (placeholder never late)",
+      "remaining": null,
       "accepted": null,
       "released": false,
-      "answerToSource": null,
+      "answerToSource": "Closed, and one line of it understated the defect: `sponsor` was not accepted and dropped, it never existed — no column, no serialiser field, no form field, on any path. Same for a project's acceptance criteria; milestones have had theirs since 032, while a project was closed on three signatures with no sentence saying what they attested. A project date now says what it rests on exactly as 040 did for a milestone (your D-057): committed, or a placeholder that is never reported late until the condition producing the real date is measured. The date stays mandatory — the engine draws, sorts and compares with it — what is added is what it is worth. The sponsor resolves in the directory rather than being free text, because on a project the sponsor is somebody you telephone and a name that does not resolve is a string, not a responsibility. And the write API now refuses a body it does not understand, naming the key, listing what is accepted, pointing at the contract and saying nothing was written — your own D-10 is the argument. That strictness is only safe because the four fields you measured were made real in the same migration. One thing we found while closing it: the AGENDA was calling a placeholder finish '42d late', which sends a steering meeting after a slip nobody promised not to have. Fixed, with a test that a committed date missed is still reported late.",
       "observed": "dateBasis on a project is accepted and dropped; RT365's project finish dates are placeholders for the same reason its gate dates are (D-057). Behind it: category on a register item, sponsor and acceptanceCriteria on a project, and status: Closed on a project all answer 200 having done nothing.",
       "history": [
         {
@@ -639,6 +665,12 @@
           "registerVersion": 5,
           "status": "open",
           "note": "Opened by the third-round committee: the integrator rewrote meridian_sync.py against the published contract and measured what it still could not do."
+        },
+        {
+          "at": "2026-09-08",
+          "registerVersion": 11,
+          "status": "done",
+          "note": "Delivered in 5.14.0; proven by test and walked in a real browser as four roles."
         }
       ]
     },
@@ -919,19 +951,23 @@
       ],
       "issue": null,
       "title": "Governance quality signals on the portfolio page: decision latency, action ageing, gate cycle time, RAID review compliance, exception age",
-      "status": "open",
+      "status": "done",
       "priority": "medium",
-      "version": null,
+      "version": "5.14.0",
       "decidedOn": "2026-09-08",
-      "delivered": [],
-      "measure": null,
-      "remaining": [
-        "Each metric computed from existing timestamps, shown per programme with its trend and available on /api/v1; no new data entry required."
+      "delivered": [
+        "shared/govsignals.js",
+        "server/src/routes/signals.js",
+        "web/src/views/index.js#governanceSignalsBlock",
+        "GET /api/signals",
+        "GET /api/v1/signals"
       ],
+      "measure": "server/test/signals.test.js (38 tests)",
+      "remaining": null,
       "accepted": null,
       "released": false,
       "observed": "A PMO that cannot see its own throughput cannot improve it, and these five are the leading indicators of a programme quietly stalling.",
-      "answerToSource": "Not taken this round, and deliberately: your own concern 6 says a list of fifteen is a way to lose our roadmap, and this round already carried four of your highest plus three measured defects. It stays open at your priority (medium) and is the cheapest thing left on the list — five metrics from timestamps that already exist, no new data entry.",
+      "answerToSource": "Closed, at your priority and with your constraint honoured: no new data entry, no migration, five clocks read from timestamps the book already keeps. Every one of them can say 'not measured' with a reason, because five new metrics are five new places to make the REQ-33 mistake — a programme that has closed no gates does not have a cycle time of zero and is not doing well. The median leads and the tail travels with it, your own sentence about a healthy mean and a two-year tail. Gate cycle time refuses to average a four-gate and a six-gate ladder and keeps each rung's own figure instead. None of the five carries a colour: nobody has agreed what 'too slow' means for your group, and a threshold chosen in our file would be exactly the fabrication you caught us at. Three things we found while building it are filed as REQ-45, REQ-46 and REQ-47 — read those before you read the metrics, because two of the five are unmeasurable on a real book today for reasons that are governance holes, not measurement bugs.",
       "history": [
         {
           "at": "2026-09-08",
@@ -950,6 +986,12 @@
           "registerVersion": 9,
           "status": "open",
           "note": "Reviewed and kept open with a reason rather than carried silently."
+        },
+        {
+          "at": "2026-09-08",
+          "registerVersion": 11,
+          "status": "done",
+          "note": "Delivered in 5.14.0; proven by test and walked in a real browser as four roles."
         }
       ]
     },
@@ -1018,25 +1060,36 @@
       ],
       "issue": null,
       "title": "A public reference implementation of the loop: package scripts/rt365-review.mjs and the request register as a documented pattern any field repository can adopt",
-      "status": "open",
+      "status": "done",
       "priority": "high",
-      "version": null,
+      "version": "5.14.0",
       "decidedOn": "2026-09-08",
-      "delivered": [],
-      "measure": null,
-      "remaining": [
-        "A documented schema and command let a second repository file its register and see its requests tracked, without Meridian-specific code in that repository."
+      "delivered": [
+        "scripts/field-init.mjs",
+        "npm run field:init",
+        "docs/35-field-return-loop.md §6",
+        "docs/requests/register.schema.json",
+        "scripts/audit/register-schema.mjs (F11)",
+        "scripts/audit/register-reachable.mjs (F12)"
       ],
+      "measure": "server/test/fieldreturn.test.js (REQ-31, six tests; the last runs command → register → review end to end)",
+      "remaining": null,
       "accepted": null,
       "released": false,
       "observed": "The strongest thing this product now has is evidence that a real programme's findings reached a release in a day. That is a capability, not an anecdote.",
-      "answerToSource": null,
+      "answerToSource": "Closed. Three of the four parts were already true and measured — the schema is published, `npm run review:field` never knew your name, and both gates hold EVERY register in docs/requests/ rather than the one we happen to have. The gap was step 1 of the pattern, which read 'copy an existing register': copying yours means inheriting forty-four requests belonging to another programme and deleting them by hand, which is how a second adopter's register ends up carrying the first adopter's leftovers. `npm run field:init` writes one that passes both gates the moment it lands, and refuses everything it cannot know rather than guessing — including a register with no requests in it, because that is a placeholder that makes the loop look adopted.",
       "history": [
         {
           "at": "2026-09-08",
           "registerVersion": 6,
           "status": "open",
           "note": "Filed by RT365 in docs/PMO_MERIDIAN_ASSESSMENT.md §8 after re-testing 5.10.0, and read into this register by the standing review duty."
+        },
+        {
+          "at": "2026-09-08",
+          "registerVersion": 11,
+          "status": "done",
+          "note": "Delivered in 5.14.0; proven by test and walked in a real browser as four roles."
         }
       ]
     },
@@ -1420,6 +1473,93 @@
           "note": "Raised from the consolidated field report and worked by the full committee."
         }
       ]
+    },
+    {
+      "id": "REQ-45",
+      "origin": [
+        "committee, measurement counsellor"
+      ],
+      "issue": null,
+      "title": "A gate records when it was passed, whether or not it carried acceptance criteria",
+      "status": "open",
+      "priority": "high",
+      "version": null,
+      "decidedOn": "2026-09-08",
+      "delivered": [],
+      "measure": null,
+      "remaining": [
+        "A gate marked done records the day it was marked and by whom, independently of whether criteria were attached; existing rows are not back-dated."
+      ],
+      "accepted": null,
+      "released": false,
+      "observed": "Measured while building REQ-28: `routes/portfolio.js` writes `milestone.accepted_on` ONLY when the milestone carries acceptance criteria. A gate ticked done without them gets `done = true` and no date at all — 24 of 24 gates on the shipped demonstration book. Gate cycle time therefore reports 'not measured' on a book where twenty-four gates have visibly been passed. The metric is telling the truth; the product cannot say WHEN most gates were passed, and that is a governance hole rather than a measurement bug.",
+      "answerToSource": "Filed against ourselves. This is the reason one of your five signals reads `—` on a real book, and we would rather you heard it from us than measured it.",
+      "history": [
+        {
+          "at": "2026-09-08",
+          "registerVersion": 11,
+          "status": "open",
+          "note": "Opened by the measurement counsellor while delivering REQ-28 — found in our own product, not filed by RT365."
+        }
+      ]
+    },
+    {
+      "id": "REQ-46",
+      "origin": [
+        "committee, measurement counsellor"
+      ],
+      "issue": null,
+      "title": "The RAID register records that a review happened, not only when the next one is due",
+      "status": "open",
+      "priority": "medium",
+      "version": null,
+      "decidedOn": "2026-09-08",
+      "delivered": [],
+      "measure": null,
+      "remaining": [
+        "A review is an event with a date and a reviewer; the next-due date is derived from the last one rather than replacing it."
+      ],
+      "accepted": null,
+      "released": false,
+      "observed": "`raid_item.review_on` holds the NEXT review date, and performing a review moves it forward — which erases the only evidence there was. Review compliance is therefore statable today and unstatable for last month, on any book. Of the five governance signals it is the one with no history at all, and its trend correctly reports that there is none.",
+      "answerToSource": "Filed against ourselves while delivering REQ-28.",
+      "history": [
+        {
+          "at": "2026-09-08",
+          "registerVersion": 11,
+          "status": "open",
+          "note": "Opened by the measurement counsellor while delivering REQ-28 — found in our own product, not filed by RT365."
+        }
+      ]
+    },
+    {
+      "id": "REQ-47",
+      "origin": [
+        "committee, measurement counsellor"
+      ],
+      "issue": null,
+      "title": "A decision records when it was ratified, not only that it was",
+      "status": "open",
+      "priority": "medium",
+      "version": null,
+      "decidedOn": "2026-09-08",
+      "delivered": [],
+      "measure": null,
+      "remaining": [
+        "decision_record.ratified_on, written when the status becomes Ratified; existing ratified rows keep a null date rather than a fabricated one."
+      ],
+      "accepted": null,
+      "released": false,
+      "observed": "Migration 039 gave a decision a status (Proposed → Ratified) and a ratifier, and no ratification date. So 'how long does ratification take in this programme' cannot be asked at all, and decision latency has to report proposed-but-unratified decisions as a note beside the number rather than counting them. One nullable column opens it.",
+      "answerToSource": "Filed against ourselves while delivering REQ-28.",
+      "history": [
+        {
+          "at": "2026-09-08",
+          "registerVersion": 11,
+          "status": "open",
+          "note": "Opened by the measurement counsellor while delivering REQ-28 — found in our own product, not filed by RT365."
+        }
+      ]
     }
   ],
   "channel": {
@@ -1444,11 +1584,11 @@
     "release": {
       "defaultBranch": "main",
       "measuredAt": "2026-09-08",
-      "state": "The default branch carries 5.9.0 (77c4b49). Every improvement REQ-01..REQ-38 lives on claude/meridian-rt365-feedback-d6vo3i, which is 9 commits ahead and 0 behind — a fast-forward with no conflicts. Newest tag on the remote is v5.9.0.",
-      "consequence": "23 requests in this register read `done`, and 42 of the files they name do not exist for anyone who clones. `released` is therefore false on every line, and honestly so.",
+      "state": "The default branch carries 5.9.0 (77c4b49). Every improvement REQ-01..REQ-47 lives on claude/meridian-rt365-feedback-d6vo3i, which is 14 commits ahead and 0 behind — a fast-forward with no conflicts. Newest tag on the remote is v5.9.0; 5.10.0 through 5.14.0 exist only on the branch.",
+      "consequence": "28 requests in this register read `done` or `partial`, and the files they name do not exist for anyone who clones. `released` is therefore false on every line, and honestly so.",
       "gate": "scripts/audit/register-reachable.mjs (F12) counts this on every `npm run audit` and fails a tag build that claims otherwise.",
-      "whatIsNeeded": "A maintainer merges the branch to main and pushes the tag. Pushing a tag ref from an agent session is refused HTTP 403 (four attempts, three commits); the merge is a decision the owner makes, not an agent."
+      "whatIsNeeded": "A maintainer merges the branch to main and pushes the tag. The owner AUTHORISED the merge on 08/09; it was then refused by the agent session's own permission classifier — `git merge --ff-only`, `git push origin <branch>:main` and even a local `git tag -a` (D-33.50). Pushing a tag ref is separately refused HTTP 403 by the session credential (D-33.18, D-33.30). Two different boundaries, neither routed around."
     }
   },
-  "registerVersion": 10
+  "registerVersion": 11
 }
