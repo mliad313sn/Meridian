@@ -57,6 +57,12 @@ export const ACTIONS = [
      qui a délégué — un chef de site qui fixe sa propre tolérance ne fixe
      pas une tolérance, il énonce une intention. */
   "tolerance.set", "exception.answer",
+  /* Q-2 : DEMANDER le constat. Le balayage tourne de lui-même à l'heure ;
+     ceci l'appelle tout de suite, à l'échelle du portefeuille et donc
+     sans projet. C'est un acte du niveau qui pose les marges — lui seul
+     a une raison de vérifier qu'elles mordent — et il ne DÉCIDE rien :
+     il n'ouvre que ce que les chiffres disent déjà. */
+  "exception.sweep",
   /* PM-02 : relever un enseignement est le travail de qui l'a vécu ;
      décider qu'il vaut pour les huit sites ne l'est pas. L'adoption est
      ce qui rend l'enseignement visible AILLEURS — sans elle, un registre
@@ -368,6 +374,12 @@ export function can(user, action, resource = {}) {
         ? allow()
         : deny("this programme does not land on a site granted to you — concerns follow the work that reaches your site");
     }
+
+    /* Q-2 — à l'échelle du portefeuille, donc sans projet à nommer. */
+    case "exception.sweep":
+      return user.role === "group"
+        ? allow()
+        : deny("the level that sets a margin is the level that checks it — ask your programme office");
 
     case "demand.raise":
       /* Asking is open to anyone who may write at all — a site lead who

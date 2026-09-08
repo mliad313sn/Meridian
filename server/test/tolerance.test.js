@@ -380,3 +380,88 @@ describe("REQ-21 · un bénéfice non mesuré à sa date est chassé, pas espér
     assert.match(late.detail, /owner /);
   });
 });
+
+/**
+ * Q-2 — un contrôle qu'on ne peut pas observer.
+ *
+ * RT365 : « Nous avons posé une tolérance d'un jour, enregistré une fin
+ * de référence, glissé de quatre mois, et vu `exceptions: []` tout du
+ * long. Le balayage tourne sur un setInterval horaire, sans première
+ * passe immédiate et sans route pour le déclencher, donc rien ne pouvait
+ * être observé dans une session. »
+ */
+describe("Q-2 · le constat peut être demandé, pas seulement attendu", () => {
+  test("le niveau qui pose les marges peut demander le balayage ; les autres non", async () => {
+    const group = await as("groupDCH");
+    const site = await as("siteGRU");
+    const viewer = await as("viewerGRU");
+
+    const refusedSite = await site.post("/api/exceptions/sweep", {});
+    assert.equal(refusedSite.status, 403, "un site ne constate pas ses propres dépassements");
+    const refusedViewer = await viewer.post("/api/exceptions/sweep", {});
+    assert.equal(refusedViewer.status, 403);
+
+    const r = await group.post("/api/exceptions/sweep", {});
+    assert.equal(r.status, 200, r.text);
+    assert.equal(typeof r.body.considered, "number");
+    assert.equal(typeof r.body.opened, "number");
+
+    /* Il reste un CONSTAT : rien ne s'ouvre que les chiffres ne disent
+       déjà, et le redemander n'empile pas. */
+    const before = (await many(`SELECT count(*)::int AS n FROM project_exception`))[0].n;
+    await group.post("/api/exceptions/sweep", {});
+    const after = (await many(`SELECT count(*)::int AS n FROM project_exception`))[0].n;
+    assert.equal(after, before, "demander deux fois ne crée pas deux lignes");
+
+    /* Et il s'inscrit sous « system » : personne ne l'a décidé. */
+    const trail = await one(
+      `SELECT user_label FROM audit_event WHERE entity = 'project_exception' ORDER BY id DESC LIMIT 1`);
+    if (trail) assert.equal(trail.user_label, "system");
+  });
+});
+
+/**
+ * D-8 — ce qu'une décision a le droit de citer.
+ *
+ * RT365 : « Dix-neuf enregistrements de décision sont entrés avec un
+ * evidenceUri VIDE parce que la vraie preuve ne pouvait pas être
+ * exprimée. » Leur preuve est un fichier versionné dans un dépôt.
+ */
+describe("D-8 · une preuve versionnée dans un dépôt en est une", () => {
+  test("un chemin de dépôt et une révision sont acceptés ; la prose est refusée", async () => {
+    const group = await as("groupDCH");
+    const admin = await as("admin");
+    const db = (await admin.get("/api/bootstrap")).body.db;
+
+    const ok = await group.post("/api/decisions", {
+      headline: "D-8 · the evidence is a file in a repository",
+      council: "ARB", evidenceUri: "docs/PRODUCT_OWNER.md v2.0",
+    });
+    assert.equal(ok.status, 201, ok.text);
+    const row = await one(`SELECT evidence_uri FROM meeting_decision WHERE id = $1`, [ok.body.id]);
+    assert.equal(row.evidence_uri, "docs/PRODUCT_OWNER.md v2.0");
+
+    const atCommit = await group.post("/api/decisions", {
+      headline: "D-8 · the evidence is a path at a commit",
+      council: "ARB", evidenceUri: "docs/DECISION_LOG.md@a1b2c3d",
+    });
+    assert.equal(atCommit.status, 201, atCommit.text);
+
+    const web = await group.post("/api/decisions", {
+      headline: "D-8 · an address still works", council: "ARB",
+      evidenceUri: "https://github.com/x/y/blob/main/docs/a.md",
+    });
+    assert.equal(web.status, 201, web.text);
+
+    /* Ce qui reste refusé, et c'est le point : une phrase ne se retrouve
+       pas. La leçon D-10 du même rapport est qu'un 200 sur un corps
+       incompris enseigne au demandeur qu'il a écrit quelque chose. */
+    const prose = await group.post("/api/decisions", {
+      headline: "D-8 · prose is not evidence", council: "ARB",
+      evidenceUri: "we all agreed in the meeting",
+    });
+    assert.equal(prose.status, 400, prose.text);
+    assert.match(prose.body.error, /cannot be found again/);
+    void db;
+  });
+});

@@ -116,7 +116,7 @@ export function buildAgenda(db, series, occurrence, openActions = [], extras = {
   /* 2 · Exceptions — the substance of a weekly. Ordered worst first. */
   const metrics = projects.map(p => Engine.metrics(db, p.id)).filter(Boolean);
   const exceptions = metrics
-    .filter(m => m.health.rag !== "G")
+    .filter(m => m.health.rag === "A" || m.health.rag === "R")
     .sort((a, b) => (a.health.rag === b.health.rag ? a.spi - b.spi : a.health.rag === "R" ? -1 : 1));
   if (exceptions.length) {
     sections.push({

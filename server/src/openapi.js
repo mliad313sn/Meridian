@@ -145,6 +145,8 @@ const upsert = (what, scope, extra) => ({
     `(Idempotent-Replayed: true); the same key with another body is refused (422) — one key names ONE ` +
     `request, not a run. \`adopt: "<Meridian id>"\` binds your externalId to a row that already exists ` +
     `(created on a screen, or scaffolded) instead of creating another. ` +
+    `A field this collection does not declare is REFUSED (400) and nothing is written or audited: ` +
+    `the properties below are the whole of what a body may carry (REQ-19). ` +
     `The same business rules as the screens apply. ${extra}`,
   scope, returns: UPSERT_RETURNS,
 });
@@ -238,7 +240,12 @@ export function openApiDocument({ version = "dev", servers = [] } = {}) {
        route que personne ne pouvait appeler. (Intégrateur, docs/33 §5.) */
     const openApiPath = path.replace(/:(\w+)/g, "{$1}");
     paths[openApiPath] ??= {};
-    const collection = /^\/api\/v1\/(\w+)\/:externalId$/.exec(path)?.[1];
+    /* `\w+` ne prenait pas le trait d'union : « business-case » n'a
+       jamais eu ni corps décrit ni en-tête d'idempotence dans le
+       document publié, alors que la route les accepte depuis la V-1.
+       Trouvé par le test de REQ-19 qui compare la déclaration au contrat
+       — c'est précisément ce qu'il est là pour attraper. */
+    const collection = /^\/api\/v1\/([\w-]+)\/:externalId$/.exec(path)?.[1];
     const body = collection && WRITE_BODIES[collection];
     const pathParams = [...path.matchAll(/:(\w+)/g)].map(([, name]) => ({
       name, in: "path", required: true, schema: { type: "string", maxLength: 200 },
@@ -261,7 +268,12 @@ export function openApiDocument({ version = "dev", servers = [] } = {}) {
       "x-required-scope": doc.scope,
       ...(pathParams.length || idempotency.length
         ? { parameters: [...pathParams, ...idempotency] } : {}),
-      ...(body ? { requestBody: { required: true, content: { "application/json": { schema: jsonSchema(body) } } } } : {}),
+      /* REQ-19 — le corps est CLOS : `assertKnownBody` refuse tout champ
+         que la collection ne déclare pas, et la description doit dire la
+         même chose que le serveur, sinon le client engendré envoie
+         tranquillement ce qui sera refusé. */
+      ...(body ? { requestBody: { required: true, content: { "application/json":
+        { schema: { ...jsonSchema(body), additionalProperties: false } } } } } : {}),
       responses: {
         200: {
           description: "The document described above",

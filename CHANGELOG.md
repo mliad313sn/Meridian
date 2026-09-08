@@ -22,6 +22,118 @@ Nothing yet.
 
 ---
 
+## [5.13.0] — 2026-09-08
+
+RT365 consolidated two rounds into one report and handed over the most
+exacting document this product has received. It measures what Meridian is
+worth, it corrects its own earlier findings in three places, and it names
+one defect that matters more than any feature request in it. A full
+committee was convened on it (D-33.43): a measurement counsellor who
+reproduced the headline finding and surveyed every surface it reaches, an
+adoption counsellor who cloned the default branch as a stranger would, and
+a contract counsellor on the two write requirements.
+
+### The finding that mattered most — unmeasured is no longer green
+
+On a book of budget-less projects with nothing reported, the executive
+page read **ON TRACK 100%, 16 green, SCHEDULE INDEX 1.00 "at or ahead of
+plan", COST INDEX 1.00 "inside the envelope"** — in a week when that
+programme's gate was not convened and two of its exit documents were
+refused. Nothing green was stored: `health`, `spi` and `cpi` were all
+null in the database. The colour was manufactured at read time, because a
+budget of zero satisfies `pv >= bac * 0.02 && ac >= bac * 0.005` twice —
+`0 >= 0` — so the project was classified **measurable**, its indices
+computed to exactly 1.00, and `health()` asserted they were "both inside
+tolerance". The honest branch existed, was unreachable for such a project,
+and was **also green**.
+
+- `measurable` now requires a budget. Both indices return **`null`**
+  rather than 1.00 — an index nobody measured is not one, and the product
+  says `—` for a number it does not have everywhere else.
+- A **fourth health state**, *not measured*, drawn grey and with its word.
+  It cost no schema change. "Too early to measure" and "nothing to
+  measure" are both absences, they stay distinct, and neither is green.
+- **Correcting the guard alone would not have fixed the tiles.** With
+  every project unmeasurable the live set is empty, and the roll-up's own
+  `: 1` fallbacks kept returning 1.00 — the page would have gone on lying.
+  They return `null` too, and the tile counts what is measured, saying how
+  many are not.
+- Three surfaces failed **green** on a value they did not recognise (the
+  roadmap bar, the report tiles, the copy-status export, which printed
+  "Red"); one crashed the health sort; and the meeting agenda's "projects
+  off track" filter was `rag !== "G"`, which would have swept every
+  unmeasured project in as AMBER. All corrected.
+- **The reason this could not wait**: the manufactured green was being
+  written into `report_snapshot` at period close, which is append-only at
+  the database. A wrong number was becoming permanent, unamendable
+  history — reproduced in one API call (D-33.45).
+
+### Added
+
+- **A write refuses a body it does not understand** (their REQ-19). Every
+  `PUT /api/v1/*` now rejects a field the collection does not declare, and
+  a body that names nothing to write, before it reserves an idempotency
+  key, opens a transaction or writes an audit row. The refusal names what
+  the collection *does* accept and points at the contract, and the
+  published OpenAPI now says `additionalProperties: false` — the document
+  states the rule the server enforces. Two latent faults fell out of
+  building it: `decisions` asserted `version` without declaring it, and
+  `business-case` had never had a described body because the collection
+  matcher did not match a hyphen.
+- **F12 · `register-reachable`** — a gate that fails when a request marked
+  `done` names files the default branch does not carry. It separates a
+  false claim (fails anywhere) from merge debt (reported and counted off
+  the default branch), always prints what it compared against, and exits 2
+  rather than passing when it cannot compare. A tag build is strict.
+- **The exception sweep can be asked for** (their Q-2), and runs once at
+  start rather than only on the hour. They set a tolerance, breached it,
+  and saw nothing all session because there was no way to make the sweep
+  run. A control nobody can watch work is a control nobody can believe.
+  It stays a constat: it opens only what the numbers already say, it is
+  audited under `system`, and asking twice does not stack.
+- **A decision may cite evidence that lives in a repository** (their D-8).
+  Nineteen of their decision records went in with an empty evidence link
+  because the true evidence — a versioned file at a revision — could not
+  be expressed. A repository path, a path at a commit, a bare commit and a
+  named locator now join http(s). Prose is still refused: a sentence with
+  no locator cannot be found again.
+
+### Fixed
+
+- **A rollout wave is one site, and the refusal now says so** (their
+  REQ-37). Declined as a defect — it is design, held by `rbac.js`, by
+  docs/14 V-06, by the screen, and by a test since V-06 — and their own
+  fallback clause was declined with it: `seq` orders the *sites*, and
+  removing it would delete the order of the rollout to fix a message. What
+  was wrong was the message, which now says what the design is and where
+  phases belong.
+- **The formatters no longer invent a number.** `money(undefined)`
+  rendered `$NaNM` and `idx(NaN)` rendered `NaN` — RT365 saw `# NaN` in
+  the pipeline and had the grace not to file it. They return `—`, which is
+  how the product says "no number" everywhere else.
+
+### Not done, and it is the one thing they ranked above everything
+
+Their REQ-32 — **the default branch carries what this register calls
+done** — is filed here as **REQ-39**, and it is `open`. Measured on a
+clean clone: `main` is 5.9.0 dated 1 September, there is no
+`docs/requests/` directory at all, `npm run seed` reports success and
+writes nothing to disk, `GET /` answers 404, and the published admin
+password answers 401. The three first-hour defects we fixed reproduce
+verbatim, because the fix was never merged. Twenty-three requests in the
+register read `done`, and forty-two of the files they name do not exist
+for anyone who clones.
+
+The merge is a fast-forward with no conflicts, and the 5.9.0 → 5.13.0
+upgrade was measured working against a real book with its data intact and
+re-running as a no-op. What is missing is a decision and a push, and
+neither is an agent's to make: the branch to develop on is designated, and
+a tag ref is refused 403 from a session. F12 now counts the debt on every
+`npm run audit` — but a gate that counts merge debt is not a substitute
+for paying it.
+
+---
+
 ## [5.12.0] — 2026-09-08
 
 RT365 consolidated its field work into two reports — one on **value**, one

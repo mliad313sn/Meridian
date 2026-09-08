@@ -45,6 +45,7 @@ import { fromM, loadSettings } from "./portfolio.js";
 import { scaffoldProject, reschedule, phaseFor } from "./wbs.js";
 import { iso, D } from "../../shared/engine.js";
 import { assertPlantWindow } from "./plant.js";
+import { isEvidenceLocator, EVIDENCE_REFUSAL } from "./evidence.js";
 import { assertCaseReconfirmed } from "./value.js";
 import { canRatifyDecision } from "../../shared/rbac.js";
 
@@ -539,7 +540,10 @@ const evidenceUri = (v) => {
   if (v === undefined) return undefined;
   const u = String(v ?? "").trim();
   if (!u) return "";
-  if (!/^https?:\/\//i.test(u)) bad("evidenceUri is an http(s) link to the record of the decision");
+  /* D-8 — une preuve versionnée dans un dépôt en est une. Voir
+     server/src/evidence.js pour ce qui est accepté et pourquoi la prose
+     reste refusée. */
+  if (!isEvidenceLocator(u)) bad(EVIDENCE_REFUSAL);
   return u.slice(0, 1000);
 };
 
@@ -1173,7 +1177,13 @@ export const WRITE_BODIES = {
   decisions: { adopt: "string", headline: "string", rationale: "string", alternatives: "string", dissent: "string",
     decidedBy: "string", council: "string", decidedOn: "date", project: "string", cr: "string", raid: "string",
     milestone: "string", supersedes: "string", evidenceUri: "string", provenance: "string",
-    status: "string", ratifiedBy: "string" },
+    /* 041 a donné un `row_version` à la décision et le chemin d'état
+       l'asserte (`sentVersion` puis `writeRow`, plus haut) : la
+       déclaration le taisait, donc ni le contrat OpenAPI ni le garde de
+       REQ-19 ne le savaient. Un synchroniseur qui relit /api/v1/decisions
+       reçoit `version` dans chaque ligne ; la renvoyer est le geste
+       normal, pas une faute. */
+    status: "string", ratifiedBy: "string", version: "integer" },
   actions: { adopt: "string", title: "string", detail: "string", owner: "string", project: "string", dueDate: "date",
     status: "string", occurrence: "string", series: "string", version: "integer" },
   activities: { activity: "string", pct: "integer", source: "string", measuredAt: "date-time", name: "string", version: "integer" },
@@ -1186,3 +1196,58 @@ export const WRITE_BODIES = {
   "business-case": { adopt: "string", project: "string", summary: "string", basis: "string",
     expectedCost: "number", expectedBenefit: "number", version: "integer" },
 };
+
+/* ── REQ-19 · un corps que la collection ne comprend pas est REFUSÉ ───
+ *
+ * Mesuré par le terrain contre ce produit, et re-mesuré ici sur 5.12.0 :
+ * `sponsor` et `acceptanceCriteria` sur un projet, `status: "Closed"` sur
+ * un projet, `category` sur une ligne de registre — quatre 200, `version`
+ * inchangée, aucune ligne écrite. Un contrat qui ne dit jamais non
+ * enseigne le mauvais corps EN SILENCE : l'appelant croit avoir écrit, et
+ * ne l'apprend qu'en relisant — s'il relit.
+ *
+ * Ce qui est reconnu se lit dans WRITE_BODIES ci-dessus, et nulle part
+ * ailleurs. C'est la même déclaration que publie /api/v1/openapi.json :
+ * le refus peut donc NOMMER ce qui est accepté sans recopier une liste
+ * qui se périmerait, et un champ ajouté demain est accepté sans qu'on y
+ * pense. `adopt` et `version` en font partie sur les collections qui les
+ * déclarent — ce sont des champs du contrat, pas des intrus ; la clé
+ * d'idempotence, elle, est un en-tête et n'a jamais eu sa place dans le
+ * corps.
+ *
+ * Posé AVANT `idempotent()` et avant la moindre lecture métier : rien
+ * n'est réservé, rien n'est audité, rien n'est versionné pour un acte qui
+ * n'a pas eu lieu. C'est la troisième moitié de la demande, et c'est
+ * celle qui compte — une piste d'audit qui consigne des actes non
+ * accomplis ne se relit plus.
+ */
+const CONTRACT_DOC = "/api/v1/openapi.json";
+const quoted = (keys) => keys.map((k) => `"${k}"`).join(", ");
+
+export function assertKnownBody(collection, body) {
+  const shape = WRITE_BODIES[collection];
+  /* Une collection sans déclaration n'est pas une collection d'écriture :
+     la route n'existe pas, et ce garde n'a rien à dire. Le test
+     « chaque PUT monté a sa déclaration » tient l'autre bout. */
+  if (!shape) return;
+  const accepted = Object.keys(shape);
+  const writable = accepted.filter((k) => k !== "version");
+  if (body === null || typeof body !== "object" || Array.isArray(body)) {
+    bad(`A ${collection} write is a JSON object naming the fields to write — ` +
+        `${collection} accepts: ${accepted.join(", ")}. See ${CONTRACT_DOC}`);
+  }
+  const sent = Object.keys(body);
+  const unknown = sent.filter((k) => !Object.hasOwn(shape, k));
+  if (unknown.length) {
+    bad(`${collection} does not accept ${quoted(unknown)} — nothing was written. ` +
+        `${collection} accepts: ${accepted.join(", ")}. See ${CONTRACT_DOC}`);
+  }
+  /* `version` asserte ce qu'on écrase ; elle n'est pas elle-même un
+     changement. Un corps qui ne porte qu'elle — ou rien du tout — ne
+     demande aucune écriture, et répondre 200 « fait » serait le même
+     mensonge sous une autre forme. */
+  if (!sent.some((k) => k !== "version")) {
+    bad(`A ${collection} write names nothing to write — send at least one of: ` +
+        `${writable.join(", ")}. See ${CONTRACT_DOC}`);
+  }
+}

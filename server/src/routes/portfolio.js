@@ -20,6 +20,8 @@ import { Engine, GATES, PHASES, LESSON_CATEGORIES, iso, addDays, days, D } from 
 import { scaffoldProject, reschedule, phaseFor } from "../wbs.js";
 import { ladderLength } from "../v1write.js";
 import { assertPlantWindow } from "../plant.js";
+import { sweepExceptions } from "../exceptions.js";
+import { isEvidenceLocator, EVIDENCE_REFUSAL } from "../evidence.js";
 import { assertCaseReconfirmed, deltaAgainst, reconfirmationsFor } from "../value.js";
 
 
@@ -2047,6 +2049,33 @@ r.put("/projects/:id/tolerance", async (req, res, next) => {
  * close sans raison écrite ne se relit pas, et c'est précisément ce
  * qu'un comité viendra relire.
  */
+/**
+ * Q-2 — constater maintenant, plutôt qu'à la prochaine heure.
+ *
+ * Le balayage tourne sur un `setInterval` horaire, sans première passe
+ * immédiate et sans aucun moyen de le déclencher. Le premier programme
+ * réel l'a rencontré en essayant de VÉRIFIER un contrôle :
+ *
+ *   « Nous avons posé une tolérance d'un jour, enregistré une fin de
+ *     référence, glissé de quatre mois, et vu `exceptions: []` tout du
+ *     long […] rien ne pouvait être observé dans une session. »
+ *
+ * Un contrôle qu'on ne peut pas observer est un contrôle que personne ne
+ * peut croire. Le geste reste celui du système — c'est un CONSTAT, pas
+ * une décision, et il s'inscrit sous « system » comme le tour horaire —
+ * mais quelqu'un peut désormais demander qu'il ait lieu tout de suite.
+ * Réservé au niveau qui pose les marges : lui seul a une raison de
+ * vérifier qu'elles mordent.
+ */
+r.post("/exceptions/sweep", async (req, res, next) => {
+  try {
+    gate(req.user, "exception.sweep");
+    const out = await sweepExceptions();
+    res.json({ ok: true, considered: out.considered, opened: out.opened,
+               exceptions: out.exceptions ?? [] });
+  } catch (e) { next(e); }
+});
+
 r.post("/exceptions/:id/answer", async (req, res, next) => {
   try {
     const row = await one(`SELECT * FROM project_exception WHERE id = $1`, [req.params.id]);
@@ -3561,7 +3590,11 @@ r.post("/decisions", async (req, res, next) => {
     const who = b.decidedBy ? await one(`SELECT id FROM person WHERE id = $1 AND active`, [String(b.decidedBy)]) : null;
     if (b.decidedBy && !who) bad("The decider must be an active person in the directory");
     const evidence = String(b.evidenceUri ?? "").trim().slice(0, 1000);
-    if (evidence && !/^https?:\/\//i.test(evidence)) bad("The evidence link is an http(s) address");
+    /* D-8 — le premier programme réel a consigné DIX-NEUF décisions avec
+       une preuve vide parce que la sienne était un fichier versionné dans
+       un dépôt, et non une page web. La règle s'élargit à ce qu'une trace
+       de gouvernance cite réellement ; la prose reste refusée. */
+    if (evidence && !isEvidenceLocator(evidence)) bad(EVIDENCE_REFUSAL);
     const on = b.decidedOn ? String(b.decidedOn).slice(0, 10) : iso(new Date());
     if (!/^\d{4}-\d{2}-\d{2}$/.test(on)) bad("decidedOn must be an ISO date");
 

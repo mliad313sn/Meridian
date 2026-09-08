@@ -425,6 +425,13 @@ export async function start({ port: wanted } = {}) {
      L'ordre compte : escalader ce qui traîne, chercher ce qu'il faut
      dire, puis balayer ce qui a fait son temps. */
   const LOCK = 774_155_001;         // arbitraire, propre à ce tour
+  /* Q-2 — une première passe au démarrage, en plus du tour horaire. Sans
+     elle, une instance qui vient de lever une marge dépassée n'ouvre rien
+     avant soixante minutes, et personne — pas même son opérateur — ne
+     peut voir que le contrôle fonctionne. Elle est silencieuse et ne peut
+     pas empêcher le démarrage. */
+  setTimeout(() => { sweepExceptions().catch(() => {}); }, 2_000).unref?.();
+
   const hourly = setInterval(async () => {
     try {
       const got = await many(`SELECT pg_try_advisory_lock($1) AS ok`, [LOCK]).catch(() => [{ ok: true }]);

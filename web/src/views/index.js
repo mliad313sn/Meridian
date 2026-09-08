@@ -200,9 +200,26 @@ Views.portfolio = (db) => {
     { label: t("Portfolio value"), value: money(roll.bac),
       note: funded + " funded project" + (funded === 1 ? "" : "s") +
             (unfunded ? " · " + unfunded + " strategy (no budget)" : "") },
-    { label: t("On track"), value: roll.count ? Math.round(roll.green / roll.count * 100) + "%" : "—", note: roll.green + " green · " + roll.amber + " amber · " + roll.red + " red" },
-    { label: t("Schedule index"), value: idx(roll.spi), note: roll.spi < 1 ? "behind the plan" : "at or ahead of plan", accent: roll.spi < db.settings.amberSpi },
-    { label: t("Cost index"), value: idx(roll.cpi), note: roll.cpi < 1 ? "spending faster than earning" : "inside the envelope", accent: roll.cpi < db.settings.amberCpi },
+    /* REQ-33 — « sur la bonne voie » se compte sur ce qui est MESURÉ. Le
+       dénominateur était le nombre total de projets, si bien que seize
+       projets sans budget donnaient 100 %, seize verts, zéro ambre, zéro
+       rouge — sur la page que lit un commanditaire, la semaine où la
+       porte n'avait pas été convoquée. Ce qui n'est pas mesuré se compte
+       à part et se dit. */
+    { label: t("On track"),
+      value: roll.measured ? Math.round(roll.green / roll.measured * 100) + "%" : "—",
+      note: roll.measured
+        ? roll.green + " green · " + roll.amber + " amber · " + roll.red + " red"
+          + (roll.notMeasured ? " · " + roll.notMeasured + t(" not measured") : "")
+        : roll.count + t(" project(s), none of them measured yet") },
+    { label: t("Schedule index"), value: idx(roll.spi),
+      note: roll.spi == null ? t("nothing measured to index")
+        : roll.spi < 1 ? "behind the plan" : "at or ahead of plan",
+      accent: roll.spi != null && roll.spi < db.settings.amberSpi },
+    { label: t("Cost index"), value: idx(roll.cpi),
+      note: roll.cpi == null ? t("nothing measured to index")
+        : roll.cpi < 1 ? "spending faster than earning" : "inside the envelope",
+      accent: roll.cpi != null && roll.cpi < db.settings.amberCpi },
     { label: t("Forecast variance"), value: signedMoney(roll.vac), note: "against " + money(roll.bac) + " approved", accent: roll.vac < 0 },
     { label: t("Open risks"), value: String(openRisks.length), note: escalated.length + " above the escalation threshold", accent: escalated.length > 0 },
   ]);
@@ -213,7 +230,7 @@ Views.portfolio = (db) => {
         h("div", { class: "xs muted" }, r.p.id + " · " + (Engine.programme(db, r.p.programme) || {}).name + " · " + Engine.personName(db, r.p.pm))) },
     { key: "site", label: "Site", sort: r => r.p.site, get: r => h("span", { class: "small" }, (Engine.site(db, r.p.site) || {}).city) },
     { key: "phase", label: "Phase", sort: r => r.p.phase, get: r => h("span", { class: "small" }, r.p.phase) },
-    { key: "health", label: "Health", sort: r => ({ R: 0, A: 1, G: 2 })[r.m.health.rag],
+    { key: "health", label: "Health", sort: r => ({ R: 0, A: 1, N: 2, G: 3 })[r.m.health.rag] ?? 9,
       get: r => h("span", { title: r.m.health.why }, ragDot(r.m.health.rag)) },
     { key: "pct", label: "Progress", sort: r => r.pctShown, width: "128px", get: r => h("div", null,
         h("div", { class: "bar-lbl mono" }, h("span", null, pct(r.pctShown)),
@@ -1318,7 +1335,13 @@ Views.project = (db) => {
       h("div", { style: "display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--rule-1)" },
         h("span", { class: "muted" }, "Schedule variance"), h("span", { class: "mono strong", style: m.sv < 0 ? "color:var(--sig-red)" : null }, signedMoney(m.sv))),
       h("div", { style: "display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--rule-1)" },
-        h("span", { class: "muted" }, "To-complete index"), h("span", { class: "mono strong" }, idx(m.tcpi)))),
+        /* REQ-33 — l'indice à terminer se calculait à 1.00 sur un projet
+           sans budget et s'affichait sans garde : c'est le dernier
+           endroit où « rien » se lisait comme « exactement dans les
+           clous ». L'arithmétique de la 172 est gelée (D-05) ; c'est
+           l'AFFICHAGE qui doit se taire. */
+        h("span", { class: "muted" }, "To-complete index"),
+        h("span", { class: "mono strong" }, m.measurable ? idx(m.tcpi) : "—"))),
     h("div", { style: "height:26px" }), h("hr", { class: "hr" }), h("div", { style: "height:18px" }),
     sdpPanel(db, p));
 
@@ -1500,7 +1523,10 @@ function copyStatus(db, p, m) {
   const L = [];
   L.push(`**${p.name}** (${p.id}) — status as at ${db.statusDate}`);
   L.push("");
-  L.push(`- Health: **${m.health.rag === "G" ? "Green" : m.health.rag === "A" ? "Amber" : "Red"}** — ${m.health.why}`);
+  /* REQ-33 — la ternaire n'avait pas de quatrième branche et rendait
+     « Red » pour tout ce qu'elle ne connaissait pas : un état inconnu
+     n'est pas rouge non plus. Le libellé partagé sait les quatre. */
+  L.push(`- Health: **${RAG_LABEL[m.health.rag] ?? "Not measured"}** — ${m.health.why}`);
   L.push(`- Progress: ${funded ? pct(m.pctComplete) + " complete vs " + pct(m.plannedComplete) + " planned" : pct((() => {
       const acts = db.activities.filter(a => a.project === p.id);
       const w = sum(acts, a => Number(a.weight));
@@ -2693,7 +2719,11 @@ Views.roadmap = (db) => {
         h("div", { title: p.name + " · " + fmtDate(p.start) + " → " + fmtDate(p.finish),
           style: "position:absolute;top:7px;height:12px;border-radius:3px;left:" + left + "%;width:" + width +
             "%;background:" + (m?.health.rag === "R" ? "var(--sig-red)"
-              : m?.health.rag === "A" ? "var(--sig-amber)" : "var(--sig-green)") }),
+              : m?.health.rag === "A" ? "var(--sig-amber)"
+              /* REQ-33 — ce qui n'est pas mesuré n'est pas vert : l'inconnu
+                 se peignait en vert par défaut, ce qui est la faute même
+                 que ce tour corrige. */
+              : m?.health.rag === "G" ? "var(--sig-green)" : "var(--muted)") }),
         ...gates.map(g => h("div", { title: "G" + g.gate + " · " + g.name + " · " + fmtDate(g.date),
           style: "position:absolute;top:4px;width:9px;height:18px;border-left:2px solid var(--color-text);left:" +
             (days(span.from, g.date) / total * 100) + "%" })),
@@ -3612,7 +3642,18 @@ function toleranceBlock(db, p) {
           t("Without a margin, authority is delegated without a bound: this project can drift and nothing will say so on its own. Only the programme office can set one.")),
 
     sectionHead(t("Exceptions"),
-      open.length ? open.length + t(" waiting on an answer") : t("none open")),
+      open.length ? open.length + t(" waiting on an answer") : t("none open"),
+      /* Q-2 — le balayage tourne à l'heure, sans première passe ni moyen
+         de le demander : le premier programme réel a posé une marge,
+         l'a dépassée, et n'a rien pu OBSERVER dans sa session. Un
+         contrôle qu'on ne peut pas voir fonctionner est un contrôle que
+         personne ne peut croire. Le geste reste un constat du système —
+         il n'ouvre que ce que les chiffres disent déjà. */
+      App.can("exception.sweep")
+        ? h("button", { class: "btn btn-xs", title: t("The sweep runs hourly on its own; this asks for it now."),
+            onClick: () => App.write("Exceptions swept", (a) => a.post("/exceptions/sweep", {})) },
+            t("Check now"))
+        : null),
 
     excs.length
       ? table({
@@ -4678,15 +4719,22 @@ Views.reports = (db) => {
   const ms = list.map(p => Engine.metrics(db, p.id)).filter(m => m.measurable);
   const redSched = ms.filter(m => m.spi < st.redSpi).length;
   const redCost = ms.filter(m => m.cpi < st.redCpi).length;
+  /* REQ-33 — un indice ABSENT n'est ni rouge, ni ambre, ni vert. Sans
+     cette branche, `null < 0.9` est faux et la ligne repartait en vert
+     sur un portefeuille dont rien n'est mesuré. */
   const band = (v, red, amber, nRed) =>
-    v < red || nRed >= 2 ? "R" : v < amber || nRed >= 1 ? "A" : "G";
+    v == null ? "N" : v < red || nRed >= 2 ? "R" : v < amber || nRed >= 1 ? "A" : "G";
   const spread = (n, what) => n ? " · " + n + " project" + (n === 1 ? "" : "s") + " below the red " + what + " line" : "";
 
   const rag = [
     { dim: "Schedule", rag: band(roll.spi, st.redSpi, st.amberSpi, redSched),
-      note: "Portfolio SPI " + idx(roll.spi) + spread(redSched, "SPI") },
+      note: roll.spi == null
+        ? "Nothing is measured — " + roll.count + " project(s) carry no budget or no reported progress"
+        : "Portfolio SPI " + idx(roll.spi) + spread(redSched, "SPI") },
     { dim: "Cost", rag: band(roll.cpi, st.redCpi, st.amberCpi, redCost),
-      note: "CPI " + idx(roll.cpi) + " · forecast " + signedMoney(roll.vac) + " against budget" + spread(redCost, "CPI") },
+      note: roll.cpi == null
+        ? "Nothing is measured — no cost index can be stated"
+        : "CPI " + idx(roll.cpi) + " · forecast " + signedMoney(roll.vac) + " against budget" + spread(redCost, "CPI") },
     { dim: "Scope", rag: pendingCRs.length > 2 ? "A" : "G",
       note: pendingCRs.length + " change requests awaiting a decision" },
     { dim: "Risk", rag: worst >= st.escalateExposure ? "R" : worst >= st.pmoExposure ? "A" : "G",
@@ -4753,7 +4801,8 @@ Views.reports = (db) => {
         h("div", { class: "kicker" }, r.dim),
         h("div", { style: "display:flex;align-items:center;gap:8px;margin:7px 0 5px" },
           h("span", { class: "dot", style: { width: "14px", height: "14px",
-            background: r.rag === "R" ? "var(--sig-red)" : r.rag === "A" ? "var(--sig-amber)" : "var(--sig-green)" } }),
+            background: r.rag === "R" ? "var(--sig-red)" : r.rag === "A" ? "var(--sig-amber)"
+              : r.rag === "G" ? "var(--sig-green)" : "var(--muted)" } }),
           h("span", { class: "num", style: "font-size:16px" }, RAG_LABEL[r.rag])),
         h("div", { class: "xs muted" }, tData(r.note))))),
 

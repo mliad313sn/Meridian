@@ -3,7 +3,7 @@
   "source": {
     "repository": "mliad313sn/RT365",
     "branch": "claude/project-owner-agent-setup-hi3xqu",
-    "commit": "92b223a",
+    "commit": "fe2ee02",
     "documents": [
       "docs/ADRs/ADR-017.md",
       "docs/IMPROVEMENT_REGISTER.md",
@@ -12,8 +12,10 @@
       "docs/PMO_MERIDIAN_ASSESSMENT.md",
       "docs/PMO_MERIDIAN_ASSESSMENT.md §8 (V-1..V-12)",
       "docs/RAID_LOG.md",
+      "docs/REPORTS/PMO_MERIDIAN_CONSOLIDATED_REPORT.md",
       "docs/REPORTS/PMO_MERIDIAN_REPORT_EVIDENCE.md (E-1..E-9, G-1..G-9)",
       "docs/REPORTS/PMO_MERIDIAN_REPORT_VALUE.md (V-1..V-15)",
+      "docs/REPORTS/meridian_requests_v3.json",
       "scripts/meridian_sync.py"
     ],
     "reviewedAt": "2026-09-08",
@@ -900,7 +902,7 @@
       "accepted": false,
       "released": false,
       "observed": "RT365 measured ten milestones where six were intended, and filed it as a defect rather than a preference.",
-      "answerToSource": "Half of V-8 is already true and was measured again on this round: a project created under a programme that carries a ladder gets exactly that ladder's gates, never both. What you saw is the other half: your sixteen projects were scaffolded BEFORE RBT carried a gate model, and a declared ladder deliberately does not rewrite projects that already exist (D-33.2 — dated gates and filed evidence would move under people's feet). So the gap is the MIGRATION, and it is accepted as such: an explicit act that moves an existing project onto its programme's ladder, adopting the milestones that already match and refusing to duplicate. Until it ships, `adopt` on PUT /api/v1/milestones binds your Gate A..F rows to the scaffolded ones by their predictable ids rather than adding to them.",
+      "answerToSource": "Half of V-8 is already true and was measured again on this round: a project created under a programme that carries a ladder gets exactly that ladder's gates, never both. What you saw is the other half: your sixteen projects were scaffolded BEFORE RBT carried a gate model, and a declared ladder deliberately does not rewrite projects that already exist (D-33.2 — dated gates and filed evidence would move under people's feet). So the gap is the MIGRATION, and it is accepted as such: an explicit act that moves an existing project onto its programme's ladder, adopting the milestones that already match and refusing to duplicate. Until it ships, `adopt` on PUT /api/v1/milestones binds your Gate A..F rows to the scaffolded ones by their predictable ids rather than adding to them.\n\nQ-7, answered from the code you asked us to read: the OPEN RISKS tile counts `status === \"Open\" && type === \"Risk\"`, scoped to the projects the filter has selected, plus portfolio-wide items that carry no project. Your withdrawal of the implication was right.",
       "history": [
         {
           "at": "2026-09-08",
@@ -1239,6 +1241,185 @@
           "note": "Opened and closed in the same round, from the consolidated field report."
         }
       ]
+    },
+    {
+      "id": "REQ-39",
+      "origin": [
+        "their REQ-32"
+      ],
+      "issue": null,
+      "title": "The default branch carries what this register calls done, and there is a tag to clone",
+      "status": "open",
+      "priority": "highest",
+      "version": null,
+      "decidedOn": "2026-09-08",
+      "delivered": [],
+      "measure": "A clone of the default branch with no flags reports the version this register names, contains docs/requests/rt365.json, completes the README quick start unaided, states its own test count correctly, and carries a tag naming that version; scripts/audit/register-reachable.mjs passes on the default branch.",
+      "remaining": [
+        "A clone of the default branch with no flags reports the version this register names, contains docs/requests/rt365.json, completes the README quick start unaided, states its own test count correctly, and carries a tag naming that version; scripts/audit/register-reachable.mjs passes on the default branch."
+      ],
+      "accepted": null,
+      "released": false,
+      "answerToSource": "Their single highest recommendation, and they are right. Measured on a clean clone: main is 5.9.0 dated 1 September, there is no docs/requests/ directory at all, `npm run seed` reports success and writes nothing to disk, `GET /` answers 404, and the published admin password answers 401 — the three first-hour defects we fixed reproduce verbatim because the fix was never merged. Their sentence for it is the accurate one: a strength an evaluator cannot reach is not a strength they will believe. The merge is a fast-forward with zero conflicts and the 5.9.0 to 5.12.0 upgrade was measured working on a real book with its data intact. What is not an agent's to do: the merge to the default branch is the owner's decision, and the tag push is refused 403 from a session. Half of it IS delivered: F12 now counts the debt on every audit and fails a tag build that claims otherwise — but a gate that counts merge debt is not a substitute for paying it.",
+      "history": [
+        {
+          "at": "2026-09-08",
+          "registerVersion": 10,
+          "status": "open",
+          "note": "Raised from the consolidated field report and worked by the full committee."
+        }
+      ]
+    },
+    {
+      "id": "REQ-40",
+      "origin": [
+        "their REQ-33 / D-6"
+      ],
+      "issue": null,
+      "title": "Unmeasured is not green: no colour and no index of 1.00 is asserted for a project with nothing measured",
+      "status": "done",
+      "priority": "highest",
+      "version": "5.13.0",
+      "decidedOn": "2026-09-08",
+      "delivered": [
+        "shared/engine.js (measurable requires bac > 0; spi/cpi null when unmeasurable; the fourth state N; roll.spi/cpi null when nothing is measured; roll.notMeasured)",
+        "web/src/ui/kit.js (the fourth state draws grey, with its word)",
+        "web/src/views/index.js (tiles, sort key, roadmap bar, copy-status, report bands, to-complete index)",
+        "shared/meetings.js (unmeasured is not 'off track')"
+      ],
+      "measure": "server/test/engine.test.js (REQ-33, three tests) + server/test/uat.test.js",
+      "remaining": null,
+      "accepted": null,
+      "released": false,
+      "answerToSource": "Confirmed, and worse than you filed it. On a book of budget-less projects the tile read ON TRACK 100%, SCHEDULE INDEX 1.00, COST INDEX 1.00; it now reads '—', '0 green · 0 amber · 0 red · N not measured', '—', '—'. Two things your report could not see. First, correcting the guard alone would NOT have fixed the tiles: with every project unmeasurable the live set is empty and the roll-up's own `: 1` fallbacks kept returning 1.00 — the page would have gone on lying. Second, and this is the one that matters: the manufactured green was being written into report_snapshot at period close, which is append-only by database rule, so it became permanent, unamendable history. We reproduced that in one API call. Your criterion is met on every surface we could find — page, print, Markdown export, dataset export, evidence pack, the frozen period, and the meeting pack — and the fourth state cost no schema change. 'Too early to measure' stays distinct from 'nothing to measure': both are absences, and neither is green.",
+      "history": [
+        {
+          "at": "2026-09-08",
+          "registerVersion": 10,
+          "status": "done",
+          "note": "Raised from the consolidated field report and worked by the full committee."
+        }
+      ]
+    },
+    {
+      "id": "REQ-41",
+      "origin": [
+        "their REQ-19 / D-10"
+      ],
+      "issue": null,
+      "title": "A write refuses a body it does not understand, and writes no audit row for an act not performed",
+      "status": "done",
+      "priority": "high",
+      "version": "5.13.0",
+      "decidedOn": "2026-09-08",
+      "delivered": [
+        "server/src/v1write.js (assertKnownBody)",
+        "server/src/routes/v1.js (known() before idempotent())",
+        "server/src/openapi.js (additionalProperties: false — the contract states the rule the server enforces)"
+      ],
+      "measure": "server/test/writeapi.test.js (REQ-19, seven tests)",
+      "remaining": null,
+      "accepted": null,
+      "released": false,
+      "answerToSource": "Delivered on the v1 half. The refusal names what the collection does accept and points at the contract; a refused body reserves no idempotency key, opens no transaction and audits nothing. Two latent faults fell out of building it: `decisions` asserted `version` without declaring it (so refusing it would have broken the REQ-15 round trip), and `business-case` had never had a described body in the published document because the collection matcher did not match a hyphen. The SESSION half — your PATCH /projects/:id/health returning 200 and auditing 'status returned to automatic', and POST attendance with the wrong key deleting every attendance row inside a frozen minute — is surveyed and not yet built: 89 mutating routes, 415 named field reads, and the design is written down (a declaration table plus one `r.use()` per router). It is the next thing on this line.",
+      "history": [
+        {
+          "at": "2026-09-08",
+          "registerVersion": 10,
+          "status": "done",
+          "note": "Raised from the consolidated field report and worked by the full committee."
+        }
+      ]
+    },
+    {
+      "id": "REQ-42",
+      "origin": [
+        "their REQ-37 / D-3"
+      ],
+      "issue": null,
+      "title": "A rollout wave is one row per site, and the refusal says so and says where phases go",
+      "status": "done",
+      "priority": "high",
+      "version": "5.13.0",
+      "decidedOn": "2026-09-08",
+      "delivered": [
+        "server/migrations/044_wave_is_a_site.sql (the constraint named, with its intent as a comment)",
+        "server/src/pgerror.js"
+      ],
+      "measure": "server/test/plant.test.js",
+      "remaining": null,
+      "accepted": null,
+      "released": false,
+      "answerToSource": "Declined as a defect, and answered as a message — with your own fallback clause declined too, with reasons. It is design: rbac.js calls it 'the rollout wave per site', docs/14 V-06 says 'one row per site per rollout', the screen reads 'Sites in this rollout' and 'N live of M', and a test has held it since V-06. Your fallback asked us to remove `seq` if that were so — we decline: `seq` orders the SITES, the screen sorts on it and an index exists to serve that order; removing it would delete the order of the rollout to fix a message. What was wrong was the message. It now reads: 'a wave IS a site in this rollout, and seq is the order the sites go live in, not a phase number within one site. Record phases at a single site as milestones on the project.'",
+      "history": [
+        {
+          "at": "2026-09-08",
+          "registerVersion": 10,
+          "status": "done",
+          "note": "Raised from the consolidated field report and worked by the full committee."
+        }
+      ]
+    },
+    {
+      "id": "REQ-43",
+      "origin": [
+        "their D-8"
+      ],
+      "issue": null,
+      "title": "A decision may cite evidence that lives in a repository, not only at an http address",
+      "status": "done",
+      "priority": "high",
+      "version": "5.13.0",
+      "decidedOn": "2026-09-08",
+      "delivered": [
+        "server/src/evidence.js",
+        "server/src/routes/portfolio.js",
+        "server/src/v1write.js"
+      ],
+      "measure": "server/test/tolerance.test.js (D-8)",
+      "remaining": null,
+      "accepted": null,
+      "released": false,
+      "answerToSource": "Nineteen of your decision records went in with an empty evidence link because the true evidence could not be expressed, and that is the kind of silence a governance record must not cause. A repository path with a revision, a path at a commit, a bare commit and a named locator (git:, repo:, commit:, artifact:, run:) are now accepted alongside http(s). Prose is still refused, and deliberately: your own D-10 is the argument for it — a 200 on a body the route did not understand teaches the caller they wrote something. A sentence with no locator cannot be found again, and is not evidence.",
+      "history": [
+        {
+          "at": "2026-09-08",
+          "registerVersion": 10,
+          "status": "done",
+          "note": "Raised from the consolidated field report and worked by the full committee."
+        }
+      ]
+    },
+    {
+      "id": "REQ-44",
+      "origin": [
+        "their Q-2"
+      ],
+      "issue": null,
+      "title": "The exception sweep can be asked for, not only waited for",
+      "status": "done",
+      "priority": "high",
+      "version": "5.13.0",
+      "decidedOn": "2026-09-08",
+      "delivered": [
+        "shared/rbac.js (exception.sweep, decided in one place)",
+        "server/src/routes/portfolio.js (POST /exceptions/sweep)",
+        "server/src/index.js (a first pass at start, not only the hourly tick)",
+        "web/src/views/index.js (a Check now control where exceptions are read)"
+      ],
+      "measure": "server/test/tolerance.test.js (Q-2) + server/test/rbac.test.js",
+      "remaining": null,
+      "accepted": null,
+      "released": false,
+      "answerToSource": "You set a one-day tolerance, slipped four months and saw exceptions: [] throughout, because the sweep runs on an hourly interval with no first pass and no way to trigger it — so nothing could be observed inside a session. A control nobody can watch work is a control nobody can believe. It stays a constat, not a decision: it opens only what the numbers already say, it is audited under 'system', asking twice does not stack, and the authority to ask is the level that sets the margins.",
+      "history": [
+        {
+          "at": "2026-09-08",
+          "registerVersion": 10,
+          "status": "done",
+          "note": "Raised from the consolidated field report and worked by the full committee."
+        }
+      ]
     }
   ],
   "channel": {
@@ -1261,10 +1442,13 @@
       "quietRound": "a round that finds nothing new changes nothing and says so"
     },
     "release": {
-      "tag": "v5.10.0",
-      "state": "tagged locally on 985d6af; not pushed — a session gets HTTP 403 on a tag ref, a maintainer must push it",
-      "consequence": "no line is `released` yet; pin the branch claude/meridian-rt365-feedback-d6vo3i, not the version"
+      "defaultBranch": "main",
+      "measuredAt": "2026-09-08",
+      "state": "The default branch carries 5.9.0 (77c4b49). Every improvement REQ-01..REQ-38 lives on claude/meridian-rt365-feedback-d6vo3i, which is 9 commits ahead and 0 behind — a fast-forward with no conflicts. Newest tag on the remote is v5.9.0.",
+      "consequence": "23 requests in this register read `done`, and 42 of the files they name do not exist for anyone who clones. `released` is therefore false on every line, and honestly so.",
+      "gate": "scripts/audit/register-reachable.mjs (F12) counts this on every `npm run audit` and fails a tag build that claims otherwise.",
+      "whatIsNeeded": "A maintainer merges the branch to main and pushes the tag. Pushing a tag ref from an agent session is refused HTTP 403 (four attempts, three commits); the merge is a decision the owner makes, not an agent."
     }
   },
-  "registerVersion": 9
+  "registerVersion": 10
 }

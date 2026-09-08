@@ -13,7 +13,8 @@ import { test, before, after, describe } from "node:test";
 import assert from "node:assert/strict";
 import { boot, shutdown, as, client } from "./harness.js";
 import { one, many } from "../src/db.js";
-import { purgeIdempotencyKeys } from "../src/v1write.js";
+import { purgeIdempotencyKeys, assertKnownBody, WRITE_BODIES } from "../src/v1write.js";
+import { mountedRoutes } from "../src/openapi.js";
 
 before(async () => { await boot(); });
 after(shutdown);
@@ -108,9 +109,24 @@ describe("I-2 · le projet, par son identifiant externe", () => {
   });
 
   test("le PUT sans changement est un no-op qui rend la même version ; l'audit nomme l'intégration", async () => {
-    const r = await put("/api/v1/projects/E01", {});
-    assert.equal(r.status, 200);
-    assert.equal(r.body.version, 2);
+    /* REQ-19 — la re-passe se démontre désormais avec le corps RÉEL,
+       celui qu'un chargeur renvoie à chaque tour, et non plus avec `{}` :
+       un corps qui ne nomme rien à écrire n'est plus une requête (voir
+       « REQ-19 » plus bas). La propriété testée ne bouge pas d'un pouce —
+       réécrire les mêmes valeurs ne change rien, ne fait pas bouger la
+       version et n'écrit pas de piste — et elle est maintenant vérifiée
+       sur le chemin qui compte, celui où `changedOnly` travaille. */
+    const same = {
+      name: "E01 Foundation and identity", programme: PROG, site: SITE, governanceLevel: "group",
+      pm: PM, start: "2026-09-07", finish: "2027-01-15", desc: "Epic E01", budget: 1.2,
+    };
+    const before = await many(`SELECT id FROM audit_event WHERE entity = 'project'`);
+    const r = await put("/api/v1/projects/E01", same);
+    assert.equal(r.status, 200, r.text);
+    assert.equal(r.body.version, 2, "la re-passe identique n'incrémente rien");
+    const after = await many(`SELECT id FROM audit_event WHERE entity = 'project'`);
+    assert.equal(after.length, before.length, "et n'écrit pas une ligne de piste de plus");
+
     const audit = await many(`SELECT user_label, detail FROM audit_event WHERE entity = 'project' AND entity_id = $1 ORDER BY id DESC`, [r.body.id]);
     assert.match(audit[0].user_label, /RT365 ledgers/);
     assert.match(audit[0].detail, /\(E01\)/, "la piste porte l'identifiant externe");
@@ -786,5 +802,148 @@ describe("V-4 · ce qui a été promis, contre ce qui a été mesuré", () => {
     assert.ok(late.reviewAgeDays > 0, "elle attend d'être mesurée depuis un nombre de jours");
     assert.equal(late.actual, null);
     assert.ok(row.overdue >= 1);
+  });
+});
+
+/**
+ * REQ-19 (retour de terrain RT365, D-10) — « une écriture refuse un corps
+ * qu'elle ne comprend pas, plutôt que de rendre 200 et d'auditer autre
+ * chose ».
+ *
+ * Ce qui était mesuré contre 5.12.0 : `sponsor` et `acceptanceCriteria`
+ * sur un projet, `status: "Closed"` sur un projet, `category` sur une
+ * ligne de registre — quatre 200, `version` inchangée, rien d'écrit. Le
+ * dernier tiers de la demande est le plus important : aucune ligne
+ * d'audit pour un acte qui n'a pas eu lieu.
+ */
+describe("REQ-19 · un corps que la collection ne comprend pas est refusé", () => {
+  const KEY_FOR = (collection) =>
+    (collection === "decisions" || collection === "actions" ? MEET_KEY : KEY);
+
+  test("le projet du terrain, écrit d'abord comme il doit l'être", async () => {
+    const r = await put("/api/v1/projects/REQ19-P", {
+      name: "REQ-19 subject", programme: PROG, site: SITE, pm: PM,
+      start: "2026-01-05", finish: "2026-12-18", budget: 1,
+    });
+    assert.equal(r.status, 201, r.text);
+  });
+
+  test("les champs mesurés sur le terrain sont refusés, et le refus nomme ce qui est accepté", async () => {
+    const two = await put("/api/v1/projects/REQ19-P", { sponsor: "Board", acceptanceCriteria: "signed off" });
+    assert.equal(two.status, 400, two.text);
+    assert.match(two.body.error, /projects does not accept "sponsor", "acceptanceCriteria"/);
+    /* Le refus n'est utile que s'il dit la suite : ce qui EST accepté,
+       et où lire le contrat entier. */
+    assert.match(two.body.error, /accepts: adopt, name, programme, site/);
+    assert.match(two.body.error, /openapi\.json/);
+    assert.match(two.body.error, /nothing was written/);
+
+    const closed = await put("/api/v1/projects/REQ19-P", { status: "Closed" });
+    assert.equal(closed.status, 400, closed.text);
+    assert.match(closed.body.error, /does not accept "status"/);
+
+    const cat = await put("/api/v1/raid/REQ19-R", {
+      project: "REQ19-P", type: "Risk", title: "model drift", category: "technical",
+    });
+    assert.equal(cat.status, 400, cat.text);
+    assert.match(cat.body.error, /raid does not accept "category"/);
+    /* Et la ligne n'existe pas : un refus à la création ne crée rien à
+       moitié. */
+    assert.equal(await one(`SELECT id FROM raid_item WHERE external_id = $1`, ["REQ19-R"]), null);
+  });
+
+  test("aucune ligne d'audit, aucune version, pour un acte qui n'a pas eu lieu", async () => {
+    const row = await one(`SELECT id, row_version FROM project WHERE external_id = $1`, ["REQ19-P"]);
+    const before = await many(
+      `SELECT id FROM audit_event WHERE entity = 'project' AND entity_id = $1`, [row.id]);
+
+    for (const body of [{ sponsor: "Board" }, { status: "Closed" }, { health: "AMBER" }]) {
+      assert.equal((await put("/api/v1/projects/REQ19-P", body)).status, 400);
+    }
+
+    const after = await many(
+      `SELECT id FROM audit_event WHERE entity = 'project' AND entity_id = $1`, [row.id]);
+    assert.equal(after.length, before.length, "un refus n'écrit pas de piste");
+    const now = await one(`SELECT row_version FROM project WHERE id = $1`, [row.id]);
+    assert.equal(now.row_version, row.row_version, "et ne fait pas bouger la version sous le lecteur");
+  });
+
+  test("un corps vide — ou qui ne porte que `version` — est refusé", async () => {
+    const empty = await put("/api/v1/projects/REQ19-P", {});
+    assert.equal(empty.status, 400, empty.text);
+    assert.match(empty.body.error, /names nothing to write/);
+    /* `version` asserte ce qu'on écrase ; elle n'est pas un changement. */
+    const onlyVersion = await put("/api/v1/projects/REQ19-P", { version: 1 });
+    assert.equal(onlyVersion.status, 400, onlyVersion.text);
+    assert.match(onlyVersion.body.error, /names nothing to write/);
+    /* Et la liste proposée ne conseille pas d'envoyer `version` seule. */
+    assert.ok(!/send at least one of:[^.]*version/.test(onlyVersion.body.error));
+  });
+
+  /**
+   * Le test qui compte autant que le changement : ce qui passait hier
+   * passe encore. Chaque champ DÉCLARÉ de chaque collection traverse le
+   * garde — s'il en refusait un seul, toute intégration qui l'envoie
+   * casserait, et c'est exactement le prix d'un garde mal posé.
+   */
+  test("chaque champ déclaré, sur chaque collection, traverse le garde", async () => {
+    for (const [collection, shape] of Object.entries(WRITE_BODIES)) {
+      const body = Object.fromEntries(Object.keys(shape).map((k) => [k, "x"]));
+      assert.doesNotThrow(() => assertKnownBody(collection, body),
+        `${collection} refuse un champ qu'il déclare`);
+      /* Et un par un, pour que le message d'échec nomme le coupable.
+         `version` est écartée de ce tour-là : seule, elle ne demande
+         aucune écriture, et c'est le test suivant qui tient cette
+         règle-ci. */
+      for (const k of Object.keys(shape).filter((x) => x !== "version")) {
+        assert.doesNotThrow(() => assertKnownBody(collection, { [k]: "x" }),
+          `${collection}.${k} est déclaré et refusé`);
+      }
+    }
+    /* Le contrat publié dit la même chose que le garde : ni plus, ni
+       moins. Une propriété de plus dans OpenAPI serait une promesse que
+       le serveur refuse ; une de moins, un champ accepté que personne ne
+       peut découvrir. */
+    const doc = (await c.get("/api/v1/openapi.json", { "X-API-Key": KEY })).body;
+    for (const [collection, shape] of Object.entries(WRITE_BODIES)) {
+      const schema = doc.paths[`/api/v1/${collection}/{externalId}`]
+        .put.requestBody.content["application/json"].schema;
+      assert.deepEqual(Object.keys(schema.properties).sort(), Object.keys(shape).sort(),
+        `${collection} : la description et le garde ne disent pas la même chose`);
+      assert.equal(schema.additionalProperties, false,
+        `${collection} : le contrat publié doit dire que le corps est clos`);
+    }
+    /* Une écriture normale, elle, passe toujours — le garde ne s'est pas
+       mis en travers du chemin qu'il protège. */
+    const ok = await put("/api/v1/projects/REQ19-P", { desc: "still writable", version: 1 });
+    assert.equal(ok.status, 200, ok.text);
+  });
+
+  test("chaque PUT monté déclare son corps, et refuse ce qu'il ne reconnaît pas", async () => {
+    const puts = mountedRoutes().filter((r) => r.method === "PUT");
+    assert.ok(puts.length >= 10, "les écritures sont montées");
+    for (const { path } of puts) {
+      const collection = /^\/api\/v1\/([^/]+)\/:externalId$/.exec(path)?.[1];
+      assert.ok(collection && WRITE_BODIES[collection],
+        `${path} est montée sans corps déclaré — le garde de REQ-19 la laisserait passer`);
+      const r = await c.put(`/api/v1/${collection}/REQ19-GUARD`, { notAField: 1 },
+        { "X-API-Key": KEY_FOR(collection) });
+      assert.equal(r.status, 400, `${path} : ${r.text}`);
+      assert.match(r.body.error, new RegExp(`${collection} does not accept "notAField"`));
+    }
+  });
+
+  test("un corps refusé ne consomme pas la clé d'idempotence", async () => {
+    const key = { "Idempotency-Key": "REQ19-K1" };
+    const refused = await put("/api/v1/projects/REQ19-K", { name: "x", sponsor: "Board" }, key);
+    assert.equal(refused.status, 400, refused.text);
+    /* Le refus est posé AVANT la réservation : la même clé, corrigée,
+       reprend son travail au lieu de répondre 422 « clé déjà employée
+       pour une autre requête ». */
+    const fixed = await put("/api/v1/projects/REQ19-K", {
+      name: "REQ-19 idempotent", programme: PROG, site: SITE,
+      start: "2026-02-02", finish: "2026-11-30",
+    }, key);
+    assert.equal(fixed.status, 201, fixed.text);
   });
 });

@@ -327,10 +327,17 @@ describe("UAT · robustness", () => {
     const { Engine } = await import("../../shared/engine.js");
     const m = Engine.metrics(db, created.body.id);
     assert.equal(m.pv, 0);
-    assert.equal(m.spi, 1);
-    assert.ok(Number.isFinite(m.eac));
+    /* REQ-33 — un projet dont rien n'est mesuré n'a pas d'indice. Ce
+       test-ci porte un CONTRAT qui vaut toujours et qu'il ne faut pas
+       supprimer avec la ligne : aucune vue dérivée ne doit recevoir de
+       NaN. Un `null` explicite le tient ; un NaN ne le tiendrait pas. */
+    assert.equal(m.spi, null);
+    assert.ok(Number.isFinite(m.eac), "aucun NaN n'atteint une vue");
+    assert.ok(Number.isFinite(m.vac));
     const roll = Engine.roll(db, db.projects);
-    assert.ok(Number.isFinite(roll.spi) && Number.isFinite(roll.cpi));
+    assert.ok(roll.spi === null || Number.isFinite(roll.spi),
+      "soit un indice réel, soit AUCUN — jamais un NaN, et jamais un 1.00 inventé");
+    assert.ok(roll.cpi === null || Number.isFinite(roll.cpi));
     const cp = Engine.criticalPath(db, created.body.id);
     assert.equal(cp.critical.size, 0);
   });

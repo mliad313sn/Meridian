@@ -100,10 +100,15 @@ describe("earned value (R3.1)", () => {
     });
     const m = Engine.metrics(early, "X");
     assert.equal(m.measurable, false);
-    assert.equal(m.spi, 1, "indices report 1.00 rather than nonsense");
-    assert.equal(m.cpi, 1);
-    assert.equal(m.health.rag, "G");
-    assert.match(m.health.why, /too early/i);
+    /* REQ-33 — un indice qu'on n'a pas ne vaut pas 1 : il vaut RIEN.
+       Rendre 1.00 « plutôt qu'une absurdité » substituait une absurdité
+       plus coûteuse — la seule que personne ne remarque, parce qu'elle a
+       l'air saine. */
+    assert.equal(m.spi, null, "an index nobody measured is not 1.00, it is nothing");
+    assert.equal(m.cpi, null);
+    assert.equal(m.health.rag, "N", "and an absence is not green");
+    assert.match(m.health.why, /too early/i,
+      "« trop tôt » reste distinct de « pas de budget » : les deux sont des absences, pas la même");
   });
 
   test("the guard releases as soon as the plan is genuinely under way", () => {
@@ -116,9 +121,59 @@ describe("earned value (R3.1)", () => {
     const m = Engine.metrics(empty, "X");
     assert.equal(m.pv, 0);
     assert.equal(m.ev, 0);
-    assert.equal(m.spi, 1);
-    assert.equal(m.cpi, 1);
+    assert.equal(m.spi, null);
+    assert.equal(m.cpi, null);
+    /* Le contrat « aucun NaN n'atteint une vue » tient toujours : un
+       indice absent ne doit pas se propager en estimation absurde. */
     assert.ok(Number.isFinite(m.eac));
+    assert.ok(Number.isFinite(m.vac));
+    assert.ok(typeof m.forecastFinish === "string" && m.forecastFinish.length === 10);
+  });
+
+  /**
+   * REQ-33 — la découverte la plus grave que ce produit ait reçue.
+   *
+   * Un budget de zéro satisfaisait `pv >= bac*0.02 && ac >= bac*0.005`
+   * deux fois (`0 >= 0`), donc le projet était classé MESURABLE, ses
+   * indices valaient exactement 1.00, et la santé affirmait qu'ils
+   * étaient « tous deux dans la tolérance ». Seize projets sans budget se
+   * lisaient ON TRACK 100 %, la semaine où la porte B du programme n'a
+   * pas été convoquée.
+   */
+  test("REQ-33 · un projet sans budget n'est pas vert, et n'a pas d'indice", () => {
+    const none = fixture({ activities: [], ledger: [] });
+    none.projects[0].budget = 0;
+    const m = Engine.metrics(none, "X");
+    assert.equal(m.bac, 0);
+    assert.equal(m.measurable, false, "zéro budget n'est pas « mesurable deux fois »");
+    assert.equal(m.spi, null);
+    assert.equal(m.cpi, null);
+    assert.equal(m.health.rag, "N");
+    assert.match(m.health.why, /no budget/i, "et la raison dit laquelle des deux absences c'est");
+    assert.doesNotMatch(m.health.why, /inside tolerance/i,
+      "la phrase qu'un commanditaire lisait ne doit plus pouvoir être produite");
+  });
+
+  test("REQ-33 · un portefeuille dont rien n'est mesuré n'a pas d'indice non plus", () => {
+    const none = fixture({ activities: [], ledger: [] });
+    none.projects[0].budget = 0;
+    const roll = Engine.roll(none, none.projects);
+    /* Corriger le garde ne suffisait pas : l'ensemble « live » devient
+       vide, et les replis `: 1` faisaient encore lire 1.00 aux tuiles. */
+    assert.equal(roll.spi, null, "les tuiles auraient continué de mentir");
+    assert.equal(roll.cpi, null);
+    assert.equal(roll.measured, 0);
+    assert.equal(roll.green, 0);
+    assert.equal(roll.notMeasured, 1, "ce qui n'est pas mesuré se compte à part");
+    /* Et le contrat « aucun NaN » vaut aussi pour l'agrégat. */
+    assert.ok(roll.spi === null || Number.isFinite(roll.spi));
+  });
+
+  test("REQ-33 · un projet réellement mesuré n'est pas touché", () => {
+    const m = Engine.metrics(fixture(), "X");
+    assert.equal(m.measurable, true);
+    assert.ok(Number.isFinite(m.spi) && Number.isFinite(m.cpi));
+    assert.ok(["G", "A", "R"].includes(m.health.rag), "il garde une vraie couleur");
   });
 });
 

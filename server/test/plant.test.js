@@ -9,6 +9,7 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert";
 import { boot, shutdown, as, SITE_PROJECT_GRU } from "./harness.js";
+import { many } from "../src/db.js";
 import { can } from "../../shared/rbac.js";
 
 before(async () => { await boot(); });
@@ -142,6 +143,60 @@ test("a rollout carries one row per site, and going live asks the freeze questio
 
   const dup = await dch.post("/api/waves", { project: SITE_PROJECT_GRU, site: "GRU" });
   assert.equal(dup.status, 409, "one wave per site per rollout");
+});
+
+/**
+ * REQ-37 (retour de terrain RT365, D-3) — « une vague porte un `seq`
+ * qu'elle vous interdit d'employer ».
+ *
+ * Ce qu'ils ont mesuré est exact : trois vagues sur un site, seq 1, 2, 3
+ * → 201, 409, 409. Ce n'est pas la contrainte qui est fausse — une vague
+ * EST un site de ce déploiement, le test au-dessus le tient depuis la
+ * V-06 — c'est le refus qui ne disait rien : « That record already
+ * exists » laisse croire à un doublon accidentel. Migration 044 : la
+ * contrainte prend un nom, et le nom porte la phrase.
+ */
+test("une seconde vague au même site est refusée par une phrase qui dit pourquoi, et où consigner les phases", async () => {
+  const dch = await as("groupDCH");
+  const first = await dch.post("/api/waves", {
+    project: SITE_PROJECT_GRU, site: "KRK", seq: 1, plannedOn: "2027-06-01", note: "supervised pilot",
+  });
+  assert.equal(first.status, 201, JSON.stringify(first.body));
+
+  for (const seq of [2, 3]) {
+    const again = await dch.post("/api/waves", {
+      project: SITE_PROJECT_GRU, site: "KRK", seq, plannedOn: "2027-0" + (6 + seq) + "-01",
+    });
+    assert.equal(again.status, 409, JSON.stringify(again.body));
+    /* Ce que le refus doit apprendre à qui le lit : ce qu'est une vague,
+       à quoi sert `seq`, et quoi faire à la place. */
+    assert.match(again.body.error, /already has a rollout wave at that site/);
+    assert.match(again.body.error, /a wave IS a site in this rollout/);
+    assert.match(again.body.error, /order the sites go live in/);
+    assert.match(again.body.error, /milestones on the project/);
+    assert.doesNotMatch(again.body.error, /That record already exists/);
+  }
+
+  /* Et `seq` n'est pas mort pour autant : il ordonne les SITES, ce qui
+     est la raison de le garder plutôt que de le retirer comme le
+     registre le proposait au cas où. Trois sites, trois rangs, relus
+     dans l'ordre. */
+  for (const [site, seq] of [["LIS", 2], ["BER", 3]]) {
+    const w = await dch.post("/api/waves", { project: SITE_PROJECT_GRU, site, seq });
+    assert.equal(w.status, 201, JSON.stringify(w.body));
+  }
+  const waves = (await dch.get("/api/bootstrap")).body.db.waves
+    .filter((w) => w.project === SITE_PROJECT_GRU && ["KRK", "LIS", "BER"].includes(w.site));
+  assert.deepEqual(waves.map((w) => w.site), ["KRK", "LIS", "BER"],
+    "le déploiement se relit dans l'ordre de ses rangs");
+  assert.deepEqual(waves.map((w) => w.seq), [1, 2, 3]);
+
+  /* Un refus n'est pas un acte : rien n'est consigné pour les deux
+     vagues qui n'ont pas eu lieu. */
+  const audit = await many(
+    `SELECT id FROM audit_event WHERE entity = 'rollout_wave' AND detail LIKE $1`,
+    ["%" + SITE_PROJECT_GRU + " \u2192 KRK%"]);
+  assert.equal(audit.length, 1, "une seule vague écrite au site, donc une seule ligne de piste");
 });
 
 test("a site carries its link and its readiness, not only its clock", async () => {

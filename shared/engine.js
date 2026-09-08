@@ -54,23 +54,35 @@ export const sum = (arr, f) => arr.reduce((a, x) => a + (f ? f(x) : x), 0);
 export const uniq = (arr) => [...new Set(arr)];
 export const by = (k) => (a, b) => (a[k] > b[k] ? 1 : a[k] < b[k] ? -1 : 0);
 
+/* Q-8 / REQ-33 — un formateur n'invente pas le nombre qu'on ne lui a pas
+   donné. `money(undefined)` rendait « $NaNM » et `idx(NaN)` rendait
+   « NaN » : le premier programme réel a vu « # NaN » dans sa file de
+   priorisation et a eu l'élégance de ne pas le déposer comme défaut.
+   C'est la même règle que celle du reste de ce tour — ne rien affirmer
+   qu'on ne sache — et le tiret est déjà la façon dont le produit dit
+   « pas de chiffre » partout ailleurs. */
+const noNumber = (v) => v === null || v === undefined || !Number.isFinite(Number(v));
+
 export function money(v, dp) {
+  if (noNumber(v)) return "—";
   const d = dp === undefined ? (Math.abs(v) >= 10 ? 1 : 2) : dp;
   return "$" + v.toFixed(d) + "M";
 }
 export function signedMoney(v) {
+  if (noNumber(v)) return "—";
   const sign = v >= 0 ? "+" : "−";
   const abs = Math.abs(v);
   if (abs < 0.005) return "$0";
   return sign + (abs < 1 ? "$" + Math.round(abs * 1000) + "K" : "$" + abs.toFixed(2) + "M");
 }
 export function cash(v) {
+  if (noNumber(v)) return "—";
   const abs = Math.abs(v);
   const str = abs < 1 ? "$" + Math.round(abs * 1000) + "K" : "$" + abs.toFixed(2).replace(/0$/, "") + "M";
   return (v < 0 ? "−" : "") + str;
 }
-export const pct = (v, dp = 0) => (v * 100).toFixed(dp) + "%";
-export const idx = (v) => v.toFixed(2);
+export const pct = (v, dp = 0) => (noNumber(v) ? "—" : (v * 100).toFixed(dp) + "%");
+export const idx = (v) => (noNumber(v) ? "—" : Number(v).toFixed(2));
 
 /* ── reference data ───────────────────────────────────────────────── */
 export const GATES = [
@@ -126,7 +138,7 @@ export const RESPONSES = ["Mitigate", "Avoid", "Transfer", "Accept", "Monitor", 
 export const LESSON_CATEGORIES = ["Scope", "Schedule", "Cost", "Risk", "Quality",
   "Resources", "Stakeholders", "Procurement", "Governance", "Technical", "Transition"];
 export const DOC_TYPES = ["Charter","Business case","Design","Assurance","Quality","Operations","Compliance","Closure","Finance"];
-export const RAG_LABEL = { G: "Green", A: "Amber", R: "Red" };
+export const RAG_LABEL = { G: "Green", A: "Amber", R: "Red", N: "Not measured" };
 
 /* ═══════════════════════════════════════════════════════════════════
    The engine proper. `db` is the in-memory portfolio the API serves:
@@ -162,12 +174,29 @@ export const Engine = {
     const ac = sum(db.ledger.filter(l => l.project === projectId), l => l.amount);
 
     /* Below a couple of per cent elapsed the indices are arithmetic noise.
-       Real PMOs don't report an index that early, so neither does this. */
-    const measurable = pv >= bac * 0.02 && ac >= bac * 0.005;
-    const spi = !measurable ? 1 : pv > 0.0001 ? ev / pv : 1;
-    const cpi = !measurable ? 1 : ac > 0.0001 ? ev / ac : 1;
+       Real PMOs don't report an index that early, so neither does this.
+
+       REQ-33 — et un budget de ZÉRO satisfaisait ce test deux fois :
+       `0 >= 0` est vrai, donc un projet sans budget était classé
+       MESURABLE, ses indices valaient exactement 1.00, et `health()`
+       affirmait qu'ils étaient « tous deux dans la tolérance ». Le
+       premier programme réel a lu, sur la page que lit un commanditaire,
+       « ON TRACK 100 %, SPI 1.00, COST INDEX 1.00 » la semaine où sa
+       porte B n'a pas été convoquée et deux de ses documents de sortie
+       ont été refusés. Rien de vert n'était stocké : la couleur, les deux
+       indices et la phrase qui les justifie étaient fabriqués à la
+       lecture, à partir de rien.
+
+       Sans budget il n'y a pas d'échelle, donc pas d'indice. Et un indice
+       qu'on n'a pas ne vaut pas 1 : il vaut RIEN, et se dit `null`. */
+    const measurable = bac > 0 && pv >= bac * 0.02 && ac >= bac * 0.005;
+    const spi = !measurable ? null : pv > 0.0001 ? ev / pv : 1;
+    const cpi = !measurable ? null : ac > 0.0001 ? ev / ac : 1;
     const sv = ev - pv, cv = ev - ac;
-    const eac = cpi > 0.01 ? bac / cpi : bac;
+    /* Un indice absent laisse l'estimation à l'enveloppe : `null > 0.01`
+       est faux, ce qui donne déjà le bon résultat — on l'écrit pour que
+       ce soit une décision et non une chance. */
+    const eac = cpi != null && cpi > 0.01 ? bac / cpi : bac;
     const vac = bac - eac;
     const tcpi = (bac - ac) > 0.0001 ? (bac - ev) / (bac - ac) : 1;
     const pctComplete = bac > 0 ? clamp(ev / bac, 0, 1) : 0;
@@ -176,10 +205,13 @@ export const Engine = {
     const totalSpan = days(p.start, p.finish);
     const elapsed = clamp(days(p.start, today), 0, totalSpan);
     const remaining = Math.max(0, totalSpan - elapsed);
-    const forecastFinish = iso(addDays(today, spi > 0.05 ? Math.round(remaining / spi) : remaining));
+    const forecastFinish = iso(addDays(today, spi != null && spi > 0.05 ? Math.round(remaining / spi) : remaining));
     const slipDays = days(p.finish, forecastFinish);
 
-    const health = Engine.health(db, p, { spi, cpi, measurable });
+    /* `bac` voyage avec les indices : `health()` doit pouvoir distinguer
+       « trop tôt pour mesurer » (il y a une échelle, on n'a pas assez
+       avancé) de « rien à mesurer » (il n'y a pas d'échelle du tout). */
+    const health = Engine.health(db, p, { spi, cpi, measurable, bac });
     return {
       project: p, bac, pv, ev, ac, spi, cpi, sv, cv, eac, vac, tcpi, measurable,
       pctComplete, plannedComplete, forecastFinish, slipDays, health,
@@ -192,7 +224,18 @@ export const Engine = {
     if (p.healthOverride) return { rag: p.healthOverride, derived: false, why: p.healthOverrideWhy || "Set by the project manager" };
     const st = db.settings;
     if (!st.autoRag) return { rag: "G", derived: false, why: "Automatic status is off — PM judgement applies" };
-    if (m.measurable === false) return { rag: "G", derived: true, why: "Too early to measure — less than 2% of the plan has been spent" };
+    /* REQ-33 — la branche honnête existait déjà et rendait VERT. « Trop
+       tôt pour mesurer » et « rien n'est mesuré » ne sont pas des états
+       sains : ce sont des absences, et une absence n'a pas de couleur.
+       L'état `N` est la quatrième réponse — celle que le produit donne
+       déjà partout ailleurs (« 0 % reported », « SPI — », « ils trient
+       en dernier plutôt qu'au pire ») et qu'il refusait ici seul. */
+    if (m.measurable === false) {
+      return { rag: "N", derived: true,
+        why: (m.bac > 0)
+          ? "Too early to measure — less than 2% of the plan has been spent"
+          : "Nothing measured — no budget, so there is no scale to measure against" };
+    }
     const s = m.spi, c = m.cpi;
     if (s < st.redSpi || c < st.redCpi)
       return { rag: "R", derived: true, why: "SPI " + idx(s) + " / CPI " + idx(c) + " — below the red threshold of " + idx(st.redSpi) };
@@ -206,7 +249,12 @@ export const Engine = {
     const bac = sum(ms, m => m.bac), pv = sum(ms, m => m.pv), ev = sum(ms, m => m.ev), ac = sum(ms, m => m.ac);
     const live = ms.filter(m => m.measurable);
     const lpv = sum(live, m => m.pv), lev = sum(live, m => m.ev), lac = sum(live, m => m.ac);
-    const spi = lpv > 0.0001 ? lev / lpv : 1, cpi = lac > 0.0001 ? lev / lac : 1;
+    /* REQ-33 — corriger le garde ne suffit pas : quand AUCUN projet n'est
+       mesurable, l'ensemble « live » est vide, `lpv` vaut 0, et ces deux
+       replis rendaient encore 1.00 — les tuiles auraient continué de
+       mentir. Un portefeuille dont rien n'est mesuré n'a pas d'indice. */
+    const spi = live.length === 0 ? null : lpv > 0.0001 ? lev / lpv : 1;
+    const cpi = live.length === 0 ? null : lac > 0.0001 ? lev / lac : 1;
     const eac = sum(ms, m => m.eac);
     return {
       count: ms.length, bac, pv, ev, ac, spi, cpi, eac, vac: bac - eac, cv: ev - ac, sv: ev - pv,
@@ -214,6 +262,7 @@ export const Engine = {
       green: ms.filter(m => m.health.rag === "G").length,
       amber: ms.filter(m => m.health.rag === "A").length,
       red: ms.filter(m => m.health.rag === "R").length,
+      notMeasured: ms.filter(m => m.health.rag === "N").length,
       metrics: ms,
     };
   },

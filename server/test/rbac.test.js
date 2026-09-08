@@ -298,3 +298,24 @@ describe("S-17 · a group account does not chair every site's room", () => {
     assert.equal(gru.canWrite, false, "and the control is not drawn (R7.3)");
   });
 });
+
+/**
+ * Q-2 — demander le constat est un acte du niveau qui pose les marges,
+ * et il n'a pas de projet à nommer.
+ */
+describe("Q-2 · exception.sweep", () => {
+  test("le groupe peut le demander ; le site, le lecteur et l'inconnu non", () => {
+    const group = { role: "group", active: true, id: "U1", grants: { programmes: new Set(), sites: new Set() } };
+    const site = { role: "site", active: true, id: "U2", grants: { programmes: new Set(), sites: new Set() } };
+    const viewer = { role: "viewer", active: true, id: "U3", grants: { programmes: new Set(), sites: new Set() } };
+    const admin = { role: "admin", active: true, id: "U4", grants: { programmes: new Set(), sites: new Set() } };
+
+    assert.equal(can(group, "exception.sweep").ok, true, "sans ressource : c'est un acte de portefeuille");
+    assert.equal(can(admin, "exception.sweep").ok, true, "l'administrateur passe partout, par la sortie anticipée");
+    assert.equal(can(site, "exception.sweep").ok, false);
+    assert.match(can(site, "exception.sweep").why, /sets a margin is the level that checks it/);
+    assert.equal(can(viewer, "exception.sweep").ok, false);
+    assert.equal(can({ role: "nonsense", active: true, id: "U5" }, "exception.sweep").ok, false,
+      "un rôle que ce fichier ne nomme pas n'obtient rien");
+  });
+});

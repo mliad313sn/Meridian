@@ -30,8 +30,8 @@ import { requireIntegration } from "../integrations.js";
 import { openApiDocument, scopedEndpoints } from "../openapi.js";
 import { packageVersion } from "../env.js";
 import {
-  idempotent, upsertProject, upsertMilestone, upsertRaid, upsertDecision, upsertAction,
-  upsertActivity, upsertWorkItem, upsertCriterion, upsertBenefit, upsertBusinessCase,
+  idempotent, assertKnownBody, upsertProject, upsertMilestone, upsertRaid, upsertDecision,
+  upsertAction, upsertActivity, upsertWorkItem, upsertCriterion, upsertBenefit, upsertBusinessCase,
 } from "../v1write.js";
 
 const r = Router();
@@ -196,24 +196,40 @@ const ext = (req) => {
   if (!id || id.length > 200) throw Object.assign(new Error("externalId is 1 to 200 characters"), { status: 400 });
   return id;
 };
+/**
+ * REQ-19 — le corps est lu contre ce que la collection DÉCLARE avant
+ * qu'il ne se passe quoi que ce soit.
+ *
+ * Placé avant `idempotent()` à dessein : un corps que le contrat ne
+ * comprend pas n'est pas une requête, donc il n'y a pas de clé à
+ * réserver, pas de réponse à mémoriser, et pas d'acte à auditer. La
+ * collection se lit dans le chemin monté (`/projects/RT-01` →
+ * `projects`) plutôt que recopiée sur chaque ligne : une route ajoutée
+ * demain sans son nom serait un trou dans le garde, et un nom recopié de
+ * travers en serait un autre.
+ */
+const known = () => (req, res, next) => {
+  try { assertKnownBody(req.path.split("/")[1], req.body ?? {}); next(); }
+  catch (e) { next(e); }
+};
 const write = (fn) => async (req, res, next) => {
   try {
     const out = await fn(req.user, ext(req), req.body ?? {});
     res.status(out.created ? 201 : 200).json({ ...stamp(), ...out });
   } catch (e) { next(e); }
 };
-r.put("/projects/:externalId", requireIntegration("write:portfolio"), idempotent(), write(upsertProject));
-r.put("/milestones/:externalId", requireIntegration("write:portfolio"), idempotent(), write(upsertMilestone));
-r.put("/raid/:externalId", requireIntegration("write:portfolio"), idempotent(), write(upsertRaid));
-r.put("/activities/:externalId", requireIntegration("write:portfolio"), idempotent(), write(upsertActivity));
-r.put("/workitems/:externalId", requireIntegration("write:portfolio"), idempotent(), write(upsertWorkItem));
-r.put("/criteria/:externalId", requireIntegration("write:portfolio"), idempotent(), write(upsertCriterion));
+r.put("/projects/:externalId", requireIntegration("write:portfolio"), known(), idempotent(), write(upsertProject));
+r.put("/milestones/:externalId", requireIntegration("write:portfolio"), known(), idempotent(), write(upsertMilestone));
+r.put("/raid/:externalId", requireIntegration("write:portfolio"), known(), idempotent(), write(upsertRaid));
+r.put("/activities/:externalId", requireIntegration("write:portfolio"), known(), idempotent(), write(upsertActivity));
+r.put("/workitems/:externalId", requireIntegration("write:portfolio"), known(), idempotent(), write(upsertWorkItem));
+r.put("/criteria/:externalId", requireIntegration("write:portfolio"), known(), idempotent(), write(upsertCriterion));
 /* REQ-20 (V-1) — la valeur est du portefeuille : ce qu'un projet promet
    et ce qu'il rend se synchronisent comme ce qu'il livre. */
-r.put("/benefits/:externalId", requireIntegration("write:portfolio"), idempotent(), write(upsertBenefit));
-r.put("/business-case/:externalId", requireIntegration("write:portfolio"), idempotent(), write(upsertBusinessCase));
-r.put("/decisions/:externalId", requireIntegration("write:meetings"), idempotent(), write(upsertDecision));
-r.put("/actions/:externalId", requireIntegration("write:meetings"), idempotent(), write(upsertAction));
+r.put("/benefits/:externalId", requireIntegration("write:portfolio"), known(), idempotent(), write(upsertBenefit));
+r.put("/business-case/:externalId", requireIntegration("write:portfolio"), known(), idempotent(), write(upsertBusinessCase));
+r.put("/decisions/:externalId", requireIntegration("write:meetings"), known(), idempotent(), write(upsertDecision));
+r.put("/actions/:externalId", requireIntegration("write:meetings"), known(), idempotent(), write(upsertAction));
 
 /**
  * La description OpenAPI de ce contrat, servie par l'instance elle-même.

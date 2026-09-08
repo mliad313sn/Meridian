@@ -36,7 +36,7 @@ describe("schema and migrations (R2.2, R2.7)", () => {
        "034_decision_register.sql", "035_write_api.sql", "036_gate_ladder.sql", "037_gate_criteria.sql",
        "038_stakeholders_comms.sql", "039_decision_record.sql", "040_milestone_basis.sql",
        "041_decision_versioned.sql", "042_value_on_the_contract.sql",
-       "043_ladder_reaches_everything.sql"]);
+       "043_ladder_reaches_everything.sql", "044_wave_is_a_site.sql"]);
     const again = await migrate({ silent: true });
     assert.deepEqual(again, [], "a second run applies nothing");
   });

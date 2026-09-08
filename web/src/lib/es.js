@@ -129,6 +129,11 @@ export const ES = {
   "undated": "sin fecha",
   "closed": "cerrado",
   "No project in scope.": "Ningún proyecto en el alcance.",
+  "Check now": "Comprobar ahora",
+  "The sweep runs hourly on its own; this asks for it now.": "El barrido se ejecuta solo cada hora; esto lo pide ahora.",
+  " not measured": " sin medir",
+  " project(s), none of them measured yet": " proyecto(s), ninguno medido todavía",
+  "nothing measured to index": "nada medido que indexar",
   "It still holds": "Sigue vigente",
   "Last reconfirmed": "Última reconfirmación",
   "Nothing here says why this project deserves its budget. Gate 1 asks for the business case as evidence — and without it, nobody can ever answer whether it still holds.":

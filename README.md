@@ -92,8 +92,8 @@ Other commands:
 
 ```bash
 npm test              # the suites — the count is in CHANGELOG.md
-npm run audit         # ten gates: routes, CRUD+audit, versions, controls, language, field help, kit imports, API contract, one version everywhere, view render
-npm run verify        # tests + build + the ten gates + a dependency audit
+npm run audit         # twelve gates: routes, CRUD+audit, versions, controls, language, field help, kit imports, API contract, one version everywhere, view render, register shape, register reachable
+npm run verify        # tests + build + the twelve gates + a dependency audit
 npm run backup        # pg_dump (PostgreSQL) or the data directory (PGlite) → server/.data/backups
 npm run restore-drill # restore the newest backup ELSEWHERE, recount, time it — /api/health reports it
 npm run sweep         # 286 use cases × 4 roles + 72 view renders, on a fresh instance
