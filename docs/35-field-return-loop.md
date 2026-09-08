@@ -172,26 +172,64 @@ so a reader of the data never has to guess.
 
 ---
 
-## 6 · How a second field repository joins, in five steps
+## 6 · How a second field repository joins, in four steps
 
-1. Copy an existing register (RT365's is the worked example), keep the
-   `$schema` string, and write your `source` — repository, branch, commit,
-   the documents you read, `remote` if your forge is not GitHub.
-2. Declare your `source.vocabulary`.
-3. Write one request per finding: `origin` = your own ledger ids, `title`,
-   `status: "open"`, `accepted: null`, `released: false`, one `history` row.
-4. Put the file in `docs/requests/<your-repository>.json`. `npm run audit`
-   now holds it to the schema, and `npm run review:field` reviews it on the
-   next round — no code was written for you, and none for us.
-5. Open one issue per request on the answering repository, and answer on it
-   when the line comes back `done`. That answer is the only thing that can
-   set `accepted: true`.
+**1 · Run the command.** One line, and it writes a register that passes
+the gates the moment it lands:
+
+```bash
+npm run field:init -- \
+  --repo acme/atlas-programme \
+  --branch delivery/2026-q1 \
+  --commit 3f9a1c2 \
+  --vocabulary 'ATL-\d+' \
+  --context   'ADR-\d+' \
+  --origin ATL-014 \
+  --first 'Cost lines cannot be corrected without deleting the period'
+```
+
+It writes `docs/requests/atlas-programme.json`, and it refuses every
+thing it cannot know rather than guessing it: a repository that is not
+`owner/name`, a commit that is not a commit, a vocabulary that is not a
+regular expression, and — the one people expect it to invent — a register
+with no requests in it. `requests` carries `minItems: 1` on purpose. A
+register with nothing in it is not a register, it is a placeholder that
+makes the loop look adopted. It will also not overwrite an existing
+register without `--force`: a register is a ledger, and overwriting one
+loses every answer written in it.
+
+*This step used to read "copy an existing register". Copying RT365's
+means inheriting forty-four requests that belong to another programme and
+deleting them by hand, which is how the second adopter's register ends up
+carrying the first adopter's leftovers.*
+
+**2 · Write the rest of your findings.** One request per finding:
+`origin` = your own ledger ids — that is the join between the two
+ledgers — `title`, `status: "open"`, `accepted: null`, `released: false`,
+one `history` row. `npm run audit` holds every register in
+`docs/requests/` to the published schema (F11) and refuses any line that
+says `done` while naming a file nobody who clones can find (F12).
+
+**3 · Let the review run.** `npm run review:field` reads **every** branch
+of your repository, finds every line that names Meridian carrying an id
+*your* vocabulary declares, and prints what your register does not yet
+carry. It exits non-zero when there is something to read. No code was
+written into your repository, and none into ours: what makes the loop
+work for you is your JSON file, not a plugin.
+
+**4 · Answer.** Open one issue per request on the answering repository,
+and answer on it when the line comes back `done`. That answer is the only
+thing that can set `accepted: true` — see §5.
 
 The measure that this works is a test, not a promise:
 `server/test/fieldreturn.test.js` builds a second field repository — its
 own name, its own vocabulary, its material on a branch that is not the
-default — files a register, and reviews it end to end through the same
-command, without touching the network.
+default — files a register **with the command above**, and reviews it end
+to end through the same command the Product Owner runs, without touching
+the network. The last test of that file is the whole of step 1 to step 3
+in one run: `field-init` writes the register, `field-review` reads the
+repository through it, and the two findings that repository carries and
+the register does not are named on the screen and in the exit code.
 
 ---
 

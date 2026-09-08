@@ -306,3 +306,112 @@ describe("E-9 · a silent requester and a blocked one are not the same register 
     assert.deepEqual(validate(schema, r), []);
   });
 });
+
+/**
+ * REQ-31, the half that was still a promise. The schema was published, the
+ * review was already generic, and docs/35 §6 documented five steps — but
+ * step 1 read "copy an existing register", and copying RT365's means
+ * inheriting forty-four requests that belong to another programme and
+ * deleting them by hand. RT365 asked for "a documented schema AND
+ * command". This is the command, and these are its manners.
+ */
+describe("REQ-31 · a second field repository files its register with a command, not a copy", () => {
+  const init = (args) => {
+    try {
+      return { code: 0, out: execFileSync(process.execPath, [path.join(root, "scripts/field-init.mjs"), ...args],
+        { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }), err: "" };
+    } catch (e) { return { code: e.status, out: e.stdout ?? "", err: e.stderr ?? "" }; }
+  };
+  const scratch = () => fs.mkdtempSync(path.join(os.tmpdir(), "field-init-"));
+
+  test("what it writes validates against the published shape, first time", () => {
+    const out = path.join(scratch(), "atlas.json");
+    const r = init(["--repo", "acme/atlas-programme", "--branch", "delivery/2026-q1",
+      "--commit", "3f9a1c2", "--vocabulary", "ATL-\\d+", "--origin", "ATL-014",
+      "--first", "Cost lines cannot be corrected without deleting the period", "--out", out]);
+    assert.equal(r.code, 0, r.err);
+    const register = JSON.parse(fs.readFileSync(out, "utf8"));
+    assert.deepEqual(validate(schema, register), [],
+      "a register the command wrote must pass the gate the command points at");
+    assert.equal(register.registerVersion, 1);
+    assert.equal(register.requests.length, 1);
+    assert.equal(register.requests[0].status, "open");
+    assert.equal(register.requests[0].accepted, null,
+      "nothing is delivered, so the requester cannot yet have answered (E-9)");
+    assert.deepEqual(register.requests[0].origin, ["ATL-014"],
+      "the join between the two ledgers is written at birth, not later");
+  });
+
+  test("it refuses every thing it cannot know, and names the flag", () => {
+    const base = ["--repo", "acme/atlas", "--branch", "b", "--commit", "3f9a1c2",
+      "--vocabulary", "ATL-\\d+", "--origin", "ATL-1", "--first", "a finding"];
+    const without = (flag) => {
+      const i = base.indexOf(flag);
+      return init([...base.slice(0, i), ...base.slice(i + 2), "--out", path.join(scratch(), "x.json")]);
+    };
+    for (const flag of ["--repo", "--branch", "--commit", "--vocabulary", "--origin", "--first"]) {
+      const r = without(flag);
+      assert.notEqual(r.code, 0, `${flag} missing must not produce a register`);
+      assert.match(r.err, new RegExp(flag.replace(/^--/, "")), `the refusal must name ${flag}`);
+    }
+  });
+
+  test("a register with nothing in it is refused, because it is not a register", () => {
+    const r = init(["--repo", "acme/atlas", "--branch", "b", "--commit", "3f9a1c2",
+      "--vocabulary", "ATL-\\d+", "--origin", "ATL-1", "--out", path.join(scratch(), "x.json")]);
+    assert.notEqual(r.code, 0);
+    assert.match(r.err, /at least one request/,
+      "the schema's minItems: 1 is a statement about registers, and the command must make it");
+  });
+
+  test("it will not silently overwrite a ledger", () => {
+    const out = path.join(scratch(), "atlas.json");
+    const args = ["--repo", "acme/atlas", "--branch", "b", "--commit", "3f9a1c2",
+      "--vocabulary", "ATL-\\d+", "--origin", "ATL-1", "--first", "a finding", "--out", out];
+    assert.equal(init(args).code, 0);
+    fs.writeFileSync(out, fs.readFileSync(out, "utf8").replace('"registerVersion": 1', '"registerVersion": 9'));
+    const second = init(args);
+    assert.notEqual(second.code, 0, "a second run must not erase the answers written since the first");
+    assert.match(second.err, /already exists/);
+    assert.match(fs.readFileSync(out, "utf8"), /"registerVersion": 9/, "and must leave the file untouched");
+    assert.equal(init([...args, "--force"]).code, 0, "--force is the way to say you meant it");
+  });
+
+  test("a bad commit or an unparseable vocabulary is caught here, not three commands later", () => {
+    const out = () => path.join(scratch(), "x.json");
+    const bad = (over) => init(["--repo", "acme/atlas", "--branch", "b", "--commit", "3f9a1c2",
+      "--vocabulary", "ATL-\\d+", "--origin", "ATL-1", "--first", "a finding", "--out", out(), ...over]);
+    assert.match(bad(["--commit", "not-a-sha"]).err, /hex/);
+    assert.match(bad(["--repo", "atlas"]).err, /owner\/name/);
+    assert.match(bad(["--vocabulary", "ATL-(\\d+"]).err, /regular expression/);
+  });
+
+  /* The whole of REQ-31 in one run: the command files the register, and the
+     review the Product Owner runs reads a real second repository through it
+     — no path, no id and no branch of that programme written into our code. */
+  test("command, then review, end to end on a second field repository", () => {
+    const { dir } = fixtureFieldRepository();
+    const head = git(dir, "rev-parse", "--short", "main").trim();
+    const out = path.join(scratch(), "anvil.json");
+
+    const written = init(["--repo", "anvil-works/anvil-field", "--remote", dir,
+      "--branch", "field/second-round", "--commit", head,
+      "--vocabulary", "ANV-\\d{3}", "--vocabulary", "RISK-\\d{2}", "--context", "DEC-\\d{3}",
+      "--document", "docs/ASSESSMENT.md", "--document", "docs/RISKS.md",
+      "--origin", "ANV-101", "--first", "Closure refuses to complete without a named benefits owner",
+      "--out", out]);
+    assert.equal(written.code, 0, written.err);
+
+    const reviewed = reviewCliFailing(["--register", out]);
+    /* ANV-101 is in the register; ANV-102 and RISK-07 are in the field
+       repository and are not — so the review must ask for them by name,
+       and say so in its exit code as well as on the screen. */
+    assert.equal(reviewed.code, 1, "a finding the register does not carry is a finding");
+    assert.match(reviewed.out, /anvil-works\/anvil-field · 2 branch\(es\)/,
+      "the command wrote a register the review reads without help");
+    assert.match(reviewed.out, /ANV-102/, "a finding written over there must not go unseen over here");
+    assert.match(reviewed.out, /RISK-07/, "including one on the branch that is not the default");
+    assert.match(reviewed.out, /for context \(1\)[\s\S]*DEC-401/,
+      "a context id the command declared is listed for the reader, never counted as a missing request");
+  });
+});
