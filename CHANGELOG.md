@@ -22,6 +22,88 @@ Nothing yet.
 
 ---
 
+## [5.15.0] — 2026-09-09
+
+Two waves in one release: the executive value page RT365 asked for, and
+the three instrument defects we filed against ourselves while building
+the governance signals of 5.14.0.
+
+### Added
+
+- **A value page for the executive** (REQ-30). Six figures — spend
+  against case, benefits by status, overdue reviews, top risks by
+  exposure, gates due, exceptions open — assembled from the book with
+  nothing typed, printable to A4 as a board pack, and stored per
+  reporting period so a claim made in March can be re-read in December.
+  **No figure carries a colour**: no threshold for "too little benefit"
+  has been agreed, and inventing one here is REQ-33 under a new name.
+  The figure to look at is *exceptions open*, because it is a trap — a
+  book with no tolerance set shows `—`, not "0 open". An empty exception
+  register on a portfolio that has declared no limits is not a clean bill
+  of health, and this is the only screen that says so.
+- **The database now refuses to store an unmeasured figure carrying a
+  zero.** `CHECK ((state = 'N' AND value IS NULL AND length(why) > 0) OR
+  (state = 'measured' AND value IS NOT NULL))` — REQ-33 written into the
+  schema rather than trusted to the code above it, with a test that
+  inserts the forbidden row to prove the refusal.
+- **A gate that was ticked without acceptance criteria records the day
+  and the person** (REQ-45): `milestone.done_on` / `done_by`, a *weaker*
+  pair beside 032's `accepted_on` / `accepted_by`, never a widened strong
+  one. A gate with no criteria has nothing to accept, and writing an
+  acceptance date where nobody accepted anything erases the distinction
+  032 exists to hold.
+- **A RAID review is an event with its own row** (REQ-46): `raid_review`,
+  one row per review performed. `raid_item.review_on` stays and becomes
+  the projection of the latest event, not a substitute for it. Two
+  columns holding the last review would answer "when was this last looked
+  at" and still not make last month readable.
+- **A decision records when it was ratified** (REQ-47):
+  `meeting_decision.ratified_on`, with a CHECK that un-ratifying clears
+  it — enforced by the table rather than trusted to four routes.
+
+### Changed
+
+- **Two of the five governance signals can now speak.** `gateCycleTime`
+  moved from `N` to a measured figure, and `raidReviewCompliance` gained
+  a replayed trend. On a book where none of it has happened, every `N` is
+  still an `N` with the right sentence: nothing lights up because a
+  standard was loosened.
+- `trendNoHistory` is **deleted**, not left unreachable. It said the
+  register could not record that a review happened; migration 050 made
+  that false, and a sentence that is no longer true must not be a state
+  the product can reach.
+- **A book that had stored a value page could not be reset at all.**
+  `reset-book` fails any table it neither clears nor declares kept, and
+  its guard fires only at reset time and only when the forgotten table
+  holds a row. Fixed, and closed as a class: a test now reads both lists
+  against the live schema and fires the moment a migration adds a table.
+  It found a second instance on its first run — `case_reconfirmation`,
+  from REQ-22's work, which meant a book with a reconfirmed business case
+  could not be reset either.
+- Gate maps taught `valuepage`, `ladder`, `raid_review`, `report_value`
+  and `report_value_figure`. Five hand-written lists in this repository
+  share one blind spot: a thing the list does not name is not reported
+  missing, it is simply not seen (REQ-52).
+
+### Not done, and said plainly
+
+- **REQ-49, high, open.** `POST /api/decisions` takes `ratifiedBy` as
+  free text with no directory lookup and no independence check, while the
+  contract door has enforced `canRatifyDecision` since the security
+  round. REQ-47 made that worse in this same release: the route now
+  writes `ratified_on`, so an unchecked ratification is dated and feeds a
+  governance metric. Closing it properly changes an authority rule and
+  the decision form; a hurried authority change is how a check ends up
+  weakened rather than applied.
+- REQ-50 (no human can ratify from a screen at all), REQ-51 (the contract
+  can move a review date but still cannot say a review happened) and
+  REQ-48 (the demonstration book carries no business case, so four of the
+  value page's six figures read as absences on a fresh install).
+- `v5.15.0` is **not on the remote**, and neither is any tag past
+  `v5.9.0`. Every `released: false` in the register is honest.
+
+---
+
 ## [5.14.0] — 2026-09-08
 
 RT365's integrator rewrote `meridian_sync.py` against our published

@@ -112,6 +112,16 @@ const ENTITIES = {
      row, or twice). Withdrawing is not deletion-because-it-is-awkward:
      the whole event is the audit row's before-image, and the due date
      that comes back is the one that review found in place. */
+  /* REQ-30 (048) — la page de valeur déposée pour une période. Le
+     dépôt est le create ; il n'y a ni update ni delete parce que ce
+     qu'on a dit au conseil est un RECORD, corrigé par une période qui
+     restate, jamais réécrit. */
+  report_value: { c: /post\("\/valuepage\/:periodId"/,
+    u: NA("Append-only (REQ-30) — corrected by a new period that restates this one, with its own value page"),
+    d: NA("Append-only (REQ-30) — what the board was told it was worth is a record") },
+  report_value_figure: { c: /post\("\/valuepage\/:periodId"/,
+    u: NA("Append-only (REQ-30) — frozen with the page it belongs to"),
+    d: NA("Append-only (REQ-30) — frozen with the page it belongs to") },
   raid_review: { c: /post\("\/raid\/:id\/reviews"/, u: /patch\("\/raid\/reviews\/:id"/,
     d: /delete\("\/raid\/reviews\/:id"/ },
   prioritisation_weighting: {

@@ -59,6 +59,15 @@ if (!KEEP.length) KEEP.push("admin@meridian.example");
 const KEEP_TABLES = new Set([
   "app_user", "app_setting", "audit_event", "board_column", "id_counter",
   "integration", "report_period", "report_snapshot", "schema_migration",
+  /* REQ-30 (048) — ce qu'on a DIT au conseil que ça valait, période par
+     période, est de l'histoire rapportée au même titre que le snapshot :
+     append-only à la base, et une remise à zéro ne réécrit pas ce qui a
+     été présenté. Sans ces deux lignes le garde ci-dessous fait échouer
+     la remise à zéro ENTIÈRE d'un livre qui a déposé une page — mesuré :
+     « la table report_value_figure (1 ligne) n'est ni vidée ni déclarée
+     gardée ». C'est la troisième liste écrite à la main de ce dépôt à
+     avoir le même angle mort que les cartes de F1 et F2. */
+  "report_value", "report_value_figure",
   "session",
   /* I-2 : la mémoire des clés d'idempotence appartient à l'intégration,
      comme sa clé — configuration d'exploitation, pas contenu de démo. */
@@ -82,6 +91,14 @@ const TABLES = [
   "meeting_occurrence", "meeting_series",
   "report_narrative", "work_item", "gate_criterion", "stakeholder", "comms_plan", "document", "allocation",
   "change_step", "change_request",
+  /* REQ-22 (042) : les reconfirmations AVANT le cas qu'elles confirment.
+     Trouvée par le contrôle de classe ajouté avec la 048, pas par un
+     incident : un livre dont un cas avait été reconfirmé à une porte ne
+     pouvait pas être remis à zéro non plus, et personne ne l'avait vu
+     parce qu'aucune suite ne reconfirme puis ne remet à zéro. C'est du
+     CONTENU de démonstration — la reconfirmation appartient au projet
+     qu'elle juge — donc elle est vidée, pas gardée. */
+  "case_reconfirmation",
   "project_exception", "project_tolerance", "business_case", "benefit",
   "lesson", "demand",
   /* REQ-46 (050) : les revues avant la ligne qu'elles regardent. Le
@@ -96,6 +113,14 @@ const TABLES = [
   "access_grant", "programme", "person", "site",
   "usage_daily",
 ];
+
+/* Exported for the test that closes this class of defect rather than
+   this instance of it. The guard below only fires AT RESET TIME, and only
+   when the forgotten table happens to hold a row — which is why a book
+   that had stored a value page could not be reset and no suite noticed.
+   A test that reads both lists against the live schema fires the moment a
+   migration adds a table, empty or not. */
+export const RESET_LISTS = { keep: KEEP_TABLES, clear: TABLES };
 
 export async function resetBook() {
   const before = await many(

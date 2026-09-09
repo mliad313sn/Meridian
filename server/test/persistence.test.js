@@ -11,11 +11,43 @@ import assert from "node:assert/strict";
 import { boot, shutdown, as, GROUP_PROJECT, SITE_PROJECT_GRU } from "./harness.js";
 import { many, one, query, tx, migrate, engine } from "../src/db.js";
 import { fromM, M } from "../src/portfolio.js";
+import { RESET_LISTS } from "../src/reset-book.js";
 
 before(async () => { await boot(); });
 after(async () => { await shutdown(); });
 
 describe("schema and migrations (R2.2, R2.7)", () => {
+  /* This repository now keeps FIVE hand-written lists of things the
+     product owns — F1's router map, F2's entity map, and reset-book's
+     keep/clear pair — and every one of them has the same blind spot: a
+     thing the list does not name is not reported as missing, it is
+     simply not seen. That has cost a release four times.
+
+     reset-book's guard is the worst of the four, because it fires only
+     at reset time AND only when the forgotten table happens to hold a
+     row. A book that had stored a value page could not be reset at all,
+     and no suite noticed, because no suite stores a page and resets the
+     same book. This test does not check that instance; it checks the
+     class, and it fires the moment a migration adds a table. */
+  test("every table the migrations create is either cleared or declared kept (reset-book)", async () => {
+    const live = (await many(
+      `SELECT table_name AS tbl FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_type = 'BASE TABLE'`
+    )).map((r) => r.tbl).sort();
+
+    const named = new Set([...RESET_LISTS.keep, ...RESET_LISTS.clear]);
+    const unseen = live.filter((t) => !named.has(t));
+    assert.deepEqual(unseen, [],
+      "a migration created a table that reset-book neither clears nor keeps — " +
+      "add it to one of the two lists WITH the reason, as every other line there has");
+
+    /* And the reverse: a list that names a table nobody has created any
+       more is a line whose reason has quietly stopped applying. */
+    const gone = [...named].filter((t) => !live.includes(t) && t !== "schema_migration");
+    assert.deepEqual(gone.sort(), [],
+      "reset-book names a table that no longer exists");
+  });
+
   test("the engine really is PostgreSQL", async () => {
     const v = await one(`SELECT version() AS v`);
     assert.match(v.v, /PostgreSQL/);
