@@ -124,7 +124,7 @@ r.get("/decisions", requireIntegration("read:meetings"), async (req, res, next) 
               d.project_id, d.cr_id, d.raid_id, d.milestone_id, d.supersedes,
               COALESCE(o.meets_on, d.decided_on) AS decided_on,
               d.external_source, d.external_id, d.council, d.evidence_uri, d.provenance,
-              d.status, d.ratified_by, d.row_version,
+              d.status, d.ratified_by, d.ratified_on, d.row_version,
               s.name AS series_name, pe.name AS decided_by_name
          FROM meeting_decision d
          LEFT JOIN meeting_occurrence o ON o.id = d.occurrence_id
@@ -144,6 +144,10 @@ r.get("/decisions", requireIntegration("read:meetings"), async (req, res, next) 
         milestone: d.milestone_id ?? null, supersedes: d.supersedes ?? null,
         evidenceUri: d.evidence_uri ?? "", provenance: d.provenance ?? "",
         status: d.status ?? "Ratified", ratifiedBy: d.ratified_by ?? "",
+        /* REQ-47 — le jour de la ratification. Nul sur une décision
+           proposée, et nul sur une ligne ratifiée avant la 049 : rien
+           n'est rétro-daté pour faire joli dans un tableau. */
+        ratifiedOn: d.ratified_on ?? null,
         /* Ce que l'adoption vient chercher : la ligne est-elle déjà à
            quelqu'un, et si oui sous quel nom. */
         externalSource: d.external_source ?? null, externalId: d.external_id ?? null,

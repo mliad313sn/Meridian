@@ -165,7 +165,12 @@ const WRITE_DOCS = {
     "`project` is a Meridian id or an externalId you created. A milestone with acceptanceCriteria " +
     "cannot be marked done without acceptedBy — the person who checked them (PM-04). `dateBasis: " +
     "\"placeholder\"` with a `condition` says the date is a position on the timeline, not a commitment: " +
-    "it is never reported missed or overdue until you make it `committed` (REQ-14)."),
+    "it is never reported missed or overdue until you make it `committed` (REQ-14). " +
+    "Marking it `done` records the day and the person who marked it — send `doneOn` when your register " +
+    "knows the real day, otherwise today is stamped, and `doneBy` names the person; both are cleared if " +
+    "you un-mark it. They are weaker than `acceptedBy`/`acceptedOn`, which say a named person found " +
+    "acceptance criteria met: a ticked box is not an acceptance, and a gate with no criteria still has " +
+    "a date (REQ-45). Rows marked done before this existed keep a null date rather than a made-up one."),
   "PUT /api/v1/raid/:externalId": upsert("a register item (risk, issue, assumption, dependency)", "write:portfolio",
     "`gate` links it to a governance gate of the project, `cr` to a change request of the same project (I-8). " +
     "Omit `project` for a portfolio-wide item. `category` is your own free classification label, kept " +
@@ -198,7 +203,11 @@ const WRITE_DOCS = {
     "Named by `decidedBy` (a person) or `council` (the deciding body). The substance — headline, rationale, " +
     "alternatives, dissent — is immutable: a different substance answers 409 — record a new decision naming " +
     "the old one in `supersedes` (I-7). The state — `status` Proposed|Ratified, `ratifiedBy`, `evidenceUri`, " +
-    "`provenance` — may change, and each change is audited with before/after."),
+    "`provenance` — may change, and each change is audited with before/after. Becoming `Ratified` records " +
+    "the day it happened: send `ratifiedOn` when you know it, otherwise today is stamped; a decision " +
+    "created already `Ratified` is dated from the day it was decided, and going back to `Proposed` clears " +
+    "the date, because a decision that is not ratified was not ratified on a day (REQ-47). Decisions " +
+    "ratified before this existed read back with `ratifiedOn: null` — unknown, never back-dated."),
   "PUT /api/v1/actions/:externalId": upsert("an action", "write:meetings",
     "An action is raised in an OPEN meeting: send `occurrence` (an open occurrence id) or `series` " +
     "(the series whose open occurrence takes it). The API never opens a meeting — a chair does."),

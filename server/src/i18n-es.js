@@ -15,6 +15,10 @@
  */
 
 export const ES = {
+  /* REQ-30 — los dos «no hay nada» de la página de valor. */
+  "No such reporting period": "Ese periodo de informe no existe",
+  "No value page was stored for that reporting period":
+    "No se depositó ninguna página de valor sobre ese periodo de informe",
   // authority
   "not authenticated — sign in again, your session may have ended":
     "no autenticado — vuelva a iniciar sesión, su sesión puede haber expirado",
@@ -133,6 +137,12 @@ const ES_NOTIFY = {
 Object.assign(ES, ES_NOTIFY);
 
 export const ES_PREFIX = [
+  /* REQ-30 — les deux refus de la page de valeur. Préfixe traduit,
+     données (la période, les deux dates) laissées telles quelles. */
+  ["A value page is already stored for this reporting period, and what was reported is a record rather than a working copy. To correct it, close a new period that restates this one and store the value page against that, so the restatement is itself on the record: ",
+   "Ya hay una página de valor depositada sobre este periodo, y lo informado es un registro, no una copia de trabajo. Para corregirlo, cierre un periodo nuevo que rectifique este y deposite ahí la página de valor, para que la rectificación conste también: "],
+  ["These figures are read from the book as it stands today, so they can only be stored against a period closed at the book's own status date. Storing them against a period closed on another day would file today's numbers under a date on which they were not true, and nobody reading them later could tell. Close a period at today's status date instead: ",
+   "Estas cifras se leen del libro tal como está hoy: solo pueden depositarse sobre un periodo cerrado a la fecha de estado del libro. Depositarlas sobre un periodo cerrado otro día archivaría las cifras de hoy bajo una fecha en la que no eran ciertas, y nadie podría advertirlo después. Cierre un periodo a la fecha de estado de hoy: "],
   ["Gate evidence needs its artefact",
     "La evidencia de puerta exige su artefacto"],
   ["No trusted document hosts are configured",

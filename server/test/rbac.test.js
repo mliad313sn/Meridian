@@ -193,6 +193,33 @@ describe("enforcement over HTTP (R1.4 — hiding a button is not enforcement)", 
     assert.equal(base.status, 403);
   });
 
+  /* REQ-46 — le registre RAID a deux portées, et une seule était dite
+     dans rbac.js : une ligne SANS projet n'avait aucun projet à vérifier,
+     tombait dans le défaut projet, et y était refusée à tout le monde. Les
+     routes s'en tiraient en écrivant le rôle à la main, trois fois. La
+     règle vit maintenant là où le produit décide de l'autorité, et une
+     revue de registre — un geste de plus sur ces lignes-là — n'a pas eu
+     besoin d'une quatrième copie. */
+  test("REQ-46 · une ligne de registre SANS projet est un geste de niveau groupe", () => {
+    const group = mk("group", ["CBP"]);
+    const site = mk("site", [], ["GRU"]);
+    assert.equal(can(group, "raid.write", {}).ok, true, "le portefeuille porte ses propres risques");
+    /* Sans habilitation de programme non plus : une ligne de portefeuille
+       n'appartient à aucun programme, exactement comme period.close. */
+    assert.equal(can(mk("group"), "raid.write", {}).ok, true);
+    const refused = can(site, "raid.write", {});
+    assert.equal(refused.ok, false);
+    assert.match(refused.why, /group level/);
+    assert.equal(can(mk("viewer", [], ["GRU"]), "raid.write", {}).ok, false);
+    assert.equal(can(mk("admin"), "raid.write", {}).ok, true);
+    /* Et la portée projet n'a pas bougé d'un pouce. */
+    assert.equal(can(site, "raid.write", { project: proj("DCH", "GRU", "site") }).ok, true);
+    assert.equal(can(site, "raid.write", { project: proj("CBP", "GRU", "group") }).ok, false);
+    assert.match(can(site, "raid.write", { project: proj("CBP", "GRU", "group") }).why, /group-governed/);
+    assert.equal(can(group, "raid.write", { project: proj("DCH", "GRU", "site") }).ok, false,
+      "un programme hors habilitation reste hors habilitation");
+  });
+
   test("R1.5 over HTTP · a viewer is refused every write it can reach", async () => {
     const v = await as("viewerLIS");
     const attempts = [

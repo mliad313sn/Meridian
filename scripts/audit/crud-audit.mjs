@@ -107,6 +107,13 @@ const ENTITIES = {
      It is here because a table this map does not name is INVISIBLE to
      this gate — the same blind spot F1 had for a router it did not
      name, found twice in two waves. */
+  /* REQ-46 (050) — a review HAPPENED: it is recorded, read back,
+     corrected, and withdrawn when it was written in error (on the wrong
+     row, or twice). Withdrawing is not deletion-because-it-is-awkward:
+     the whole event is the audit row's before-image, and the due date
+     that comes back is the one that review found in place. */
+  raid_review: { c: /post\("\/raid\/:id\/reviews"/, u: /patch\("\/raid\/reviews\/:id"/,
+    d: /delete\("\/raid\/reviews\/:id"/ },
   prioritisation_weighting: {
     c: NA("One row, posed by migration 046 — a portfolio has one weighting, never a second"),
     u: /patch\("\/prioritisation\/weighting"/,

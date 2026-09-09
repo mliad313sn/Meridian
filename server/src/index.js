@@ -31,6 +31,7 @@ import federationRoutes from "./routes/federation.js";
 import v1Routes from "./routes/v1.js";
 import signalsRoutes from "./routes/signals.js";
 import ladderRoutes from "./routes/ladder.js";
+import valuePageRoutes from "./routes/valuepage.js";
 import federationServiceRoutes from "./routes/federationService.js";
 import { translate } from "./pgerror.js";
 import { say, localeOf } from "./i18n.js";
@@ -220,6 +221,7 @@ export function buildApp() {
   app.use("/api/federation", federationRoutes);
   app.use("/api", portfolioRoutes);
   app.use("/api", ladderRoutes);
+  app.use("/api", valuePageRoutes);
   app.use("/api/import", importRoutes);
   app.use("/api/meetings", meetingRoutes);
   app.use("/api/admin", adminRoutes);

@@ -550,7 +550,26 @@ textarea.input{resize:vertical;min-height:70px;line-height:1.55}
 .scrollx{overflow-x:auto}
 .nowrap{white-space:nowrap}
 
-/* ── print (status report) ────────────────────────────────────────── */
+/* ── REQ-30 · the value page ──────────────────────────────────────────
+   One printable page. Nothing here carries a colour that means anything:
+   every status, band and gate state is drawn as a WORD by the view, so
+   the page survives a greyscale board pack — which is where it is
+   actually read. */
+.value-page{border-bottom:1px solid var(--rule-2)}
+.vp-masthead{display:flex;align-items:flex-start;gap:20px;flex-wrap:wrap}
+.vp-scope{margin:12px 0 14px;max-width:96ch}
+.vp-banner{margin-top:12px;padding:8px 11px;border-left:3px solid var(--color-accent);
+  background:var(--color-surface);max-width:96ch}
+.vp-block{margin-top:22px;break-inside:avoid}
+.vp-block-hd{display:flex;align-items:baseline;gap:10px;
+  border-bottom:1px solid var(--rule-2);padding-bottom:5px;margin-bottom:10px}
+.vp-block-hd h5{font-size:12px;letter-spacing:.1em;text-transform:uppercase;margin:0}
+.vp-why{color:var(--muted);max-width:82ch;padding:2px 0 4px;font-style:italic}
+.vp-facts{display:flex;gap:22px;flex-wrap:wrap;margin-bottom:10px}
+.vp-facts .kicker{display:block}
+.vp-foot{margin-top:22px;padding-top:8px;border-top:1px solid var(--rule-1);max-width:96ch}
+
+/* ── print (status report, and the value page alone) ──────────────── */
 @media print{
   :root{--color-bg:#fff;--color-surface:#fff;--color-text:#000;--rule-1:#ccc;--rule-2:#999}
   body{overflow:visible}
@@ -558,6 +577,38 @@ textarea.input{resize:vertical;min-height:70px;line-height:1.55}
   .app,.main,.scroll{display:block;height:auto;overflow:visible}
   .print-only{display:block!important}
   .btn,.poster{box-shadow:none}
+
+  /* REQ-30 — "Print this page" means THIS page. The body carries the
+     class only while the print dialog is open, so the screen is never
+     left with half its sections hidden. */
+  body.printing-value .sec:not(.value-page){display:none!important}
+
+  /* A section cut in half across a page break is a section a reader
+     stops trusting: each figure block, and each table inside it, stays
+     whole, and a heading never sits alone at the foot of a page. */
+  .value-page{border-bottom:0}
+  .value-page .vp-block{break-inside:avoid;page-break-inside:avoid;margin-top:16px}
+  .value-page .vp-block-hd{break-after:avoid;page-break-after:avoid}
+  .value-page .kpis{break-inside:avoid;page-break-inside:avoid;
+    grid-template-columns:repeat(3,1fr)!important}
+  .value-page .kpi{border-bottom:1px solid #ccc}
+  /* A table that scrolls sideways on a screen is a table with a column
+     missing on paper. Nothing on this page may scroll: it wraps. */
+  .value-page .tbl-wrap{overflow:visible!important}
+  .value-page table{width:100%;table-layout:auto;font-size:9pt}
+  .value-page table th,.value-page table td{padding:4px 6px}
+  /* Prose wraps; a column HEADING and a NUMBER do not. "$0.73M" broken
+     across two lines as "$0.7" and "3M" is a figure a reader has to
+     reassemble, and this page exists to be read without effort. */
+  .value-page table td{white-space:normal;overflow-wrap:break-word}
+  .value-page table th{white-space:nowrap}
+  .value-page table td .mono,.value-page table td .num{white-space:nowrap}
+  .value-page thead{display:table-header-group}
+  .value-page tr{break-inside:avoid;page-break-inside:avoid}
+  .value-page .truncate{overflow:visible;text-overflow:clip;white-space:normal}
+  .value-page .vp-banner{border-left:2px solid #000;background:#fff}
+  .value-page .vp-why{color:#000}
+  .value-page .muted,.value-page .xs.muted{color:#333}
 }
 .print-only{display:none}
 

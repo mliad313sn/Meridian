@@ -310,14 +310,69 @@ describe("REQ-28 · 4 · la conformité de revue RAID", () => {
     assert.equal(c.extra.onTime + c.extra.overdue, c.n, "ni au numérateur");
   });
 
-  test("il n'y a pas de tendance, et c'est un constat, pas un oubli", () => {
-    /* Le schéma porte la PROCHAINE date de revue et aucune trace qu'une
-       revue ait eu lieu : faire la revue avance la date, ce qui efface la
-       seule preuve qu'il y en avait une. */
+  /* Ce test affirmait, jusqu'à la 050, que le schéma ne POUVAIT PAS
+     porter la trace d'une revue : faire la revue avançait la date et
+     effaçait la seule preuve qu'il y en avait eu une. REQ-46 a rendu
+     cette phrase fausse — `raid_review` existe. Ce n'est pas le test qui
+     avait tort, c'est le produit qui a changé sous lui ; il affirme donc
+     maintenant la vérité nouvelle, dans les deux sens. */
+  test("sans revue consignée il n'y a rien à mettre en tendance — et on ne dit plus que c'est impossible", () => {
     const c = m();
     assert.equal(c.trend.state, "N");
-    assert.equal(c.trend.why, SIGNAL_TEXT.trendNoHistory);
-    assert.deepEqual(c.trend.periods, []);
+    assert.equal(c.trend.why, SIGNAL_TEXT.trendNoPeriod,
+      "« rien à mettre en tendance », et non « le registre ne sait pas le noter »");
+    assert.equal(c.extra.reviews, 0);
+    assert.equal(c.extra.neverReviewed, 4, "les quatre lignes ouvertes, aucune revue");
+  });
+
+  test("une revue consignée rend le mois dernier lisible — c'est tout REQ-46", () => {
+    const withHistory = emptyBook({
+      projects: [{ id: "P1", programme: "PR", scaffoldedGates: 4 }],
+      raid: [{ id: "R1", project: "P1", status: "Open", review: "2026-09-30",
+               opened: "2026-03-01" }],
+      raidReviews: [
+        /* Revue le 12/04, qui repose la suivante au 30/06. À la fin juin
+           elle est due CE JOUR-LÀ : encore dans les temps. À la fin
+           juillet elle est due depuis un mois et personne n'y est
+           retourné : en retard — et c'est un fait de juillet que la
+           colonne seule, avancée depuis, ne pouvait plus dire. */
+        { id: "RVW-1", item: "R1", project: "P1", on: "2026-04-12",
+          dueOn: "2026-04-30", nextOn: "2026-06-30" },
+        { id: "RVW-2", item: "R1", project: "P1", on: "2026-08-05",
+          dueOn: "2026-06-30", nextOn: "2026-09-30" },
+      ],
+    }).portfolio.signals.raidReviewCompliance;
+
+    assert.equal(withHistory.extra.reviews, 2);
+    assert.equal(withHistory.extra.reviewed, 1);
+    assert.equal(withHistory.extra.neverReviewed, 0);
+    assert.equal(withHistory.trend.state, "measured",
+      "le mois dernier est redevenu lisible");
+    const byKey = Object.fromEntries(withHistory.trend.periods.map((p) => [p.key, p.value]));
+    assert.equal(byKey["2026-04"], 1, "en avril, due le 30/04 : encore dans les temps");
+    assert.equal(byKey["2026-06"], 1, "fin juin, due CE jour-là : pas encore en retard");
+    assert.equal(byKey["2026-07"], 0, "fin juillet, due depuis un mois : en retard");
+  });
+
+  test("une ligne jamais revue reste hors du rejeu, et la tendance dit son n", () => {
+    /* La colonne `review` porte une date, mais c'est celle d'AUJOURD'HUI :
+       s'en servir comme échéance d'avril emprunte une horloge voisine et
+       espère. Conséquence assumée et publiée : le titre compte tout le
+       registre ouvert, la tendance compte la part qui a une histoire. */
+    const mixed = emptyBook({
+      projects: [{ id: "P1", programme: "PR", scaffoldedGates: 4 }],
+      raid: [
+        { id: "R1", project: "P1", status: "Open", review: "2026-09-30", opened: "2026-03-01" },
+        { id: "R2", project: "P1", status: "Open", review: "2026-09-30", opened: "2026-03-01" },
+      ],
+      raidReviews: [{ id: "RVW-1", item: "R1", project: "P1", on: "2026-04-12",
+                      dueOn: "2026-04-30", nextOn: "2026-09-30" }],
+    }).portfolio.signals.raidReviewCompliance;
+
+    assert.equal(mixed.n, 2, "le titre compte les deux lignes ouvertes et programmées");
+    assert.equal(mixed.extra.neverReviewed, 1);
+    const april = mixed.trend.periods.find((p) => p.key === "2026-04");
+    assert.equal(april.n, 1, "le rejeu ne compte que celle dont on sait quelque chose");
   });
 });
 

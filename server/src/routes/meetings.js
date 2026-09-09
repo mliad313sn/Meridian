@@ -402,6 +402,9 @@ r.get("/occurrences/:id", async (req, res, next) => {
         externalSource: d.external_source ?? null, externalId: d.external_id ?? null,
         council: d.council ?? "", evidenceUri: d.evidence_uri ?? "", provenance: d.provenance ?? "",
         status: d.status ?? "Ratified", ratifiedBy: d.ratified_by ?? "",
+        /* REQ-47 (049) — le jour où elle est entrée en vigueur. Une
+           décision prise en salle l'est le jour où la salle a siégé. */
+        ratifiedOn: d.ratified_on ?? null,
       })),
       openActions: actions,
       actionsRaisedHere: raisedHere.map((a) => ({
@@ -581,15 +584,23 @@ r.post("/occurrences/:id/decisions", async (req, res, next) => {
         await t.query(
         `INSERT INTO meeting_decision
            (id, occurrence_id, headline, rationale, project_id, cr_id, decided_by, recorded_by, referred_to_scope,
-            alternatives, dissent, raid_id, milestone_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+            alternatives, dissent, raid_id, milestone_id, ratified_on)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
         [id, o.id, String(b.headline).slice(0, 300), String(b.rationale ?? "").slice(0, 4000),
          b.projectId ?? null, b.crId ?? null, b.decidedBy ?? s.chair_id, req.user.id, referredTo,
          /* I-7 — les alternatives écartées et la dissension, en salle
             aussi : un procès-verbal qui ne dit pas ce qu'on a refusé ne
             dit pas ce qu'on a décidé. */
          String(b.alternatives ?? "").slice(0, 4000), String(b.dissent ?? "").slice(0, 2000),
-         b.raidId ?? null, b.milestoneId ?? null]);
+         b.raidId ?? null, b.milestoneId ?? null,
+         /* REQ-47 (049) — une décision de salle naît « Ratified » (la
+            valeur par défaut de la 039) : la salle qui la prend la met en
+            vigueur, et elle l'est le jour où cette salle a siégé. Pas le
+            jour de la saisie — un président qui rédige son procès-verbal
+            le lendemain n'a pas ratifié le lendemain. Un renvoi vers le
+            haut n'est pas une décision et n'entre pas en vigueur : sa
+            date reste nulle, comme son statut le dit. */
+         referredTo ? null : o.meets_on]);
         if (answers) {
           /* Still-unanswered is re-checked here: the lookup above runs
              outside this transaction (PGlite serialises one connection,

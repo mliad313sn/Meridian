@@ -527,24 +527,57 @@ export function can(user, action, resource = {}) {
         : deny("project is outside your authority — you can read it, and raise a concern on it if it lands on your site");
     }
 
+    /* REQ-46 — le registre RAID a DEUX portées, et une seule était dite
+       ici. Une ligne rattachée à un projet est une écriture de projet
+       ordinaire, et tombe dans le défaut ci-dessous ; une ligne SANS
+       projet — les risques que le portefeuille porte lui-même, ceux que
+       le registre hérité tient depuis toujours — n'a aucun projet à
+       vérifier, tombait donc dans ce même défaut, et y était refusée à
+       TOUT LE MONDE pour n'avoir rien en portée. Le piège que
+       `data.import`, `period.close` et `lesson.adopt` ont déjà payé dans
+       ce fichier.
+
+       Les routes s'en tiraient en écrivant `["admin","group"].includes(
+       req.user.role)` à la main, trois fois, dans portfolio.js. C'est la
+       même règle : elle est simplement écrite ici, à l'endroit que le
+       produit traite comme faisant autorité, plutôt que recopiée à côté
+       de chaque geste. Enregistrer une REVUE est un geste de plus sur ce
+       registre-là, et il ne méritait pas une quatrième copie.
+
+       Pourquoi groupe : un risque de portefeuille est le risque du
+       groupe. Un chef de site qui l'édite ne tient pas son registre, il
+       écrit dans celui d'un autre — et il a `concern.raise` pour se
+       faire entendre sur ce qui atterrit chez lui. L'administrateur est
+       déjà sorti plus haut. */
+    case "raid.write":
+      if (!resource.project) {
+        return user.role === "group"
+          ? allow()
+          : deny("portfolio-wide register items are kept at group level — raise it on the project it lands on, or ask your programme office");
+      }
+      return canWriteProject(user, resource.project) ? allow() : outsideProject(user, resource.project);
+
     default:
       // Every remaining write is project-scoped.
       return canWriteProject(user, resource.project)
         ? allow()
-        : deny(
-            resource.project
-              ? resource.project.governance_level === "group" && user.role === "site"
-                ? "this is a group-governed project — site level is read-only here; raise a concern on it and your programme office will see it"
-                /* A-07 — les deux refus les plus fréquents du produit
-                   étaient les deux derniers à ne dire que l'état. */
-                : "project is outside your authority — you can read it, and raise a concern on it if it lands on your site"
-              : "no project in scope — this act belongs to a project; open it from the portfolio first"
-          );
+        : outsideProject(user, resource.project);
   }
 }
 
 const allow = () => ({ ok: true, why: "" });
 const deny = (why) => ({ ok: false, why });
+
+/* A-07 — les deux refus les plus fréquents du produit étaient les deux
+   derniers à ne dire que l'état. Écrit une fois : deux `case` le disent
+   maintenant, et la phrase qu'un utilisateur lit ne doit pas dépendre de
+   celui des deux par lequel il est passé. */
+const outsideProject = (user, project) => deny(
+  project
+    ? project.governance_level === "group" && user.role === "site"
+      ? "this is a group-governed project — site level is read-only here; raise a concern on it and your programme office will see it"
+      : "project is outside your authority — you can read it, and raise a concern on it if it lands on your site"
+    : "no project in scope — this act belongs to a project; open it from the portfolio first");
 
 /** Express guard. Resource is resolved by an earlier middleware. */
 /**

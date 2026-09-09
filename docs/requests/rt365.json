@@ -1589,6 +1589,93 @@
           "note": "Opened after an attempt in this round was reverted rather than paid for with nineteen test edits."
         }
       ]
+    },
+    {
+      "id": "REQ-49",
+      "origin": [
+        "committee, instrument counsellor"
+      ],
+      "issue": null,
+      "title": "A decision recorded through the session route is held to the same segregation of duties as one written through the contract",
+      "status": "open",
+      "priority": "high",
+      "version": null,
+      "decidedOn": "2026-09-09",
+      "delivered": [],
+      "measure": null,
+      "remaining": [
+        "`POST /api/decisions` and the occurrence route resolve the ratifier in the directory and apply `canRatifyDecision` exactly as the contract door does; the screen's decision form offers a person rather than a text box; the refusal says who may ratify and why it is not the person who took or recorded it."
+      ],
+      "accepted": null,
+      "released": false,
+      "observed": "`POST /api/decisions` accepts `ratifiedBy` as free text — `String(b.ratifiedBy).slice(0,200)`, no directory lookup, no independence check — while `PUT /api/v1/decisions/:externalId` has enforced `canRatifyDecision` (H-3) since the security round. Before REQ-47 that was a soft hole: an unchecked NAME beside a status. REQ-47 made it materially worse, and we made it worse ourselves in the same release — the same route now writes `ratified_on`, so the unchecked claim is DATED and feeds a governance metric. A ratification nobody independent ever saw is now measurable evidence of a ratification.",
+      "answerToSource": "Filed against ourselves, and we are telling you before you measure it. It is not closed: closing it properly changes an authority rule and the decision form, and a hurried change to an authority rule at the end of a wave is how the check ends up weakened rather than applied. It is the first thing in the next wave.",
+      "history": [
+        {
+          "at": "2026-09-09",
+          "registerVersion": 13,
+          "status": "open",
+          "note": "Opened by the instrument counsellor while delivering REQ-45/46/47 — found in our own product."
+        }
+      ]
+    },
+    {
+      "id": "REQ-50",
+      "origin": [
+        "committee, instrument counsellor"
+      ],
+      "issue": null,
+      "title": "A human can ratify a decision from a screen, not only through the integration contract",
+      "status": "open",
+      "priority": "medium",
+      "version": null,
+      "decidedOn": "2026-09-09",
+      "delivered": [],
+      "measure": null,
+      "remaining": [
+        "A session route that ratifies a decision under the same independence rule, and an authority expression for portfolio-wide decisions."
+      ],
+      "accepted": null,
+      "released": false,
+      "observed": "The only door that moves a decision from Proposed to Ratified is `PUT /api/v1/decisions/:externalId`, because H-3 put the segregation-of-duties rule on that path. With `ratified_on` now recorded, a programme kept entirely by hand can never produce a ratification latency at all — the metric exists and their book structurally cannot feed it.",
+      "answerToSource": "Filed against ourselves while delivering REQ-47. It is a governance decision, not a field, so it is put down rather than guessed at.",
+      "history": [
+        {
+          "at": "2026-09-09",
+          "registerVersion": 13,
+          "status": "open",
+          "note": "Opened by the instrument counsellor while delivering REQ-45/46/47 — found in our own product."
+        }
+      ]
+    },
+    {
+      "id": "REQ-51",
+      "origin": [
+        "committee, instrument counsellor"
+      ],
+      "issue": null,
+      "title": "The write contract can record that a RAID review happened, not only move the date it is next due",
+      "status": "open",
+      "priority": "medium",
+      "version": null,
+      "decidedOn": "2026-09-09",
+      "delivered": [],
+      "measure": null,
+      "remaining": [
+        "A contract route for the review event, its OpenAPI entry, and its declared write body."
+      ],
+      "accepted": null,
+      "released": false,
+      "observed": "`PUT /api/v1/raid/:externalId` sets `review` directly, which is scheduling and is correct. There is no contract door for the review EVENT that migration 050 introduced. So an integrator syncing a real register can move the due date but cannot tell us a review occurred — which is precisely the defect REQ-46 just fixed for the screen, one door along.",
+      "answerToSource": "Filed against ourselves the moment 050 landed, rather than waiting for you to measure the asymmetry as you did with REQ-18.",
+      "history": [
+        {
+          "at": "2026-09-09",
+          "registerVersion": 13,
+          "status": "open",
+          "note": "Opened by the instrument counsellor while delivering REQ-45/46/47 — found in our own product."
+        }
+      ]
     }
   ],
   "channel": {
@@ -1619,5 +1706,5 @@
       "whatIsNeeded": "A maintainer merges the branch to main and pushes the tag. The owner AUTHORISED the merge on 08/09; it was then refused by the agent session's own permission classifier — `git merge --ff-only`, `git push origin <branch>:main` and even a local `git tag -a` (D-33.50). Pushing a tag ref is separately refused HTTP 403 by the session credential (D-33.18, D-33.30). Two different boundaries, neither routed around."
     }
   },
-  "registerVersion": 12
+  "registerVersion": 13
 }

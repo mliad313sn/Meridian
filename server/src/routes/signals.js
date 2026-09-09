@@ -77,6 +77,30 @@ function monthsOf(req) {
  * it. Nothing else is selected: this endpoint has no business carrying a
  * headline or a rationale out of the meetings module.
  */
+/**
+ * REQ-46 (050) — the reviews actually performed, for the compliance
+ * replay. Deliberately NOT in `loadPortfolio`: it would ride on every
+ * bootstrap for a history that only this signal and one panel need, and
+ * the register of a real programme accumulates one row per review per
+ * item for as long as the item is open.
+ *
+ * Scoped by the same rule the serialiser applies to portfolio-wide RAID
+ * (R1.10): attached to a project the reader may see, or to no project.
+ */
+async function reviewsFor(ids) {
+  return (await many(
+    `SELECT v.id, v.raid_id, r.project_id, v.reviewed_on, v.due_on, v.next_review_on
+       FROM raid_review v
+       JOIN raid_item r ON r.id = v.raid_id
+      WHERE r.project_id IS NULL OR r.project_id = ANY($1)
+      ORDER BY v.reviewed_on, v.recorded_at, v.id`,
+    [ids]
+  )).map((v) => ({
+    id: v.id, item: v.raid_id, project: v.project_id ?? null,
+    on: v.reviewed_on ?? null, dueOn: v.due_on ?? null, nextOn: v.next_review_on ?? null,
+  }));
+}
+
 async function decisionsFor(ids) {
   return (await many(
     `SELECT d.id, d.project_id,
@@ -127,12 +151,14 @@ async function signalsFor(user, months) {
   /* Read before nothing and inside nothing: these are plain reads, and
      db.js refuses a module-level call issued while a transaction is open.
      There is no transaction here — this endpoint writes nothing at all. */
-  const [decisions, actions] = await Promise.all([decisionsFor(ids), actionsFor(ids)]);
+  const [decisions, actions, raidReviews] = await Promise.all([
+    decisionsFor(ids), actionsFor(ids), reviewsFor(ids),
+  ]);
   return govSignals({
     asAt: db.statusDate, months,
     programmes: db.programmes, projects: db.projects,
     milestones: db.milestones, raid: db.raid, exceptions: db.exceptions,
-    decisions, actions,
+    decisions, actions, raidReviews,
   });
 }
 

@@ -56,6 +56,38 @@ function visible(user, p) {
   if (!canSeeProject(user, p)) throw new HttpError(404, "No such project");
   return p;
 }
+/**
+ * An ISO calendar date the caller stated, or nothing at all.
+ *
+ * `undefined` and `""` mean "I am not telling you" — the caller gets the
+ * default the route chooses. A malformed date is REFUSED rather than
+ * coerced: `new Date("last tuesday")` is Invalid Date, and a clock built
+ * on one reads as a null that nobody meant to write.
+ */
+function isoDay(v, what) {
+  if (v === undefined || v === null || v === "") return null;
+  const s = String(v).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s) || !Number.isFinite(D(s).getTime())) {
+    bad(`${what} must be an ISO date (YYYY-MM-DD)`);
+  }
+  return s;
+}
+/**
+ * The person a governance act is recorded under.
+ *
+ * The name that stays on the record is a PERSON of the directory — the
+ * rule `accepted_by` (032) and `closed_by` (045) already follow — and it
+ * defaults to the person behind the account doing it. The audit trail
+ * carries the account either way, so this is the human name, not the
+ * login. An account with no person attached records no name rather than
+ * a false one.
+ */
+async function personOrSelf(user, stated, what) {
+  if (stated === undefined || stated === null || stated === "") return user.personId ?? null;
+  const who = await one(`SELECT id FROM person WHERE id = $1 AND active`, [String(stated)]);
+  if (!who) bad(`${what} must be an active person in the directory`);
+  return who.id;
+}
 /** AD-6 — a version mismatch is a 409 the client resolves by re-reading. */
 function conflict(result) {
   if (!result.ok) throw new HttpError(409, "Someone else changed this record — reload and try again");
@@ -542,7 +574,30 @@ r.patch("/milestones/:id", async (req, res, next) => {
         patch.accepted_by = b.acceptedBy;
         patch.accepted_on = iso(new Date());
       }
-      if (!patch.done) { patch.accepted_by = null; patch.accepted_on = null; }
+      /* REQ-45 (049) — mesuré sur le livre de démonstration : VINGT-QUATRE
+         portes sur vingt-quatre cochées `done` sans aucune date, parce que
+         la ligne ci-dessus n'écrit que sur une porte À CRITÈRES. Une porte
+         sans critères n'a rien à accepter — et le produit ne savait donc
+         pas dire QUAND il avait franchi la plupart de ses portes.
+
+         Ce couple-ci est le plus faible des deux, et c'est voulu : il dit
+         qu'on a coché, ce jour-là, sous ce nom. `accepted_on` continue de
+         dire qu'un nommé a CONSTATÉ des critères posés d'avance ; élargir
+         cette colonne-là aurait effacé la distinction que la 032 tient.
+
+         Seulement sur la TRANSITION : re-cocher une porte déjà cochée ne
+         la coche pas aujourd'hui, et une ligne cochée avant la 049 garde
+         sa date nulle — on ne rétro-date pas. */
+      if (patch.done && !m.done) {
+        patch.done_on = isoDay(b.doneOn, "doneOn") ?? iso(new Date());
+        patch.done_by = await personOrSelf(req.user, b.doneBy, "doneBy");
+      }
+      if (!patch.done) {
+        patch.accepted_by = null; patch.accepted_on = null;
+        /* Un jalon qui n'est pas fait ne l'a pas été un jour donné : la
+           même symétrie que la réouverture d'une ligne de registre (045). */
+        patch.done_on = null; patch.done_by = null;
+      }
     }
     if (b.owner !== undefined) patch.owner_id = b.owner || null;
     if (b.intrusive !== undefined) patch.intrusive = !!b.intrusive;
@@ -991,6 +1046,184 @@ r.delete("/raid/:id", async (req, res, next) => {
         detail: item.title, before: { ...item } },
       async (t) => t.query(`DELETE FROM raid_item WHERE id = $1`, [item.id]));
     res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
+/* ── REQ-46 (050) · une revue est un ÉVÉNEMENT ─────────────────────────
+   `raid_item.review_on` portait la PROCHAINE revue, et faire une revue
+   avançait la date — ce qui effaçait la seule preuve qu'il y en avait eu
+   une. La conformité était donc énonçable aujourd'hui et impossible pour
+   le mois dernier, sur n'importe quel livre, à jamais.
+
+   Ici, une revue s'inscrit : un jour, une personne, ce qui a été dit, ce
+   qui était dû, et quand la suivante l'est. La colonne du registre reste
+   ce qu'elle était et devient la PROJECTION de la dernière revue —
+   dérivée, non remplacée. Poser `review` directement reste possible et
+   reste un autre geste : PLANIFIER la première revue n'affirme pas que
+   quelqu'un a regardé quoi que ce soit. */
+
+/** Le registre auquel cette ligne appartient, et l'autorité d'y écrire. */
+async function raidItemFor(id, user, { write = false } = {}) {
+  const item = await one(`SELECT * FROM raid_item WHERE id = $1`, [id]);
+  if (!item) throw new HttpError(404, "No such item");
+  if (item.project_id) {
+    const p = await project(item.project_id, user);
+    if (write) gate(user, "raid.write", { project: p });
+  } else if (write) {
+    /* Aucun rôle écrit à la main ici : la règle des lignes de
+       portefeuille est dite une fois, dans shared/rbac.js. */
+    gate(user, "raid.write", {});
+  }
+  return item;
+}
+
+/**
+ * La date de prochaine revue du registre, RECALCULÉE depuis les revues
+ * qui subsistent.
+ *
+ * Elle s'écrit sous `updateVersioned` comme toute ligne mutable, mais la
+ * version assertée est celle lue DANS la transaction et non celle que
+ * l'appelant tenait : ce n'est pas une valeur qu'il a lue puis remplacée,
+ * c'est une conséquence de l'événement qu'il vient d'inscrire. Ce que sa
+ * version garde, c'est la revue elle-même (`requiredVersion` plus bas).
+ *
+ * `fallback` sert au retrait de la DERNIÈRE revue : la date qui redevient
+ * due est celle que cette revue avait trouvée en place — sans quoi
+ * annuler une revue laisserait le registre sans échéance du tout.
+ */
+async function reprojectNextReview(t, itemId, fallback = null) {
+  const cur = (await t.query(`SELECT row_version, review_on FROM raid_item WHERE id = $1`, [itemId])).rows[0];
+  const last = (await t.query(
+    `SELECT next_review_on FROM raid_review WHERE raid_id = $1
+      ORDER BY reviewed_on DESC, recorded_at DESC, id DESC LIMIT 1`, [itemId])).rows[0];
+  const next = last ? (last.next_review_on ?? null) : (fallback ?? null);
+  if (String(cur.review_on ?? "") === String(next ?? "")) return next;   // rien n'a bougé
+  await updateVersioned(t, "raid_item", itemId, cur.row_version, { review_on: next });
+  return next;
+}
+
+const asReview = (v) => ({
+  id: v.id, item: v.raid_id,
+  reviewedOn: v.reviewed_on, reviewedBy: v.reviewed_by ?? null,
+  reviewedByName: v.reviewed_by_name ?? null,
+  note: v.note ?? "",
+  /* Ce qui était dû quand la revue a eu lieu, et ce qui l'est ensuite :
+     le triplet dont la conformité se lit sans rejouer le registre. */
+  dueOn: v.due_on ?? null, nextReviewOn: v.next_review_on ?? null,
+  onTime: v.due_on ? v.reviewed_on <= v.due_on : null,
+  recordedBy: v.recorded_by ?? null, recordedAt: v.recorded_at,
+  version: v.row_version,
+});
+
+const reviewsOf = async (itemId) => (await many(
+  `SELECT v.*, p.name AS reviewed_by_name
+     FROM raid_review v LEFT JOIN person p ON p.id = v.reviewed_by
+    WHERE v.raid_id = $1
+    ORDER BY v.reviewed_on DESC, v.recorded_at DESC, v.id DESC`, [itemId])).map(asReview);
+
+/** Les revues d'une ligne, la plus récente d'abord. */
+r.get("/raid/:id/reviews", async (req, res, next) => {
+  try {
+    const item = await raidItemFor(req.params.id, req.user);
+    res.json({ item: item.id, review: item.review_on, reviews: await reviewsOf(item.id) });
+  } catch (e) { next(e); }
+});
+
+/** Enregistrer une revue : elle a eu lieu, ce jour-là, par quelqu'un. */
+r.post("/raid/:id/reviews", async (req, res, next) => {
+  try {
+    const item = await raidItemFor(req.params.id, req.user, { write: true });
+    const b = req.body ?? {};
+    const on = isoDay(b.on, "on") ?? iso(new Date());
+    const next = isoDay(b.next, "next");
+    /* Une revue ne prépare pas la suivante pour hier : la date qu'elle
+       pose est postérieure au jour où elle a eu lieu, sinon elle naît en
+       retard et le registre se met à mentir dès l'écriture. */
+    if (next && next < on) bad("The next review falls after the one being recorded, not before it");
+    const who = await personOrSelf(req.user, b.by, "by");
+    const note = String(b.note ?? "").slice(0, 2000);
+
+    let id = null;
+    await audited(req.user,
+      () => ({ action: "Register item reviewed", entity: "raid_item", entityId: item.id,
+               detail: `${item.title} — reviewed ${on}` + (next ? `, next due ${next}` : ", no next review set"),
+               before: { review_on: item.review_on }, after: { review_on: next } }),
+      async (t) => {
+        id = await allocateId(t, "RVW", { pad: 3 });
+        await t.query(
+          `INSERT INTO raid_review
+             (id, raid_id, reviewed_on, reviewed_by, note, due_on, next_review_on, recorded_by)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [id, item.id, on, who, note, item.review_on ?? null, next, req.user.id]);
+        /* La ligne du registre bouge sous la version que l'appelant
+           tenait : c'est bien SA lecture qu'il remplace en décidant que
+           la revue a eu lieu maintenant. */
+        conflict(await updateVersioned(t, "raid_item", item.id,
+          requiredVersion(b, "register item"), { review_on: next }));
+        return { ok: true };
+      });
+    const fresh = (await many(
+      `SELECT v.*, p.name AS reviewed_by_name FROM raid_review v
+         LEFT JOIN person p ON p.id = v.reviewed_by WHERE v.id = $1`, [id])).map(asReview)[0];
+    const it = await one(`SELECT review_on, row_version FROM raid_item WHERE id = $1`, [item.id]);
+    res.status(201).json({ id, review: fresh, item: { id: item.id, review: it.review_on, version: it.row_version } });
+  } catch (e) { next(e); }
+});
+
+/** Corriger une revue mal consignée : la date, le nom, ce qui a été dit. */
+r.patch("/raid/reviews/:id", async (req, res, next) => {
+  try {
+    const v = await one(`SELECT * FROM raid_review WHERE id = $1`, [req.params.id]);
+    if (!v) throw new HttpError(404, "No such review");
+    const item = await raidItemFor(v.raid_id, req.user, { write: true });
+    const b = req.body ?? {};
+    const patch = {};
+    if (b.on !== undefined) patch.reviewed_on = isoDay(b.on, "on") ?? v.reviewed_on;
+    if (b.by !== undefined) patch.reviewed_by = await personOrSelf(req.user, b.by, "by");
+    if (b.note !== undefined) patch.note = String(b.note ?? "").slice(0, 2000);
+    if (b.next !== undefined) patch.next_review_on = isoDay(b.next, "next");
+    const on = patch.reviewed_on ?? v.reviewed_on;
+    const nx = patch.next_review_on !== undefined ? patch.next_review_on : v.next_review_on;
+    if (nx && nx < on) bad("The next review falls after the one being recorded, not before it");
+
+    const out = await audited(req.user,
+      { action: "Review corrected", entity: "raid_item", entityId: item.id,
+        detail: `${item.title} — ${v.id}`,
+        before: { reviewed_on: v.reviewed_on, reviewed_by: v.reviewed_by, next_review_on: v.next_review_on },
+        after: patch },
+      async (t) => {
+        const r2 = conflict(await updateVersioned(t, "raid_review", v.id, requiredVersion(b, "review"), patch));
+        await reprojectNextReview(t, item.id);
+        return r2;
+      });
+    const it = await one(`SELECT review_on, row_version FROM raid_item WHERE id = $1`, [item.id]);
+    res.json({ version: out.version, item: { id: item.id, review: it.review_on, version: it.row_version } });
+  } catch (e) { next(e); }
+});
+
+/**
+ * Retirer une revue consignée par erreur.
+ *
+ * Une revue qui a eu lieu ne se retire pas parce qu'elle dérange : ce
+ * qu'on retire est une ligne qui n'aurait pas dû être écrite — mauvaise
+ * ligne de registre, double saisie. Le retrait est lui-même consigné,
+ * avec la revue entière en image d'avant, et la date de prochaine revue
+ * redevient celle que cette revue avait trouvée en place.
+ */
+r.delete("/raid/reviews/:id", async (req, res, next) => {
+  try {
+    const v = await one(`SELECT * FROM raid_review WHERE id = $1`, [req.params.id]);
+    if (!v) throw new HttpError(404, "No such review");
+    const item = await raidItemFor(v.raid_id, req.user, { write: true });
+    await audited(req.user,
+      { action: "Review withdrawn", entity: "raid_item", entityId: item.id,
+        detail: `${item.title} — ${v.id} of ${v.reviewed_on}`, before: { ...v } },
+      async (t) => {
+        await t.query(`DELETE FROM raid_review WHERE id = $1`, [v.id]);
+        await reprojectNextReview(t, item.id, v.due_on ?? null);
+      });
+    const it = await one(`SELECT review_on, row_version FROM raid_item WHERE id = $1`, [item.id]);
+    res.json({ ok: true, item: { id: item.id, review: it.review_on, version: it.row_version } });
   } catch (e) { next(e); }
 });
 
@@ -3601,7 +3834,7 @@ r.get("/decisions/log", async (req, res, next) => {
       `SELECT d.id, d.headline, d.rationale, d.alternatives, d.dissent, d.decided_by,
               d.referred_to_scope, d.project_id, d.cr_id, d.raid_id, d.milestone_id, d.supersedes,
               COALESCE(o.meets_on, d.decided_on) AS decided_on, d.external_source, d.external_id,
-              d.council, d.evidence_uri, d.provenance, d.status, d.ratified_by,
+              d.council, d.evidence_uri, d.provenance, d.status, d.ratified_by, d.ratified_on,
               s.name AS series_name, s.scope_kind, pe.name AS decided_by_name
          FROM meeting_decision d
          LEFT JOIN meeting_occurrence o ON o.id = d.occurrence_id
@@ -3627,6 +3860,9 @@ r.get("/decisions/log", async (req, res, next) => {
         externalSource: d.external_source ?? null, externalId: d.external_id ?? null,
         council: d.council ?? "", evidenceUri: d.evidence_uri ?? "", provenance: d.provenance ?? "",
         status: d.status ?? "Ratified", ratifiedBy: d.ratified_by ?? "",
+        /* REQ-47 (049) — le jour où elle est entrée en vigueur. Nul sur
+           une ligne ratifiée avant que nous sachions le noter. */
+        ratifiedOn: d.ratified_on ?? null,
       })),
     });
   } catch (e) { next(e); }
@@ -3881,6 +4117,18 @@ r.post("/decisions", async (req, res, next) => {
     if (evidence && !isEvidenceLocator(evidence)) bad(EVIDENCE_REFUSAL);
     const on = b.decidedOn ? String(b.decidedOn).slice(0, 10) : iso(new Date());
     if (!/^\d{4}-\d{2}-\d{2}$/.test(on)) bad("decidedOn must be an ISO date");
+    /* REQ-47 (049) — la 039 a donné à une décision un ÉTAT et un
+       ratifieur, et aucune date de ratification : « combien de temps
+       ratifier prend-il dans ce programme » ne pouvait pas se poser.
+
+       Une décision qui NAÎT ratifiée l'a été quand elle a été prise :
+       « Ratified » à la création veut dire qu'elle est en vigueur, et
+       elle l'est depuis le jour de la décision. Celle qui le DEVIENT
+       plus tard est ratifiée le jour de ce geste-là (v1write.js). Qui
+       connaît le vrai jour le dit ; personne ne l'invente pour lui, et
+       les lignes déjà ratifiées avant la 049 gardent une date nulle. */
+    const status = b.status === "Proposed" ? "Proposed" : "Ratified";
+    const ratifiedOn = isoDay(b.ratifiedOn, "ratifiedOn") ?? on;
 
     /* L'autorité : sur un projet, celle d'y écrire ; sans projet, c'est
        une décision de portefeuille, un acte de niveau groupe. */
@@ -3919,13 +4167,14 @@ r.post("/decisions", async (req, res, next) => {
           `INSERT INTO meeting_decision
              (id, occurrence_id, headline, rationale, alternatives, dissent, project_id, cr_id,
               raid_id, milestone_id, supersedes, decided_by, decided_on, recorded_by,
-              council, evidence_uri, provenance, status, ratified_by)
-           VALUES ($1,NULL,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
+              council, evidence_uri, provenance, status, ratified_by, ratified_on)
+           VALUES ($1,NULL,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
           [id, String(b.headline).slice(0, 1000), String(b.rationale ?? "").slice(0, 4000),
            String(b.alternatives ?? "").slice(0, 4000), String(b.dissent ?? "").slice(0, 2000),
            p?.id ?? null, crId, raidId, msId, supersedes, who?.id ?? null, on, req.user.id,
            council, evidence, String(b.provenance ?? "").slice(0, 200),
-           b.status === "Proposed" ? "Proposed" : "Ratified", String(b.ratifiedBy ?? "").slice(0, 200)]);
+           status, String(b.ratifiedBy ?? "").slice(0, 200),
+           status === "Ratified" ? ratifiedOn : null]);
       });
     res.status(201).json({ id });
   } catch (e) { next(e); }

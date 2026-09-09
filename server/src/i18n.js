@@ -24,6 +24,10 @@
 import { ES, ES_PREFIX } from "./i18n-es.js";
 
 const FR = {
+  /* REQ-30 — les deux « rien ici » de la page de valeur. */
+  "No such reporting period": "Cette période de rapport n'existe pas",
+  "No value page was stored for that reporting period":
+    "Aucune page de valeur n'a été déposée sur cette période de rapport",
   /* REQ-19 (045) — la base d'une date de projet, refusée à l'écran comme
      à l'API : ce que la 040 a donné au jalon, la 045 le donne au projet. */
   "dateBasis is committed or placeholder":
@@ -143,6 +147,12 @@ const FR_NOTIFY = {
 Object.assign(FR, FR_NOTIFY);
 
 const FR_PREFIX = [
+  /* REQ-30 — les deux refus de la page de valeur. Préfixe traduit,
+     données (la période, les deux dates) laissées telles quelles. */
+  ["A value page is already stored for this reporting period, and what was reported is a record rather than a working copy. To correct it, close a new period that restates this one and store the value page against that, so the restatement is itself on the record: ",
+   "Une page de valeur est déjà déposée sur cette période, et ce qui a été rapporté est un enregistrement, non une copie de travail. Pour la corriger, closez une nouvelle période qui reprend celle-ci et déposez-y la page de valeur, pour que la reprise soit elle-même au dossier : "],
+  ["These figures are read from the book as it stands today, so they can only be stored against a period closed at the book's own status date. Storing them against a period closed on another day would file today's numbers under a date on which they were not true, and nobody reading them later could tell. Close a period at today's status date instead: ",
+   "Ces chiffres sont lus dans le livre tel qu'il est aujourd'hui : ils ne peuvent être déposés que sur une période close à la date d'état du livre. Les déposer sur une période close un autre jour rangerait les chiffres du jour sous une date à laquelle ils n'étaient pas vrais, et personne ne pourrait le voir plus tard. Closez plutôt une période à la date d'état du jour : "],
   ["Gate evidence needs its artefact",
     "La preuve de jalon exige son artefact"],
   ["No trusted document hosts are configured",

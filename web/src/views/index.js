@@ -29,6 +29,13 @@ import {
   SIGNAL_TEXT, SIGNAL_ORDER, formatSignal, formatTrend,
 } from "../../../shared/govsignals.js";
 
+/* REQ-30 — the value page's arithmetic, shared with the server so that
+   the page an executive prints and the page that is stored per period are
+   one computation. The same reason govsignals gives. */
+import {
+  VALUE_TEXT, FIGURE_ORDER, valuePage, formatValue, formatPopulation,
+} from "../../../shared/valuepage.js";
+
 /* REQ-24 — the ranking's arithmetic is shared with the server, for the
    reason govsignals gives: two projections of the same number diverge at
    the first change, and then the room argues about which screen is right
@@ -5312,6 +5319,432 @@ function governanceSignalsBlock(db) {
           t("No programme has measured any of the five yet — the reasons are on the tiles above.")));
 }
 
+
+/* ═══════════════════════════════════════════════════════════════════
+   REQ-30 (RT365 V-11) · THE VALUE PAGE — one printable page, and the
+   record of what it said.
+   ───────────────────────────────────────────────────────────────────
+   « The portfolio view answers "is it on time and on budget"; nobody can
+     answer "is it worth it". »
+
+   The arithmetic is `shared/valuepage.js`, shared with the server so that
+   the page an executive prints and the page the server stores are one
+   computation rather than two that will diverge (the govsignals idiom).
+   It is computed HERE, from the book the browser already holds, so this
+   screen draws without waiting for a fetch — 5.14.0 shipped a block whose
+   whole view failed to draw while the render gate stayed green, because
+   the gate never reaches a fetch. The only thing fetched is the LIST of
+   periods that already carry a stored page, and its absence costs a line
+   of text rather than the page.
+
+   Two rules govern every cell below, and both come from REQ-33:
+
+     · a figure that is not measured shows `—` and SAYS WHY. Never a
+       zero, never a 100 %, never a colour;
+     · a figure that IS zero shows 0 and says what it was counted over,
+       because "no benefit was measured" and "the measured benefit was
+       nil" are different sentences and the reader in December has only
+       this page to tell them apart.
+
+   Nothing here carries a RAG colour. Nobody has agreed what "too little
+   benefit" is for this group, and a threshold chosen in our file would be
+   the fabrication REQ-33 ended. What the page does carry, everywhere, is
+   the WORD — status, band, gate state — because a printed board pack is
+   greyscale and a dot is not information there.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/** The value figures of a stored period, or null while none is chosen. */
+function storedValuePage() {
+  const id = App.ui.valuePeriod;
+  if (!id) return null;
+  const got = liveFetch("valuepage:" + id, () => api.get("/valuepage/" + id), (r) => [r]);
+  return got.length ? got[0] : (got.failed ? { failed: true } : null);
+}
+
+/** The pages already on the record. Empty for an account that may not read them. */
+const storedValuePages = () =>
+  liveFetch("valuepages", () => api.get("/valuepage"), (r) => r.stored ?? []);
+
+/** One figure: its number, or the reason there is not one. */
+function valueFigureTile(f) {
+  const measured = f.state === "measured";
+  return {
+    label: t(f.label),
+    value: formatValue(f),
+    /* The note is the whole point of the tile. Measured: the population,
+       so a zero reads as a zero. Not measured: the reason, so an absence
+       never reads as a nil. */
+    note: measured
+      /* A note can carry two sentences joined by a middot; each is a
+         dictionary key of its own, so they are translated one by one —
+         joining first and translating after is exactly how a tile ends
+         up half-French. The population sentence carries live numbers and
+         goes through tData(), which translates the fragments. */
+      ? [...(f.note ? String(f.note).split(" · ").map((x) => t(x)) : []),
+         ...(formatPopulation(f) ? [tData(formatPopulation(f))] : [])].join(" · ")
+      : t(f.why || VALUE_TEXT.notMeasured),
+  };
+}
+
+/** A row of small facts under a figure — never a chart, this page prints. */
+const vpFacts = (pairs) => h("div", { class: "vp-facts" },
+  ...pairs.filter(Boolean).map(([k, v]) => h("div", null,
+    h("span", { class: "kicker" }, k), h("span", { class: "mono small" }, v))));
+
+/**
+ * The body of one figure: the breakdown a board reads under the number.
+ * A figure that is not measured has no breakdown — it has a sentence, and
+ * printing an empty table beside it would suggest the data is merely
+ * missing from the view rather than from the book.
+ */
+function valueFigureDetail(key, f) {
+  if (f.state !== "measured") {
+    return h("div", { class: "vp-why small" }, t(f.why || VALUE_TEXT.notMeasured));
+  }
+  const e = f.extra ?? {};
+  const dash = (v, fmt) => (v === null || v === undefined ? "—" : fmt ? fmt(v) : String(v));
+
+  if (key === "spendAgainstCase") {
+    return h("div", null,
+      vpFacts([
+        [t("Case cost"), money(e.expectedCost)],
+        [t("Booked"), money(f.value)],
+        [t("Left against the case"), money(e.variance)],
+        [t("Case benefit / yr"), money(e.expectedBenefit)],
+        e.uncased ? [t("Spent outside any case"), money(e.uncasedSpend)] : null,
+      ]),
+      (e.lines ?? []).length
+        ? table({
+            cols: [
+              { key: "p", label: t("Project"), get: (r) => h("div", null,
+                  h("div", { class: "small strong truncate" }, r.name),
+                  h("div", { class: "xs muted mono" }, r.project)) },
+              { key: "c", label: t("Case cost"), align: "r", get: (r) => h("span", { class: "mono small" }, money(r.expectedCost)) },
+              { key: "s", label: t("Booked"), align: "r", get: (r) => h("span", { class: "mono small" }, money(r.spend)) },
+              { key: "v", label: t("Variance"), align: "r", get: (r) => h("span", { class: "mono small" }, signedMoney(r.variance)) },
+              { key: "r", label: t("Case standing"), get: (r) => h("span", { class: "xs muted" },
+                  (r.reconfirmedGate ? t("reconfirmed at gate ") + r.reconfirmedGate : t("never reconfirmed")) +
+                  (r.staleSinceReconfirm ? t(" · revised since") : "")) },
+            ],
+            rows: e.lines,
+          })
+        : null);
+  }
+
+  if (key === "benefitsByStatus") {
+    const s = e.states ?? {};
+    return h("div", null,
+      vpFacts([
+        [t("Forecast"), String(s.Forecast ?? 0)],
+        [t("Realised"), String(s.Realised ?? 0)],
+        [t("Partly"), String(s["Partially realised"] ?? 0)],
+        [t("Missed"), String(s.Missed ?? 0)],
+        [t("Withdrawn"), String(s.Withdrawn ?? 0)],
+      ]),
+      vpFacts([
+        [t("Measured"), dash(e.measured)],
+        [t("Ruled on"), e.decided ? e.met + " / " + e.decided : "—"],
+        [t("Attainment"), e.attainment == null ? "—" : pct(e.attainment)],
+        [t("Promising nothing"), String(e.uncased ?? 0) + " " + t("project(s)")],
+      ]));
+  }
+
+  if (key === "overdueReviews") {
+    return h("div", null,
+      vpFacts([
+        [t("Dated reviews"), String(e.dated ?? 0)],
+        [t("Undated promises"), String(e.undated ?? 0)],
+        [t("Longest overdue"), e.worstDays == null ? "—" : e.worstDays + t("d")],
+      ]),
+      (e.list ?? []).length
+        ? table({
+            cols: [
+              { key: "b", label: t("Benefit"), get: (r) => h("div", null,
+                  h("div", { class: "small strong truncate" }, r.title),
+                  h("div", { class: "xs muted" }, r.projectName)) },
+              { key: "d", label: t("Was due"), get: (r) => h("span", { class: "mono small" }, fmtDate(r.realiseOn)) },
+              { key: "o", label: t("Overdue"), align: "r", get: (r) => h("span", { class: "mono small" }, r.overdueDays + t("d")) },
+              { key: "s", label: t("Status"), get: (r) => h("span", { class: "xs" }, t(r.status)) },
+            ],
+            rows: e.list,
+          })
+        : null);
+  }
+
+  if (key === "topRisks") {
+    const b = e.bands ?? {};
+    return h("div", null,
+      vpFacts([
+        [t("Open risks"), String(e.open ?? 0)],
+        [t("Critical"), String(b.Critical ?? 0)],
+        [t("High"), String(b.High ?? 0)],
+        [t("At steering level"), String(e.steering ?? 0)],
+        [t("Open issues"), String(e.issues ?? 0)],
+      ]),
+      (e.top ?? []).length
+        ? table({
+            cols: [
+              { key: "r", label: t("Risk"), get: (r) => h("div", null,
+                  h("div", { class: "small strong truncate" }, r.title),
+                  h("div", { class: "xs muted mono" }, r.id + (r.projectName ? " · " + r.projectName : " · " + t("portfolio-wide")))) },
+              { key: "e", label: t("Exposure"), align: "r", get: (r) => h("span", { class: "mono small" }, String(r.exposure)) },
+              /* The band as a WORD: this page is printed, and one man in
+                 twelve cannot read the colour anyway. */
+              { key: "b", label: t("Band"), get: (r) => h("span", { class: "xs" }, t(r.band)) },
+              { key: "l", label: t("Escalates to"), get: (r) => h("span", { class: "xs" }, t(r.level)) },
+            ],
+            rows: e.top,
+          })
+        : null);
+  }
+
+  if (key === "gatesDue") {
+    return h("div", null,
+      vpFacts([
+        [t("Inside the horizon"), String(f.value) + " " + t("of") + " " + String(e.committed ?? 0)],
+        [t("Already past"), String(e.overdue ?? 0)],
+        [t("Dated with a placeholder"), String(e.placeholders ?? 0)],
+      ]),
+      (e.list ?? []).length
+        ? table({
+            cols: [
+              { key: "g", label: t("Gate"), get: (r) => h("div", null,
+                  h("div", { class: "small strong truncate" }, r.name),
+                  h("div", { class: "xs muted" }, r.projectName)) },
+              { key: "d", label: t("Due"), get: (r) => h("span", { class: "mono small" }, fmtDate(r.date)) },
+              { key: "i", label: t("In"), align: "r", get: (r) => h("span", { class: "mono small" },
+                  r.inDays < 0 ? Math.abs(r.inDays) + t("d late") : r.inDays + t("d")) },
+              { key: "s", label: t("State"), get: (r) => h("span", { class: "xs" }, t(r.state)) },
+              { key: "o", label: t("Outstanding"), align: "r", get: (r) => h("span", { class: "xs" },
+                  (r.outstanding || r.unmet) ? (r.outstanding + t(" evidence") + (r.unmet ? " · " + r.unmet + t(" criteria") : "")) : "—") },
+            ],
+            rows: e.list,
+          })
+        : null);
+  }
+
+  if (key === "exceptionsOpen") {
+    const d = e.byDimension ?? {};
+    return h("div", null,
+      vpFacts([
+        [t("Projects with a tolerance"), String(e.projectsBounded ?? 0)],
+        [t("Answered"), String(e.answered ?? 0)],
+        [t("Oldest open"), e.oldestDays == null ? "—" : e.oldestDays + t("d")],
+        /* The dimensions that are actually open, named one by one: the
+           book has four of them since migration 042, and a fixed
+           "schedule / cost / benefit" line would drop the fourth. */
+        ...Object.keys(d).sort().map((k) => [t(k), String(d[k])]),
+      ]),
+      (e.list ?? []).length
+        ? table({
+            cols: [
+              { key: "p", label: t("Project"), get: (r) => h("span", { class: "small strong" }, r.projectName) },
+              { key: "d", label: t("Dimension"), get: (r) => h("span", { class: "xs" }, t(r.dimension)) },
+              { key: "m", label: t("Measured / allowed"), align: "r", get: (r) => h("span", { class: "mono small" },
+                  String(r.measured) + " / " + String(r.allowed)) },
+              { key: "a", label: t("Open for"), align: "r", get: (r) => h("span", { class: "mono small" },
+                  r.ageDays == null ? "—" : r.ageDays + t("d")) },
+            ],
+            rows: e.list,
+          })
+        : null);
+  }
+  return null;
+}
+
+/** Close the books first, then put the value page on the record. */
+function storeValuePageDialog(db) {
+  const periods = liveFetch("periods", () => api.get("/periods"), (r) => r.periods);
+  const stored = new Set(storedValuePages().map((s) => s.period));
+  /* Only a period closed at the book's own status date can receive these
+     figures: they are read from the book as it stands now, and filing
+     them under an older period would put numbers on the record under a
+     date on which they were not true. The server refuses it too — this
+     is the same rule said before the click rather than after it. */
+  const eligible = periods.filter((p) =>
+    String(p.statusDate).slice(0, 10) === String(db.statusDate) && !stored.has(p.id));
+
+  /* With nothing to store against, a form whose only field refuses to be
+     filled is a dead end: say the sentence instead. The server refuses
+     the same thing for the same reason; this is that refusal said before
+     the click rather than after it. */
+  if (!eligible.length) {
+    return dialog({
+      title: t("Store this value page"), kicker: t("Record of record"),
+      body: h("p", { class: "small", style: "max-width:64ch" },
+        t("No period is closed at today's status date, so there is nothing to store this page against. Close the reporting period first — these figures are read from the book as it stands today, and a period closed on another day would carry them under a date on which they were not true.")),
+      actions: (c) => [h("button", { class: "btn", onClick: c }, t("Close"))],
+    });
+  }
+
+  formDialog({
+    title: t("Store this value page"), kicker: t("Record of record"), wide: true,
+    fields: [
+      { key: "period", label: t("Reporting period"), type: "select", required: true,
+        value: eligible[0]?.id ?? "",
+        options: eligible.map((p) => ({ value: p.id, label: p.label + " · " + p.statusDate })),
+        hint: t("Close the period first (the button above), then store the page against it.") },
+      { key: "note", label: t("Note for the record"), type: "textarea", rows: 2, span: 2, value: "",
+        hint: t("Why this page reads as it does — read back months later by people who were not there") },
+    ],
+    saveLabel: "Store the page",
+    extra: h("div", { class: "small muted", style: "max-width:64ch" },
+      t("The six figures are written down exactly as they read now — including the ones that are not measured, which are stored as absences with their reason and never as zeros. A stored page cannot be edited or deleted: a correction is a new period that restates this one, with its own page.")),
+    onSave: async (v) => {
+      const ok = await App.write(t("Value page stored"), (a) => a.post("/valuepage/" + v.period, {
+        note: v.note,
+      }), { detail: v.period });
+      if (ok !== false) { delete live.data.valuepages; App.set({ valuePeriod: null }); }
+      return ok;
+    },
+  });
+}
+
+/**
+ * Print THIS page and nothing else. `@media print` in styles.css hides
+ * every other section while the body carries the class; the class is
+ * dropped as soon as the dialog closes so the screen is not left in a
+ * print state.
+ */
+function printValuePage() {
+  const body = document.body;
+  body.classList.add("printing-value");
+  const done = () => {
+    body.classList.remove("printing-value");
+    window.removeEventListener("afterprint", done);
+  };
+  window.addEventListener("afterprint", done);
+  if (typeof window.print === "function") {
+    try { window.print(); } catch { /* a browser that refuses to print is not a broken page */ }
+  }
+  /* Some browsers never fire afterprint. The class must not survive the
+     dialog either way, or the screen silently loses half its sections. */
+  setTimeout(done, 2000);
+}
+
+function valuePageSection(db) {
+  const pages = App.can("period.close") ? storedValuePages() : [];
+  /* A selection left in the session by whoever was signed in before does
+     not survive into an account that may not read a stored page, nor a
+     page that is not on this book: the reader would get a failure banner
+     for a page they never asked for. */
+  const chosen = pages.some((p) => p.period === App.ui.valuePeriod)
+    ? App.ui.valuePeriod : null;
+  const record = chosen ? storedValuePage() : null;
+  const now = valuePage(db, db.projects, db.statusDate);
+  const failed = !!(record && record.failed);
+  /* A stored page is read, never recomputed — that is the whole point of
+     storing it. While it is in flight the live page stays on screen, and
+     the banner says which of the two is being read. */
+  const showing = record && !failed && record.figures ? record : null;
+  const figures = showing ? showing.figures : now.figures;
+  const order = showing ? (showing.order ?? FIGURE_ORDER) : now.order;
+  const asAt = showing ? showing.period.statusDate : now.asAt;
+
+  const options = [{ value: "", label: t("Live — as the book stands now") },
+    ...pages.map((p) => ({ value: p.period, label: p.label + " · " + p.statusDate }))];
+
+  return h("section", { class: "sec value-page" },
+    h("div", { class: "vp-masthead" },
+      h("div", { style: "flex:1;min-width:260px" },
+        h("div", { class: "kicker" },
+          db.orgName + t(" · Value report · as at ") + fmtDateLong(asAt)),
+        h("h3", { style: "margin:6px 0 0" }, t(VALUE_TEXT.block)),
+        h("div", { class: "small muted", style: "margin-top:5px;max-width:78ch" },
+          t(VALUE_TEXT.strap))),
+      h("div", { class: "btn-row no-print" },
+        h("button", { class: "btn btn-sm", onClick: () => printValuePage() },
+          icon("printer", 12), t("Print this page")),
+        App.can("period.close")
+          ? h("button", { class: "btn btn-sm btn-primary", onClick: () => storeValuePageDialog(db) },
+              icon("check", 12), t("Store this page"))
+          : null)),
+
+    /* Which page is on the screen — live, or one that was stored. Drawn
+       before the figures, because a reader who mistakes one for the other
+       has been told something false about the date of every number. */
+    pages.length
+      ? h("div", { class: "no-print", style: "display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-top:14px" },
+          selectField(t("Which page"), chosen ?? "", options,
+            (v) => { App.set({ valuePeriod: v || null }); }))
+      : null,
+    showing
+      ? h("div", { class: "vp-banner small" },
+          t("Stored figures — written down when the page was stored, not recalculated. ") +
+          t("Stored ") + fmtDate(String(showing.stored.at).slice(0, 10)) + t(" by ") + showing.stored.by +
+          t(" · scope: ") + showing.stored.scope + t(" · ") + showing.stored.projects + t(" project(s)") +
+          (showing.stored.note ? " · " + showing.stored.note : ""))
+      : null,
+    failed
+      ? h("div", { class: "small muted", style: "margin-top:10px" },
+          t("That stored page could not be loaded — refresh to try again."))
+      : null,
+
+    h("div", { class: "vp-scope small muted" },
+      showing
+        ? t("As at ") + fmtDateLong(asAt) + t(" · ") + showing.stored.projects + t(" project(s)")
+        : t("As at ") + fmtDateLong(asAt) + t(" · every project you can see: ") +
+          now.scope.projects + t(" project(s), of which ") + now.scope.closed + t(" closed") +
+          t(" · this page ignores the scope filter above, because the page that is stored is this one.")),
+
+    kpiStrip(order.map((k) => valueFigureTile(figures[k]))),
+
+    /* Six sections, in the order the request named them. Each carries its
+       own breakdown, or the sentence that says why there is none. */
+    ...order.map((k) => {
+      const f = figures[k];
+      return h("div", { class: "vp-block" },
+        h("div", { class: "vp-block-hd" },
+          h("h5", null, t(f.label)),
+          h("span", { class: "sp", style: "flex:1" }),
+          h("span", { class: "mono small" }, formatValue(f)),
+          h("span", { class: "xs muted" },
+            f.state === "measured" ? t("measured") : t(VALUE_TEXT.notMeasured))),
+        valueFigureDetail(k, f));
+    }),
+
+    /* The promise against the measurement, project by project (V-4). It
+       is LIVE arithmetic over the book in front of the reader, so it is
+       not drawn beside stored figures — a live table under a stored
+       headline is exactly the kind of mixed page this feature exists to
+       stop. */
+    showing
+      ? h("div", { class: "small muted", style: "margin-top:18px;max-width:70ch" },
+          t("The project-by-project table is computed from the book as it stands and is not part of what was stored, so it is not shown beside stored figures. Switch to the live page to read it."))
+      : h("div", { class: "vp-block" },
+          h("div", { class: "vp-block-hd" }, h("h5", null, t("Project by project"))),
+          table({
+            cols: [
+              { key: "p", label: t("Project"), get: (r) => h("div", null,
+                  h("div", { class: "small strong truncate" }, r.name),
+                  h("div", { class: "xs muted mono" }, r.project + (r.closed ? " · " + t("closed") : ""))) },
+              { key: "c", label: t("The case"), get: (r) => !r.case
+                  ? h("span", { class: "xs muted" }, r.benefits.length ? t("benefits, but no case") : t("nothing promised"))
+                  : h("span", { class: "mono small" }, money(r.case.expectedCost) + " → " + money(r.case.expectedBenefit)) },
+              { key: "s", label: t("Booked"), align: "r", get: (r) => h("span", { class: "mono small" },
+                  r.spend == null ? "—" : money(r.spend)) },
+              { key: "b", label: t("Benefits"), align: "r", get: (r) => h("span", { class: "mono small" },
+                  r.benefits.length ? (r.benefits.filter((x) => x.actual != null).length + " / " + r.benefits.length) : "—") },
+              { key: "o", label: t("Overdue"), align: "r", get: (r) => h("span", { class: "mono small" },
+                  r.overdue ? String(r.overdue) : (r.benefits.some((x) => x.realiseOn) ? "0" : "—")) },
+              { key: "x", label: t("Top exposure"), align: "r", get: (r) => h("span", { class: "mono small" },
+                  r.topExposure == null ? "—" : String(r.topExposure)) },
+              { key: "g", label: t("Next gate"), get: (r) => h("span", { class: "xs" },
+                  r.nextGate ? fmtDate(r.nextGate.date) + " · " + r.nextGate.name : "—") },
+              { key: "e", label: t("Exceptions"), align: "r", get: (r) => h("span", { class: "mono small" },
+                  r.exceptionsOpen ? String(r.exceptionsOpen) : "—") },
+            ],
+            rows: now.rows,
+            empty: { title: t("No project in scope"), body: t("Nothing is in your scope to report on.") },
+          })),
+
+    h("div", { class: "vp-foot xs muted" },
+      t("Generated from the book — no figure on this page was typed. ") +
+      (showing
+        ? t("Stored against ") + showing.period.label + t(" and readable unchanged for as long as the record lasts.")
+        : t("Nothing here is on the record until this page is stored against a closed reporting period."))));
+}
+
 function valueReportBlock(db, list) {
   const v = Engine.valueReport(db, list);
   const tot = v.totals;
@@ -5597,7 +6030,13 @@ Views.reports = (db) => {
       })(),
     ] : []));
 
-  return report;
+  /* REQ-30 — the executive's page leads: the request's own sentence is
+     that the portfolio view answers "is it on time and on budget" and
+     nobody can answer "is it worth it". It is its own <section> because
+     it is its own PAGE: the print rules hide everything else when it is
+     printed, and a section that lived inside the status report could not
+     be printed alone. */
+  return h("div", null, valuePageSection(db), report);
 };
 
 function editBlock(db, b) {

@@ -85,7 +85,11 @@ export const SIGNAL_TEXT = {
   /* why a trend has no value */
   trendOnePeriod:   "One period only — a trend needs at least two",
   trendNoPeriod:    "No period in this window carries a value — there is nothing to trend",
-  trendNoHistory:   "The register records the next review date, not that a review happened — there is no history",
+  /* `trendNoHistory` lived here until 050. It said the register could
+     not record that a review happened, which stopped being true the day
+     `raid_review` existed — so it is gone rather than left reachable. A
+     window with no recorded review now says `trendNoPeriod`, which is
+     the honest sentence: nothing to trend, not nothing to record. */
   trendUndatedActions:    "Some actions were closed without a date, so the register cannot be replayed",
   trendUndatedExceptions: "Some exceptions were answered without a date, so the register cannot be replayed",
 
@@ -391,7 +395,12 @@ function gateCycleTime(milestones, ladderOf, asAt, periods) {
   let closedWithoutDate = 0, unknownLadder = 0, closedGates = 0;
   for (const m of milestones) {
     if (m.kind !== "gate" || m.gate === null || m.gate === undefined) continue;
-    const accepted = dayOf(m.acceptedOn);
+    /* REQ-45 (049) — `acceptedOn` leads because it is the stronger claim:
+       a named person found criteria posed in advance to be met. `doneOn`
+       is all a criteria-less gate ever had to say, and until 049 it had
+       nothing at all. A gate ticked before 049 has neither and still
+       counts in `closedWithoutDate` — the sentence about it stays true. */
+    const accepted = dayOf(m.acceptedOn) ?? dayOf(m.doneOn);
     if (m.done) closedGates++;
     if (m.done && !accepted) closedWithoutDate++;
     if (!accepted) continue;
@@ -471,7 +480,7 @@ function gateCycleTime(milestones, ladderOf, asAt, periods) {
    which overwrites the only evidence there was. Compliance can therefore
    be stated today and cannot be stated for last month.
    ═══════════════════════════════════════════════════════════════════ */
-function raidReviewCompliance(raid, asAt) {
+function raidReviewCompliance(raid, reviews, asAt, periods) {
   const today = dayOf(asAt);
   const open = raid.filter((r) => r.status === "Open");
   const scheduled = open.filter((r) => dayOf(r.review));
@@ -485,7 +494,70 @@ function raidReviewCompliance(raid, asAt) {
     worstOverdueDays: worst ? worst.max : null,
     medianOverdueDays: worst ? worst.median : null,
   };
-  const noTrend = trendOf([], SIGNAL_TEXT.trendNoHistory);
+  /* REQ-46 (050) — until a review was an EVENT, this metric could state
+     today and never last month: performing a review moved the due date
+     forward and destroyed the only evidence there had been one. The
+     trend is now replayed from the recorded reviews.
+
+     Two judgements are written down here because they are arguable, and
+     because the numbers they produce differ:
+
+     1 · An item with NO recorded review is left out of the replay
+         entirely. Its `review` column holds a date, but that is TODAY's
+         date; using it as last April's due date borrows a neighbouring
+         clock and hopes. The consequence is real and is stated rather
+         than hidden: the headline counts today's whole open register
+         and the trend counts the part that has a review history, so the
+         two carry different `n` — both publish theirs, and they
+         converge as reviews accumulate. The alternative reported 100 %
+         for four months on the strength of a column nobody had evidence
+         for, which is REQ-33 wearing a different hat.
+
+     2 · An item closed on no recorded day is counted in
+         `extra.unplaceable` and left out, rather than silencing the
+         whole trend as `actionAgeing` does in the same situation. This
+         metric's own doctrine is that a row we cannot judge is reported
+         apart and folded into neither side — that is what `unscheduled`
+         already is — and one legacy row would otherwise silence a
+         metric that now has real history, permanently. */
+  const byItem = new Map();
+  for (const v of (reviews ?? [])) {
+    if (!dayOf(v.on)) continue;
+    if (!byItem.has(v.item)) byItem.set(v.item, []);
+    byItem.get(v.item).push(v);
+  }
+  for (const list of byItem.values()) {
+    list.sort((a, b) => dayOf(a.on).localeCompare(dayOf(b.on)));
+  }
+  extra.reviews = (reviews ?? []).length;
+  extra.reviewed = byItem.size;
+  extra.neverReviewed = open.filter((r) => !byItem.has(r.id)).length;
+  extra.unplaceable = raid.filter(
+    (r) => r.status !== "Open" && !dayOf(r.closedOn) && byItem.has(r.id)).length;
+
+  const buckets = (periods ?? []).map((k) => {
+    const end = periodEnd(k, asAt);
+    let n = 0, kept = 0;
+    for (const r of raid) {
+      const evs = byItem.get(r.id);
+      if (!evs) continue;                                  // no history to replay
+      const opened = dayOf(r.opened);
+      if (opened && opened > end) continue;                // not raised yet
+      if (r.status !== "Open") {
+        const closed = dayOf(r.closedOn);
+        if (!closed || closed <= end) continue;            // closed by then, or on no day
+      }
+      const before = evs.filter((v) => dayOf(v.on) <= end);
+      const due = before.length
+        ? dayOf(before[before.length - 1].nextOn)
+        : dayOf(evs[0].dueOn);                             // what it answered, before the first
+      if (!due) continue;                                  // on no rhythm, neither side
+      n += 1;
+      if (due >= end) kept += 1;
+    }
+    return { key: k, value: n ? Math.round((kept / n) * 10000) / 10000 : null, n };
+  });
+  const noTrend = trendOf(buckets);
 
   if (!scheduled.length) {
     const why = open.length ? SIGNAL_TEXT.noReviewDate : SIGNAL_TEXT.noOpenRaid;
@@ -596,7 +668,8 @@ export function govSignals(book = {}) {
       decisionLatency: decisionLatency(own(book.decisions ?? []), asAt, periods),
       actionAgeing: actionAgeing(own(book.actions ?? []), asAt, periods),
       gateCycleTime: gateCycleTime(own(book.milestones ?? []), ladderOf, asAt, periods),
-      raidReviewCompliance: raidReviewCompliance(own(book.raid ?? []), asAt),
+      raidReviewCompliance: raidReviewCompliance(
+        own(book.raid ?? []), own(book.raidReviews ?? []), asAt, periods),
       exceptionAge: exceptionAge(own(book.exceptions ?? []), asAt, periods),
     };
   };

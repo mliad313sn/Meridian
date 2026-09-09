@@ -84,6 +84,12 @@ const TABLES = [
   "change_step", "change_request",
   "project_exception", "project_tolerance", "business_case", "benefit",
   "lesson", "demand",
+  /* REQ-46 (050) : les revues avant la ligne qu'elles regardent. Le
+     `ON DELETE CASCADE` les emporterait de toute façon ; elles sont
+     nommées ici parce qu'une table absente de cette liste ET du jeu
+     gardé fait échouer le contrôle de fin — ce qui est exactement le
+     service qu'il rend. */
+  "raid_review",
   "cost_line", "raid_item", "milestone",
   "cross_dep", "activity_dep", "activity", "ext_link",
   "site_window", "rollout_wave", "project",

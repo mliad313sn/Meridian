@@ -907,7 +907,7 @@
     "/api/v1/decisions/{externalId}": {
       "put": {
         "summary": "Create or update a decision outside a meeting, keyed by your own identifier",
-        "description": "Creates the a decision outside a meeting when nothing carries this externalId for your integration, updates it otherwise. The identity is (integration, externalId): two connected systems may both say \"E01\" without colliding. `version` is optional — when sent it is asserted (409 if stale); when omitted your system is the master of this row and the last write wins. Optional `Idempotency-Key` header: the same key with the same body replays the recorded answer (Idempotent-Replayed: true); the same key with another body is refused (422) — one key names ONE request, not a run. `adopt: \"<Meridian id>\"` binds your externalId to a row that already exists (created on a screen, or scaffolded) instead of creating another. A field this collection does not declare is REFUSED (400) and nothing is written or audited: the properties below are the whole of what a body may carry (REQ-19). The same business rules as the screens apply. Named by `decidedBy` (a person) or `council` (the deciding body). The substance — headline, rationale, alternatives, dissent — is immutable: a different substance answers 409 — record a new decision naming the old one in `supersedes` (I-7). The state — `status` Proposed|Ratified, `ratifiedBy`, `evidenceUri`, `provenance` — may change, and each change is audited with before/after.",
+        "description": "Creates the a decision outside a meeting when nothing carries this externalId for your integration, updates it otherwise. The identity is (integration, externalId): two connected systems may both say \"E01\" without colliding. `version` is optional — when sent it is asserted (409 if stale); when omitted your system is the master of this row and the last write wins. Optional `Idempotency-Key` header: the same key with the same body replays the recorded answer (Idempotent-Replayed: true); the same key with another body is refused (422) — one key names ONE request, not a run. `adopt: \"<Meridian id>\"` binds your externalId to a row that already exists (created on a screen, or scaffolded) instead of creating another. A field this collection does not declare is REFUSED (400) and nothing is written or audited: the properties below are the whole of what a body may carry (REQ-19). The same business rules as the screens apply. Named by `decidedBy` (a person) or `council` (the deciding body). The substance — headline, rationale, alternatives, dissent — is immutable: a different substance answers 409 — record a new decision naming the old one in `supersedes` (I-7). The state — `status` Proposed|Ratified, `ratifiedBy`, `evidenceUri`, `provenance` — may change, and each change is audited with before/after. Becoming `Ratified` records the day it happened: send `ratifiedOn` when you know it, otherwise today is stamped; a decision created already `Ratified` is dated from the day it was decided, and going back to `Proposed` clears the date, because a decision that is not ratified was not ratified on a day (REQ-47). Decisions ratified before this existed read back with `ratifiedOn: null` — unknown, never back-dated.",
         "security": [
           {
             "apiKey": []
@@ -994,6 +994,10 @@
                   },
                   "ratifiedBy": {
                     "type": "string"
+                  },
+                  "ratifiedOn": {
+                    "type": "string",
+                    "format": "date"
                   },
                   "version": {
                     "type": "integer"
@@ -1133,7 +1137,7 @@
     "/api/v1/milestones/{externalId}": {
       "put": {
         "summary": "Create or update a milestone, keyed by your own identifier",
-        "description": "Creates the a milestone when nothing carries this externalId for your integration, updates it otherwise. The identity is (integration, externalId): two connected systems may both say \"E01\" without colliding. `version` is optional — when sent it is asserted (409 if stale); when omitted your system is the master of this row and the last write wins. Optional `Idempotency-Key` header: the same key with the same body replays the recorded answer (Idempotent-Replayed: true); the same key with another body is refused (422) — one key names ONE request, not a run. `adopt: \"<Meridian id>\"` binds your externalId to a row that already exists (created on a screen, or scaffolded) instead of creating another. A field this collection does not declare is REFUSED (400) and nothing is written or audited: the properties below are the whole of what a body may carry (REQ-19). The same business rules as the screens apply. `project` is a Meridian id or an externalId you created. A milestone with acceptanceCriteria cannot be marked done without acceptedBy — the person who checked them (PM-04). `dateBasis: \"placeholder\"` with a `condition` says the date is a position on the timeline, not a commitment: it is never reported missed or overdue until you make it `committed` (REQ-14).",
+        "description": "Creates the a milestone when nothing carries this externalId for your integration, updates it otherwise. The identity is (integration, externalId): two connected systems may both say \"E01\" without colliding. `version` is optional — when sent it is asserted (409 if stale); when omitted your system is the master of this row and the last write wins. Optional `Idempotency-Key` header: the same key with the same body replays the recorded answer (Idempotent-Replayed: true); the same key with another body is refused (422) — one key names ONE request, not a run. `adopt: \"<Meridian id>\"` binds your externalId to a row that already exists (created on a screen, or scaffolded) instead of creating another. A field this collection does not declare is REFUSED (400) and nothing is written or audited: the properties below are the whole of what a body may carry (REQ-19). The same business rules as the screens apply. `project` is a Meridian id or an externalId you created. A milestone with acceptanceCriteria cannot be marked done without acceptedBy — the person who checked them (PM-04). `dateBasis: \"placeholder\"` with a `condition` says the date is a position on the timeline, not a commitment: it is never reported missed or overdue until you make it `committed` (REQ-14). Marking it `done` records the day and the person who marked it — send `doneOn` when your register knows the real day, otherwise today is stamped, and `doneBy` names the person; both are cleared if you un-mark it. They are weaker than `acceptedBy`/`acceptedOn`, which say a named person found acceptance criteria met: a ticked box is not an acceptance, and a gate with no criteria still has a date (REQ-45). Rows marked done before this existed keep a null date rather than a made-up one.",
         "security": [
           {
             "apiKey": []
@@ -1198,6 +1202,13 @@
                     "type": "boolean"
                   },
                   "acceptedBy": {
+                    "type": "string"
+                  },
+                  "doneOn": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "doneBy": {
                     "type": "string"
                   },
                   "intrusive": {

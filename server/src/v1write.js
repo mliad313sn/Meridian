@@ -421,6 +421,11 @@ export async function upsertMilestone(user, externalId, b) {
   const owner = b.owner !== undefined ? await resolvePerson(b.owner, "owner") : undefined;
   const criteria = text(b.acceptanceCriteria, 4000, "acceptanceCriteria");
   const acceptedBy = b.acceptedBy !== undefined ? await resolvePerson(b.acceptedBy, "acceptedBy") : undefined;
+  /* REQ-45 (049) — le jour où la porte a été cochée, et par qui. Plus
+     faible que l'acceptation : cocher n'est pas constater des critères
+     (032). Le registre source qui connaît le vrai jour l'envoie. */
+  const doneOn = isoDate(b.doneOn, "doneOn");
+  const doneBy = b.doneBy !== undefined ? await resolvePerson(b.doneBy, "doneBy") : undefined;
   /* REQ-14 (RT365 D-057) — a date that is a position, not a promise. */
   let basis;
   if (b.dateBasis !== undefined) {
@@ -465,11 +470,15 @@ export async function upsertMilestone(user, externalId, b) {
         await t.query(
           `INSERT INTO milestone (id, project_id, name, due_date, base_date, gate, kind, owner_id, intrusive,
                                   acceptance_criteria, external_source, external_id, done, accepted_by, accepted_on,
-                                  date_basis, condition)
-           VALUES ($1,$2,$3,$4,$4,NULL,'milestone',$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+                                  done_on, done_by, date_basis, condition)
+           VALUES ($1,$2,$3,$4,$4,NULL,'milestone',$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
           [id, p.id, name, date, owner ?? p.pm_id ?? null, !!b.intrusive, criteria ?? "", source, externalId,
            done, done && String(criteria ?? "").trim() ? acceptedBy : null,
            done && String(criteria ?? "").trim() ? iso(new Date()) : null,
+           /* REQ-45 (049) — un jalon né coché dit quand il l'a été, avec
+              ou sans critères. `doneOn` laisse au registre source le vrai
+              jour ; sans lui, c'est celui où nous l'avons appris. */
+           done ? (doneOn ?? iso(new Date())) : null, done ? (doneBy ?? acceptedBy ?? null) : null,
            basis ?? "committed", condition ?? ""]);
       });
     return stamp(true, id, externalId, 1);
@@ -495,7 +504,17 @@ export async function upsertMilestone(user, externalId, b) {
       patch.accepted_by = acceptedBy;
       patch.accepted_on = iso(new Date());
     }
-    if (!patch.done) { patch.accepted_by = null; patch.accepted_on = null; }
+    /* REQ-45 (049) — le contrat a le même trou que l'écran : une porte
+       sans critères se cochait sans aucune date. Seulement sur la
+       TRANSITION, et jamais rétro-daté sur une ligne déjà cochée. */
+    if (patch.done && !existing.done) {
+      patch.done_on = doneOn ?? iso(new Date());
+      patch.done_by = doneBy ?? acceptedBy ?? null;
+    }
+    if (!patch.done) {
+      patch.accepted_by = null; patch.accepted_on = null;
+      patch.done_on = null; patch.done_by = null;
+    }
   }
   patch = changedOnly(patch, existing);            // ne réécrire que ce qui bouge
   Object.assign(patch, binding);   // H-2 — la liaison valide avec l'écriture
@@ -712,6 +731,17 @@ export async function upsertDecision(user, externalId, b) {
       if (!verdict.ok) throw new HttpError(403, verdict.why);
       changed.ratified_by = who;
     }
+    /* REQ-47 (049) — la ratification a enfin un JOUR. Une décision qui
+       DEVIENT ratifiée l'est le jour de ce geste : celui que l'appelant
+       déclare quand son registre le connaît, sinon celui où nous
+       l'apprenons. Et le retour en arrière l'efface — une décision
+       proposée n'a pas été ratifiée un jour, ce que la contrainte
+       `decision_ratification_dated` tient au niveau de la table. */
+    if (changed.status === "Ratified") {
+      changed.ratified_on = isoDate(b.ratifiedOn, "ratifiedOn") ?? iso(new Date());
+    } else if (changed.status === "Proposed") {
+      changed.ratified_on = null;
+    }
     const version = sentVersion(b);
     const out = await audited(user,
       { action: changed.status === "Ratified" ? "Decision ratified" : "Decision state updated",
@@ -758,13 +788,20 @@ export async function upsertDecision(user, externalId, b) {
         `INSERT INTO meeting_decision
            (id, occurrence_id, headline, rationale, alternatives, dissent, project_id, cr_id, raid_id,
             milestone_id, supersedes, decided_by, decided_on, recorded_by, external_source, external_id,
-            council, evidence_uri, provenance, status, ratified_by)
-         VALUES ($1,NULL,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
+            council, evidence_uri, provenance, status, ratified_by, ratified_on)
+         VALUES ($1,NULL,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`,
         [id, headline, text(b.rationale, 4000, "rationale") ?? "", text(b.alternatives, 4000, "alternatives") ?? "",
          text(b.dissent, 2000, "dissent") ?? "", p?.id ?? null, crId, raidId, msId, supersedes,
          decidedBy, on, user.id, source, externalId,
          council, evidenceUri(b.evidenceUri) ?? "", String(b.provenance ?? "").slice(0, 200),
-         DECISION_STATUS.includes(b.status) ? b.status : "Ratified", ratifiedBy ?? ""]);
+         DECISION_STATUS.includes(b.status) ? b.status : "Ratified", ratifiedBy ?? "",
+         /* REQ-47 — une décision qui NAÎT ratifiée l'est depuis le jour
+            où elle a été prise : « Ratified » à la création veut dire
+            qu'elle est en vigueur, et elle l'est depuis ce jour-là. Née
+            « Proposed », elle n'a pas de date — et n'en aura une qu'au
+            geste qui la ratifie. */
+         (DECISION_STATUS.includes(b.status) ? b.status : "Ratified") === "Ratified"
+           ? (isoDate(b.ratifiedOn, "ratifiedOn") ?? on) : null]);
     });
   return stamp(true, id, externalId, 1);
 }
@@ -1276,8 +1313,12 @@ export const WRITE_BODIES = {
     contingency: "number", desc: "string", dateBasis: "string", condition: "string",
     sponsor: "string", acceptanceCriteria: "string", status: "string",
     opsAcceptedBy: "string", benefitsTo: "string", closureNote: "string", version: "integer" },
+  /* REQ-45 — `doneOn`/`doneBy` : le jour où la porte a été cochée et par
+     qui, avec ou sans critères. Sans eux, un registre source qui charge
+     son histoire de portes la datait toute entière du jour de l'import. */
   milestones: { adopt: "string", project: "string", name: "string", date: "date", dateBasis: "string", condition: "string",
-    owner: "string", acceptanceCriteria: "string", done: "boolean", acceptedBy: "string", intrusive: "boolean", version: "integer" },
+    owner: "string", acceptanceCriteria: "string", done: "boolean", acceptedBy: "string",
+    doneOn: "date", doneBy: "string", intrusive: "boolean", version: "integer" },
   /* REQ-13 `category` (leur mot à côté du nôtre) et REQ-18
      `closedOn`/`closedBy` (une clôture a une date et un nom). */
   raid: { adopt: "string", project: "string", type: "string", title: "string", detail: "string", p: "integer", i: "integer",
@@ -1294,7 +1335,8 @@ export const WRITE_BODIES = {
        REQ-19 ne le savaient. Un synchroniseur qui relit /api/v1/decisions
        reçoit `version` dans chaque ligne ; la renvoyer est le geste
        normal, pas une faute. */
-    status: "string", ratifiedBy: "string", version: "integer" },
+    /* REQ-47 — le jour de la ratification, que la 039 n'avait pas. */
+    status: "string", ratifiedBy: "string", ratifiedOn: "date", version: "integer" },
   actions: { adopt: "string", title: "string", detail: "string", owner: "string", project: "string", dueDate: "date",
     status: "string", occurrence: "string", series: "string", version: "integer" },
   activities: { activity: "string", pct: "integer", source: "string", measuredAt: "date-time", name: "string", version: "integer" },

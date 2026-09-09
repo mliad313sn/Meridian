@@ -41,7 +41,19 @@ describe("schema and migrations (R2.2, R2.7)", () => {
        /* 046 - REQ-24, the weighting of the portfolio ranking;
           047 - REQ-27, a project moves onto its programme ladder. */
        "046_what_we_choose_not_to_do.sql",
-       "047_a_project_moves_onto_its_ladder.sql"]);
+       "047_a_project_moves_onto_its_ladder.sql",
+       /* 048 - REQ-30, the value page and its snapshot per reporting
+          period: report_value and report_value_figure hang off
+          report_period, so there is one period concept and not two. */
+       "048_what_it_was_worth.sql",
+       /* 049 - REQ-45 and REQ-47, the two clocks the product asked for
+          and never wrote down: the day a gate was marked done (with or
+          without acceptance criteria) and the day a decision became
+          ratified. 050 - REQ-46, a RAID review is an event with a date
+          and a reviewer; the next-due date is derived from the last one
+          rather than replacing it. */
+       "049_when_it_was_passed.sql",
+       "050_a_review_is_an_event.sql"]);
     const again = await migrate({ silent: true });
     assert.deepEqual(again, [], "a second run applies nothing");
   });
