@@ -147,6 +147,28 @@ export function tData(s) {
 /* ── the dictionary ─────────────────────────────────────────────────── */
 
 export const FR = {
+  // ── REQ-27 · un projet passe sur l'échelle de son programme
+  "Move onto the programme's ladder": "Passer sur l'échelle du programme",
+  "See what this would do": "Voir ce que cela ferait",
+  "Adopted — kept with its date, its acceptance and its evidence": "Adopté — conservé avec sa date, son acceptation et ses preuves",
+  "Created — this rung is not on the project yet": "Créé — ce barreau n'est pas encore sur le projet",
+  "Retired — it leaves the ladder and keeps everything it carries": "Retiré — il quitte l'échelle et garde tout ce qu'il porte",
+  "Nothing is deleted. A retired gate becomes an ordinary milestone and keeps its date, its acceptance and its filed evidence.": "Rien n'est supprimé. Un jalon retiré redevient un jalon ordinaire et garde sa date, son acceptation et ses preuves déposées.",
+  "I have read what leaves the ladder": "J'ai lu ce qui quitte l'échelle",
+  "Move this project onto the ladder": "Faire passer ce projet sur l'échelle",
+  "This project is already on its programme's ladder — there is nothing to move.": "Ce projet est déjà sur l'échelle de son programme — il n'y a rien à déplacer.",
+  "Scaffolded on this many gates": "Jalons à la création",
+  "Declared by the programme": "Déclarés par le programme",
+  "These milestones already exist and simply take their place on the ladder.": "Ces jalons existent déjà et prennent simplement leur place sur l'échelle.",
+  "Scaffolded exactly as it would have been at birth: its draft evidence and the criteria the ladder declares.": "Dressé exactement comme il l'aurait été à la création : sa preuve en brouillon et les critères que l'échelle déclare.",
+  "marked done": "marqué fait",
+  "accepted by a named person": "accepté par une personne nommée",
+  "acceptance criteria posed": "des critères d'acceptation posés",
+  "filed evidence citation(s)": "preuve(s) déposée(s)",
+  "criterion(s) found met by a named reviewer": "critère(s) tenu(s) par un réviseur nommé",
+  "adopted": "adoptés",
+  "created": "créés",
+  "retired": "retirés",
   "No period in this window carries a value \u2014 there is nothing to trend": "Aucune p\u00e9riode de cette fen\u00eatre ne porte de valeur \u2014 il n'y a rien \u00e0 mettre en tendance",
   // ── REQ-28 · les cinq signaux de gouvernance, et pourquoi l'un d'eux ne se mesure pas
   "Governance signals": "Signaux de gouvernance",

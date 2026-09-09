@@ -19,6 +19,28 @@
  */
 
 export const ES = {
+  // ── REQ-27 · un proyecto pasa a la escala de su programa
+  "Move onto the programme's ladder": "Pasar a la escala del programa",
+  "See what this would do": "Ver qué haría esto",
+  "Adopted — kept with its date, its acceptance and its evidence": "Adoptado: conservado con su fecha, su aceptación y sus pruebas",
+  "Created — this rung is not on the project yet": "Creado: este peldaño aún no está en el proyecto",
+  "Retired — it leaves the ladder and keeps everything it carries": "Retirado: sale de la escala y conserva todo lo que lleva",
+  "Nothing is deleted. A retired gate becomes an ordinary milestone and keeps its date, its acceptance and its filed evidence.": "No se elimina nada. Un hito retirado vuelve a ser un hito ordinario y conserva su fecha, su aceptación y sus pruebas presentadas.",
+  "I have read what leaves the ladder": "He leído lo que sale de la escala",
+  "Move this project onto the ladder": "Pasar este proyecto a la escala",
+  "This project is already on its programme's ladder — there is nothing to move.": "Este proyecto ya está en la escala de su programa: no hay nada que mover.",
+  "Scaffolded on this many gates": "Hitos al crear",
+  "Declared by the programme": "Declarados por el programa",
+  "These milestones already exist and simply take their place on the ladder.": "Estos hitos ya existen y simplemente ocupan su lugar en la escala.",
+  "Scaffolded exactly as it would have been at birth: its draft evidence and the criteria the ladder declares.": "Creado exactamente como lo habría sido al nacer: su prueba en borrador y los criterios que declara la escala.",
+  "marked done": "marcado como hecho",
+  "accepted by a named person": "aceptado por una persona nombrada",
+  "acceptance criteria posed": "criterios de aceptación planteados",
+  "filed evidence citation(s)": "prueba(s) presentada(s)",
+  "criterion(s) found met by a named reviewer": "criterio(s) cumplido(s) por un revisor nombrado",
+  "adopted": "adoptados",
+  "created": "creados",
+  "retired": "retirados",
   "No period in this window carries a value \u2014 there is nothing to trend": "Ning\u00fan per\u00edodo de esta ventana lleva un valor \u2014 no hay nada que poner en tendencia",
   // ── REQ-28 · las cinco señales de gobernanza, y por qué alguna no se mide
   "Governance signals": "Señales de gobernanza",

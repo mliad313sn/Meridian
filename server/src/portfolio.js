@@ -343,6 +343,12 @@ export async function loadPortfolio(user) {
       acceptedBy: m.accepted_by ?? null, acceptedOn: m.accepted_on ?? null,
       /* REQ-14 — what the date is worth, and what will produce the real one. */
       dateBasis: m.date_basis ?? "committed", condition: m.condition ?? "",
+      /* REQ-27 — the rung this milestone held before an explicit ladder
+         move took it off. It is an ordinary milestone now and keeps
+         everything it carried; this is the only thing that still SAYS
+         what it used to be, and without it a reader cannot tell a
+         retired gate from a milestone that was never one. */
+      retiredGate: m.retired_gate ?? null,
       externalSource: m.external_source ?? null, externalId: m.external_id ?? null,
       origin: m.origin ?? "local", version: m.row_version,
     })),

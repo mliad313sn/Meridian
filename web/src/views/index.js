@@ -1255,7 +1255,15 @@ Views.project = (db) => {
           h("div", { class: "small strong" }, t("This project is on a ladder its programme no longer declares.")),
           h("div", { class: "xs muted", style: "margin-top:3px" },
             t("It was set up with ") + p.scaffoldedGates + t(" gates; the programme now declares ")
-            + Engine.gates(db, p.id).length + t(". Its dated gates and their filed evidence were deliberately left alone — but read “what is next” with that in mind.")))
+            + Engine.gates(db, p.id).length + t(". Its dated gates and their filed evidence were deliberately left alone — but read “what is next” with that in mind.")),
+          /* REQ-27 — the notice said the problem for two releases and
+             offered nothing. The act that fixes it belongs here, where
+             the question is already being asked. */
+          may("ladder.migrate", p)
+            ? h("div", { style: "margin-top:8px" },
+                h("button", { class: "btn btn-xs", onClick: () => moveOntoLadder(db, p) },
+                  t("See what this would do")))
+            : null)
       : null,
     h("div", { style: "margin-bottom:8px" }, milestones),
     criteriaBlock(db, p, gate),
@@ -2561,6 +2569,124 @@ function raidDetail(db, r) {
             App.write("Item reopened", (a) => a.patch("/raid/" + r.id, { status: "Open", version: r.version }), { detail: r.id });
             close(); } }, "Reopen"),
     ],
+  });
+}
+
+/* ── REQ-27 · a project moves onto its programme's ladder ──────────────
+   D-33.2 forbids a declared ladder from rewriting projects that already
+   exist — dated gates and filed evidence would move under people's feet.
+   So this is a rehearsal and then an explicit act, and the rehearsal is
+   the point: the operator reads what leaves the ladder BEFORE anything
+   moves, and a rung carrying an acceptance or a filed citation cannot
+   leave until they say they have read it.
+
+   Nothing is ever deleted. A retired gate becomes an ordinary milestone
+   and keeps its date, its acceptance and its evidence; what it loses is
+   its place. The dialog says that in as many words, because "retire"
+   read alone sounds like a deletion. */
+
+/** The five things a retiring rung may carry, named rather than dumped. */
+function carriedLabel(c) {
+  if (c.what === "accepted") return t("accepted by a named person");
+  if (c.what === "evidence") return c.count + " " + t("filed evidence citation(s)");
+  if (c.what === "criteriaMet") return c.count + " " + t("criterion(s) found met by a named reviewer");
+  if (c.what === "acceptanceCriteria") return t("acceptance criteria posed");
+  return t("marked done");
+}
+
+async function moveOntoLadder(db, p) {
+  let plan;
+  try { plan = await api.get("/projects/" + p.id + "/ladder"); }
+  catch (e) { return reportError(e); }
+
+  /* The server's own sentence names the next step; ours would only be a
+     worse copy of it. */
+  if (plan.refusal) {
+    return dialog({
+      title: t("Gate ladder"), kicker: p.id,
+      body: h("p", { class: "small" }, tData(plan.refusal)),
+      actions: (c) => [h("button", { class: "btn", onClick: c }, t("Close"))],
+    });
+  }
+  if (plan.onLadder) {
+    return dialog({
+      title: t("Gate ladder"), kicker: p.id,
+      body: h("p", { class: "small" },
+        t("This project is already on its programme's ladder — there is nothing to move.")),
+      actions: (c) => [h("button", { class: "btn", onClick: c }, t("Close"))],
+    });
+  }
+
+  const group = (title, note, rows, render) => rows.length
+    ? h("div", { style: "margin-bottom:12px" },
+        h("div", { class: "kicker" }, title + " · " + rows.length),
+        h("div", { class: "xs muted", style: "margin:2px 0 5px" }, note),
+        ...rows.map(render))
+    : null;
+
+  const needsAck = (plan.acknowledgeRequired || []).length > 0;
+  let acked = !needsAck;
+  const confirmBtn = h("button", { class: "btn btn-primary", disabled: !acked },
+    t("Move this project onto the ladder"));
+
+  const body = h("div", null,
+    h("div", { class: "small", style: "margin-bottom:10px" },
+      h("span", { class: "strong" }, plan.programmeName || plan.programme),
+      " · " + t("Declared by the programme") + " " + plan.ladder.gates,
+      " · " + t("Scaffolded on this many gates") + " " + (plan.scaffoldedGates ?? "—")),
+
+    group(t("Adopted — kept with its date, its acceptance and its evidence"),
+      t("These milestones already exist and simply take their place on the ladder."),
+      plan.adopt, (a) => h("div", { class: "small", style: "padding:2px 0" },
+        h("span", { class: "mono xs muted" }, String(a.rung).padStart(2, " ") + "  "), a.name,
+        a.was && a.was.name !== a.name
+          ? h("span", { class: "xs muted" }, "  ← " + a.was.name) : null)),
+
+    group(t("Created — this rung is not on the project yet"),
+      t("Scaffolded exactly as it would have been at birth: its draft evidence and the criteria the ladder declares."),
+      plan.create, (c) => h("div", { class: "small", style: "padding:2px 0" },
+        h("span", { class: "mono xs muted" }, String(c.rung).padStart(2, " ") + "  "), c.name,
+        c.date ? h("span", { class: "xs muted" }, "  " + fmtDate(c.date)) : null)),
+
+    group(t("Retired — it leaves the ladder and keeps everything it carries"),
+      t("Nothing is deleted. A retired gate becomes an ordinary milestone and keeps its date, its acceptance and its filed evidence."),
+      plan.retire, (r) => h("div", { class: "small", style: "padding:2px 0" },
+        h("span", { class: "mono xs muted" }, (r.gate != null ? String(r.gate).padStart(2, " ") : " —") + "  "),
+        r.name,
+        (r.carries || []).length
+          ? h("div", { class: "xs", style: "margin-left:26px;color:var(--sig-amber)" },
+              (r.carries || []).map(carriedLabel).join(" · "))
+          : null)),
+
+    needsAck
+      ? h("label", { class: "small", style: "display:flex;gap:8px;align-items:flex-start;margin-top:10px;cursor:pointer" },
+          h("input", { type: "checkbox",
+            onChange: (e) => { acked = e.target.checked; confirmBtn.disabled = !acked; } }),
+          h("span", null, t("I have read what leaves the ladder")))
+      : null);
+
+  dialog({
+    title: t("Move onto the programme's ladder"), kicker: p.id, body, wide: true,
+    actions: (close) => {
+      confirmBtn.onclick = async () => {
+        if (!acked) return;
+        const ok = await App.write("Project moved onto its programme's ladder",
+          (a) => a.post("/projects/" + p.id + "/ladder", {
+            version: plan.version, acknowledge: plan.acknowledgeRequired || [],
+          }));
+        /* The toast reports what the ACT did, never what the plan
+           proposed: the server recomputes the plan inside its own
+           transaction, so the two can differ and the truth is the one
+           that was written. */
+        if (ok !== false && ok && ok.applied) {
+          toast(ok.applied.adopted + " " + t("adopted") + " · " +
+                ok.applied.created + " " + t("created") + " · " +
+                ok.applied.retired + " " + t("retired"));
+        }
+        close();
+      };
+      return [h("button", { class: "btn", onClick: close }, t("Cancel")), confirmBtn];
+    },
   });
 }
 

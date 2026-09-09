@@ -101,6 +101,16 @@ const ENTITIES = {
     d: /grants\/revoke/ },
   session: { c: /post\("\/login"/, u: NA("Sessions are not edited"), d: /post\("\/logout"/ },
   app_setting: { c: /patch\("\/settings"/, u: /patch\("\/settings"/, d: NA("Settings have defaults, not absence") },
+  /* REQ-24 — the weighting the portfolio ranks by. Its single row is
+     posed by migration 046, which is why it has no create route and why
+     reset-book keeps it: a book with no weighting has no order at all.
+     It is here because a table this map does not name is INVISIBLE to
+     this gate — the same blind spot F1 had for a router it did not
+     name, found twice in two waves. */
+  prioritisation_weighting: {
+    c: NA("One row, posed by migration 046 — a portfolio has one weighting, never a second"),
+    u: /patch\("\/prioritisation\/weighting"/,
+    d: NA("Removing it would leave the portfolio with no order; the way back is to restore the shipped weights") },
   audit_event: { c: NA("Written by audited(), never by a route"), u: NA("Append-only (R6.2)"),
     d: NA("Append-only (R6.2)") },
 
