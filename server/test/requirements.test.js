@@ -26,6 +26,8 @@ async function admin() {
 function book(over = {}) {
   return {
     orgName: "TEST", statusDate: "2026-08-28",
+    // MER-09 — un livre dit son unité monétaire ou l'import le refuse.
+    currencyUnit: "millions",
     sites: [{ id: "S1", city: "Ici", tz: 0 }],
     people: [{ id: "PE-1", name: "A. Personne", role: "PM", site: "S1", rate: 0 }],
     programmes: [{ id: "P1", name: "Programme", managerId: "PE-1" }],

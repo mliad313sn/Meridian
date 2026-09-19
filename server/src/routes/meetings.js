@@ -557,10 +557,18 @@ r.post("/occurrences/:id/decisions", async (req, res, next) => {
         id = await allocateId(t, "DEC", { pad: 3 });
         await t.query(
         `INSERT INTO meeting_decision
-           (id, occurrence_id, headline, rationale, project_id, cr_id, decided_by, recorded_by, referred_to_scope)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+           (id, occurrence_id, headline, rationale, project_id, cr_id, decided_by, recorded_by,
+            referred_to_scope, reversal_cost, supersedes_id, source_evidence_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
         [id, o.id, String(b.headline).slice(0, 300), String(b.rationale ?? "").slice(0, 4000),
-         b.projectId ?? null, b.crId ?? null, b.decidedBy ?? s.chair_id, req.user.id, referredTo]);
+         b.projectId ?? null, b.crId ?? null, b.decidedBy ?? s.chair_id, req.user.id, referredTo,
+         /* MER-07 — le coût de retour. Publier une banque d'items sous
+            licence libre est irréversible ; retirer une galerie du
+            périmètre ne l'est pas. Sans cette colonne les deux décisions
+            se ressemblent, et elles n'ont rien à voir. Nul = personne
+            ne s'est prononcé, ce qui n'est pas « faible ». */
+         ["low", "medium", "high"].includes(b.reversalCost) ? b.reversalCost : null,
+         b.supersedes ?? null, b.sourceEvidence ?? null]);
         if (answers) {
           /* Still-unanswered is re-checked here: the lookup above runs
              outside this transaction (PGlite serialises one connection,

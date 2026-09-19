@@ -117,6 +117,7 @@ export async function loadPortfolio(user) {
     activities, deps, milestones, requirementRows, ledger, raidRows, crRows, stepRows,
     allocations, docs, columns, items, crossDeps, narrativeRows, extLinks,
     benefits, waves, commitments, timesheets, lessonRows, tolerances, exceptions, caseRows,
+    evidenceRows, findingRows, seatRows, seatConflicts, objectionRows,
   ] = await Promise.all([
     inScope(`SELECT * FROM activity WHERE project_id = ANY($1) ORDER BY project_id, stage`),
     inScope(`SELECT d.* FROM activity_dep d JOIN activity a ON a.id = d.activity_id
@@ -174,7 +175,29 @@ export async function loadPortfolio(user) {
               WHERE project_id = ANY($1) ORDER BY raised_on DESC, id`),
     /* PM-03 — la promesse contre laquelle le réalisé se relira. */
     inScope(`SELECT * FROM business_case WHERE project_id = ANY($1)`),
+
+    /* MER-11 — la preuve, document ou non. Une exécution d'intégration
+       continue n'a ni révision ni propriétaire ; la forcer dans le
+       registre documentaire produit une révision « 0.1 » qui ne veut
+       rien dire. Bornée au périmètre comme tout le reste. */
+    inScope(`SELECT * FROM evidence WHERE project_id = ANY($1) ORDER BY captured_on DESC, id`),
+    /* MER-05 — les constats de revue. Ni risques (ils se sont produits)
+       ni enseignements (ils sont ouverts et bloquants). */
+    inScope(`SELECT * FROM finding WHERE project_id = ANY($1) ORDER BY id`),
+    /* MER-06 — les sièges. Une gouvernance, contrairement à un
+       portefeuille, n'est pas bornée par projet : qui siège et qui peut
+       opposer un veto est un fait de groupe. */
+    many(`SELECT * FROM seat ORDER BY id`),
+    many(`SELECT * FROM seat_conflict ORDER BY seat_id, other_id`),
+    /* MER-07 — le registre des dissensions. */
+    many(`SELECT * FROM decision_objection ORDER BY raised_on DESC, id`),
   ]);
+
+  const conflictsBySeat = new Map();
+  for (const c of seatConflicts) {
+    if (!conflictsBySeat.has(c.seat_id)) conflictsBySeat.set(c.seat_id, []);
+    conflictsBySeat.get(c.seat_id).push(c.other_id);
+  }
 
   const depsByActivity = new Map();
   for (const d of deps) {
@@ -197,6 +220,11 @@ export async function loadPortfolio(user) {
 
   return {
     orgName: settings.orgName ?? "MERIDIAN",
+    /* MER-09 — le livre DIT son unité. Le sérialiseur divise par un
+       million (`toM`), donc il l'écrit, et un livre exporté d'ici se
+       réimporte sans que quiconque ait à deviner. Un livre qui ne le
+       dit pas est refusé à l'import, ce qui est le but. */
+    currencyUnit: "millions",
     statusDate: await statusDate(settings),
     currentUser: user?.personId ?? null,
     viewer: user ? { id: user.id, role: user.role, name: user.displayName } : null,
@@ -327,6 +355,46 @@ export async function loadPortfolio(user) {
       verification: r.verification, verifiedBy: r.verified_by,
       gate: r.gate_n, status: r.status, waiverReason: r.waiver_reason,
       owner: r.owner_id, updated: r.updated_on, version: r.row_version,
+    })),
+
+    /* MER-11 — une pièce de preuve pointe un document DU REGISTRE ou
+       porte sa propre adresse, jamais ni l'un ni l'autre : la contrainte
+       `evidence_has_a_source` le tient côté base. */
+    evidence: evidenceRows.map((e) => ({
+      id: e.id, project: e.project_id, document: e.document_id,
+      kind: e.kind, name: e.name, uri: e.uri, digest: e.digest,
+      gate: e.gate_n, loop: e.gate_loop,
+      capturedOn: e.captured_on, capturedBy: e.captured_by,
+    })),
+
+    /* MER-05 — le constat. `observedFact` est ce qui a été VU ;
+       `whyItMatters` est la conséquence. Deux colonnes parce que les
+       confondre est la façon dont un constat devient une opinion. */
+    findings: findingRows.map((f) => ({
+      id: f.id, project: f.project_id, requirement: f.requirement_id,
+      gate: f.gate_n, loop: f.gate_loop,
+      observedFact: f.observed_fact, whyItMatters: f.why_it_matters,
+      severity: f.severity, owner: f.owner_id, proposedFix: f.proposed_fix,
+      raisedOn: f.raised_on, retestOn: f.retest_on, status: f.status,
+      closedEvidence: f.closed_evidence_id, waiverReason: f.waiver_reason,
+    })),
+
+    /* MER-06 — qui siège, sur quel domaine, avec ou sans veto, et ce
+       que le siège ne peut pas être cumulé avec. */
+    seats: seatRows.map((s2) => ({
+      id: s2.id, name: s2.name, person: s2.person_id, domain: s2.domain,
+      vetoDomain: s2.veto_domain, observer: s2.observer, active: s2.active,
+      incompatibleWith: conflictsBySeat.get(s2.id) ?? [],
+    })),
+
+    /* MER-07 — les objections. Une gouvernance par consentement a
+       besoin d'un endroit pour l'objection raisonnée ; un conseil
+       réglementé a besoin d'un endroit pour la position minoritaire.
+       C'est le même endroit. */
+    objections: objectionRows.map((o) => ({
+      id: o.id, decision: o.decision_id, seat: o.seat_id, domain: o.domain,
+      reason: o.reason, raisedOn: o.raised_on, escalatesOn: o.escalates_on,
+      state: o.state, resolution: o.resolution,
     })),
 
     ledger: ledger.map((l) => ({
@@ -469,6 +537,12 @@ export async function loadPortfolio(user) {
     items: items.map((i) => ({
       id: i.id, project: i.project_id, column: i.column_id, title: i.title,
       assignee: i.assignee_id, points: i.points, priority: i.priority,
+      /* MER-05 — d'où vient cet élément, ce qu'il vaut, et par quelle
+         méthode. Une lettre de priorité perdait les trois : un arriéré
+         d'améliorations noté par RICE et arrivé d'un panel d'enfants
+         devenait « P2 », et la note comme la source disparaissaient. */
+      source: i.source ?? "", score: i.score === null || i.score === undefined ? null : Number(i.score),
+      scoreMethod: i.score_method ?? "",
       created: i.created_on, version: i.row_version,
     })),
 
