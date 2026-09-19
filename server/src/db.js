@@ -146,9 +146,24 @@ async function clearStaleLocks(dataDir) {
   if (stale.length) console.log(`  cleared ${stale.length} stale lock file(s) from a previous run`);
 }
 
+/** Where PGlite keeps the book, and why it is never nowhere by default. */
+export function pgliteStore() {
+  const configured = process.env.PGLITE_DIR;
+  if (configured === ":memory:") return null;        // explicit, as the tests want
+  if (configured) return configured;
+  return "./server/.data/pgdata";                     // the documented default
+}
+
 async function openPglite(dataDir) {
   const { PGlite } = await import("@electric-sql/pglite");
   await clearStaleLocks(dataDir);
+  if (dataDir) {
+    const { mkdirSync } = await import("node:fs");
+    /* PGlite ne crée pas le dossier parent : sans ceci le défaut
+       ci-dessus échouerait au premier lancement, ce qui remplacerait un
+       piège par un autre. */
+    mkdirSync(dataDir, { recursive: true });
+  }
   const pglite = dataDir ? new PGlite(dataDir) : new PGlite();
   await pglite.waitReady;
 
@@ -223,7 +238,23 @@ async function openPglite(dataDir) {
 export async function connect(opts = {}) {
   const url = opts.url ?? process.env.DATABASE_URL;
   if (url) impl = await openPg(url);
-  else impl = await openPglite(opts.dataDir ?? process.env.PGLITE_DIR ?? null);
+  /* MER-12 — le stockage par défaut est SUR DISQUE, plus en mémoire.
+
+     Le démarrage rapide documenté lançait le serveur sans PGLITE_DIR,
+     donc en mémoire : `npm run seed` créait les comptes, `npm run dev`
+     repartait d'une base vide, et la connexion échouait sur
+     « Email ou mot de passe non reconnu ». Une panne de configuration
+     déguisée en erreur d'identifiants — la pire sorte, parce qu'elle
+     envoie chercher au mauvais endroit, et c'est ce qui m'est arrivé.
+
+     `PGLITE_DIR=:memory:` reste possible et explicite, et un appelant
+     qui passe `dataDir: null` — ce que fait le harness de test —
+     demande explicitement la mémoire : on teste la PRÉSENCE de la clé,
+     pas sa valeur, parce que `null ?? défaut` rend le défaut et aurait
+     silencieusement mis les tests sur disque. Ce qui change, c'est le DÉFAUT : un produit dont
+     le démarrage documenté perd les données n'a pas un défaut, il a un
+     défaut mal choisi. */
+  else impl = await openPglite("dataDir" in opts ? opts.dataDir : pgliteStore());
   engineName = impl.name;
   return impl;
 }

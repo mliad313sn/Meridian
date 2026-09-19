@@ -32,6 +32,17 @@ const DEFAULT_SETTINGS = {
   /* V-04 — the capital envelope the queue is ranked against, in millions.
      Zero means "no envelope agreed", and nothing falls below the line. */
   capexEnvelope: 0,
+  /* MER-01 — le modèle de jalons, en donnée. `null` veut dire « garder
+     les quatre intégrés » : un portefeuille qui n'a rien déclaré ne
+     change pas de comportement. Un produit qui a six jalons qui
+     bouclent les déclare ici, et le verrouillage de jalon s'applique
+     enfin aux jalons qui bloquent réellement sa sortie. */
+  gates: null,
+  /* Au-delà de combien de tours une boucle est elle-même une alerte.
+     Zéro = aucune limite décidée, et la boucle ne déclenche rien —
+     même règle que `notifyRetentionDays` : on s'abstient plutôt que
+     d'inventer un seuil que personne n'a posé. */
+  gateLoopLimit: 0,
   cadence: "Weekly — Monday 09:00",
   orgName: "MERIDIAN",
   /* R-01 — the hosts an evidence link may point at, comma-separated.
@@ -103,7 +114,7 @@ export async function loadPortfolio(user) {
     ids.length ? many(sql, [ids, ...extra]) : Promise.resolve([]);
 
   const [
-    activities, deps, milestones, ledger, raidRows, crRows, stepRows,
+    activities, deps, milestones, requirementRows, ledger, raidRows, crRows, stepRows,
     allocations, docs, columns, items, crossDeps, narrativeRows, extLinks,
     benefits, waves, commitments, timesheets, lessonRows, tolerances, exceptions, caseRows,
   ] = await Promise.all([
@@ -111,6 +122,7 @@ export async function loadPortfolio(user) {
     inScope(`SELECT d.* FROM activity_dep d JOIN activity a ON a.id = d.activity_id
               WHERE a.project_id = ANY($1)`),
     inScope(`SELECT * FROM milestone WHERE project_id = ANY($1) ORDER BY due_date`),
+    inScope(`SELECT * FROM requirement WHERE project_id = ANY($1) ORDER BY id`),
     /* Individual postings, not a monthly sum. The aggregate was enough to
        compute actual cost, but it left no line to point at — so a
        mis-posting could not be corrected, which is the whole reason the
@@ -249,6 +261,9 @@ export async function loadPortfolio(user) {
       desc: p.description, phase: p.phase, gate: p.gate,
       healthOverride: p.health_override, healthOverrideWhy: p.health_override_why,
       closed: p.closed, origin: p.origin ?? "local",
+      /* MER-01 — quel tour de boucle ce projet fait. Tout ce qui
+         existe est au tour 1 : la colonne a un défaut. */
+      loop: p.gate_loop ?? 1,
       // the post-implementation verdict, where one has been given (V-01)
       pirOn: p.pir_on ?? null, pirVerdict: p.pir_verdict ?? null, pirNote: p.pir_note ?? "",
       /* PM-08 — les trois signatures de la clôture. */
@@ -287,12 +302,31 @@ export async function loadPortfolio(user) {
 
     milestones: milestones.map((m) => ({
       id: m.id, project: m.project_id, name: m.name, date: m.due_date,
-      baseDate: m.base_date, gate: m.gate, kind: m.kind, owner: m.owner_id,
+      baseDate: m.base_date, gate: m.gate, loop: m.gate_loop ?? 1,
+      kind: m.kind, owner: m.owner_id,
       done: m.done, intrusive: m.intrusive === true,
       /* PM-04 — les critères posés d'avance, et qui a constaté. */
       acceptanceCriteria: m.acceptance_criteria ?? "",
       acceptedBy: m.accepted_by ?? null, acceptedOn: m.accepted_on ?? null,
       origin: m.origin ?? "local", version: m.row_version,
+    })),
+
+    /* MER-03 — le registre d'exigences. C'était le plus gros manque du
+       produit : un portefeuille qui suit des projets sans suivre ce
+       qu'ils doivent tenir oblige à tenir les exigences À CÔTÉ de
+       l'outil, ce qui est exactement la situation qu'il existe pour
+       supprimer.
+
+       `verification` est la MÉTHODE promise ; `verifiedBy` la PREUVE
+       produite. Les deux sont séparées parce que les confondre est la
+       façon dont une exigence se déclare vérifiée du seul fait que
+       quelqu'un a écrit comment elle le serait. */
+    requirements: requirementRows.map((r) => ({
+      id: r.id, project: r.project_id, statement: r.statement,
+      source: r.source, priority: r.priority,
+      verification: r.verification, verifiedBy: r.verified_by,
+      gate: r.gate_n, status: r.status, waiverReason: r.waiver_reason,
+      owner: r.owner_id, updated: r.updated_on, version: r.row_version,
     })),
 
     ledger: ledger.map((l) => ({
@@ -417,7 +451,8 @@ export async function loadPortfolio(user) {
       .filter((d) => !d.project_id || idSet.has(d.project_id))
       .map((d) => ({
         id: d.id, project: d.project_id, name: d.name, type: d.doc_type,
-        gate: d.gate, owner: d.owner_id, rev: d.revision, status: d.status,
+        gate: d.gate, loop: d.gate_loop ?? 1,
+        owner: d.owner_id, rev: d.revision, status: d.status,
         updated: d.updated_on,
         /* R-01 / R-13 — the artefact, its frozen address, its lineage. */
         uri: d.uri ?? "", uriHash: d.uri_locked_hash ?? "",

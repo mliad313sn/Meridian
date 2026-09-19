@@ -251,14 +251,53 @@ export const Engine = {
   isEvidence(d) {
     return d?.status === "Approved" && !!d.uri;
   },
-  gateStatus(db, projectId, gateN) {
-    const docs = db.docs.filter(d => d.project === projectId && d.gate === gateN);
+  /* MER-01 — le modèle de jalons est une DONNÉE, plus une constante.
+     `settings.gates` le porte ; absent, on garde exactement les quatre
+     d'origine, donc aucun portefeuille existant ne change. Un produit
+     qui en a six ne les écrase plus sur quatre, et les jalons qui
+     bloquent réellement une sortie redeviennent des jalons verrouillés
+     plutôt que des dates dans un calendrier. */
+  gateModel(db) {
+    const g = db?.settings?.gates;
+    if (!Array.isArray(g) || !g.length) return GATES;
+    return g
+      .filter(x => x && Number.isFinite(Number(x.n)))
+      .map(x => ({
+        n: Number(x.n),
+        name: x.name ?? `Gate ${x.n}`,
+        at: Number.isFinite(Number(x.at)) ? Number(x.at) : 0,
+        owner: x.owner ?? "",
+        evidence: x.evidence ?? "",
+        /* Un jalon qui RENVOIE à un autre. Une revue qui renvoie au
+           cahier des charges est un cycle d'amélioration, pas un échec,
+           et sans ceci le portefeuille ne sait pas le dire. */
+        loopsTo: Number.isFinite(Number(x.loopsTo)) ? Number(x.loopsTo) : null,
+      }))
+      .sort((a, b) => a.n - b.n);
+  },
+
+  /* Combien de tours un projet a le droit de faire avant que la boucle
+     soit elle-même une alerte. Zéro ou absent = pas de limite déclarée,
+     et la boucle ne déclenche rien. */
+  gateLoopLimit(db) {
+    const v = Number(db?.settings?.gateLoopLimit ?? 0);
+    return Number.isFinite(v) && v > 0 ? v : 0;
+  },
+
+  gateStatus(db, projectId, gateN, loop = 1) {
+    /* Les preuves et les jalons du tour PRÉCÉDENT ne franchissent pas
+       le jalon du tour courant. Sans ce filtre, le jalon 1 du deuxième
+       tour est « déjà franchi » par la preuve du premier, et la
+       deuxième revue s'ouvre en se croyant terminée. Tout ce qui n'a
+       pas de tour est au tour 1, donc rien d'existant ne bouge. */
+    const at = (x) => (x?.loop ?? 1) === loop;
+    const docs = db.docs.filter(d => d.project === projectId && d.gate === gateN && at(d));
     const approved = docs.filter(d => Engine.isEvidence(d)).length;
-    const ms = db.milestones.find(m => m.project === projectId && m.gate === gateN);
+    const ms = db.milestones.find(m => m.project === projectId && m.gate === gateN && at(m));
     const date = ms ? ms.date : null;
     const passed = date ? D(date) <= D(db.statusDate) : false;
     return {
-      gate: gateN, date, docs, approved, total: docs.length,
+      gate: gateN, loop, date, docs, approved, total: docs.length,
       ready: docs.length > 0 && approved === docs.length,
       outstanding: docs.filter(d => !Engine.isEvidence(d)),
       state: passed && approved === docs.length ? "Cleared"
@@ -269,17 +308,37 @@ export const Engine = {
   },
 
   currentGate(db, projectId) {
-    for (const g of GATES) {
-      const st = Engine.gateStatus(db, projectId, g.n);
+    const model = Engine.gateModel(db);
+    const project = db.projects?.find(p => p.id === projectId);
+    const loop = Math.max(1, Number(project?.loop ?? 1));
+    for (const g of model) {
+      const st = Engine.gateStatus(db, projectId, g.n, loop);
       if (st.state !== "Cleared") return { ...g, ...st };
     }
-    return { ...GATES[3], ...Engine.gateStatus(db, projectId, 4) };
+    const last = model[model.length - 1];
+    return { ...last, ...Engine.gateStatus(db, projectId, last.n, loop) };
   },
 
   canAdvance(db, projectId) {
     if (!db.settings.gateLock) return { ok: true, reason: "Gate locking is off" };
     const g = Engine.currentGate(db, projectId);
     if (g.state === "Cleared" || g.ready) return { ok: true, reason: "Evidence complete for " + g.name };
+    /* MER-15 — un refus DIT ce qui manque.
+
+       Un jalon auquel aucune preuve n'a jamais été rattachée refusait
+       l'avancement en annonçant « 0 evidence items outstanding » : zéro
+       en attente, et pourtant bloqué. Le lecteur cherche alors la pièce
+       qui manque dans une liste vide. Les deux situations — « rien n'a
+       été exigé » et « il reste des pièces » — sont différentes et
+       doivent le dire. */
+    if (!g.total) {
+      return {
+        ok: false,
+        reason: "No evidence has been registered for " + g.name +
+                " — name what this gate requires before it can clear",
+        items: [],
+      };
+    }
     return {
       ok: false,
       reason: g.outstanding.length + " evidence item" + (g.outstanding.length === 1 ? "" : "s") + " outstanding for " + g.name,

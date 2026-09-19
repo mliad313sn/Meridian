@@ -17,12 +17,14 @@
 import { tx } from "./db.js";
 import { record } from "./audit.js";
 import { fromM } from "./portfolio.js";
+import { HttpError } from "./auth.js";
 
 const PORTFOLIO_TABLES = [
   "meeting_action", "meeting_decision", "meeting_attendance", "agenda_item",
   "meeting_occurrence", "meeting_series",
   "report_narrative", "work_item", "document", "allocation",
   "change_step", "change_request", "raid_item", "cost_line", "milestone",
+  "requirement",
   "cross_dep", "activity_dep", "activity", "project",
   "programme", "person", "site",
 ];
@@ -66,8 +68,9 @@ export async function importBook(book, user) {
         `INSERT INTO project
            (id, name, programme_id, site_id, governance_level, pm_id, method,
             start_date, finish_date, baseline_finish, budget, contingency,
-            contingency_used, description, phase, gate, health_override, closed)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
+            contingency_used, description, phase, gate, health_override, closed,
+            gate_loop)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
         [p.id, p.name, p.programme, p.site,
          p.governanceLevel === "group" ? "group" : "site",
          clean(p.pm), p.method ?? "Hybrid",
@@ -75,7 +78,8 @@ export async function importBook(book, user) {
          fromM(p.budget), fromM(p.contingency), fromM(p.contingencyUsed),
          p.desc ?? "", p.phase ?? "Initiation", int(p.gate),
          ["G", "A", "R"].includes(p.healthOverride) ? p.healthOverride : null,
-         !!p.closed]);
+         !!p.closed,
+         Math.max(1, int(p.loop, 1))]);
     }
     for (const a of book.activities ?? []) {
       await t.query(
@@ -102,10 +106,37 @@ export async function importBook(book, user) {
     }
     for (const m of book.milestones ?? []) {
       await t.query(
-        `INSERT INTO milestone (id, project_id, name, due_date, base_date, gate, kind, owner_id, done)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        `INSERT INTO milestone (id, project_id, name, due_date, base_date, gate, kind,
+                                owner_id, done, gate_loop)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
         [m.id, m.project, m.name, m.date, m.baseDate ?? m.date,
-         m.gate ?? null, m.kind === "gate" ? "gate" : "milestone", clean(m.owner), !!m.done]);
+         m.gate ?? null, m.kind === "gate" ? "gate" : "milestone", clean(m.owner), !!m.done,
+         Math.max(1, int(m.loop, 1))]);
+    }
+    /* MER-03 — les exigences. Elles arrivent APRÈS les projets parce
+       qu'une exigence sans projet pour la tenir n'a personne pour la
+       tenir, et la clé étrangère le dit. */
+    for (const r of book.requirements ?? []) {
+      const status = ["Not started", "In progress", "Done", "Waived"].includes(r.status)
+        ? r.status : "Not started";
+      const reason = r.waiverReason ?? "";
+      if (status === "Waived" && !String(reason).trim()) {
+        throw new HttpError(400,
+          `Requirement ${r.id} is waived with no reason. ` +
+          `A waiver without a reason is how a requirement disappears ` +
+          `without anybody deciding to drop it.`);
+      }
+      await t.query(
+        `INSERT INTO requirement
+           (id, project_id, statement, source, priority, verification, verified_by,
+            gate_n, status, waiver_reason, owner_id, updated_on)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+        [r.id, clean(r.project), r.statement ?? "", r.source ?? "",
+         ["M", "S", "C", "W"].includes(r.priority) ? r.priority : "M",
+         r.verification ?? "", r.verifiedBy ?? "",
+         r.gate === undefined || r.gate === null ? null : int(r.gate),
+         status, reason, clean(r.owner),
+         r.updated ?? new Date().toISOString().slice(0, 10)]);
     }
     for (const l of book.ledger ?? []) {
       await t.query(
@@ -143,20 +174,53 @@ export async function importBook(book, user) {
            clean(st.when), st.comment ?? ""]);
       }
     }
+    /* MER-14 — deux corrections sur la même table.
+
+       1. L'identité SURVIT à l'aller-retour. `allocation` était la seule
+          table dont l'export puis le réimport renumérotait chaque ligne,
+          si bien que comparer deux exports montrait toujours toutes les
+          allocations comme modifiées. Un contrôle que les gens
+          apprennent à ignorer n'est plus un contrôle.
+
+       2. Une clé inconnue est REFUSÉE. `pct` est un pourcentage ; un
+          livre qui écrit `fte` — c'est ainsi que la plupart des outils
+          de charge expriment la même idée — était accepté en silence et
+          atterrissait à 0 %, donc une équipe apparaissait affectée à un
+          projet sans aucune capacité dessus. C'est le mode de panne de
+          MER-09 (l'unité implicite) à un deuxième endroit : le champ est
+          pris, le nombre est faux, et rien ne le dit. */
+    const ALLOCATION_KEYS = new Set(["id", "person", "project", "from", "to", "pct", "version"]);
     for (const a of book.allocations ?? []) {
-      await t.query(
-        `INSERT INTO allocation (person_id, project_id, from_date, to_date, pct)
-         VALUES ($1,$2,$3,$4,$5)`,
-        [a.person, a.project, a.from, a.to, Math.max(0, Math.min(200, int(a.pct)))]);
+      const unknown = Object.keys(a).filter(k => !ALLOCATION_KEYS.has(k));
+      if (unknown.length) {
+        throw new HttpError(400,
+          `Allocation for ${a.person ?? "?"} on ${a.project ?? "?"} has ` +
+          `no such field: ${unknown.join(", ")}. ` +
+          `An allocation is a percentage of time, in "pct".`);
+      }
+      if (a.id === undefined || a.id === null || a.id === "") {
+        await t.query(
+          `INSERT INTO allocation (person_id, project_id, from_date, to_date, pct)
+           VALUES ($1,$2,$3,$4,$5)`,
+          [a.person, a.project, a.from, a.to, Math.max(0, Math.min(200, int(a.pct)))]);
+      } else {
+        await t.query(
+          `INSERT INTO allocation (id, person_id, project_id, from_date, to_date, pct)
+           VALUES ($1,$2,$3,$4,$5,$6)`,
+          [int(a.id), a.person, a.project, a.from, a.to,
+           Math.max(0, Math.min(200, int(a.pct)))]);
+      }
     }
     for (const d of book.docs ?? []) {
       await t.query(
-        `INSERT INTO document (id, project_id, name, doc_type, gate, owner_id, revision, status, updated_on)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        `INSERT INTO document (id, project_id, name, doc_type, gate, owner_id, revision,
+                               status, updated_on, gate_loop)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
         [d.id, clean(d.project), d.name, d.type ?? "Assurance", int(d.gate),
          clean(d.owner), d.rev ?? "0.1",
          ["Draft", "In review", "Approved", "Superseded"].includes(d.status) ? d.status : "Draft",
-         d.updated ?? new Date().toISOString().slice(0, 10)]);
+         d.updated ?? new Date().toISOString().slice(0, 10),
+         Math.max(1, int(d.loop, 1))]);
     }
     for (const i of book.items ?? []) {
       await t.query(
@@ -189,7 +253,7 @@ export async function importBook(book, user) {
          ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`, [JSON.stringify(book.statusDate)]);
     }
 
-    for (const k of ["projects", "activities", "milestones", "ledger", "raid", "crs", "docs", "items", "allocations"]) {
+    for (const k of ["projects", "activities", "milestones", "requirements", "ledger", "raid", "crs", "docs", "items", "allocations"]) {
       counts[k] = (book[k] ?? []).length;
     }
 
@@ -200,6 +264,7 @@ export async function importBook(book, user) {
       ["ISS","raid_item","id LIKE 'ISS-%'"],["ASM","raid_item","id LIKE 'ASM-%'"],
       ["DEP","raid_item","id LIKE 'DEP-%'"],["CR","change_request","true"],
       ["DOC","document","true"],["WI","work_item","true"],["PE","person","true"],
+      ["REQ","requirement","true"],
     ]) {
       await t.query(
         `INSERT INTO id_counter (prefix, next_value)
@@ -209,6 +274,14 @@ export async function importBook(book, user) {
            SET next_value = GREATEST(id_counter.next_value, EXCLUDED.next_value)`,
         [prefix]);
     }
+
+    /* MER-14 — `allocation.id` est un bigserial et l'import l'honore
+       désormais, donc la séquence doit suivre comme les compteurs
+       ci-dessus : sans cela la prochaine allocation créée à la main
+       entre en collision avec une allocation importée. */
+    await t.query(
+      `SELECT setval(pg_get_serial_sequence('allocation','id'),
+                     GREATEST(COALESCE((SELECT MAX(id) FROM allocation), 0), 1))`);
 
     await record(t, user, {
       action: "Book imported",
