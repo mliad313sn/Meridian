@@ -203,7 +203,7 @@ export async function importBook(book, user) {
     ]) {
       await t.query(
         `INSERT INTO id_counter (prefix, next_value)
-         SELECT $1, COALESCE(MAX(NULLIF(regexp_replace(id, '\D', '', 'g'), ''))::int, 0)
+         SELECT $1, COALESCE(MAX(NULLIF(regexp_replace(id, '\\D', '', 'g'), ''))::int, 0)
            FROM ${table} WHERE ${where}
          ON CONFLICT (prefix) DO UPDATE
            SET next_value = GREATEST(id_counter.next_value, EXCLUDED.next_value)`,
