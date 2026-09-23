@@ -33,6 +33,10 @@ import {
    let ratify: the same independence rule, read from the same file. */
 import { canRatifyDecision } from "../../../shared/rbac.js";
 
+/* D-36.13 — a site is a place or a team; a team is on no map. */
+import { isTeam, placesOf, locations } from "../../../shared/sitekind.js";
+import { unitName } from "../lib/units.js";
+
 /* REQ-30 — the value page's arithmetic, shared with the server so that
    the page an executive prints and the page that is stored per period are
    one computation. The same reason govsignals gives. */
@@ -1009,7 +1013,7 @@ function projectFields(db, p) {
     { key: "programme", label: "Programme", type: "select", value: p ? p.programme : db.programmes[0].id,
       options: db.programmes.map(x => ({ value: x.id, label: x.name })) },
     { key: "site", label: "Lead site", type: "select", value: p ? p.site : db.sites[0].id,
-      options: db.sites.map(x => ({ value: x.id, label: x.city + " · " + x.region })) },
+      options: db.sites.map(x => ({ value: x.id, label: x.city + " · " + (isTeam(x) ? t("Team") : x.region) })) },
     { key: "governanceLevel", label: "Governance", type: "select",
       value: p ? p.governanceLevel : (App.me.role === "site" ? "site" : "group"),
       options: governanceOptions(p),
@@ -1139,7 +1143,7 @@ Views.project = (db) => {
           h("span", { title: m.health.why }, ragDot(m.health.rag))),
         h("div", { class: "xs muted", style: "margin-top:5px" },
           p.id + " · " + (Engine.programme(db, p.programme) || {}).name + " · " +
-          (Engine.site(db, p.site) || {}).city + " · managed by " + Engine.personName(db, p.pm)),
+          unitName(Engine.site(db, p.site)) + " · managed by " + Engine.personName(db, p.pm)),
         h("p", { class: "small", style: "margin:10px 0 0;max-width:64ch;color:var(--muted)" }, p.desc)),
       h("div", { style: "width:270px;flex:none" },
         h("div", { class: "kicker" }, "Completion"),
@@ -3744,7 +3748,7 @@ function demandFields(db, d, deciding) {
     { key: "programme", label: t("Programme"), type: "select", value: d?.programme ?? "",
       options: [{ value: "", label: "—" }, ...db.programmes.map(x => ({ value: x.id, label: x.name }))] },
     { key: "site", label: t("Site"), type: "select", value: d?.site ?? "",
-      options: [{ value: "", label: "—" }, ...db.sites.map(x => ({ value: x.id, label: x.city }))] },
+      options: [{ value: "", label: "—" }, ...db.sites.map(x => ({ value: x.id, label: unitName(x) }))] },
     { key: "benefitNote", label: t("What the business gets"), type: "textarea", rows: 2, span: 2,
       value: d?.benefitNote ?? "", hint: t("In production, availability, cost or compliance terms") },
     { hint: t("The one or two lines a reader needs to judge this without asking you."),
@@ -3810,7 +3814,7 @@ function convertDemand(db, d) {
       { key: "programme", label: t("Programme"), type: "select", required: true, value: d.programme ?? "",
         options: db.programmes.map(x => ({ value: x.id, label: x.name })) },
       { key: "site", label: t("Site"), type: "select", required: true, value: d.site ?? "",
-        options: db.sites.map(x => ({ value: x.id, label: x.city })) },
+        options: db.sites.map(x => ({ value: x.id, label: unitName(x) })) },
       { key: "governanceLevel", label: t("Governed at"), type: "select", value: "site",
         options: [{ value: "site", label: t("Site") }, { value: "group", label: t("Group") }] },
       { key: "pm", label: t("Project manager"), type: "select", value: "",
@@ -3954,7 +3958,8 @@ function windowsBlock(db) {
   const wins = (db.windows ?? [])
     .filter(w => w.to >= db.statusDate)
     .sort((a, b) => String(a.from).localeCompare(String(b.from)));
-  const mySites = db.sites.filter(s => App.can("window.write", { site_id: s.id }));
+  /* D-36.13 — a team has no plant calendar: it is never offered here. */
+  const mySites = placesOf(db.sites).filter(s => App.can("window.write", { site_id: s.id }));
 
   return h("div", null,
     sectionHead(t("Shutdowns & change freezes"),
@@ -4091,8 +4096,9 @@ function releaseMoc(db, p) {
 
 function waveFields(db, p, w) {
   return [
+    /* D-36.13 — a wave lands at a place; a team is never offered. */
     { key: "site", label: t("Site"), type: "select", required: true, value: w?.site ?? "",
-      options: [{ value: "", label: "—" }, ...db.sites.map(s => ({ value: s.id, label: s.city }))] },
+      options: [{ value: "", label: "—" }, ...placesOf(db.sites).map(s => ({ value: s.id, label: s.city }))] },
     { key: "seq", label: t("Wave"), type: "number", min: 1, value: w?.seq ?? 1 },
     { key: "plannedOn", label: t("Planned"), type: "date", value: w?.plannedOn ?? "" },
     { key: "actualOn", label: t("Went live"), type: "date", value: w?.actualOn ?? "" },
@@ -5256,7 +5262,7 @@ Views.resources = (db) => {
       h("section", { class: "l sec" },
         sectionHead("Capacity by person", "next " + weeks + " weeks · ceiling " + ceiling + "%",
           selectField("Site", App.ui.resSite,
-            [{ value: "all", label: "All sites" }].concat(db.sites.map(x => ({ value: x.id, label: x.city }))),
+            [{ value: "all", label: "All sites" }].concat(db.sites.map(x => ({ value: x.id, label: unitName(x) }))),
             v => App.set({ resSite: v }), "150px")),
         h("div", { class: "scrollx" }, heat),
         over.length ? h("div", { class: "drop-hint", style: "margin-top:14px" },
@@ -6443,7 +6449,13 @@ function exportReport(db, list, rag, blocks) {
 
 /* ── Locations ────────────────────────────────────────────────────── */
 Views.locations = (db) => {
-  const roll = Engine.siteRollup(db);
+  /* D-36.13 — the Locations view describes PLACES. A team is a delivery
+     unit with no geography: it has no clock, no working-hour overlap and
+     no plant calendar, so it is left out, and the view says how many it
+     left out and names them rather than letting a squad vanish. The
+     rollup, the KPIs, the overlap grid and the clocks all read `places`. */
+  const { places, teams } = locations(db);
+  const roll = Engine.siteRollup({ ...db, sites: places });
   const ceiling = db.settings.capacityCeiling;
   const now = new Date();
 
@@ -6488,7 +6500,7 @@ Views.locations = (db) => {
   ];
 
   /* follow-the-sun overlap */
-  const sites = db.sites;
+  const sites = places;
   const overlap = h("table", { class: "heat" },
     h("thead", null, h("tr", null, h("th", { class: "n" }, "Overlap (hours)"), ...sites.map(x => h("th", null, x.id)))),
     h("tbody", null, ...sites.map(a => h("tr", null,
@@ -6507,11 +6519,12 @@ Views.locations = (db) => {
 
   return h("div", null,
     kpiStrip([
-      { label: "Sites", value: String(db.sites.length), note: uniq(db.projects.map(p => p.site)).length + " leading delivery" },
-      { label: "People", value: String(sum(db.sites, s => s.headcount)), note: "across every location" },
+      { label: "Sites", value: String(places.length),
+        note: uniq(db.projects.filter(p => places.some(s => s.id === p.site)).map(p => p.site)).length + " leading delivery" },
+      { label: "People", value: String(sum(places, s => s.headcount)), note: "across every location" },
       { label: "Widest gap",
-        value: db.sites.length
-          ? (Math.max(...db.sites.map(s => s.tz)) - Math.min(...db.sites.map(s => s.tz))) + " h"
+        value: places.length
+          ? (Math.max(...places.map(s => s.tz)) - Math.min(...places.map(s => s.tz))) + " h"
           : "—",
         note: "between the extreme time zones" },
       { label: "Pairs with no overlap", value: String(noOverlap.length), note: "need asynchronous handover", accent: noOverlap.length > 0 },
@@ -6521,6 +6534,12 @@ Views.locations = (db) => {
       h("section", { class: "l sec" },
         sectionHead("Delivery locations", "utilisation against a " + ceiling + "% ceiling"),
         sortableTable({ cols, rows: roll, onRow: r => siteDetail(db, r) }),
+        teams.length ? h("div", { class: "small muted", "data-teams-hidden": String(teams.length),
+            style: "margin-top:10px;max-width:70ch" },
+          teams.length + (teams.length === 1
+            ? t(" team is not shown: a team is a delivery unit with no location, so it has no clock, no overlap and no plant calendar. ")
+            : t(" teams are not shown: a team is a delivery unit with no location, so it has no clock, no overlap and no plant calendar. ")),
+          teams.map(x => x.city).join(" · ")) : null,
         h("div", { style: "height:26px" }), h("hr", { class: "hr" }), h("div", { style: "height:18px" }),
         windowsBlock(db),
 
@@ -6543,7 +6562,7 @@ Views.locations = (db) => {
         h("hr", { class: "hr" }), h("div", { style: "height:18px" }),
         sectionHead("Clocks", "right now"),
         h("div", { style: "display:grid;grid-template-columns:1fr 1fr;gap:10px" },
-          ...db.sites.map(sit => {
+          ...places.map(sit => {
             const hh = +Engine.siteClock(sit, now).slice(0, 2);
             const working = hh >= 9 && hh < 18;
             return h("div", { style: "padding:9px 0;border-bottom:1px solid var(--rule-1)" },

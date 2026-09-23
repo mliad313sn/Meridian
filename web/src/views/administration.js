@@ -21,6 +21,8 @@ import { App, toast, reportError } from "../lib/state.js";
 import { api, download } from "../lib/api.js";
 import { t } from "../lib/i18n.js";
 import { Engine, fmtDate, money, uniq, GATES, parseGateLadder, formatGateLadder } from "../../../shared/engine.js";
+import { isTeam, placesOf, teamsOf } from "../../../shared/sitekind.js";
+import { unitLabel } from "../lib/units.js";
 
 /* Fetched on demand; invalidated by every write below. */
 const state = { users: null, loading: false, q: "", tab: "accounts" };
@@ -330,7 +332,10 @@ function levelTable(db, users) {
 function grantCell(db, u) {
   const names = [
     ...u.grants.programmes.map((id) => (db.programmes.find((p) => p.id === id) || {}).name || id),
-    ...u.grants.sites.map((id) => (db.sites.find((s) => s.id === id) || {}).city || id),
+    ...u.grants.sites.map((id) => {
+      const s = db.sites.find((x) => x.id === id);
+      return s ? (isTeam(s) ? unitLabel(s) : s.city) : id;
+    }),
   ];
   if (u.role === "admin") return h("span", { class: "xs muted" }, "unrestricted");
   /* D-36.12 — a review grant is shown as one, never as a scope the
@@ -382,7 +387,7 @@ function newUser(db) {
       { key: "grant", label: "First grant", type: "select", span: 2, value: "",
         options: [{ value: "", label: "None — add grants after creating" }]
           .concat(db.programmes.map((p) => ({ value: "programme:" + p.id, label: "Programme · " + p.name })))
-          .concat(db.sites.map((s) => ({ value: "site:" + s.id, label: "Site · " + s.city }))),
+          .concat(db.sites.map((s) => ({ value: "site:" + s.id, label: unitLabel(s) }))),
         hint: t("A group or site account with no grants can see nothing. One is required.") },
     ],
     saveLabel: "Create account",
@@ -449,8 +454,10 @@ function manageGrants(db, u) {
   const held = [
     ...u.grants.programmes.map((id) => ({ kind: "programme", target: id,
       label: (db.programmes.find((p) => p.id === id) || {}).name || id })),
-    ...u.grants.sites.map((id) => ({ kind: "site", target: id,
-      label: (db.sites.find((s) => s.id === id) || {}).city || id })),
+    ...u.grants.sites.map((id) => {
+      const s = db.sites.find((x) => x.id === id);
+      return { kind: "site", target: id, label: s ? unitLabel(s) : id };
+    }),
     ...reviewsHeld(db, u),
   ];
 
@@ -468,7 +475,7 @@ function manageGrants(db, u) {
     ? db.programmes.filter((p) => !u.grants.programmes.includes(p.id))
         .map((p) => ({ value: "programme:" + p.id, label: "Programme · " + p.name }))
     : db.sites.filter((s) => !u.grants.sites.includes(s.id))
-        .map((s) => ({ value: "site:" + s.id, label: "Site · " + s.city })));
+        .map((s) => ({ value: "site:" + s.id, label: unitLabel(s) })));
 
   const options = kind ? available(kind) : [...available("programme"), ...available("site")];
 
@@ -596,8 +603,10 @@ export function directoryPanel(db) {
             p.rotation || "—") },
         { key: "av", label: t("Avail."), align: "r", get: (p) => h("span", { class: "mono small" },
             (p.availability ?? 100) + "%") },
-        { key: "s", label: "Site", get: (p) => h("span", { class: "small" },
-            (Engine.site(db, p.site) || {}).city ?? p.site) },
+        { key: "s", label: "Site", get: (p) => {
+            const s = Engine.site(db, p.site);
+            return h("span", { class: "small" }, s ? (isTeam(s) ? unitLabel(s) : s.city) : p.site);
+          } },
         { key: "d", label: "Day rate", align: "r", get: (p) => h("span", { class: "mono small" },
             p.rate ? "$" + Number(p.rate).toLocaleString() : "—") },
         { key: "l", label: "Load", align: "r", get: (p) => {
@@ -624,7 +633,7 @@ function personFields(db, p) {
     { key: "role", label: "Job role", required: true, span: 2, value: p ? p.role : "",
       hint: t("Free text — this is the directory description, not an access level.") },
     { key: "site", label: "Site", type: "select", value: p ? p.site : db.sites[0]?.id,
-      options: db.sites.map((s) => ({ value: s.id, label: s.city + " · " + s.region })) },
+      options: db.sites.map((s) => ({ value: s.id, label: s.city + " · " + (isTeam(s) ? t("Team") : s.region) })) },
     { key: "rate", label: "Day rate", type: "number", min: 0, step: 10, value: p ? p.rate : 0 },
     /* V-09 / O-4 (docs/32 → docs/36 C-04) — the API carried these from
        migration 012; the form never offered them, so rotation and
@@ -698,14 +707,23 @@ function editPerson(db, p) {
 export function referencePanel(db) {
   if (!App.isAdmin) return null;
   return h("div", null,
-    sectionHead("Sites", db.sites.length + " delivery locations",
-      h("button", { class: "btn btn-sm", onClick: () => siteDialog(db, null) }, icon("plus", 12), "Add site")),
+    /* D-36.13 — sites and teams share one list: a team is governed like
+       a site. Its kind is a column, and its zone reads "none" rather
+       than a UTC nobody chose. */
+    sectionHead("Sites", teamsOf(db.sites).length
+        ? placesOf(db.sites).length + (placesOf(db.sites).length === 1 ? t(" place") : t(" places")) + " · " +
+          teamsOf(db.sites).length + (teamsOf(db.sites).length === 1 ? t(" team") : t(" teams"))
+        : db.sites.length + " delivery locations",
+      h("button", { class: "btn btn-sm", onClick: () => siteDialog(db, null) }, icon("plus", 12), t("Add site or team"))),
     table({
       cols: [
         { key: "i", label: "Code", get: (s) => h("span", { class: "mono small strong" }, s.id) },
-        { key: "c", label: "City", get: (s) => h("span", { class: "small" }, s.city) },
+        { key: "k", label: t("Kind"), get: (s) => h("span", { class: "tag " + (isTeam(s) ? "tag-ink" : "tag-out"),
+            "data-kind": isTeam(s) ? "team" : "place" }, isTeam(s) ? t("Team") : t("Place")) },
+        { key: "c", label: t("Name"), get: (s) => h("span", { class: "small" }, s.city) },
         { key: "r", label: "Region", get: (s) => h("span", { class: "small muted" }, s.region) },
-        { key: "t", label: "Zone", get: (s) => h("span", { class: "mono xs" }, s.tzName) },
+        { key: "t", label: "Zone", get: (s) => h("span", { class: "mono xs" + (s.tzName ? "" : " muted") },
+            s.tzName ?? t("none")) },
         { key: "h", label: "People", align: "r", get: (s) => h("span", { class: "mono small" }, String(s.headcount)) },
         { key: "a", label: "", align: "r", get: (s) => h("button", {
             class: "btn btn-xs", onClick: (e) => { e.stopPropagation(); siteDialog(db, s); } }, "Edit") },
@@ -734,13 +752,23 @@ export function referencePanel(db) {
 }
 
 function siteDialog(db, s) {
+  const team = isTeam(s);
+  /* D-36.13 — a team's timezone is optional: empty is sent as null, and
+     the server stores none rather than a UTC nobody chose. A place still
+     needs one, here and on the server. */
+  const tzRequired = (v, st) => (st.kind !== "team" && (v === "" || v === null || v === undefined)
+    ? t("A place needs a timezone — only a team may have none") : "");
   formDialog({
-    title: s ? "Edit site" : "Add site", kicker: s ? s.id : "Reference data", wide: true,
+    title: s ? (team ? t("Edit team") : "Edit site") : t("Add site or team"),
+    kicker: s ? s.id : "Reference data", wide: true,
     fields: [
       ...(s ? [] : [{ key: "id", label: "Code", required: true, value: "",
         hint: t("Three letters, e.g. the airport code."),
         validate: (v) => (/^[A-Za-z]{2,5}$/.test(v) ? "" : "Two to five letters") }]),
-      { key: "city", label: "City", required: true, value: s ? s.city : "" },
+      { key: "kind", label: t("Kind"), type: "select", value: team ? "team" : "place",
+        options: [{ value: "place", label: t("Place — a location") }, { value: "team", label: t("Team — a delivery unit with no location") }],
+        hint: t("A team is governed like a site (grants, its own projects, meetings, absences) but has no geography: no timezone needed, no plant window, no rollout wave, and it is not on the Locations view.") },
+      { key: "city", label: t("City, or the team's name"), required: true, value: s ? s.city : "" },
       { key: "region", label: "Region", value: s ? s.region : "" },
       /* MC-01 — le pays sert deux obligations, pas une préférence : G-14
          (l'avis social et juridique est PAR PAYS) et la réponse RGPD (une
@@ -750,26 +778,33 @@ function siteDialog(db, s) {
         validate: (v) => (v === "" || /^[A-Za-z]{2}$/.test(v) ? "" : t("Two letters, or empty")) },
       { key: "legalEntity", label: t("Legal entity"), value: s ? s.legalEntity : "",
         hint: t("The company that carries this site. A data-subject request is answered by an entity, not by a city.") },
-      { key: "tz", label: "UTC offset", type: "number", step: 0.5, value: s ? s.tz : 0 },
-      { key: "tzName", label: "Zone name", value: s ? s.tzName : "UTC" },
+      { key: "tz", label: "UTC offset", type: "number", step: 0.5, value: s ? (s.tz ?? "") : 0,
+        hint: t("Hours from UTC. A team may leave it empty."), validate: tzRequired },
+      { key: "tzName", label: "Zone name", value: s ? (s.tzName ?? "") : "UTC", validate: tzRequired },
       { key: "headcount", label: "Headcount", type: "number", min: 0, value: s ? s.headcount : 0 },
       { key: "fte", label: "FTE", type: "number", min: 0, value: s ? s.fte : 0 },
       { key: "charter", label: "What this site does", type: "textarea", rows: 2, span: 2,
         value: s ? s.role : "" },
     ],
-    saveLabel: s ? "Save site" : "Add site",
-    onSave: (v) => write(s ? "Site updated" : "Site added",
-      (a) => (s
-        ? a.patch("/admin/sites/" + s.id, {
-            city: v.city, region: v.region, country: v.country, legalEntity: v.legalEntity,
-            tz: Number(v.tz), tzName: v.tzName,
-            headcount: Number(v.headcount), fte: Number(v.fte), charter: v.charter,
-            version: s.version })
-        : a.post("/admin/sites", {
-            id: v.id, city: v.city, region: v.region, country: v.country, legalEntity: v.legalEntity,
-            tz: Number(v.tz), tzName: v.tzName,
-            headcount: Number(v.headcount), fte: Number(v.fte), charter: v.charter })),
-      v.city),
+    saveLabel: s ? (team ? t("Save team") : "Save site") : t("Add"),
+    onSave: (v) => {
+      const tz = v.tz === "" || v.tz === null || v.tz === undefined ? null : Number(v.tz);
+      const tzName = v.tzName === "" || v.tzName === undefined ? null : v.tzName;
+      const added = v.kind === "team" ? t("Team added") : "Site added";
+      return write(s ? (v.kind === "team" ? t("Team updated") : "Site updated") : added,
+        (a) => (s
+          ? a.patch("/admin/sites/" + s.id, {
+              kind: v.kind,
+              city: v.city, region: v.region, country: v.country, legalEntity: v.legalEntity,
+              tz, tzName,
+              headcount: Number(v.headcount), fte: Number(v.fte), charter: v.charter,
+              version: s.version })
+          : a.post("/admin/sites", {
+              id: v.id, kind: v.kind, city: v.city, region: v.region, country: v.country, legalEntity: v.legalEntity,
+              tz, tzName,
+              headcount: Number(v.headcount), fte: Number(v.fte), charter: v.charter })),
+        v.city);
+    },
   });
 }
 

@@ -304,7 +304,13 @@ export async function loadPortfolio(user, { inactive = false } = {}) {
          demande RGPD arrive à UNE entité : le site sait désormais dire
          les deux. */
       country: s.country ?? "", legalEntity: s.legal_entity ?? "",
-      tz: Number(s.tz_offset),
+      /* D-36.13 (060) — a place or a team. A team's timezone may be
+         absent, and absent is written as null, never as 0: Number(null)
+         is 0, which would re-invent the "UTC that means nothing" of #18.
+         A reader that must compute a time falls back to the group
+         default through shared/sitekind.js `tzOffsetOf`. */
+      kind: s.kind ?? "place",
+      tz: s.tz_offset === null ? null : Number(s.tz_offset),
       tzName: s.tz_name, headcount: s.headcount, fte: s.fte, role: s.charter,
       // what the site actually is, not only what time it is there (V-07)
       linkMbps: s.link_mbps === null ? null : Number(s.link_mbps),

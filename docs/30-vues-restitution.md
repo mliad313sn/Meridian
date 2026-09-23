@@ -41,7 +41,7 @@ Puis, dans l'outil : source PostgreSQL, base de l'instance, schéma
 
 | Vue | Une ligne par | Colonnes |
 |---|---|---|
-| `sites` | site | id, city, region, country (ISO 3166), legal_entity, tz_name, headcount, fte, active |
+| `sites` | site | id, city, region, country (ISO 3166), legal_entity, tz_name (NULL for a team without a timezone, 060), headcount, fte, active, kind (`place` or `team`, 060) |
 | `programmes` | programme | id, name, sponsor, active |
 | `projects` | projet | id, name, programme_id, site_id, governance_level, method, phase, gate, start_date, finish_date, baseline_finish, budget, contingency, contingency_used, health_override, closed, pir_on, pir_verdict |
 | `milestones` | jalon de plan | id, project_id, name, kind (gate\|milestone), gate, due_date, base_date, done |

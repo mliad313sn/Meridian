@@ -2734,6 +2734,49 @@ export const ES = {
     "sustituido",
   "Cite a reference":
     "Citar una referencia",
+  /* D-36.13 — a site is a place or a team (FitAdapt #18). */
+  "Team":
+    "Equipo",
+  "team":
+    "equipo",
+  "Place":
+    "Lugar",
+  "none":
+    "ninguno",
+  " place":
+    " lugar",
+  " team":
+    " equipo",
+  " places":
+    " lugares",
+  " teams":
+    " equipos",
+  "Add site or team":
+    "Añadir un sitio o un equipo",
+  "A place needs a timezone — only a team may have none":
+    "Un lugar necesita una zona horaria — solo un equipo puede no tenerla",
+  "Edit team":
+    "Editar el equipo",
+  "Place — a location":
+    "Lugar — una ubicación",
+  "Team — a delivery unit with no location":
+    "Equipo — una unidad de entrega sin ubicación",
+  "A team is governed like a site (grants, its own projects, meetings, absences) but has no geography: no timezone needed, no plant window, no rollout wave, and it is not on the Locations view.":
+    "Un equipo se gobierna como un sitio (permisos, proyectos propios, reuniones, ausencias) pero no tiene geografía: no necesita zona horaria, no tiene ventana de planta ni ola de despliegue, y no aparece en la vista de Sitios.",
+  "City, or the team's name":
+    "Ciudad, o nombre del equipo",
+  "Hours from UTC. A team may leave it empty.":
+    "Horas respecto a UTC. Un equipo puede dejarlo vacío.",
+  "Save team":
+    "Guardar el equipo",
+  "Team added":
+    "Equipo añadido",
+  "Team updated":
+    "Equipo actualizado",
+  " team is not shown: a team is a delivery unit with no location, so it has no clock, no overlap and no plant calendar. ":
+    " equipo no se muestra: un equipo es una unidad de entrega sin ubicación, así que no tiene reloj, ni solapamiento horario, ni calendario de planta. ",
+  " teams are not shown: a team is a delivery unit with no location, so it has no clock, no overlap and no plant calendar. ":
+    " equipos no se muestran: un equipo es una unidad de entrega sin ubicación, así que no tiene reloj, ni solapamiento horario, ni calendario de planta. ",
 };
 
 /* ── fragments composés autour de nombres vivants (R-15) ────────────── */

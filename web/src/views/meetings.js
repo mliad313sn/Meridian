@@ -26,6 +26,7 @@ import { t, tData } from "../lib/i18n.js";
 import { Engine, fmtDate, fmtDateLong, isoWeek, iso, addDays, D, days } from "../../../shared/engine.js";
 /* NEW-04 — seats and objections (MER-06, MER-07). */
 import { seatsSection, objectionsFor, decisionFields, decisionFacts } from "./registers.js";
+import { unitLabel } from "../lib/units.js";
 
 /* Cached between renders so switching series does not blank the screen. */
 const cache = { series: null, detail: null, detailId: null, loading: false };
@@ -219,7 +220,8 @@ function seriesDialog(db, existing) {
         { key: "scope", label: "Scope", type: "select", value: "group",
           options: [{ value: "group", label: "Group — the whole portfolio" }]
             .concat(db.programmes.map((p) => ({ value: "programme:" + p.id, label: "Programme · " + p.name })))
-            .concat(db.sites.map((s) => ({ value: "site:" + s.id, label: "Site · " + s.city }))),
+            /* D-36.13 — a meeting can be scoped to a team, and says so. */
+            .concat(db.sites.map((s) => ({ value: "site:" + s.id, label: unitLabel(s) }))),
           hint: t("Scope decides both what the agenda covers and who may run it.") },
       ] : []),
       { key: "chairId", label: "Chair", type: "select", value: existing?.chairId ?? App.me.personId ?? "",

@@ -54,7 +54,7 @@
     },
     "counterpart": "FitAdapt delivery lead & Meridian champion (PE-14), docs/governance/05-dogfooding-loop.md"
   },
-  "registerVersion": 3,
+  "registerVersion": 4,
   "requests": [
     {
       "id": "DF-01",
@@ -434,13 +434,18 @@
         "WI-12"
       ],
       "title": "Site is the only unit of delegated authority",
-      "status": "open",
+      "status": "done",
       "priority": "low",
-      "version": null,
-      "decidedOn": null,
-      "delivered": [],
-      "measure": null,
-      "remaining": "open; nothing built on any branch",
+      "version": "5.28.0",
+      "decidedOn": "2026-09-23",
+      "delivered": [
+        "server/migrations/060_a_team_is_located_nowhere.sql",
+        "shared/sitekind.js",
+        "web/src/views/administration.js — Sites: kind, “Add site or team”",
+        "Locations: places only, teams named as left out"
+      ],
+      "measure": "server/test/site-kind.test.js (11 tests); F13 round trip carries a team with no timezone; browser: 15 checks",
+      "remaining": null,
       "issue": 18,
       "accepted": null,
       "released": false,
@@ -452,8 +457,15 @@
           "registerVersion": 1,
           "status": "open",
           "note": "issue #18 open on 2026-09-23"
+        },
+        {
+          "at": "2026-09-23",
+          "registerVersion": 4,
+          "status": "done",
+          "note": "Delivered by docs/36 wave 2 (5.28.0)."
         }
-      ]
+      ],
+      "answerToSource": "Closed in 5.28.0 (D-36.13). Administration → Sites → “Add site or team”: choose Team and leave the timezone empty. A team is governed exactly like a site (grants, site-governed projects, its own weekly), and it is located nowhere: no timezone, not on Locations, no plant window or rollout wave. What to try: turn “Distributed team” into one team per squad (a site with no window or wave can change kind), and grant each squad lead on their own team."
     }
   ]
 }

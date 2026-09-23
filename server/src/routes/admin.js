@@ -17,6 +17,7 @@ import { acceptableWebhook, deliveriesOf } from "../events.js";
 import { posture } from "../posture.js";
 import { outboundTransport } from "../notify.js";
 import { normaliseGateModel } from "../../../shared/engine.js";
+import { SITE_KINDS } from "../../../shared/sitekind.js";
 
 /* I-3 — l'échelle de jalons d'un programme, validée par la même fonction
    que le navigateur explique. Un refus dit lequel des jalons cloche. */
@@ -657,19 +658,54 @@ r.patch("/people/:id", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+/* D-36.13 (060) — a site is a `place` (the default) or a `team`.
+   A team is a delivery unit with no geography: its timezone is optional,
+   and "none" is stored as NULL, never as a UTC that means nothing (the
+   FitAdapt "Distributed team" of #18). A place keeps requiring one: a
+   timezone sent explicitly empty is refused; one left out keeps the
+   historical default (UTC), so no existing client changes behaviour. */
+const blank = (v) => v === null || v === "";
+function siteKind(b, current = "place") {
+  const kind = b.kind === undefined ? current : String(b.kind);
+  if (!SITE_KINDS.includes(kind)) throw new HttpError(400, "A site is a place or a team");
+  return kind;
+}
+function tzOffsetInput(v) {
+  if (blank(v)) return null;
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < -12 || n > 14) {
+    throw new HttpError(400, "A UTC offset is a number of hours between -12 and +14");
+  }
+  return n;
+}
+const PLACE_NEEDS_TZ = "A place needs a timezone (UTC offset and zone name) — only a team may have none";
+
 r.post("/sites", async (req, res, next) => {
   try {
     const b = req.body ?? {};
     if (!b.id || !b.city) throw new HttpError(400, "A site needs an identifier and a city");
+    const kind = siteKind(b);
+    let tz, tzName;
+    if (kind === "team") {
+      tz = b.tz === undefined ? null : tzOffsetInput(b.tz);
+      tzName = blank(b.tzName) || b.tzName === undefined ? null : String(b.tzName);
+      if (tz === null) tzName = null;          // a zone name with no offset tells nobody the time
+    } else {
+      if (blank(b.tz) || blank(b.tzName)) throw new HttpError(400, PLACE_NEEDS_TZ);
+      tz = b.tz === undefined ? 0 : tzOffsetInput(b.tz);
+      tzName = b.tzName === undefined ? "UTC" : String(b.tzName);
+    }
+    const id = String(b.id).toUpperCase().slice(0, 5);
     await audited(req.user,
-      { action: "Site added", entity: "site", entityId: b.id, detail: b.city },
+      { action: kind === "team" ? "Team added" : "Site added", entity: "site", entityId: id,
+        detail: b.city + (kind === "team" ? " (team)" : "") },
       async (t) => t.query(
-        `INSERT INTO site (id, city, region, country, legal_entity, tz_offset, tz_name, headcount, fte, charter)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-        [String(b.id).toUpperCase().slice(0, 5), b.city, b.region ?? "",
-         String(b.country ?? "").toUpperCase(), b.legalEntity ?? "", Number(b.tz ?? 0),
-         b.tzName ?? "UTC", Number(b.headcount ?? 0), Number(b.fte ?? 0), b.charter ?? ""]));
-    res.status(201).json({ id: b.id });
+        `INSERT INTO site (id, city, region, country, legal_entity, tz_offset, tz_name, headcount, fte, charter, kind)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+        [id, b.city, b.region ?? "",
+         String(b.country ?? "").toUpperCase(), b.legalEntity ?? "", tz,
+         tzName, Number(b.headcount ?? 0), Number(b.fte ?? 0), b.charter ?? "", kind]));
+    res.status(201).json({ id: b.id, kind });
   } catch (e) { next(e); }
 });
 
@@ -725,8 +761,19 @@ r.patch("/sites/:id", async (req, res, next) => {
       patch.country = c;
     }
     if (b.legalEntity !== undefined) patch.legal_entity = b.legalEntity;
-    if (b.tz !== undefined) patch.tz_offset = Number(b.tz);
-    if (b.tzName !== undefined) patch.tz_name = b.tzName;
+    /* D-36.13 — a team may clear its timezone (NULL, not 0); a place may
+       not, and the CHECK site_place_has_timezone says so if the route
+       below did not. Turning a place into a team that still holds a
+       window or a wave is refused by 060's trigger, in words. */
+    if (b.kind !== undefined) patch.kind = siteKind(b, s.kind);
+    const kindAfter = patch.kind ?? s.kind;
+    if (b.tz !== undefined) patch.tz_offset = tzOffsetInput(b.tz);
+    if (b.tzName !== undefined) patch.tz_name = blank(b.tzName) ? null : String(b.tzName);
+    if (kindAfter === "place" &&
+        ((patch.tz_offset ?? s.tz_offset) === null || (patch.tz_name ?? s.tz_name) === null ||
+         ("tz_offset" in patch && patch.tz_offset === null) || ("tz_name" in patch && patch.tz_name === null))) {
+      throw new HttpError(400, PLACE_NEEDS_TZ);
+    }
     if (b.headcount !== undefined) patch.headcount = Number(b.headcount);
     if (b.fte !== undefined) patch.fte = Number(b.fte);
     if (b.charter !== undefined) patch.charter = b.charter;
