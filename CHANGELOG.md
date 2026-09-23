@@ -18,6 +18,16 @@ Unreleased work sits under `## [Unreleased]` until it is tagged.
 
 ## [Unreleased]
 
+Nothing yet.
+
+---
+
+## [5.9.1] — 2026-09-23
+
+What running a real programme (FitAdapt) on a clean clone of `main`
+found on its first day: the import could not import, the quick start
+could not sign anyone in, and an unmeasured project called itself green.
+
 ### Fixed
 
 - **Whole-book import answered 400 for every book, including Meridian's
