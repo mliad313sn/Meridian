@@ -20,7 +20,11 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
+      # F12 compares the request registers against main, and refuses to call
+      # a comparison it could not make a pass. A shallow checkout has no main
+      # (docs/36 C-02: the first CI run of the RT365 line found this).
       - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
 
       - uses: actions/setup-node@v4
         with:
