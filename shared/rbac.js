@@ -84,6 +84,11 @@ export const ACTIONS = [
   "change.raise", "change.approve",
   // meetings
   "meeting.write", "meeting.close", "series.manage",
+  /* REQ-50 (RT365) : RATIFIER une décision proposée, depuis un écran. Ce
+     n'est pas `project.write` — celui-là écrit ; celui-ci met en vigueur,
+     et seulement sous la règle d'indépendance de `canRatifyDecision`,
+     que la route et l'écran appliquent EN PLUS de ce `case`. */
+  "decision.ratify",
   // system
   "user.manage", "settings.write", "data.export", "data.import",
 ];
@@ -549,6 +554,19 @@ export function can(user, action, resource = {}) {
        écrit dans celui d'un autre — et il a `concern.raise` pour se
        faire entendre sur ce qui atterrit chez lui. L'administrateur est
        déjà sorti plus haut. */
+    /* REQ-50 — ratifier a les deux portées de raid.write : sur un projet,
+       l'autorité d'y écrire ; sans projet, une décision de portefeuille,
+       que le groupe ratifie. L'indépendance (ni celui qui a décidé, ni la
+       personne derrière le compte qui a consigné) n'est pas une question
+       de niveau : `canRatifyDecision` la tient, pour tous, admin compris. */
+    case "decision.ratify":
+      if (!resource.project) {
+        return user.role === "group"
+          ? allow()
+          : deny("portfolio-wide decisions are ratified at group level — ask your programme office");
+      }
+      return canWriteProject(user, resource.project) ? allow() : outsideProject(user, resource.project);
+
     case "raid.write":
       if (!resource.project) {
         return user.role === "group"

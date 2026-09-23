@@ -896,6 +896,11 @@ export const ES = {
   "Meeting pack": "Dossier de reunión",
   "Minutes": "Acta",
   "Record a decision": "Consignar una decisión",
+  /* REQ-50 */
+  "Ratify": "Ratificar",
+  "Ratify this decision?": "¿Ratificar esta decisión?",
+  "You ratify it in your own name, today. It then takes effect, and it cannot be un-ratified from a screen — a later decision supersedes it.":
+    "La ratifica en su propio nombre, hoy. Entra entonces en vigor y no puede des-ratificarse desde una pantalla: una decisión posterior la sustituye.",
   "Record decision": "Consignar la decisión",
   "Close the meeting": "Cerrar la reunión",
   "Attendance": "Asistencia",
