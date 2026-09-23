@@ -70,6 +70,57 @@ describe("R2.6 · whole-book import", () => {
   });
 });
 
+describe("NEW-05 · what the book may point at, and what it may not rewrite", () => {
+  test("an account or integration this database does not hold drops to null; the row still comes in", async () => {
+    const admin = await as("admin");
+    const book = structuredClone((await admin.get("/api/admin/export")).body);
+    /* A file from another instance names ITS accounts and ITS
+       integrations. Accounts are not book data (import.js header), so the
+       pointer cannot be honoured — but the posting and the project are. */
+    book.ledger[0].createdBy = "U-from-elsewhere";
+    book.projects[0].externalSource = "INT-from-elsewhere";
+    book.projects[0].externalId = "their-42";
+    const r = await admin.post("/api/admin/import", { db: book });
+    assert.equal(r.status, 200, r.text);
+    const line = await one(`SELECT created_by FROM cost_line WHERE id = $1`, [Number(book.ledger[0].id)]);
+    assert.ok(line, "the posting came in under its own id");
+    assert.equal(line.created_by, null);
+    const p = await one(`SELECT external_source, external_id FROM project WHERE id = $1`, [book.projects[0].id]);
+    assert.equal(p.external_source, null);
+    assert.equal(p.external_id, "their-42");
+  });
+
+  test("a merge never rewrites a posting: a different line under a held id is refused by name", async () => {
+    const admin = await as("admin");
+    const book = structuredClone((await admin.get("/api/admin/export")).body);
+    const held = book.ledger[0];
+    const amount = Number((await one(`SELECT amount FROM cost_line WHERE id = $1`, [Number(held.id)])).amount);
+    held.amount += 1;   // one million more, under the same number
+    const dry = await admin.post("/api/admin/import?mode=merge&dryRun=1", { db: book });
+    assert.equal(dry.status, 200, dry.text);
+    assert.deepEqual(dry.body.rejects.map((x) => [x.table, x.id]), [["cost_line", held.id]]);
+    assert.match(dry.body.rejects[0].reason, /append-only/);
+    const r = await admin.post("/api/admin/import?mode=merge", { db: book });
+    assert.equal(r.status, 200, r.text);
+    assert.equal(Number((await one(`SELECT amount FROM cost_line WHERE id = $1`, [Number(held.id)])).amount),
+      amount, "the posting the ledger holds is the one it keeps");
+  });
+
+  test("the ledger and timesheet sequences follow the imported ids", async () => {
+    const admin = await as("admin");
+    const book = structuredClone((await admin.get("/api/admin/export")).body);
+    book.ledger[0].id = "900001";
+    book.timesheets = [{ id: "700001", person: book.people[0].id, project: book.projects[0].id,
+                         week: "2026-08-24", days: 2 }];
+    const r = await admin.post("/api/admin/import", { db: book });
+    assert.equal(r.status, 200, r.text);
+    const next = await one(`SELECT nextval(pg_get_serial_sequence('cost_line','id'))::int AS c,
+                                   nextval(pg_get_serial_sequence('timesheet','id'))::int AS t`);
+    assert.equal(next.c, 900002);
+    assert.equal(next.t, 700002);
+  });
+});
+
 describe("a refused import says which row", () => {
   test("the answer names the table and the id, and nothing is half-imported", async () => {
     const admin = await as("admin");
