@@ -141,6 +141,15 @@ export async function loadPortfolio(user, { inactive = false } = {}) {
      out-of-scope activity or cost line has no route into the response. */
   const inScope = (sql, extra = []) =>
     ids.length ? many(sql, [ids, ...extra]) : Promise.resolve([]);
+  /* NEW-24 — a row that names no project is portfolio-wide, like a
+     portfolio RAID item: it belongs to the book, not to a project. The
+     export read only the rows of visible projects, so a requirement,
+     evidence or finding with no project was imported, stored, and then
+     left out of the next export — and a replace of that export erased it
+     with nothing saying so. */
+  const withPortfolioWide = (table, order) => ids.length
+    ? many(`SELECT * FROM ${table} WHERE project_id = ANY($1) OR project_id IS NULL ORDER BY ${order}`, [ids])
+    : many(`SELECT * FROM ${table} WHERE project_id IS NULL ORDER BY ${order}`);
 
   const [
     activities, deps, milestones, requirementRows, ledger, raidRows, crRows, stepRows,
@@ -153,7 +162,7 @@ export async function loadPortfolio(user, { inactive = false } = {}) {
     inScope(`SELECT d.* FROM activity_dep d JOIN activity a ON a.id = d.activity_id
               WHERE a.project_id = ANY($1) ORDER BY d.activity_id, d.predecessor_id`),
     inScope(`SELECT * FROM milestone WHERE project_id = ANY($1) ORDER BY due_date, id`),
-    inScope(`SELECT * FROM requirement WHERE project_id = ANY($1) ORDER BY id`),
+    withPortfolioWide("requirement", "id"),
     /* Individual postings, not a monthly sum. The aggregate was enough to
        compute actual cost, but it left no line to point at — so a
        mis-posting could not be corrected, which is the whole reason the
@@ -227,10 +236,10 @@ export async function loadPortfolio(user, { inactive = false } = {}) {
        continue n'a ni révision ni propriétaire ; la forcer dans le
        registre documentaire produit une révision « 0.1 » qui ne veut
        rien dire. Bornée au périmètre comme tout le reste. */
-    inScope(`SELECT * FROM evidence WHERE project_id = ANY($1) ORDER BY captured_on DESC, id`),
+    withPortfolioWide("evidence", "captured_on DESC, id"),
     /* MER-05 — les constats de revue. Ni risques (ils se sont produits)
        ni enseignements (ils sont ouverts et bloquants). */
-    inScope(`SELECT * FROM finding WHERE project_id = ANY($1) ORDER BY id`),
+    withPortfolioWide("finding", "id"),
     /* MER-06 — les sièges. Une gouvernance, contrairement à un
        portefeuille, n'est pas bornée par projet : qui siège et qui peut
        opposer un veto est un fait de groupe. */

@@ -268,11 +268,26 @@ contradicts `docs/25` (reversibility).
 | NEW-21 | Four fields no screen draws, listed by the stricter F2 as known gaps: `notification.acted_at` (nothing writes or reads it), `integration.rotated_at` (sent, not drawn), `event_delivery.last_error` and `delivered_at` (no screen calls the deliveries route, so an admin cannot see why a webhook failed). | 3 |
 | NEW-22 | A deputy who signs a change step *for* X is recorded as the deputy's own person, so X can then sign the next step of the same request. Closing it needs a `decided_for_person` column. Found building PR-04; outside D-36.11's scope. | 3 |
 | NEW-23 | After a grant is added from the grants dialog, the accounts list does not redraw until the page is reloaded. The grant is saved. Pre-existing; found building #16. | 3 |
+| NEW-24 | **BUILT (5.28.1).** The export read requirements, evidence and findings only for visible projects, so a row with no project (KODO's FR-M20/M21 requirements) was imported, stored, left out of the next export, and erased by a replace of it without `erased` counting it. Found by the field re-run of 23/09. | 1 |
 | NEW-09 | On SIGTERM the process exits before PGlite closes (`claimBook` calls `process.exit` first). **BUILT (5.20.2)**. Corrected diagnosis: the leftover `postmaster.pid` is PGlite 0.2.x behaviour even after a clean close; the defect was the unclosed book. `shutdown.test.js` fails on 5.20.1. | 1 |
 | NEW-10 | Saving a programme's gate ladder from the screen drops `loopsTo` and `scope` (D-36.02 holds in the engine and the validator, not in the form). **BUILT (5.20.2)**: optional `loops to N` and scope columns; seen in the browser. | 1 |
 | NEW-11 | Administration's notifications panel still names SMTP, and the CSV import panel is French in every language. | 3 |
 | NEW-12 | `/` answers 404 when the install path contains a dot-directory (`sendFile` refuses it). | 4 |
 | NEW-13 | Spanish notification strings reach nobody: `inLocale` treats any non-`fr` locale as English, and `/auth/preferences` accepts only `en` and `fr`. | 3 |
+
+#### Field re-run against 5.28.0 (P5, 23/09)
+
+| Field | Commit | Meridian checks | Result |
+|---|---|---|---|
+| FitAdapt | 66c7f34 (branch `claude/vigilant-franklin-76iok4`) | `pmo/meridian/bootstrap.mjs`: export, replace import, 3 series, settings | **Refused on `currencyUnit`** (D-36.04, since 5.17.0: FitAdapt was never told, now said on DF-09); with the header, 7 projects imported and a round trip at 0 rejects |
+| KODO | 8ad1d15 | 6 committed books, generator `tools/meridian_book.py` | Same refusal; with the header all merge at 0 rejects; **NEW-24** found |
+| RT365 | 670bfbd (`claude/project-owner-agent-setup-hi3xqu`) | `test_meridian_sync.py`, live sync | 4/4; 367 writes, all 2xx; idempotent second run. Its script adds a second set of gate milestones (field-side: it looks for the exact name "Gate A") |
+
+Field-side, not Meridian's: FitAdapt's and KODO's generators lack the
+`currencyUnit` header; KODO's committed book is stale (136 vs 148
+requirements) and its docs name `/api/v1/admin/import`, which does not
+exist; RT365's sync duplicates scaffolded gates. No field repository has
+a new Meridian request since its register.
 
 #### C-06 · Refresh the public record — BUILT, PR as 5.18.2
 

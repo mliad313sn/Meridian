@@ -206,6 +206,21 @@ const ENRICH = [
    VALUES ('FND-901', ${P1}, 'REQ-901', 2, 2, 'Latency measured at 3.4 s', 'Operators act late',
            'S1', ${PE2}, 'Move the poller', '2026-05-07', '2026-05-20', 'Closed', 'EV-901',
            'Re-tested on the new PLC')`,
+  /* NEW-24 — portfolio-wide rows (no project): KODO's generator emits
+     requirements for modules it has no project for yet (FR-M20-01…). */
+  `INSERT INTO requirement (id, project_id, statement, source, priority, verification, verified_by,
+                           gate_n, status, waiver_reason, owner_id, updated_on)
+   VALUES ('REQ-902', NULL, 'Every module declares its data retention', 'Group policy', 'M',
+           'Document review', 'Retention register', 1, 'In progress', '', ${PE1}, '2026-05-08')`,
+  `INSERT INTO evidence (id, project_id, document_id, kind, name, uri, digest, gate_n, gate_loop,
+                        captured_on, captured_by)
+   VALUES ('EV-902', NULL, NULL, 'document', 'Retention register v2',
+           'docs/policy/retention.md@c0ffee1', 'sha256:cd34', 1, 1, '2026-05-09', ${PE1})`,
+  `INSERT INTO finding (id, project_id, requirement_id, gate_n, gate_loop, observed_fact,
+                       why_it_matters, severity, owner_id, proposed_fix, raised_on, retest_on,
+                       status, closed_evidence_id, waiver_reason)
+   VALUES ('FND-902', NULL, 'REQ-902', 1, 1, 'Two modules keep logs forever', 'Retention policy breached',
+           'S2', ${PE2}, 'Add a purge job', '2026-05-10', '2026-05-24', 'Open', NULL, '')`,
   `INSERT INTO seat (id, name, person_id, domain, veto_domain, observer, active)
    VALUES ('SE-901', 'Safety officer', ${PE1}, 'safety', 'safety', true, false),
           ('SE-902', 'Architect', ${PE2}, 'architecture', NULL, false, true)`,
@@ -354,6 +369,16 @@ describe("F13 · export → import → export", () => {
 
   test("the product imports its own export", () => {
     assert.equal(status, 200, text);
+  });
+
+  test("NEW-24 · a requirement, evidence or finding with no project travels and comes back", () => {
+    for (const [list, id] of [["requirements", "REQ-902"], ["evidence", "EV-902"], ["findings", "FND-902"]]) {
+      const a = (first[list] ?? []).find((x) => x.id === id);
+      const b = (second[list] ?? []).find((x) => x.id === id);
+      assert.ok(a, `${id} is in the export (it was left out: the export read only rows of visible projects)`);
+      assert.ok(b, `${id} survives a replace of that export`);
+      assert.equal(b.project ?? null, null, `${id} stays portfolio-wide`);
+    }
   });
 
   test("NEW-18 · inactive sites, programmes and people travel, flagged, and stay inactive", async () => {
