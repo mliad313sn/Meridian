@@ -12,6 +12,20 @@
  */
 
 import fs from "node:fs";
+import { migrationSchema } from "./lib/schema.mjs";
+
+/* REQ-52 — the files and tables this gate reads are derived, not named.
+   It named three views, three routers and sixteen tables; a view file,
+   a router or a versioned table added after it was written was a write
+   path it never looked at. */
+const walkJs = (dir, into = []) => {
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = `${dir}/${e.name}`;
+    if (e.isDirectory()) walkJs(p, into);
+    else if (e.name.endsWith(".js")) into.push(p);
+  }
+  return into;
+};
 
 /** Read the argument list of a call, balancing quotes and brackets. */
 function callArgs(src, start) {
@@ -37,8 +51,7 @@ let problems = 0;
 
 /* ── client side ──────────────────────────────────────────────────── */
 console.log("═══ client PATCH calls that do not name a version ═══");
-const clientFiles = ["web/src/views/index.js", "web/src/views/meetings.js",
-                     "web/src/views/administration.js"];
+const clientFiles = walkJs("web/src").sort();
 for (const f of clientFiles) {
   const s = fs.readFileSync(f, "utf8");
   const re = /\.\s*patch\(/g;
@@ -57,6 +70,12 @@ for (const f of clientFiles) {
        now())` — et deux onglets qui le font en même temps veulent la même
        chose. Exclus délibérément, comme au-dessus. */
     if (/\/auth\/(notifications|quiet-hours)/.test(path)) continue;
+    /* REQ-52 — seen the first time this gate read main.js (it read three
+       view files). `/auth/preferences` is quiet-hours' neighbour: the
+       signed-in account's own language and digest cadence, on its own
+       app_user row, written by nobody else — there is no second writer
+       for a version to protect against. Exempt for the same reason. */
+    if (/^\/auth\/preferences$/.test(path)) continue;
     if (!/\bversion\b\s*:/.test(args)) {
       console.log(`  ✖ ${f.split("/").pop().padEnd(20)} ${path}`);
       problems++;
@@ -67,16 +86,11 @@ if (!problems) console.log("  none");
 
 /* ── server side ──────────────────────────────────────────────────── */
 console.log("\n═══ server PATCH routes on versioned tables that accept a missing version ═══");
-const VERSIONED = new Set([
-  "project", "activity", "milestone", "raid_item", "change_request",
-  "allocation", "document", "work_item", "person", "site", "programme",
-  "board_column", "app_user", "meeting_series", "meeting_occurrence",
-  "meeting_action",
-]);
+/* Every table that carries `row_version`, read from the migrations. */
+const VERSIONED = migrationSchema().versioned;
 
 let serverProblems = 0;
-for (const f of ["server/src/routes/portfolio.js", "server/src/routes/meetings.js",
-                 "server/src/routes/admin.js"]) {
+for (const f of walkJs("server/src/routes").sort()) {
   const s = fs.readFileSync(f, "utf8");
   const re = /^r\.patch\(\s*"([^"]+)"/gm;
   let m;

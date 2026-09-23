@@ -23,21 +23,30 @@
  * dériver du code, dans un sens comme dans l'autre.
  */
 
-import v1Router from "./routes/v1.js";
+import { servedRoutes } from "./routemap.js";
 import { SCOPES } from "./integrations.js";
 import { WRITE_BODIES } from "./v1write.js";
 
 export const CONTRACT = "v1";
 
-/** Les chemins et méthodes RÉELLEMENT montés, lus dans le routeur. */
-export function mountedRoutes(router = v1Router) {
+/**
+ * Les chemins et méthodes RÉELLEMENT servis sous /api/v1, lus dans
+ * l'application que construit `buildApp()` — pas dans `routes/v1.js`
+ * seul. REQ-52 / NEW-08 : lire un seul fichier de routeur, c'était tenir
+ * une liste à la main d'un élément, et `GET /api/v1/signals`, servi par
+ * `routes/signals.js` monté sur `/api`, est resté hors du contrat publié
+ * pour cette seule raison. Une route est dans le contrat parce qu'elle
+ * répond sous /api/v1, quel que soit le fichier qui la déclare.
+ */
+export function mountedRoutes() {
+  const seen = new Set();
   const out = [];
-  for (const layer of router.stack ?? []) {
-    if (!layer.route) continue;
-    const path = layer.route.path === "/" ? "" : layer.route.path;
-    for (const [method, on] of Object.entries(layer.route.methods ?? {})) {
-      if (on) out.push({ method: method.toUpperCase(), path: `/api/v1${path}` });
-    }
+  for (const { method, path } of servedRoutes()) {
+    if (path !== "/api/v1" && !path.startsWith("/api/v1/")) continue;
+    const key = `${method} ${path}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ method, path });
   }
   return out.sort((a, b) => (a.path + a.method).localeCompare(b.path + b.method));
 }
@@ -103,6 +112,22 @@ const DOCS = {
       "visible as such rather than absent. Filter: programme.",
     scope: "read:portfolio",
     returns: { contract: "string", generatedAt: "date-time", programme: "string", value: "object" },
+  },
+  /* REQ-28 (V-9) — servie depuis la 5.13 par `routes/signals.js`, et
+     absente du contrat jusqu'à REQ-52 : F9 ne lisait que `routes/v1.js`
+     (NEW-08). */
+  "GET /api/v1/signals": {
+    summary: "Governance quality signals — how fast the portfolio decides, acts, passes gates and reviews its risks",
+    description:
+      "The same computation the portfolio page draws (`shared/govsignals.js`), for the " +
+      "portfolio and for each programme: decision latency, action ageing, gate cycle time, " +
+      "RAID review compliance and exception age, each with its monthly trend. Every metric has " +
+      "a not-measured state and uses it rather than a zero, a 100 % or a colour; no threshold " +
+      "is applied. Only counts and numbers of days cross this route — no headline, title, " +
+      "owner or person — which is why it needs `read:portfolio` and not `read:meetings`. " +
+      "Filter: months (the trend's span, 2 to 24, default 6).",
+    scope: "read:portfolio",
+    returns: { contract: "string", generatedAt: "date-time", signals: "object" },
   },
   /* REQ-15 — écrire sans pouvoir relire n'est pas un contrat. */
   "GET /api/v1/decisions": {

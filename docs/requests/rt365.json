@@ -1741,28 +1741,35 @@
       ],
       "issue": null,
       "title": "A gate's own list of what it watches is checked against the product, so a thing it does not name is reported rather than unseen",
-      "status": "partial",
+      "status": "done",
       "priority": "medium",
-      "version": "5.15.0",
-      "decidedOn": "2026-09-09",
+      "version": "5.21.1",
+      "decidedOn": "2026-09-23",
       "delivered": [
-        "server/test/persistence.test.js (every table is cleared or declared kept)",
-        "server/src/reset-book.js#RESET_LISTS"
+        "server/src/routemap.js (every mounted router, where)",
+        "scripts/audit/lib/schema.mjs (schema read once, checked against the live database)",
+        "scripts/audit/crud-audit.mjs (every migration table named or failed)",
+        "scripts/audit/route-match.mjs, version-audit.mjs, control-audit.mjs, kit-imports.mjs, view-render.mjs (derived lists)",
+        "server/src/openapi.js (F9 reads every /api/v1 route served)"
       ],
-      "measure": "server/test/persistence.test.js — it found `case_reconfirmation` on its first run",
-      "remaining": [
-        "The same check for `scripts/audit/route-match.mjs` (its router map) and `scripts/audit/crud-audit.mjs` (its entity map): a router or table absent from those is invisible to F1 and F2, which is the gate lying in the safe direction."
-      ],
+      "measure": "server/test/gate-lists.test.js (6 tests) + both-direction breaks recorded in docs/36: a scratch table, an unmounted router, a /api/v1 route outside v1.js, an unversioned PATCH, an unguarded delete button, an unimported helper, a screen missing from NAV — each passed the old gate and fails the new one",
+      "remaining": null,
       "accepted": null,
       "released": false,
       "observed": "This repository keeps five hand-written lists of things the product owns — F1's router map, F2's entity map, and reset-book's keep/clear pair — and every one shares a blind spot: a thing the list does not name is not reported missing, it is simply not seen. That has cost four releases in this round alone (`signals`, `ladder`, `valuepage`, `prioritisation_weighting`). reset-book's was the worst: its guard fires only at reset time AND only when the forgotten table holds a row, so a production book that had stored a value page could not be reset at all and no suite noticed.",
-      "answerToSource": "Filed against ourselves, half-closed in the same breath. The reset-book half is done and the test that closes it found a SECOND instance on its first run — `case_reconfirmation`, from REQ-22's work, which meant a book with a reconfirmed business case could not be reset either. Nobody had reported it because no suite reconfirms and then resets. That is the argument for checking the class rather than the instance, and the same argument is now owed to F1 and F2.",
+      "answerToSource": "Closed in 5.21.1. Every gate list that walked a hand-written list now derives it from the product or fails when the product holds something the list does not name — tables, routers, /api/v1 routes, versioned tables, client files, screens, roles. The stricter F2 immediately showed what it had never seen: 15 tables it never examined, KODO's six registers with no write route (NEW-04, listed as dated, shrink-only known gaps until delivered), four fields no screen draws, and /api/v1/signals missing from the published contract (fixed).",
       "history": [
         {
           "at": "2026-09-09",
           "registerVersion": 14,
           "status": "partial",
           "note": "Opened and half-closed in the same round; the test found a second instance immediately."
+        },
+        {
+          "at": "2026-09-23",
+          "registerVersion": 21,
+          "status": "done",
+          "note": "Delivered by docs/36 wave 1 (5.21.1)."
         }
       ]
     },
@@ -1832,5 +1839,5 @@
       "whatIsNeeded": "A maintainer merges the branch to main and pushes the tag. The owner AUTHORISED the merge on 08/09; it was then refused by the agent session's own permission classifier — `git merge --ff-only`, `git push origin <branch>:main` and even a local `git tag -a` (D-33.50). Pushing a tag ref is separately refused HTTP 403 by the session credential (D-33.18, D-33.30). Two different boundaries, neither routed around."
     }
   },
-  "registerVersion": 20
+  "registerVersion": 21
 }

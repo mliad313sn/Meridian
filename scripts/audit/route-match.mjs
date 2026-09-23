@@ -8,12 +8,19 @@
  * separate fragments.
  */
 import fs from "node:fs";
+import { servedRoutes, unmountedRouterFiles } from "../../server/src/routemap.js";
 
-const clientFiles = [
-  "web/src/views/index.js", "web/src/views/meetings.js",
-  "web/src/main.js", "web/src/lib/api.js", "web/src/ui/login.js",
-  "web/src/views/administration.js",
-];
+/* REQ-52 — every client file, walked, not six of them named. A screen
+   written in a seventh file was a set of buttons this gate never read. */
+function walk(dir, into = []) {
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = `${dir}/${e.name}`;
+    if (e.isDirectory()) walk(p, into);
+    else if (e.name.endsWith(".js")) into.push(p);
+  }
+  return into;
+}
+const clientFiles = walk("web/src").sort();
 
 /** Read the first argument expression of a call, balancing parens/quotes. */
 function firstArg(src, i) {
@@ -72,25 +79,29 @@ for (const f of clientFiles) {
   }
 }
 
-/* federationService.js (/v1) is deliberately absent: it is the
-   machine-facing contract surface for SDP, and no browser button calls
-   it — this audit is about buttons that 404 in a user's hands. */
-/* `signals` mounts at /api like `portfolio` does. It is listed here
-   because a router this map does not name is INVISIBLE to the gate: the
-   five governance readouts were drawn on the portfolio page, the route
-   existed and answered, and F1 still reported the call as a button that
-   404s — which is the gate lying in the safe direction, but lying. */
-const mounts = { portfolio: "", signals: "", ladder: "", valuepage: "", meetings: "/meetings", admin: "/admin", auth: "/auth", federation: "/federation", importcsv: "/import" };
+/* REQ-52 — the served routes are read from the app buildApp() builds
+   (server/src/routemap.js), not from a map of router files typed here.
+   That map was the blind spot: `signals` was missing from it for a
+   release, and every button calling it was reported as a 404 while the
+   route existed and answered. A router the app mounts is now seen
+   because the app mounts it, and a router file the app does NOT mount
+   fails below, by name.
+
+   The browser calls through api.js, which prefixes `/api`; so only the
+   routes under /api are buttons' targets, and they are keyed without it.
+   federationService (/v1) is outside /api on purpose — another system's
+   door, no button calls it. */
 const served = new Set();
-for (const [f, prefix] of Object.entries(mounts)) {
-  const s = fs.readFileSync(`server/src/routes/${f}.js`, "utf8");
-  for (const m of s.matchAll(/^r\.(get|post|patch|put|delete)\(\s*"([^"]+)"/gm)) {
-    served.add(`${m[1].toUpperCase()} ${(prefix + m[2]).replace(/\/:[a-zA-Z]+/g, "/:id")}`);
-  }
+for (const { method, path } of servedRoutes()) {
+  if (!path.startsWith("/api/")) continue;
+  served.add(`${method} ${path.slice(4).replace(/\/:[a-zA-Z]+/g, "/:id")}`);
 }
+const unmounted = await unmountedRouterFiles();
 
 const broken = [...calls].filter(([k]) => !served.has(k));
-const unused = [...served].filter((s) => !calls.has(s));
+/* /api/v1 is the machines' contract (F9 holds it); a route there that no
+   button calls is its purpose, not a question. */
+const unused = [...served].filter((s) => !calls.has(s) && !/^\w+ \/v1(\/|$)/.test(s));
 
 console.log(`client call sites: ${calls.size}   server routes: ${served.size}\n`);
 console.log("── CLIENT CALLS WITH NO MATCHING ROUTE (buttons that 404) ──");
@@ -98,6 +109,10 @@ broken.length ? broken.forEach(([k, f]) => console.log(`  ✖ ${k}   (${f})`)) :
 console.log("\n── ROUTES NO CLIENT CODE CALLS ──");
 unused.length ? unused.forEach((u) => console.log(`  · ${u}`)) : console.log("  none");
 
+console.log("\n── ROUTER FILES THE APP NEVER MOUNTS ──");
+unmounted.length ? unmounted.forEach((f) => console.log(`  ✖ ${f}`)) : console.log("  none");
+
 /* A client call with no route is a button that 404s in someone hands, so
-   it fails the build. An uncalled route is a question, not a fault. */
-if (broken.length) process.exitCode = 1;
+   it fails the build. An uncalled route is a question, not a fault. A
+   router file nobody mounts is every one of its routes answering 404. */
+if (broken.length || unmounted.length) process.exitCode = 1;

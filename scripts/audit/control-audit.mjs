@@ -20,11 +20,18 @@
 
 import fs from "node:fs";
 
-const FILES = [
-  "web/src/views/index.js",
-  "web/src/views/meetings.js",
-  "web/src/views/administration.js",
-];
+/* REQ-52 — every client file, walked. Three view files were named here,
+   so a screen drawn anywhere else (main.js, ui/, a fourth view file) was
+   a set of write controls this gate never looked at. */
+const walkJs = (dir, into = []) => {
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = `${dir}/${e.name}`;
+    if (e.isDirectory()) walkJs(p, into);
+    else if (e.name.endsWith(".js")) into.push(p);
+  }
+  return into;
+};
+const FILES = walkJs("web/src").sort();
 
 /** Handlers that write. Anything else on a click is navigation or filtering. */
 const MUTATES = /^(new|add|create|edit|update|delete|remove|book|assign|approve|reject|withdraw|revise|import|reset|advance|release|close|baseline|promote|revoke|disable|enable|save|apply|post|reverse|link|unlink|set(?!Doc$))/i;

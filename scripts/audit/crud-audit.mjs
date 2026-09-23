@@ -9,20 +9,32 @@
  * declared here, next to the entity, so the audit reports what is
  * genuinely missing rather than a wall of noise nobody reads.
  *
+ * REQ-52 — and the map is held against the schema: a table a migration
+ * creates and this file does not name fails the build by name, instead
+ * of being silently unseen. Gaps that are known and owned by a line are
+ * listed shrink-only in KNOWN_GAPS, reported on every run.
+ *
  *   node scripts/audit/crud-audit.mjs
  */
 
 import fs from "node:fs";
+import { migrationSchema } from "./lib/schema.mjs";
 
-const sql = fs.readdirSync("server/migrations").filter((f) => f.endsWith(".sql")).sort()
-  .map((f) => fs.readFileSync(`server/migrations/${f}`, "utf8")).join("\n");
 const routes = fs.readdirSync("server/src/routes").filter((f) => f.endsWith(".js"))
   .map((f) => fs.readFileSync(`server/src/routes/${f}`, "utf8")).join("\n");
-const client = ["web/src/views", "web/src/ui", "web/src/lib"]
-  .flatMap((d) => fs.readdirSync(d).map((f) => `${d}/${f}`))
-  .filter((f) => f.endsWith(".js"))
+/* REQ-52 — the whole client, walked: three folders and main.js were
+   named here, and a fourth folder would have been a client this gate
+   never read. */
+const walkJs = (dir, into = []) => {
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = `${dir}/${e.name}`;
+    if (e.isDirectory()) walkJs(p, into);
+    else if (e.name.endsWith(".js")) into.push(p);
+  }
+  return into;
+};
+const client = walkJs("web/src").sort()
   .map((f) => fs.readFileSync(f, "utf8")).join("\n")
-  + fs.readFileSync("web/src/main.js", "utf8")
   /* A field is "surfaced" once it is part of the API contract, so the
      serialisers count as exposure — both the portfolio one and the
      per-module ones inside the routes. */
@@ -31,29 +43,15 @@ const client = ["web/src/views", "web/src/ui", "web/src/lib"]
   + fs.readFileSync("shared/meetings.js", "utf8");
 
 /* ── schema ───────────────────────────────────────────────────────── */
-const tables = {};
-/* docs/36 C-03 — `IF NOT EXISTS` is how the KODO line wrote 051 and 052.
-   The old pattern read neither the tables nor the columns, and read
-   `ADD COLUMN IF NOT EXISTS gate_loop` as a column named "IF": six new
+/* docs/36 C-03 — `IF NOT EXISTS` is how the KODO line wrote 051 and 052,
+   and the old pattern read neither the tables nor the columns: six new
    registers and ten columns were invisible to the one gate that asks
-   whether a stored field ever reaches a human. */
-for (const m of sql.matchAll(/CREATE TABLE (?:IF NOT EXISTS )?(\w+) \(([\s\S]*?)\n\);/g)) {
-  const cols = [];
-  for (const line of m[2].split("\n")) {
-    const t = line.trim();
-    if (!t || t.startsWith("--") || /^(CONSTRAINT|PRIMARY KEY|UNIQUE|FOREIGN|CHECK)/i.test(t)) continue;
-    const c = /^(\w+)\s+/.exec(t);
-    if (c && !["id", "row_version", "created_at"].includes(c[1])) cols.push(c[1]);
-  }
-  tables[m[1]] = cols;
-}
-/* A column added by a later migration is a column like any other. Reading
-   only CREATE TABLE left everything migrations 005–007 added — origin,
-   origin_site, referred_to_scope, must_change_password — outside the one
-   check that asks whether a stored field ever reaches a human. */
-for (const m of sql.matchAll(/ALTER TABLE (\w+)\s+ADD COLUMN (?:IF NOT EXISTS )?(\w+)/g)) {
-  if (tables[m[1]] && !tables[m[1]].includes(m[2])) tables[m[1]].push(m[2]);
-}
+   whether a stored field ever reaches a human. The reading now lives in
+   lib/schema.mjs, which also reports any CREATE TABLE it could not read
+   (and server/test/gate-lists.test.js holds it against the live schema),
+   so a statement this pattern misses is named, not dropped. */
+const schema = migrationSchema();
+const tables = schema.tables;
 
 /* ── what the API offers, and what is deliberately absent ─────────── */
 const NA = (why) => ({ na: why });
@@ -181,7 +179,91 @@ const ENTITIES = {
     d: NA("A decision is superseded by a new one, never deleted (I-7)") },
   meeting_action: { c: /occurrences\/:id\/actions/, u: /patch\("\/actions\/:id"/,
     d: NA("Cancelled via status, so it stays in the minutes that raised it") },
+
+  /* ── REQ-52 — the tables this map did not name ─────────────────────
+     Until 23/09 the nine below were in the schema and not here, so F2
+     never asked about their verbs or their columns: not "passed", not
+     "failed" — not seen. They are named now, each with what it offers
+     and, where a verb is absent, the reason. */
+  /* O-1 — raised by the server when something concerns a person; the
+     person marks it read, the sweep purges it. */
+  notification: { c: NA("Raised by the server (notify.js) when an event concerns someone — never typed by a person"),
+    u: /patch\("\/notifications\/:id"/,
+    d: NA("Purged by the sweep after the retention the administrator set (G-13) — a message someone was sent is not deleted by hand") },
+  notification_subscription: { c: /post\("\/subscriptions"/,
+    u: NA("A subscription is a switch — removed and re-created, it has no history worth versioning"),
+    d: /delete\("\/subscriptions\/:id"/ },
+  lesson: { c: /post\("\/lessons"/, u: /patch\("\/lessons\/:id"/, d: /delete\("\/lessons\/:id"/ },
+  integration: { c: /post\("\/integrations"/, u: /patch\("\/integrations\/:id"/, d: /delete\("\/integrations\/:id"/ },
+  /* PM-02 — one active tolerance per project; setting it again retires
+     the old one rather than editing it. */
+  project_tolerance: { c: /put\("\/projects\/:id\/tolerance"/, u: /put\("\/projects\/:id\/tolerance"/,
+    d: NA("Superseded, never deleted (active=false) — an exception must stay readable against the tolerance it breached") },
+  project_exception: { c: NA("Raised by the sweep when a tolerance is breached — a breach is detected, not declared"),
+    u: /post\("\/exceptions\/:id\/answer"/,
+    d: NA("A breach that happened is a record; it is answered, never deleted") },
+  event_delivery: { c: NA("Written by the outbound queue, one row per event and subscriber (events.js)"),
+    u: NA("Its state is what the receiver got — editing it by hand would lie to the integrator"),
+    d: NA("Removed with its integration (ON DELETE CASCADE)") },
+  usage_daily: { c: NA("Counted by the server (A-08) — a measure of use is never typed"),
+    u: NA("A count is not corrected by hand — it is what was counted"),
+    d: NA("An aggregate with no person in it; nothing to withdraw") },
 };
+
+/* Tables that are not an entity anyone corrects, with the reason. Only
+   the fourth legitimate reason of goal.md §F2 fits here — the table never
+   leaves the server — so a table may be listed only when NO column of it
+   is meant to reach a human. */
+const NOT_ENTITIES = {
+  id_counter: "Never leaves the server — the allocator behind human-readable ids (db.js nextId), a mechanism and not a record",
+};
+
+/* ── known gaps: shrink-only ─────────────────────────────────────────
+   KODO's six registers (docs/36 NEW-04, D-36.05) arrived in C-03 with
+   their data, engine and import, and without a single write route or
+   screen: requirements, evidence, findings, seats and their conflicts,
+   and objections enter the book only through the import. F2 did not
+   report it, because this map did not name them (REQ-52).
+
+   They are named above as what NEW-04 owes, and every gap they show is
+   listed here with its line and the day it was measured, so the gate
+   reports them on every run without failing the build. The list only
+   shrinks, as F13's did:
+     · a gap not listed here fails the build (a new table, a new column);
+     · a listed gap that has closed fails too, until it is struck off;
+     · a listed table that gains a write path outside the import (an
+       INSERT, UPDATE or DELETE in server/src) fails until its verbs are
+       declared for real and its lines are struck off. */
+const KNOWN_GAP = "NEW-04 · measured 2026-09-23 — enters the book only through the import";
+Object.assign(ENTITIES, {
+  requirement: { c: /post\("\/requirements"/, u: /patch\("\/requirements\/:id"/, d: /delete\("\/requirements\/:id"/ },
+  evidence: { c: /post\("\/evidence"/, u: /patch\("\/evidence\/:id"/, d: /delete\("\/evidence\/:id"/ },
+  finding: { c: /post\("\/findings"/, u: /patch\("\/findings\/:id"/, d: /delete\("\/findings\/:id"/ },
+  seat: { c: /post\("\/seats"/, u: /patch\("\/seats\/:id"/, d: /delete\("\/seats\/:id"/ },
+  seat_conflict: { c: /post\("\/seats\/:id\/conflicts"/, u: NA("A conflict is a pair and a reason — removed and re-declared"),
+    d: /delete\("\/seats\/:id\/conflicts/ },
+  decision_objection: { c: /post\("\/decisions\/:id\/objections"/, u: /patch\("\/objections\/:id"/,
+    d: NA("An objection raised is a record — it is resolved or withdrawn through its state, never deleted") },
+});
+const KNOWN_GAPS = new Map(Object.entries({
+  "requirement: no create": KNOWN_GAP, "requirement: no update": KNOWN_GAP, "requirement: no remove": KNOWN_GAP,
+  "evidence: no create": KNOWN_GAP, "evidence: no update": KNOWN_GAP, "evidence: no remove": KNOWN_GAP,
+  "finding: no create": KNOWN_GAP, "finding: no update": KNOWN_GAP, "finding: no remove": KNOWN_GAP,
+  "seat: no create": KNOWN_GAP, "seat: no update": KNOWN_GAP, "seat: no remove": KNOWN_GAP,
+  "seat_conflict: no create": KNOWN_GAP, "seat_conflict: no remove": KNOWN_GAP,
+  "decision_objection: no create": KNOWN_GAP, "decision_objection: no update": KNOWN_GAP,
+  /* Found by naming the nine tables above (REQ-52, 23/09). Each is a
+     field stored and never drawn; none is a KODO table, so none is
+     NEW-04's. They are reported here, not closed and not hidden. */
+  "notification.acted_at": "REQ-52 finding · measured 2026-09-23 — no code writes or reads it: a column with no life at all",
+  "integration.rotated_at": "REQ-52 finding · measured 2026-09-23 — GET /admin/integrations sends it, the connected-systems table does not draw when a key was last rotated",
+  "event_delivery.last_error": "REQ-52 finding · measured 2026-09-23 — GET /admin/integrations/:id/deliveries serves it and no screen calls that route (F1 lists it): an administrator cannot see why a webhook failed",
+  "event_delivery.delivered_at": "REQ-52 finding · measured 2026-09-23 — same route, same absence",
+}));
+/* The files allowed to write a known-gap table without that being "a
+   route arrived": the import that brings KODO's book in, the seed and
+   the restore. */
+const IMPORT_WRITERS = new Set(["import.js", "seed.js", "seed-data.js", "archive.js", "reset-book.js"]);
 
 /* Columns that must never reach a browser. */
 const SERVER_ONLY = new Set([
@@ -199,6 +281,11 @@ const SERVER_ONLY = new Set([
   /* I-2 — la mécanique d'idempotence : une empreinte de requête et la
      réponse enregistrée, rejouée à l'appelant, jamais dessinée. */
   "request_hash", "response_json",
+  /* REQ-52 — notification mechanics, seen once `notification` was named:
+     the key that stops a sweep sending the same message twice, and the
+     date after which the purge may drop it (G-13). The person reads the
+     message, not its bookkeeping. */
+  "dedupe_key", "expires_on",
 ]);
 
 const verb = (spec) => {
@@ -207,7 +294,7 @@ const verb = (spec) => {
   return spec.test(routes) ? { mark: "✓", note: "" } : { mark: "✖", note: "MISSING" };
 };
 
-let gaps = 0;
+const found = [];            // every gap measured: { key, text }
 const notes = [];
 console.log("ENTITY                 C  U  D   FIELDS");
 console.log("─".repeat(78));
@@ -215,7 +302,7 @@ console.log("─".repeat(78));
 for (const [name, spec] of Object.entries(ENTITIES)) {
   const c = verb(spec.c), u = verb(spec.u), d = verb(spec.d);
   [["create", c], ["update", u], ["remove", d]].forEach(([label, v]) => {
-    if (v.mark === "✖") { gaps++; notes.push(`${name}: no ${label}`); }
+    if (v.mark === "✖") found.push({ key: `${name}: no ${label}`, text: `${name}: no ${label}` });
     else if (v.mark === "—") notes.push(`${name}: no ${label} — ${v.note}`);
   });
 
@@ -225,7 +312,9 @@ for (const [name, spec] of Object.entries(ENTITIES)) {
     const bare = col.replace(/_id$/, "");
     return !new RegExp(`\\b(${col}|${camel}|${bare})\\b`).test(client);
   });
-  if (missing.length) { gaps++; notes.push(`${name}: fields never surfaced — ${missing.join(", ")}`); }
+  /* One gap per column, so a listed gap can never cover a column added
+     after it was listed. */
+  for (const col of missing) found.push({ key: `${name}.${col}`, text: `${name}.${col}: field never surfaced` });
 
   console.log(
     name.padEnd(22) + `${c.mark}  ${u.mark}  ${d.mark}   ` +
@@ -233,11 +322,69 @@ for (const [name, spec] of Object.entries(ENTITIES)) {
   );
 }
 
-console.log("\n── NOTES ──");
-notes.forEach((n) => console.log("  " + (n.includes(" — ") ? "· " : "✖ ") + n));
+/* ── REQ-52 — the map is held against the schema ─────────────────────
+   A table this map does not name used to be invisible: not a gap, not a
+   pass, nothing. Now it fails the build by name, and so does a name that
+   no migration creates any more (a reason that has quietly stopped
+   applying). */
+const listing = [];
+const named = new Set([...Object.keys(ENTITIES), ...Object.keys(NOT_ENTITIES)]);
+for (const t of schema.unreadable) {
+  listing.push(`${t}: a CREATE TABLE this audit could not read — its columns are unseen (fix lib/schema.mjs)`);
+}
+for (const t of schema.names) {
+  if (!named.has(t)) {
+    listing.push(`${t}: a migration creates this table and F2 does not name it — declare it in ENTITIES ` +
+      `(its routes, or the reason a verb is absent) or in NOT_ENTITIES with its reason`);
+  }
+}
+for (const t of named) {
+  if (!schema.names.includes(t)) listing.push(`${t}: named here and created by no migration — remove it`);
+}
+for (const t of Object.keys(NOT_ENTITIES)) {
+  if (t in ENTITIES) listing.push(`${t}: both an entity and not one — choose`);
+}
 
-console.log(`\n${gaps} unexplained gap(s).`);
-if (gaps) {
+/* Shrink-only (see KNOWN_GAPS). */
+const foundKeys = new Set(found.map((g) => g.key));
+const unexplained = found.filter((g) => !KNOWN_GAPS.has(g.key));
+const known = found.filter((g) => KNOWN_GAPS.has(g.key));
+const healed = [...KNOWN_GAPS.keys()].filter((k) => !foundKeys.has(k));
+/* The tables whose VERBS are listed as missing: a write path appearing
+   for one of them is a route arriving, whatever path it was given. */
+const gapTables = new Set([...KNOWN_GAPS.keys()].filter((k) => k.includes(": no ")).map((k) => k.split(":")[0]));
+const writers = [];
+for (const p of walkJs("server/src")) {
+  if (IMPORT_WRITERS.has(p.split("/").pop())) continue;
+  const src = fs.readFileSync(p, "utf8");
+  for (const t of gapTables) {
+    if (new RegExp(`\\b(INSERT\\s+INTO|UPDATE|DELETE\\s+FROM)\\s+${t}\\b`).test(src)) {
+      writers.push(`${t}: ${p} now writes this table, which KNOWN_GAPS says has no route — ` +
+        `declare its real verbs in ENTITIES and strike its lines off KNOWN_GAPS`);
+    }
+  }
+}
+
+console.log("\n── NOTES ──");
+notes.forEach((n) => console.log("  · " + n));
+if (known.length) {
+  console.log("\n── KNOWN GAPS (shrink-only, reported on every run) ──");
+  known.forEach((g) => console.log(`  ◦ ${g.text}   [${KNOWN_GAPS.get(g.key)}]`));
+}
+const failures = [
+  ...unexplained.map((g) => g.text),
+  ...healed.map((k) => `${k}: listed in KNOWN_GAPS and no longer a gap — strike it off`),
+  ...writers,
+  ...listing,
+];
+if (failures.length) {
+  console.log("\n── FAILURES ──");
+  failures.forEach((f) => console.log("  ✖ " + f));
+}
+
+console.log(`\n${Object.keys(ENTITIES).length} entities + ${Object.keys(NOT_ENTITIES).length} not-entity of ` +
+  `${schema.names.length} tables · ${known.length} known gap(s) · ${failures.length} unexplained.`);
+if (failures.length) {
   console.log("Each must be closed, or given a reason in ENTITIES above.");
   console.log("See .claude/commands/goal.md §F2 for the four legitimate reasons.");
   process.exitCode = 1;

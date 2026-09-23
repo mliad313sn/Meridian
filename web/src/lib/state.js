@@ -360,11 +360,63 @@ export function reportError(e, context) {
 
 /* ── routing ──────────────────────────────────────────────────────── */
 
-export const ROUTES = [
-  "my", "inbox", "portfolio", "roadmap", "pipeline", "programmes", "mysite", "project",
-  "schedule", "board", "risk", "budget", "change", "resources", "meetings",
-  "documents", "reports", "lessons", "locations", "adoption", "admin",
+/* Which roles see which entry lives in ROUTE_ROLES beside the routes, so
+   that hiding an entry and refusing the route it points at cannot drift
+   apart (R7.3 — an entry an account cannot use is not there). "My site"
+   is the site lead's governance surface; "Programmes" the group PMO's;
+   "My week" is everyone's landing (2026-08-28 governance + UX
+   committees). */
+export const NAV = [
+  { label: "Deliver", items: [
+    ["my", "My week"],
+    ["inbox", "Notifications"],
+    ["portfolio", "Portfolio"],
+    ["roadmap", "Roadmap"],
+    ["pipeline", "Pipeline"],
+    ["programmes", "Programmes"],
+    ["mysite", "My site"],
+    ["project", "Project overview"],
+    ["schedule", "Schedule"], ["board", "Board"]] },
+  { label: "Control", items: [
+    ["risk", "Risks & issues"], ["budget", "Budget & cost"],
+    ["change", "Change requests"], ["resources", "Resources"]] },
+  { label: "Govern", items: [["meetings", "Meetings"]] },
+  { label: "Record", items: [
+    ["documents", "Documents"], ["reports", "Reports"], ["lessons", "Lessons"],
+    ["locations", "Locations"], ["adoption", "Adoption"]] },
+  { label: "System", items: [["admin", "Administration"]] },
 ];
+
+export const TITLES = {
+  my: ["Deliver", "My week"],
+  inbox: ["Deliver", "Notification centre"],
+  portfolio: ["Portfolio", "Executive portfolio view"],
+  roadmap: ["Deliver", "Portfolio roadmap"],
+  pipeline: ["Deliver", "Demand & prioritisation"],
+  programmes: ["Deliver", "Programme governance"],
+  mysite: ["Deliver", "My site"],
+  project: ["Project", null],
+  schedule: ["Schedule", "Integrated master schedule"],
+  board: ["Delivery", "Work board"],
+  risk: ["Control", "Risks & issues"],
+  budget: ["Control", "Budget & earned value"],
+  change: ["Control", "Change requests"],
+  resources: ["Control", "Resource capacity"],
+  meetings: ["Govern", "Meetings & decisions"],
+  documents: ["Record", "Document library"],
+  reports: ["Record", "Status reporting"],
+  locations: ["Record", "Delivery locations"],
+  lessons: ["Record", "Lessons learned"],
+  adoption: ["Record", "How the tool is used"],
+  admin: ["System", "Governance & administration"],
+};
+
+/* REQ-52 — the routes a hash may open are the screens the navigation
+   offers. This was a third hand-typed list of the same twenty-one names
+   (with NAV and TITLES); a screen added to one and not the others opened
+   on the portfolio instead, and nothing said so. F8 (view-render) now
+   holds VIEWS, NAV, TITLES and ROUTE_ROLES against each other. */
+export const ROUTES = NAV.flatMap((g) => g.items.map(([key]) => key));
 
 /* Views an account has no use for are absent from the navigation (R7.3),
    which is a matter of what is drawn — a typed hash, or one left in the

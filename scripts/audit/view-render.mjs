@@ -70,12 +70,49 @@ const base = `http://127.0.0.1:${server.address().port}`;
 
 /* Importés après le DOM : ces modules touchent `localStorage` et
    `document` dès leur évaluation. */
-const { App } = await import("../../web/src/lib/state.js");
+const { App, NAV, TITLES, ROUTES, ROUTE_ROLES } = await import("../../web/src/lib/state.js");
 const { VIEWS } = await import("../../web/src/views/index.js");
+
+const { ROLES: RBAC_ROLES } = await import("../../shared/rbac.js");
+const { MANUAL, firstStepsFor } = await import("../../web/src/ui/guide.js");
 
 const names = Object.keys(VIEWS).sort();
 const failures = [];
 let drawn = 0;
+
+/* ── REQ-52 — the lists that name screens and roles, held together ────
+   This gate draws every view VIEWS names, for every role it names. A
+   role it did not name was never drawn for; a screen VIEWS holds and the
+   navigation does not offer (or that has no title, or that a hash cannot
+   open) was a screen nobody could reach, and each list only saw itself.
+   Every one of them is now held against the product's own: VIEWS for
+   the screens, shared/rbac.js for the roles. */
+const same = (label, list, truth) => {
+  for (const x of truth) if (!list.includes(x)) failures.push({ role: "(lists)", view: x, message: `absent from ${label}` });
+  for (const x of list) if (!truth.includes(x)) failures.push({ role: "(lists)", view: x, message: `in ${label} and not a screen VIEWS draws` });
+};
+const navKeys = NAV.flatMap((g) => g.items.map(([k]) => k));
+same("NAV (web/src/lib/state.js)", navKeys, names);
+same("TITLES (web/src/lib/state.js)", Object.keys(TITLES), names);
+same("ROUTES (web/src/lib/state.js)", ROUTES, names);
+for (const [view, roles] of Object.entries(ROUTE_ROLES)) {
+  if (!names.includes(view)) failures.push({ role: "(lists)", view, message: "in ROUTE_ROLES and not a screen VIEWS draws" });
+  for (const r of roles) if (!RBAC_ROLES.includes(r)) failures.push({ role: r, view, message: "ROUTE_ROLES names a role shared/rbac.js does not" });
+}
+const drawnRoles = ROLES.map(([r]) => r);
+for (const r of RBAC_ROLES) if (!drawnRoles.includes(r)) failures.push({ role: r, view: "(every screen)", message: "a role shared/rbac.js defines and this gate never draws for — add an account to ROLES" });
+for (const r of drawnRoles) if (!RBAC_ROLES.includes(r)) failures.push({ role: r, view: "(every screen)", message: "drawn for, and not a role shared/rbac.js defines" });
+/* The guide's links: a first step or a manual entry pointing at a screen
+   that no longer exists sends someone to the portfolio instead. */
+const links = [
+  ...MANUAL.flatMap((s) => s.items.map((i) => ["manual", i.where])),
+  ...RBAC_ROLES.flatMap((r) => firstStepsFor(r).map((i) => [`first steps · ${r}`, i.go])),
+];
+for (const [where, href] of links) {
+  if (!href) continue;
+  const view = /^#\/([^/]+)/.exec(href)?.[1];
+  if (!view || !names.includes(view)) failures.push({ role: "(guide)", view: String(href), message: `${where} links to a screen VIEWS does not draw` });
+}
 
 for (const [role, email, password] of ROLES) {
   const login = await fetch(`${base}/api/auth/login`, {
@@ -125,6 +162,7 @@ await close();
 console.log("\n═══ F8 · chaque écran se dessine, pour chaque rôle ═══\n");
 if (!failures.length) {
   console.log(`  · ${names.length} écrans × ${ROLES.length} rôles`);
+  console.log(`  · NAV, TITLES, ROUTES, ROUTE_ROLES, les rôles et ${links.length} liens du guide tenus contre VIEWS et rbac.js`);
   console.log(`  · ${drawn} rendus, aucune exception\n`);
 } else {
   for (const f of failures) {
