@@ -91,7 +91,8 @@ const closeDialog = () => { const b = $(".backdrop"); if (b) b.remove(); };
 
 /** The project row shape the shared permission module expects. */
 const asRow = (p) => p && {
-  programme_id: p.programme, site_id: p.site, governance_level: p.governanceLevel,
+  /* D-36.12 — the id, because a review grant may name one project. */
+  id: p.id, programme_id: p.programme, site_id: p.site, governance_level: p.governanceLevel,
 };
 /** May the signed-in account write to this project? */
 export const mayWrite = (p) => App.canWrite(asRow(p));
@@ -1253,6 +1254,7 @@ Views.project = (db) => {
         h("div", { class: "xs muted" }, Engine.personName(db, ms.owner) + " · " + fmtDate(ms.date) +
           (ms.dateBasis === "placeholder" ? " · " + t("placeholder") + (ms.condition ? " — " + t("after: ") + ms.condition : "") : "") +
           (g ? " · evidence " + g.approved + "/" + g.total : "") +
+          (g && waitingOnSeats(db, g.outstanding || []) ? " · " + waitingOnSeats(db, g.outstanding || []) : "") +
           (g && g.criteria.length ? " · " + t("criteria") + " " + g.criteriaMet + "/" + g.criteria.length : "") +
           (g && g.risks.length ? " · " + g.risks.length + " " + t("open register item(s) against it") : "") +
           /* Et QUI l'a accepté, et quand : le nom n'apparaissait sur
@@ -5321,6 +5323,12 @@ Views.documents = (db) => {
   const mayEditDoc = (d) => d.project
     ? may("document.write", Engine.project(db, d.project))
     : ["admin", "group"].includes(App.me.role);
+  /* D-36.12 — approving is its own question, asked with the document's
+     owner and gate: a reviewer who may not edit is still offered Approve,
+     and nobody is offered it on their own document. */
+  const mayApproveDoc = (d) => d.project
+    ? App.can("document.approve", { project: asRow(Engine.project(db, d.project)), owner_id: d.owner, gate: d.gate })
+    : mayEditDoc(d);
 
   const cols = [
     { key: "name", label: "Document", sort: d => d.name, get: d => h("div", null,
@@ -5358,13 +5366,22 @@ Views.documents = (db) => {
           : h("span", { class: "xs", style: "color:var(--sig-amber)", title: d.uri }, t("unsafe link")))
         : h("span", { class: "xs", style: "color:var(--sig-amber)", title: t("No artefact — an approval will be refused") }, "—") },
     { key: "updated", label: "Updated", align: "r", sort: d => d.updated, get: d => h("span", { class: "mono small" }, fmtDate(d.updated)) },
-    { key: "status", label: "Status", align: "c", sort: d => d.status, width: "96px", get: d => statusTag(d.status) },
-    { key: "act", label: "", align: "r", width: "160px", get: d => !mayEditDoc(d) ? null
-      : h("div", { class: "btn-row", style: "justify-content:flex-end" },
-        d.status !== "Approved" ? h("button", { class: "btn btn-xs btn-primary", onClick: () => setDocStatus(db, d, "Approved") }, t("Approve")) : null,
-        d.status === "Draft" ? h("button", { class: "btn btn-xs", onClick: () => setDocStatus(db, d, "In review") }, t("Submit")) : null,
-        d.status === "Approved" ? h("button", { class: "btn btn-xs", onClick: () => reviseDoc(db, d) }, t("New revision")) : null,
-        h("button", { class: "btn btn-xs btn-ghost", onClick: () => editDoc(db, d) }, icon("pencil", 11))) },
+    { key: "status", label: "Status", align: "c", sort: d => d.status, width: "96px", get: d => h("div", null,
+        statusTag(d.status),
+        /* D-36.12 — who the evidence is waiting on, by seat. */
+        d.expectedSeat && d.status !== "Approved"
+          ? h("div", { class: "xs muted", style: "margin-top:3px" }, t("waiting on seat") + " " + seatName(db, d.expectedSeat))
+          : null) },
+    { key: "act", label: "", align: "r", width: "160px", get: d => {
+      const edit = mayEditDoc(d);
+      const approve = d.status !== "Approved" && mayApproveDoc(d);
+      if (!edit && !approve) return null;
+      return h("div", { class: "btn-row", style: "justify-content:flex-end" },
+        approve ? h("button", { class: "btn btn-xs btn-primary", onClick: () => setDocStatus(db, d, "Approved") }, t("Approve")) : null,
+        edit && d.status === "Draft" ? h("button", { class: "btn btn-xs", onClick: () => setDocStatus(db, d, "In review") }, t("Submit")) : null,
+        edit && d.status === "Approved" ? h("button", { class: "btn btn-xs", onClick: () => reviseDoc(db, d) }, t("New revision")) : null,
+        mayEditDoc(d) ? h("button", { class: "btn btn-xs btn-ghost", onClick: () => editDoc(db, d) }, icon("pencil", 11)) : null);
+    } },
   ];
 
   const gateBoard = App.scopedProjects().map(p => {
@@ -5381,7 +5398,10 @@ Views.documents = (db) => {
               : g.state === "At risk" || g.state === "Overdue" ? "var(--sig-red)"
               : g.ready ? "var(--sig-green-line)" : "var(--color-surface-2)" } }))),
       h("div", { class: "xs muted", style: "margin-top:4px" },
-        tData(sum(gs, g => g.approved) + " of " + sum(gs, g => g.total) + " evidence items approved")));
+        tData(sum(gs, g => g.approved) + " of " + sum(gs, g => g.total) + " evidence items approved")),
+      waitingOnSeats(db, gs.flatMap(g => g.outstanding || []))
+        ? h("div", { class: "xs muted", style: "margin-top:2px" }, waitingOnSeats(db, gs.flatMap(g => g.outstanding || [])))
+        : null);
   });
 
   return h("div", { class: "split" },
@@ -5426,6 +5446,16 @@ Views.documents = (db) => {
         h("button", { class: "btn btn-xs", style: "margin-top:9px", onClick: () => go("#/admin") }, "Change in administration"))));
 };
 
+/* D-36.12 — the seat a document names as the one expected to approve it. */
+function seatName(db, id) {
+  return ((db.seats ?? []).find(s => s.id === id) || {}).name || id;
+}
+/** "waiting on seat A1, C2" for the outstanding evidence that names a seat, or "". */
+function waitingOnSeats(db, outstanding) {
+  const seats = [...new Set(outstanding.map(d => d.expectedSeat).filter(Boolean))];
+  return seats.length ? t("waiting on seat") + " " + seats.map(id => seatName(db, id)).join(", ") : "";
+}
+
 function setDocStatus(db, d, status) {
   App.write("Document " + status.toLowerCase(),
     (a) => a.patch("/documents/" + d.id, { status, version: d.version }),
@@ -5450,6 +5480,12 @@ function docFields(db, d) {
     { key: "owner", label: "Owner", type: "select", value: d ? d.owner : db.currentUser, options: db.people.map(p => ({ value: p.id, label: p.name })) },
     { key: "rev", label: "Revision", value: d ? d.rev : "0.1" },
     { key: "status", label: "Status", type: "select", value: d ? d.status : "Draft", options: ["Draft", "In review", "Approved"] },
+    /* D-36.12 — the seat expected to approve it; the gate then says who
+       it is waiting on. Naming a seat grants nothing. */
+    { key: "expectedSeat", label: t("Expected approver (seat)"), type: "select", value: d ? (d.expectedSeat ?? "") : "",
+      options: [{ value: "", label: "—" }].concat((db.seats ?? []).filter(s => s.active !== false || s.id === d?.expectedSeat)
+        .map(s => ({ value: s.id, label: s.name }))),
+      hint: t("The seat expected to approve this document. The gate then reads “waiting on seat …”; naming a seat grants no authority.") },
     /* R-01 — the artefact itself. Free while drafting; required and
        host-checked by the server the moment anybody approves. */
     { key: "uri", label: t("Evidence link"), span: 2, value: d ? (d.uri ?? "") : "",
@@ -5462,6 +5498,7 @@ function newDoc(db) {
     onSave: (v) => App.write("Document added", (a) => a.post("/documents", {
       name: v.name, project: v.project || null, type: v.type, gate: +v.gate,
       owner: v.owner, rev: v.rev || "0.1", status: v.status, uri: v.uri,
+      expectedSeat: v.expectedSeat || null,
     }), { detail: v.name }) });
 }
 function editDoc(db, d) {
@@ -5473,6 +5510,7 @@ function editDoc(db, d) {
     onSave: (v) => App.write("Document updated", (a) => a.patch("/documents/" + d.id, {
       name: v.name, project: v.project || null, type: v.type, gate: +v.gate,
       owner: v.owner, rev: v.rev, status: v.status, uri: v.uri, version: d.version,
+      expectedSeat: v.expectedSeat || null,
     }), { detail: v.name }) });
 }
 

@@ -22,6 +22,53 @@ Nothing yet.
 
 ---
 
+## [5.26.0] — 2026-09-23
+
+**An evidence-review grant, not a role** (D-36.12; FitAdapt #16 · DF-10,
+KODO MER-06; docs/36 wave 2).
+
+### Added
+
+- **An access grant carries a power: `write` (as before) or `review`.**
+  FitAdapt observed that "`document.approve` requires write authority on
+  the project, so an independent council member can't sign evidence
+  without edit rights", and its product owner approved on the member's
+  behalf, so the audit row named the wrong person. A review grant on a
+  programme or a single project carries the approval of evidence and the
+  reads over that scope, and nothing else: no plan, RAID, change,
+  baseline, benefit or objection. It works for a viewer, so a council
+  member approves in their own name. Authority stays in `shared/rbac.js`,
+  where review grants are kept apart from the write grants every write
+  rule reads.
+- **The rules for approving evidence are unchanged**: never one's own
+  document, and site-governed gate evidence still needs group level.
+  Approving under a review grant is a pure act: a call that also edits
+  the link, gate, name or revision is refused.
+- **A document may name the seat expected to approve it** (052's seats),
+  and the library, the gate board and the gate line read "waiting on seat
+  A1".
+- Administration: a Power column and "Add a review grant" in the grants
+  dialog; the accounts list tags "review · …". FR and ES.
+- Migration 058: `access_grant.power`, a `project` scope for review
+  grants only, `document.expected_seat_id`. The database refuses a review
+  grant on a site and a write grant on a single project.
+
+### Changed
+
+- Nobody sees *Approve* on their own document any more (the route
+  already refused it).
+
+### Measure
+
+`review-grant.test.js`, 23 tests, including an exhaustive check that for
+viewer, site and group accounts every action except `document.approve`
+and `project.read` answers the same with and without the grant. Browser:
+an administrator grants review on Data & AI to viewer N. Rahimi from the
+screen; she sees "waiting on seat A1" and only *Approve*; the audit row
+names her; a forced project write gets 403.
+
+---
+
 ## [5.25.0] — 2026-09-23
 
 **Where the work is: one typed external reference** (D-36.14; FitAdapt

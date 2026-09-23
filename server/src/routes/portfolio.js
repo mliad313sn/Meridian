@@ -14,7 +14,7 @@ import { many, one, tx, updateVersioned, allocateId, insertMany, requiredVersion
 import { reprojectNextReview } from "../raidreview.js";
 import { can, canSeeProject, canRatifyDecision } from "../../../shared/rbac.js";
 import { audited, readAudit, record } from "../audit.js";
-import { HttpError } from "../auth.js";
+import { HttpError, grantsOut } from "../auth.js";
 import { loadPortfolio, projectFor, fromM, toM, loadSettings, loadWeighting } from "../portfolio.js";
 import { adoptionBySite } from "../adoption.js";
 import { Engine, GATES, PHASES, LESSON_CATEGORIES, iso, addDays, days, D } from "../../../shared/engine.js";
@@ -179,10 +179,7 @@ r.get("/bootstrap", async (req, res, next) => {
         /* A-11 — le client dessine un bandeau permanent quand ceci est
            vrai : personne ne doit confondre un exercice avec le livre. */
         training: process.env.MERIDIAN_TRAINING === "1" || undefined,
-        grants: {
-          programmes: [...req.user.grants.programmes],
-          sites: [...req.user.grants.sites],
-        },
+        grants: grantsOut(req.user.grants),
       },
     });
   } catch (e) { next(e); }
@@ -2986,6 +2983,21 @@ const uriHash = (uri) => crypto.createHash("sha256").update(String(uri)).digest(
  * still gates approval. An empty link stays legal — a document may be
  * filed before its artefact exists.
  */
+/**
+ * D-36.12 — the seat a document names as the one expected to approve it,
+ * so the gate reads "waiting on seat A1". Empty clears it. A seat that
+ * does not exist, or no longer sits, is refused rather than stored: the
+ * gate would otherwise wait on nobody. Naming a seat grants nothing.
+ */
+async function expectedSeat(v) {
+  if (v === undefined) return undefined;
+  if (v === null || v === "") return null;
+  const s = await one(`SELECT id, active FROM seat WHERE id = $1`, [String(v)]);
+  if (!s) bad("That seat does not exist — declare it under Seats first");
+  if (!s.active) bad("That seat no longer sits — name a seat that does");
+  return s.id;
+}
+
 function assertStorableUri(uri) {
   const raw = String(uri ?? "").trim();
   if (!raw) return "";
@@ -3018,14 +3030,16 @@ r.post("/documents", async (req, res, next) => {
       throw new HttpError(403, "Portfolio documents are managed at group level");
     }
     if (!b.name) bad("A document needs a name");
+    const seat = (await expectedSeat(b.expectedSeat)) ?? null;
     let id = null;
     await audited(req.user,
       () => ({ action: "Document added", entity: "document", entityId: id, detail: b.name }),
       async (t) => {
         id = await allocateId(t, "DOC");
         return t.query(
-          `INSERT INTO document (id, project_id, name, doc_type, gate, owner_id, revision, status, updated_on, uri)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,CURRENT_DATE,$9)`,
+          `INSERT INTO document (id, project_id, name, doc_type, gate, owner_id, revision, status, updated_on, uri,
+                                 expected_seat_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,CURRENT_DATE,$9,$10)`,
           [id, b.project || null, b.name, b.type ?? "Assurance", num(b.gate, 0),
            /* S-06 — the author is recorded, not requested. An evidence
               document filed with no owner used to approve itself: the
@@ -3035,7 +3049,7 @@ r.post("/documents", async (req, res, next) => {
               name somebody else. */
            b.owner || req.user.personId || null,
            b.rev ?? "0.1", b.status ?? "Draft",
-           assertStorableUri(b.uri)]);
+           assertStorableUri(b.uri), seat]);
       });
     res.status(201).json({ id });
   } catch (e) { next(e); }
@@ -3069,6 +3083,19 @@ r.patch("/documents/:id", async (req, res, next) => {
               "name the person accountable for it, then approve");
         }
         gate(req.user, "document.approve", { project: p, owner_id: d.owner_id, gate: d.gate });
+        /* D-36.12 — whoever approves WITHOUT the authority to write the
+           document (a review grant) approves it as it stands: the status
+           and the version they read, nothing else. Otherwise the review
+           grant would edit the evidence in the same breath — its link,
+           its gate, its revision — which is document.write by another
+           door. */
+        if (!can(req.user, "document.write", { project: p }).ok) {
+          const extra = Object.keys(b0).filter((k) => !["status", "version"].includes(k) && b0[k] !== undefined);
+          if (extra.length) {
+            throw new HttpError(403, "A review grant approves the document as it stands — it does not edit it " +
+              `(${extra.join(", ")}); ask the project to change it, then approve`);
+          }
+        }
         /* Approval is a pure act. Handing the document to someone else in
            the same breath is how an owner signs their own work in two
            moves, and it leaves the trail reading as if a colleague did. */
@@ -3098,6 +3125,7 @@ r.patch("/documents/:id", async (req, res, next) => {
     if (b.rev !== undefined) patch.revision = b.rev;
     if (b.status !== undefined) patch.status = b.status;
     if (b.uri !== undefined) patch.uri = assertStorableUri(b.uri);
+    if (b.expectedSeat !== undefined) patch.expected_seat_id = await expectedSeat(b.expectedSeat);
 
     /* R-01 — approving names the artefact and freezes its address. */
     let uriChangedOnApproved = false;
@@ -3158,9 +3186,12 @@ r.post("/documents/:id/revise", async (req, res, next) => {
            expected to live at and NAMES the row it replaces. The lock is
            not carried — a new revision is unapproved by definition. */
         await t.query(
-          `INSERT INTO document (id, project_id, name, doc_type, gate, owner_id, revision, status, updated_on, uri, supersedes)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,'Draft',CURRENT_DATE,$8,$9)`,
-          [id, d.project_id, d.name, d.doc_type, d.gate, d.owner_id, next, d.uri ?? "", d.id]);
+          `INSERT INTO document (id, project_id, name, doc_type, gate, owner_id, revision, status, updated_on, uri, supersedes,
+                                 expected_seat_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,'Draft',CURRENT_DATE,$8,$9,$10)`,
+          [id, d.project_id, d.name, d.doc_type, d.gate, d.owner_id, next, d.uri ?? "", d.id,
+           /* D-36.12 — the new revision waits on the same seat. */
+           d.expected_seat_id ?? null]);
       });
     res.status(201).json({ id, revision: next });
   } catch (e) { next(e); }

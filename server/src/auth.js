@@ -44,6 +44,19 @@ export async function verifyPassword(plain, hash, salt) {
 
 /* ── users ────────────────────────────────────────────────────────── */
 
+/**
+ * The grants as the browser receives them: arrays, not Sets. D-36.12 —
+ * the review grants travel beside the write grants, never inside them,
+ * so no screen that counts `programmes` or `sites` mistakes a review for
+ * authority to write.
+ */
+export function grantsOut(g) {
+  return {
+    programmes: [...g.programmes], sites: [...g.sites],
+    reviews: { programmes: [...(g.reviews?.programmes ?? [])], projects: [...(g.reviews?.projects ?? [])] },
+  };
+}
+
 /** The only shape a user is ever allowed to leave the server in. */
 export function publicUser(row, grants = []) {
   if (!row) return null;
@@ -55,7 +68,7 @@ export function publicUser(row, grants = []) {
     personId: row.person_id ?? null,
     role: row.role,
     active: row.active,
-    grants: { programmes: [...g.programmes], sites: [...g.sites] },
+    grants: grantsOut(g),
     lastLoginAt: row.last_login_at ?? null,
     mustChangePassword: row.must_change_password === true,
     locale: row.locale ?? "",
@@ -100,7 +113,7 @@ async function loadUser(userId, actingForId = null) {
      what every audit row will carry. */
   const authorityUserId = acting ? acting.id : userId;
   const grants = await many(
-    `SELECT scope_kind, programme_id, site_id FROM access_grant WHERE user_id = $1`,
+    `SELECT scope_kind, programme_id, site_id, project_id, power FROM access_grant WHERE user_id = $1`,
     [authorityUserId]
   );
   return {
@@ -188,7 +201,7 @@ export async function login(email, password, userAgent = "") {
   await query(`UPDATE app_user SET last_login_at = now() WHERE id = $1`, [row.id]);
 
   const grants = await many(
-    `SELECT scope_kind, programme_id, site_id FROM access_grant WHERE user_id = $1`,
+    `SELECT scope_kind, programme_id, site_id, project_id, power FROM access_grant WHERE user_id = $1`,
     [row.id]
   );
   return { token, expires, user: publicUser(row, grants) };

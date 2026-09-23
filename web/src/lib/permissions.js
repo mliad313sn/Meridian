@@ -32,6 +32,13 @@ function adapt(me) {
     grants: {
       programmes: new Set(me.grants?.programmes ?? []),
       sites: new Set(me.grants?.sites ?? []),
+      /* D-36.12 — the review grants, kept apart from the write grants
+         exactly as the server keeps them, so the screen draws Approve for
+         a reviewer and nothing else. */
+      reviews: {
+        programmes: new Set(me.grants?.reviews?.programmes ?? []),
+        projects: new Set(me.grants?.reviews?.projects ?? []),
+      },
     },
   };
 }

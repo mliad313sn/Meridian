@@ -668,6 +668,8 @@ export async function loadPortfolio(user, { inactive = false } = {}) {
            le lien répondait au dernier passage, et le statut reste celui
            que des humains ont posé. */
         probeState: d.probe_state ?? "never", probedAt: d.probed_at ?? null,
+        /* D-36.12 — the seat expected to approve it ("waiting on seat A1"). */
+        expectedSeat: d.expected_seat_id ?? null,
         version: d.row_version,
       })),
 

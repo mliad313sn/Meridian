@@ -333,11 +333,27 @@ function grantCell(db, u) {
     ...u.grants.sites.map((id) => (db.sites.find((s) => s.id === id) || {}).city || id),
   ];
   if (u.role === "admin") return h("span", { class: "xs muted" }, "unrestricted");
-  if (!names.length) {
+  /* D-36.12 — a review grant is shown as one, never as a scope the
+     account writes in: the chip says what it carries. */
+  const reviews = reviewsHeld(db, u).map((g) =>
+    h("span", { class: "tag tag-amber", title: t("Review grant: approves evidence here, and nothing else") },
+      t("review") + " · " + g.label));
+  if (!names.length && !reviews.length) {
     return h("span", { class: "xs warn strong", title: "This account can see and do nothing" },
       "no grants held");
   }
-  return h("div", { class: "chips" }, ...names.map((n) => h("span", { class: "tag tag-out" }, n)));
+  return h("div", { class: "chips" }, ...names.map((n) => h("span", { class: "tag tag-out" }, n)), ...reviews);
+}
+
+/* D-36.12 — the review grants an account holds, labelled for a person. */
+function reviewsHeld(db, u) {
+  const r = u.grants.reviews ?? { programmes: [], projects: [] };
+  return [
+    ...r.programmes.map((id) => ({ kind: "programme", target: id, power: "review",
+      label: (db.programmes.find((p) => p.id === id) || {}).name || id })),
+    ...r.projects.map((id) => ({ kind: "project", target: id, power: "review",
+      label: id + " · " + ((db.projects.find((p) => p.id === id) || {}).name || "") })),
+  ];
 }
 
 /* ── accounts ─────────────────────────────────────────────────────── */
@@ -435,6 +451,17 @@ function manageGrants(db, u) {
       label: (db.programmes.find((p) => p.id === id) || {}).name || id })),
     ...u.grants.sites.map((id) => ({ kind: "site", target: id,
       label: (db.sites.find((s) => s.id === id) || {}).city || id })),
+    ...reviewsHeld(db, u),
+  ];
+
+  /* D-36.12 — a review grant names a programme or one project that the
+     account holds no grant on yet: one grant per scope, whatever its
+     power. */
+  const reviewOptions = [
+    ...db.programmes.filter((p) => !held.some((g) => g.kind === "programme" && g.target === p.id))
+      .map((p) => ({ value: "programme:" + p.id, label: t("Programme") + " · " + p.name })),
+    ...db.projects.filter((p) => !held.some((g) => g.kind === "project" && g.target === p.id))
+      .map((p) => ({ value: "project:" + p.id, label: t("Project") + " · " + p.id + " · " + p.name })),
   ];
 
   const available = (k) => (k === "programme"
@@ -462,6 +489,9 @@ function manageGrants(db, u) {
             cols: [
               { key: "k", label: "Scope", get: (g) => tag(g.kind, "tag-out") },
               { key: "l", label: "Granted", get: (g) => h("span", { class: "small strong" }, g.label) },
+              { key: "p", label: t("Power"), get: (g) => g.power === "review"
+                  ? h("span", { class: "tag tag-amber", title: t("Review grant: approves evidence here, and nothing else") }, t("review"))
+                  : h("span", { class: "xs muted" }, t("write")) },
               /* Reachable only from an administrator's screen today — but
                  "you could only have got here as an admin" is the argument
                  that left the change-request row unguarded, so it asks. */
@@ -495,15 +525,40 @@ function manageGrants(db, u) {
                 },
               }, "Grant")))
         : h("p", { class: "xs muted" }, "Every available scope is already granted."),
+
+      /* D-36.12 — the evidence-review grant. Not a role: the level of
+         the account is untouched, and so is everything it may write. */
+      h("div", { style: "height:16px" }),
+      h("div", { class: "field" },
+        h("label", { for: "grant-review" }, t("Add a review grant")),
+        h("p", { class: "xs muted", style: "margin:0 0 6px;max-width:62ch" },
+          t("A review grant carries the approval of evidence and the reads over one programme or one project, and nothing else: no plan, no RAID, no change, no baseline. Its holder never approves their own document, and gate evidence on a site-governed project still needs group level.")),
+        reviewOptions.length
+          ? h("div", { style: "display:flex;gap:8px" },
+              h("select", { class: "input", id: "grant-review" },
+                ...reviewOptions.map((o) => h("option", { value: o.value }, o.label))),
+              h("button", {
+                class: "btn", style: "white-space:nowrap",
+                onClick: () => {
+                  const sel = document.getElementById("grant-review");
+                  const [k, target] = sel.value.split(":");
+                  close();
+                  write("Access granted", (a) => a.post("/admin/users/" + u.id + "/grants",
+                    { kind: k, target, power: "review" }), `${u.displayName}: ${t("review")} · ${k} ${target}`);
+                },
+              }, t("Grant review")))
+          : h("p", { class: "xs muted" }, t("Every programme and project is already granted to this account."))),
     ),
   });
 }
 
 function revokeGrant(u, g, close) {
-  const last = u.grants.programmes.length + u.grants.sites.length === 1;
+  const last = g.power !== "review" && u.grants.programmes.length + u.grants.sites.length === 1;
   confirmDialog({
     title: `Revoke ${g.kind} ${g.label}?`,
-    message: `${u.displayName} loses access to ${g.label}.`,
+    message: g.power === "review"
+      ? u.displayName + " " + t("can no longer approve evidence on") + " " + g.label + "."
+      : `${u.displayName} loses access to ${g.label}.`,
     detail: last && u.role !== "viewer"
       ? "This is their only grant — afterwards the account can see and do nothing."
       : "",

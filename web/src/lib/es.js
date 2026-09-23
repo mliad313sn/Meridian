@@ -2518,6 +2518,31 @@ export const ES = {
     "Alto — prácticamente sin vuelta atrás",
   "Weekly delivery":
     "Entrega semanal",
+  /* D-36.12 — the evidence-review grant and the seat a document waits on. */
+  "review":
+    "revisión",
+  "write":
+    "escritura",
+  "Power":
+    "Poder",
+  "Review grant: approves evidence here, and nothing else":
+    "Habilitación de revisión: aprueba evidencias aquí, y nada más",
+  "Add a review grant":
+    "Añadir una habilitación de revisión",
+  "A review grant carries the approval of evidence and the reads over one programme or one project, and nothing else: no plan, no RAID, no change, no baseline. Its holder never approves their own document, and gate evidence on a site-governed project still needs group level.":
+    "Una habilitación de revisión lleva la aprobación de evidencias y la lectura sobre un programa o un proyecto, y nada más: ni plan, ni RAID, ni cambio, ni línea base. Su titular nunca aprueba su propio documento, y la evidencia de hito de un proyecto gobernado por un sitio sigue exigiendo el nivel de grupo.",
+  "Grant review":
+    "Habilitar para revisión",
+  "Every programme and project is already granted to this account.":
+    "Cada programa y cada proyecto ya están concedidos a esta cuenta.",
+  "can no longer approve evidence on":
+    "ya no puede aprobar evidencias en",
+  "waiting on seat":
+    "a la espera del puesto",
+  "Expected approver (seat)":
+    "Aprobador esperado (puesto)",
+  "The seat expected to approve this document. The gate then reads “waiting on seat …”; naming a seat grants no authority.":
+    "El puesto que debe aprobar este documento. El hito muestra entonces «a la espera del puesto …»; nombrar un puesto no otorga ninguna autoridad.",
   "Monthly steering":
     "Dirección mensual",
   /* ── NEW-20 · la importación dice lo que un reemplazo borraría ── */

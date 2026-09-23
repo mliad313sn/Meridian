@@ -17,7 +17,7 @@ import { Engine, D, fmtDate } from "../../../shared/engine.js";
 
 /* ── shared ───────────────────────────────────────────────────────── */
 
-const asRow = (p) => p && { programme_id: p.programme, site_id: p.site, governance_level: p.governanceLevel };
+const asRow = (p) => p && { id: p.id, programme_id: p.programme, site_id: p.site, governance_level: p.governanceLevel };
 const mayAssure = (p) => !!p && p.origin !== "sdp" && App.can("assurance.write", { project: asRow(p) });
 const mayWaive = (p) => !!p && App.can("waiver.grant", { project: asRow(p) });
 const people = (db) => [{ value: "", label: "—" }].concat(db.people.map((q) => ({ value: q.id, label: q.name })));

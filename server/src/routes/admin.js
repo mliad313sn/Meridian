@@ -372,31 +372,64 @@ r.post("/users/:id/grants", async (req, res, next) => {
   try {
     const u = await one(`SELECT id, role, display_name FROM app_user WHERE id = $1`, [req.params.id]);
     if (!u) throw new HttpError(404, "No such user");
-    const kind = req.body?.kind === "programme" ? "programme" : "site";
+    /* D-36.12 — a grant carries a power: `write` (what every grant meant
+       before 058) or `review` — document.approve and the reads over a
+       programme or one project, nothing else. What the power ALLOWS is
+       decided in shared/rbac.js; this route only checks the grant is one
+       the model knows. */
+    const power = req.body?.power === "review" ? "review" : "write";
+    const kind = req.body?.kind === "programme" ? "programme"
+      : req.body?.kind === "project" ? "project" : "site";
     const target = req.body?.target;
-    if (!target) throw new HttpError(400, "Name the programme or site to grant");
+    if (!target) throw new HttpError(400, "Name the programme, site or project to grant");
+
+    if (power === "review") {
+      if (kind === "site") {
+        throw new HttpError(400, "A review grant names a programme or a project — a site is where work is delivered, not what a reviewer is asked to look at");
+      }
+      if (u.role === "admin") {
+        throw new HttpError(400, "An administrator already approves everywhere — a review grant would add nothing");
+      }
+    } else if (kind === "project") {
+      throw new HttpError(400, "Only a review grant names a single project — a write grant names a programme or a site");
+    }
 
     const exists = kind === "programme"
       ? await one(`SELECT id FROM programme WHERE id = $1`, [target])
+      : kind === "project"
+      ? await one(`SELECT id FROM project WHERE id = $1`, [target])
       : await one(`SELECT id FROM site WHERE id = $1`, [target]);
     if (!exists) throw new HttpError(404, `No such ${kind}`);
 
-    if (u.role === "group" && kind !== "programme") {
+    if (power === "write" && u.role === "group" && kind !== "programme") {
       throw new HttpError(400, "A group-level account is scoped by programme, not by site");
     }
-    if (u.role === "site" && kind !== "site") {
+    if (power === "write" && u.role === "site" && kind !== "site") {
       throw new HttpError(400, "A site-level account is scoped by site, not by programme");
+    }
+
+    /* One grant per scope: the power is what it carries, not a second
+       row beside it. Asking for the other power on a scope already held
+       is refused by name rather than silently ignored — the administrator
+       would otherwise believe the account now reviews, or now writes. */
+    const held = await one(
+      `SELECT power FROM access_grant
+        WHERE user_id = $1 AND scope_kind = $2 AND COALESCE(programme_id, site_id, project_id) = $3`,
+      [u.id, kind, target]);
+    if (held && held.power !== power) {
+      throw new HttpError(409, `That ${kind} is already granted with the ${held.power} power — revoke it first to change what the grant carries`);
     }
 
     await audited(req.user,
       { action: "Access granted", entity: "app_user", entityId: u.id,
-        detail: `${u.display_name}: ${kind} ${target}` },
+        detail: `${u.display_name}: ${power === "review" ? "review · " : ""}${kind} ${target}` },
       async (t) => t.query(
-        `INSERT INTO access_grant (user_id, scope_kind, programme_id, site_id, granted_by)
-         VALUES ($1,$2,$3,$4,$5)
+        `INSERT INTO access_grant (user_id, scope_kind, programme_id, site_id, project_id, power, granted_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)
          ON CONFLICT DO NOTHING`,
         [u.id, kind, kind === "programme" ? target : null,
-         kind === "site" ? target : null, req.user.id]));
+         kind === "site" ? target : null, kind === "project" ? target : null,
+         power, req.user.id]));
     res.status(201).json({ ok: true });
   } catch (e) { next(e); }
 });
@@ -414,20 +447,21 @@ r.post("/users/:id/grants/revoke", async (req, res, next) => {
   try {
     const u = await one(`SELECT id, display_name FROM app_user WHERE id = $1`, [req.params.id]);
     if (!u) throw new HttpError(404, "No such user");
-    const kind = req.body?.kind === "programme" ? "programme" : "site";
+    const kind = req.body?.kind === "programme" ? "programme"
+      : req.body?.kind === "project" ? "project" : "site";
     const target = req.body?.target;
     if (!target) throw new HttpError(400, "Name the grant to revoke");
 
     const g = await one(
-      `SELECT id FROM access_grant
+      `SELECT id, power FROM access_grant
         WHERE user_id = $1 AND scope_kind = $2
-          AND COALESCE(programme_id, site_id) = $3`,
+          AND COALESCE(programme_id, site_id, project_id) = $3`,
       [u.id, kind, target]);
     if (!g) return res.json({ ok: true, alreadyRevoked: true });
 
     await audited(req.user,
       { action: "Access revoked", entity: "app_user", entityId: u.id,
-        detail: `${u.display_name}: ${kind} ${target}` },
+        detail: `${u.display_name}: ${g.power === "review" ? "review · " : ""}${kind} ${target}` },
       async (t) => t.query(`DELETE FROM access_grant WHERE id = $1`, [g.id]));
     res.json({ ok: true });
   } catch (e) { next(e); }

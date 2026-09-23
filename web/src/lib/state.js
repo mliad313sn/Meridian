@@ -302,7 +302,7 @@ export const App = {
   /** The project row shape the permission mirror expects. */
   projectRow(p) {
     return p && {
-      programme_id: p.programme, site_id: p.site, governance_level: p.governanceLevel,
+      id: p.id, programme_id: p.programme, site_id: p.site, governance_level: p.governanceLevel,
     };
   },
 };
