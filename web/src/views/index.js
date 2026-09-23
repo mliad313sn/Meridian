@@ -29,6 +29,10 @@ import {
   SIGNAL_TEXT, SIGNAL_ORDER, formatSignal, formatTrend,
 } from "../../../shared/govsignals.js";
 
+/* REQ-50 — the screen draws « Ratify » only for someone the server would
+   let ratify: the same independence rule, read from the same file. */
+import { canRatifyDecision } from "../../../shared/rbac.js";
+
 /* REQ-30 — the value page's arithmetic, shared with the server so that
    the page an executive prints and the page that is stored per period are
    one computation. The same reason govsignals gives. */
@@ -6064,6 +6068,7 @@ Views.reports = (db) => {
               (x.dissent ? " · " + t("dissent: ") + x.dissent : "") +
               (x.supersedes ? " · " + t("supersedes ") + x.supersedes : ""),
             by: (x.byName || x.council || x.by || "—") + (x.status === "Proposed" ? " · " + t("proposed") : ""), scope: x.scope,
+            decision: x,
           }));
           return controls.concat(minuted).sort((a, b) => b.on.localeCompare(a.on)).slice(0, 30);
         });
@@ -6075,6 +6080,9 @@ Views.reports = (db) => {
                     h("div", { class: "strong small" }, x.what),
                     x.detail ? h("div", { class: "xs muted" }, String(x.detail).slice(0, 110)) : null) },
                 { key: "by", label: "By", get: x => h("span", { class: "small" }, x.by) },
+                { key: "ratify", label: "", width: "96px", get: x => mayRatify(db, x.decision)
+                    ? h("button", { class: "btn btn-sm", onClick: () => ratifyDecision(x.decision) }, t("Ratify"))
+                    : null },
               ],
               rows: reg,
             })
@@ -6785,6 +6793,30 @@ function recordDecision(db) {
       supersedes: v.supersedes || null,
     }), { detail: v.headline }).then((ok) => { if (ok !== false) { delete live.data.register; App.emit(); } return ok; }),
   });
+}
+
+/* REQ-50 — may the person signed in ratify this proposed decision? The
+   level (`decision.ratify`, as the route gates it) AND the independence
+   rule of REQ-49: never the person who decided, never the person behind
+   the account that recorded it, and only as oneself. Drawn for nobody
+   else, so the refusal is never the first thing a reader meets. */
+function mayRatify(db, d) {
+  if (!d || d.status !== "Proposed" || !App.me.personId) return false;
+  const project = d.project ? db.projects.find((p) => p.id === d.project) : null;
+  if (d.project && !project) return false;
+  if (!App.can("decision.ratify", { project })) return false;
+  return canRatifyDecision({ ratifier: App.me.personId, decidedBy: d.by,
+    recorderPerson: d.recordedByPerson }).ok;
+}
+
+function ratifyDecision(d) {
+  confirmDialog({
+    title: t("Ratify this decision?"), confirmLabel: t("Ratify"),
+    message: d.headline,
+    detail: t("You ratify it in your own name, today. It then takes effect, and it cannot be un-ratified from a screen — a later decision supersedes it."),
+  }).then((ok) => ok && App.write("Decision ratified",
+    (a) => a.post("/decisions/" + d.id + "/ratify", { version: d.version }), { detail: d.headline })
+    .then((done) => { if (done !== false) { delete live.data.register; App.emit(); } return done; }));
 }
 
 const firstWritable = (db) => db.projects.find((p) => mayWrite(p)) ?? null;

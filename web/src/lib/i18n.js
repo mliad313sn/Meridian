@@ -1001,6 +1001,11 @@ export const FR = {
   "Meeting pack": "Dossier de réunion",
   "Minutes": "Compte rendu",
   "Record a decision": "Consigner une décision",
+  /* REQ-50 — ratifier depuis l'écran, en son propre nom. */
+  "Ratify": "Ratifier",
+  "Ratify this decision?": "Ratifier cette décision ?",
+  "You ratify it in your own name, today. It then takes effect, and it cannot be un-ratified from a screen — a later decision supersedes it.":
+    "Vous la ratifiez en votre nom, aujourd'hui. Elle entre alors en vigueur et ne peut plus être dé-ratifiée depuis un écran : une décision ultérieure la remplace.",
   "Record decision": "Consigner la décision",
   "Close the meeting": "Clore la réunion",
   "Attendance": "Présences",

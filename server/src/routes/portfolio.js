@@ -3836,11 +3836,13 @@ r.get("/decisions/log", async (req, res, next) => {
               d.referred_to_scope, d.project_id, d.cr_id, d.raid_id, d.milestone_id, d.supersedes,
               COALESCE(o.meets_on, d.decided_on) AS decided_on, d.external_source, d.external_id,
               d.council, d.evidence_uri, d.provenance, d.status, d.ratified_by, d.ratified_on,
+              d.row_version, ru.person_id AS recorded_by_person,
               s.name AS series_name, s.scope_kind, pe.name AS decided_by_name
          FROM meeting_decision d
          LEFT JOIN meeting_occurrence o ON o.id = d.occurrence_id
          LEFT JOIN meeting_series s ON s.id = o.series_id
          LEFT JOIN person pe ON pe.id = d.decided_by
+         LEFT JOIN app_user ru ON ru.id = d.recorded_by
         ORDER BY COALESCE(o.meets_on, d.decided_on) DESC, d.id DESC
         LIMIT $1`, [limit]);
     res.json({
@@ -3864,6 +3866,9 @@ r.get("/decisions/log", async (req, res, next) => {
         /* REQ-47 (049) — le jour où elle est entrée en vigueur. Nul sur
            une ligne ratifiée avant que nous sachions le noter. */
         ratifiedOn: d.ratified_on ?? null,
+        /* REQ-50 — what the screen needs to draw « Ratify » only for
+           someone the rule would let through. */
+        recordedByPerson: d.recorded_by_person ?? null, version: d.row_version,
       })),
     });
   } catch (e) { next(e); }
@@ -4191,6 +4196,47 @@ r.post("/decisions", async (req, res, next) => {
            status === "Ratified" ? ratifiedOn : null]);
       });
     res.status(201).json({ id });
+  } catch (e) { next(e); }
+});
+
+/* REQ-50 (RT365) — a human ratifies a proposed decision from a screen.
+   The only door from Proposed to Ratified was the integration contract,
+   so a programme without an integration kept every decision "Proposed"
+   or ratified it by editing the record elsewhere.
+
+   The person signed in ratifies AS THEMSELF: there is no field to name
+   someone else. Ratifying on another's behalf is exactly the workaround
+   the field describes for gate evidence (FitAdapt DF-10) — the record
+   would name one person and the act would be another's. The independence
+   rule is REQ-49's, from shared/rbac.js; the level is `decision.ratify`. */
+r.post("/decisions/:id/ratify", async (req, res, next) => {
+  try {
+    const b = req.body ?? {};
+    const d = await one(
+      `SELECT id, project_id, decided_by, recorded_by, status, row_version
+         FROM meeting_decision WHERE id = $1`, [req.params.id]);
+    if (!d) throw new HttpError(404, "No such decision");
+    const p = d.project_id ? await project(d.project_id, req.user) : null;
+    gate(req.user, "decision.ratify", { project: p });
+    if (d.status !== "Proposed") throw new HttpError(409, `Decision ${d.id} is already ${d.status}`);
+    const ratifier = req.user.personId ?? null;
+    if (!ratifier) {
+      throw new HttpError(400, "Your account is not linked to a person in the directory, and a ratification names the person who gave it — ask an administrator to link your account");
+    }
+    const recorder = d.recorded_by
+      ? await one(`SELECT person_id FROM app_user WHERE id = $1`, [d.recorded_by]) : null;
+    const verdict = canRatifyDecision({ ratifier, decidedBy: d.decided_by,
+      recorderPerson: recorder?.person_id ?? null });
+    if (!verdict.ok) throw new HttpError(403, verdict.why);
+    /* REQ-47 — ratified the day of this gesture, unless the caller knows
+       the real day (a committee that met yesterday). */
+    const on = isoDay(b.ratifiedOn, "ratifiedOn") ?? new Date().toISOString().slice(0, 10);
+    const out = await audited(req.user,
+      () => ({ action: "Decision ratified", entity: "meeting_decision", entityId: d.id,
+               detail: `${d.id} ratified by ${ratifier} on ${on}` }),
+      async (t) => conflict(await updateVersioned(t, "meeting_decision", d.id,
+        requiredVersion(b, "decision"), { status: "Ratified", ratified_by: ratifier, ratified_on: on })));
+    res.json({ ok: true, id: d.id, version: out.version ?? null });
   } catch (e) { next(e); }
 });
 

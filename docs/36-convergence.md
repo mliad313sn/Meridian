@@ -275,6 +275,20 @@ contradicts `docs/25` (reversibility).
 
 ### Waves 1–4
 
+#### REQ-50 · Ratify from a screen, in one's own name — BUILT, PR as 5.19.0
+
+- **Delivered**:
+  - `decision.ratify` in `rbac.js`.
+  - `POST /api/decisions/:id/ratify`.
+  - The *Ratify* button in the decision register. It is drawn only when
+    `can` **and** `canRatifyDecision` would pass for the person signed
+    in.
+  - One decision (D-36.10): the ratifier is always the person signed in.
+- **Measure**:
+  - `ratify.test.js`: +7 tests.
+  - In the browser: the recorder sees no button; R. Kaur ratifies, and
+    the row reads PE-14, today. No console errors.
+
 #### REQ-49 · Ratification held to one rule on both doors — BUILT, PR as 5.18.3
 
 - **Observed**: the session route took `ratifiedBy` as free text. While
@@ -323,6 +337,7 @@ carry it. An issue is closed as delivered only when `v5.16.0` exists.
 | D-36.07 | 23/09 | **F13 ships strict, with the existing losses named, not fixed.** The losses are 15 collections and 38 fields (NEW-05). The gate fails on any unnamed loss and on any named loss that has been fixed, so the list only shrinks. NEW-05 becomes the first line of wave 1. | Make F13 "status 200", as the campaign's P3 probe did. Refused: it certifies an empty book, and it passed on every one of these losses. Fix NEW-05 inside C-05. Refused: rewriting the importer for 15 registers is a feature line, and the campaign keeps wave 0 to convergence. Leave F13 red until NEW-05 lands. Refused: a red main stops every other line. | C-05, NEW-05 |
 | D-36.08 | 23/09 | **A branch that must not be merged is declared, not deleted.** `docs/superseded-branches.json` names it, the tip it was judged at, and the line that judged it. F14 accepts it only at that tip. Deleting the branch remains the owner's call (C-06 proposes it). | Delete the branch from this session. Refused: the owner confirms deletions (C-06). Exempt branches by name pattern. Refused: a pattern outlives the reason it was written for. | C-05, C-04 |
 | D-36.09 | 23/09 | **Rows ratified by free text before REQ-49 keep their text, unmarked.** No signal or figure reads `ratified_by`. Marking would add a column, or a derived flag, that nothing reads, and rewriting the rows would invent a person. The rule changes what can be written from 5.18.3 on. | Resolve old texts to people by name match. Refused: it invents who ratified. Flag them in the API. Refused for now: no reader needs it. If a signal ever reads the ratifier, it must first separate these rows, and this decision says so. | REQ-49 |
+| D-36.10 | 23/09 | **From a screen, one ratifies as oneself.** The route takes no ratifier. It records the person behind the signed-in account, and refuses an account that represents nobody. | A ratifier field, as the contract has. Refused: it is the behalf-signing the field is already working around for evidence (DF-10). The record would name one person and the act would be another's. The contract keeps its field, because an integration relays what a room decided. | REQ-50 |
 | D-36.03 | 23/09 | **C-02 is delivered as a merge of main into the RT365 line, not a commit-by-commit rebase.** The 20 commits keep their SHAs, which `docs/33` cites in about fifty places, including D-33.50 and the register's `source.commit`. The six conflicts are resolved once, in one reviewable merge commit, not up to six times across 20 replays. The line still reaches main through a pull request. | A rebase, as the campaign file says. Refused: it would invalidate every SHA the RT365 record cites, and the campaign's own rule is that a record must stay readable. | C-02 |
 
 ---

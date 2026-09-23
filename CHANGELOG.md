@@ -22,6 +22,47 @@ Nothing yet.
 
 ---
 
+## [5.19.0] — 2026-09-23
+
+**A decision is ratified from a screen, by someone independent, in their
+own name** (REQ-50, RT365; docs/36 wave 1).
+
+### Added
+
+- **Ratify, in the decision register.** A proposed decision gets a
+  *Ratify* button for exactly the people the server would let ratify it:
+  - authority on the decision's project (`decision.ratify` in
+    `shared/rbac.js`, group level for a portfolio-wide decision);
+  - never the person who decided it;
+  - never the person behind the account that recorded it (REQ-49's rule,
+    read from the same file by the screen and the route).
+
+  The person signed in ratifies as themself. There is no field to name
+  somebody else, because ratifying on another's behalf is the workaround
+  the field describes for gate evidence (FitAdapt DF-10). The decision
+  takes effect that day, dated (REQ-47), and the act is audited
+  ("Decision ratified").
+- `POST /api/decisions/:id/ratify` (`row_version` asserted):
+  - 400 for an account that represents nobody;
+  - 403 with the rule named;
+  - 409 when already ratified or stale.
+- The decision register now carries each row's version, and the recorder's
+  person, which the screen needs to draw the button honestly.
+
+### Why this was wrong before
+
+The only door from *Proposed* to *Ratified* was the integration contract.
+A programme without an integration either kept its decisions *Proposed*
+forever or ratified them by editing records somewhere else.
+
+`server/test/ratify.test.js` (+7 tests). Exercised in the browser:
+- E. Lindqvist, who recorded the decision, sees no button.
+- R. Kaur (PE-14) sees it, confirms, and the row reads Ratified by PE-14
+  today.
+- The button is then gone, with no console errors.
+
+---
+
 ## [5.18.3] — 2026-09-23
 
 **A decision is ratified by someone independent, on both doors** (REQ-49,
