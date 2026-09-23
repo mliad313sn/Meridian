@@ -30,7 +30,18 @@ const schema = JSON.parse(fs.readFileSync(path.join(root, SCHEMA_FILE), "utf8"))
 const problems = [];
 const checked = [];
 
-const files = fs.readdirSync(dir).filter((f) => f.endsWith(".json") && f !== path.basename(SCHEMA_FILE)).sort();
+/* REQ-53 (RT365) — the side that WRITES a register had no way to check it:
+   RT365's registerVersion 7 declared this shape and failed it in 55 places,
+   and was handed over as finished. Named files are checked instead of
+   docs/requests/, resolved from where the command is run, so a field
+   repository can validate its own file before it hands it over:
+
+     node <meridian>/scripts/audit/register-schema.mjs docs/REPORTS/meridian_requests_v3.json */
+const named = process.argv.slice(2).filter((a) => !a.startsWith("-"));
+const files = named.length
+  ? named.map((f) => path.resolve(process.cwd(), f))
+  : fs.readdirSync(dir).filter((f) => f.endsWith(".json") && f !== path.basename(SCHEMA_FILE)).sort()
+      .map((f) => path.join(dir, f));
 
 console.log(`\n═══ F11 · every request register matches ${SCHEMA_ID} ═══\n`);
 
@@ -40,9 +51,9 @@ if (schema.$id !== SCHEMA_ID) {
 if (!files.length) problems.push(`${dir} holds no register — the loop has no field repository`);
 
 for (const f of files) {
-  const rel = `docs/requests/${f}`;
+  const rel = path.relative(named.length ? process.cwd() : root, f) || f;
   let register;
-  try { register = JSON.parse(fs.readFileSync(path.join(dir, f), "utf8")); }
+  try { register = JSON.parse(fs.readFileSync(f, "utf8")); }
   catch (e) { problems.push(`${rel} is not readable JSON: ${e.message}`); continue; }
 
   /* A file in this directory that claims another shape is not this gate's
@@ -55,9 +66,9 @@ for (const f of files) {
   }
 
   /* A reader chases `REQ-13`, never `requests[12]`. */
-  const named = (where) => where.replace(/^requests\[(\d+)\]/,
+  const byId = (where) => where.replace(/^requests\[(\d+)\]/,
     (m, i) => `requests[${register.requests?.[Number(i)]?.id ?? i}]`);
-  for (const p of validate(schema, register)) problems.push(`${rel} · ${named(p.path)}: ${p.message}`);
+  for (const p of validate(schema, register)) problems.push(`${rel} · ${byId(p.path)}: ${p.message}`);
 
   const seen = new Set();
   for (const r of register.requests ?? []) {

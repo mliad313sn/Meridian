@@ -102,6 +102,12 @@ unchanged. What this command adds:
 - the F10 gate must stay green (version, lock, OpenAPI, changelog agree);
 - the counsellors of §COUNSEL are convened before the push, and their
   findings that survive verification are fixed, not filed.
+- **a field-return round ends with a pull request to `main`, not with a
+  branch** (docs/36 C-05). `done` in the register means merged to `main`
+  with its test; a line that exists only on a branch is `partial` at best,
+  whatever its tests say. Gate F14 fails the build on a branch of product
+  code more than seven days ahead of `main`, and F12 fails `main` on a
+  register claim it does not carry.
 
 ## §ANSWER — keep the communication with RT365
 
@@ -115,8 +121,9 @@ script) gets one, with the §3 entry of `docs/33` as its body.
 
 ## §STATES — what a line's status means
 
-`open` accepted, not started · `partial` a slice on the branch, remainder
-named · `done` on the branch with its test · `accepted` the requester
+`open` accepted, not started · `partial` a slice built, remainder
+named · `done` on `main` with its test (docs/36 C-05 — it used to say "on
+the branch", and 66 claims waited there for fifteen days) · `accepted` the requester
 said so on the issue · `released` a version tag carries it · `refused`
 with the reason in §5. A rejected refusal or `done` goes back to `open`
 with the objection quoted; the sponsor is the tie-breaker. Bump

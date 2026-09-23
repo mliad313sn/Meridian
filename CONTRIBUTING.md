@@ -36,8 +36,23 @@ just for you.
 npm run verify
 ```
 
-That is every suite, a client build, ten static gates and a dependency
+That is every suite (F13 among them), a client build, thirteen static gates and a dependency
 audit. It must be green. It takes about three minutes.
+
+Two of those gates exist because of what happened on 23/09/2026, when the
+product anyone cloned could not import its own export while four
+unreleased lines carried the fix (`docs/36`):
+
+- **F13 · the book comes back** (`server/test/roundtrip.test.js`). Export,
+  import, export again: every collection and every field must survive,
+  except the losses named in that file with the line that will close them.
+  If you add a field to the export, you add it to the import in the same
+  commit, or the build tells you.
+- **F14 · no proven line waits on a branch** (`npm run audit:debt`). A
+  branch carrying product code that is ahead of `main` and older than
+  seven days fails the build by name. **Work reaches `main` through a pull
+  request; a line on a branch is built, not done.** A branch that must not
+  be merged is declared in `docs/superseded-branches.json` with the reason.
 
 `npm run sweep` exercises 286 use cases across the four roles and is
 worth running when you touch authorisation. Twelve of its warnings are

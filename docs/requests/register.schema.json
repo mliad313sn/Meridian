@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "meridian-request-register/1",
   "title": "meridian-request-register/1",
-  "description": "A field repository's request register, as read by Meridian's Product Owner. One file per field repository, in docs/requests/. The register is the field's half of the loop: it says what was asked for, what was delivered, what remains, and what the requester has answered. Additive properties are allowed everywhere on purpose — a field repository may carry its own columns (priority, effort, category) and a reader that ignores them loses nothing.",
+  "description": "A field repository's request register, as read by Meridian's Product Owner. One file per field repository, in docs/requests/. The register is the field's half of the loop: it says what was asked for, what was delivered, what remains, and what the requester has answered. Additive properties are allowed everywhere on purpose — a field repository may carry its own columns (priority, effort, category) and a reader that ignores them loses nothing. Check a register before handing it over, from the field repository: `node <path-to-meridian>/scripts/audit/register-schema.mjs <your-register.json>` — it names each failing request by its id (REQ-53).",
   "type": "object",
   "required": ["$schema", "source", "productOwner", "channel", "registerVersion", "requests"],
   "properties": {
