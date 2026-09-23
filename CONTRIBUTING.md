@@ -36,7 +36,7 @@ just for you.
 npm run verify
 ```
 
-That is every suite (F13 among them), a client build, thirteen static gates and a dependency
+That is every suite (F13 among them), a client build, fourteen static gates and a dependency
 audit. It must be green. It takes about three minutes.
 
 Two of those gates exist because of what happened on 23/09/2026, when the

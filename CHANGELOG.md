@@ -22,6 +22,42 @@ Nothing yet.
 
 ---
 
+## [5.18.2] — 2026-09-23
+
+**The public record counts what the tree holds** (docs/36 C-06).
+
+### Fixed
+
+- **The front door said four things that were not true.** The README
+  said twelve gates in three places (there were thirteen, fourteen with
+  this release). SECURITY.md said "334 tests, eight static gates" (840,
+  and fourteen). Each number had been typed once, true, and never read
+  again.
+- **The README's "What you are not getting" no longer promises what 5.18
+  does not deliver.** It now says:
+  - the JSON book import erases fifteen registers and changes 38 fields
+    (NEW-05), so an instance should be moved with the database backup;
+  - five registers have no screen (NEW-04);
+  - no release since 5.9.0 is tagged yet.
+
+### Added
+
+- **F15 · the public record counts what the tree holds**
+  (`scripts/audit/public-record.mjs`, in `npm run audit`). It reads every
+  number that README.md, CONTRIBUTING.md and SECURITY.md state about the
+  tree and compares it with the tree: gates, tests, tables, and the last
+  migration. It reads each file as one text, because the first version
+  read line by line and missed "twelve static⏎gates", split by a wrap. A
+  number on a line that names a version or a date is history and is left
+  alone.
+
+  Proven both ways: it failed on the five stale numbers and passes once
+  they are corrected. SECURITY.md now describes "every test suite"
+  without a count, so that adding a test does not require editing the
+  security policy.
+
+---
+
 ## [5.18.1] — 2026-09-23
 
 **Release becomes part of done, as two gates** (docs/36 C-05). No

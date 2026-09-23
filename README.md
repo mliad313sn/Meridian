@@ -59,9 +59,24 @@ Stated here rather than discovered later:
 - **Three blocking operational findings are yours to close**, not the
   software's: a tested backup, a second instance, and a written security
   policy. See [SECURITY.md](SECURITY.md).
+- **The JSON book import does not yet bring back everything the export
+  writes.** Fifteen registers are erased by an import: benefits, business
+  cases, lessons, stakeholders, criteria, tolerances, timesheets and
+  others. Thirty-eight fields come back changed. Gate F13 names every loss
+  (`server/test/roundtrip.test.js`), and closing them is the first open
+  line (NEW-05 in [`docs/36`](docs/36-convergence.md)). To move a whole
+  instance, use the database backup (`npm run backup`, proven with
+  `npm run restore-drill`), not the book export.
+- **Five registers have no screen yet.** Requirements, evidence, review
+  findings, governance seats and objections arrive only by importing a
+  book (NEW-04). Everything else in
+  [`docs/38`](docs/38-user-manual.md) is walked and works, or says where
+  it does not.
+- **No release since 5.9.0 is tagged yet.** 5.9.1, 5.16.0, 5.17.0 and
+  5.18.x are merged on `main`; the tags wait on a maintainer.
 
 You are getting the source, an archive format that gets all your data
-back out (`npm run restore`), and a build that fails on twelve static
+back out (`npm run restore`), and a build that fails on fourteen static
 gates before it will let a change through. What each part of it does,
 table by table and screen by screen, is
 [`docs/37-technical-reference.md`](docs/37-technical-reference.md).
@@ -97,8 +112,8 @@ Other commands:
 
 ```bash
 npm test              # the suites — the count is in CHANGELOG.md
-npm run audit         # twelve gates: routes, CRUD+audit, versions, controls, language, field help, kit imports, API contract, one version everywhere, view render, register shape, register reachable
-npm run verify        # tests + build + the twelve gates + a dependency audit
+npm run audit         # fourteen gates: routes, CRUD+audit, versions, controls, language, field help, kit imports, API contract, one version everywhere, view render, register shape, register reachable, merge debt, public record
+npm run verify        # tests (the round trip, F13, among them) + build + the fourteen gates + a dependency audit
 npm run backup        # pg_dump (PostgreSQL) or the data directory (PGlite) → server/.data/backups
 npm run restore-drill # restore the newest backup ELSEWHERE, recount, time it — /api/health reports it
 npm run sweep         # 73 use cases run as each of 4 roles — 286 exercised cases — on a fresh instance
