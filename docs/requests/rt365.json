@@ -1747,25 +1747,33 @@
       ],
       "issue": null,
       "title": "The register schema is checkable by the field repository that writes the register",
-      "status": "open",
+      "status": "done",
       "priority": "medium",
-      "version": null,
+      "version": "5.18.1",
       "decidedOn": "2026-09-23",
-      "delivered": [],
-      "measure": null,
-      "remaining": [
-        "The validator behind scripts/audit/register-schema.mjs is runnable against an arbitrary file path, and the schema and that command are named in the schema's own description."
+      "delivered": [
+        "scripts/audit/register-schema.mjs (accepts file paths, resolved from the caller's directory)",
+        "docs/requests/register.schema.json (description names the command)",
+        "package.json#register:check"
       ],
+      "measure": "Run from outside the repository against RT365's own files: meridian_requests_v3.json v8 → 0 violations; v7 (fe2ee02) → 47 violations, each named by request id.",
+      "remaining": null,
       "accepted": null,
       "released": false,
       "observed": "Found by validating our own file. RT365's registerVersion 7 - the register handed over with the consolidated report - declared \"$schema\": \"meridian-request-register/1\" and failed that schema in 55 places: status \"proposed\" is not in the enum (open|partial|done|refused); `accepted: false` is forbidden on an open line by an explicit rule in the schema (E-9: absence is not silence) and was wrong in our own words, since no agent may record an acceptance at all; and every history row we wrote omitted the required `status`. Meridian validates the copy it holds; the side that WRITES the file had no way to check it, so a register that would have bounced was handed over as finished. Fixed in registerVersion 8, which validates clean.",
-      "answerToSource": "Taken (docs/36, P5 round of 23/09). Scheduled with C-05, the line that adds gates: the same validator, run against a path you name.",
+      "answerToSource": "Delivered: from your repository, `node <path-to-meridian>/scripts/audit/register-schema.mjs docs/REPORTS/meridian_requests_v3.json`. Your v8 passes; your v7 fails with 47 violations named by id — the tool that would have caught it before hand-over.",
       "history": [
         {
           "at": "2026-09-23",
           "registerVersion": 16,
           "status": "open",
           "note": "Read from RT365 meridian_requests_v3.json (registerVersion 8, 09/09) on branch claude/project-owner-agent-setup-hi3xqu at 670bfbd — filed after this register's reviewedAt of 08/09, found by the convergence campaign's P5 read."
+        },
+        {
+          "at": "2026-09-23",
+          "registerVersion": 17,
+          "status": "done",
+          "note": "Delivered with docs/36 C-05 (5.18.1)."
         }
       ]
     }
@@ -1798,5 +1806,5 @@
       "whatIsNeeded": "A maintainer merges the branch to main and pushes the tag. The owner AUTHORISED the merge on 08/09; it was then refused by the agent session's own permission classifier — `git merge --ff-only`, `git push origin <branch>:main` and even a local `git tag -a` (D-33.50). Pushing a tag ref is separately refused HTTP 403 by the session credential (D-33.18, D-33.30). Two different boundaries, neither routed around."
     }
   },
-  "registerVersion": 16
+  "registerVersion": 17
 }

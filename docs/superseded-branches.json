@@ -1,0 +1,12 @@
+{
+  "$comment": "Branches that must NOT be merged, because their content reached main by other means. Read by gate F14 (scripts/audit/merge-debt.mjs). Each entry is pinned to the tip it was judged at: a new commit is a new tip, and the branch is merge debt again until someone looks. Deleting the branch is the owner's call; this file is what makes leaving it safe.",
+  "branches": [
+    {
+      "branch": "claude/project-analysis-db-schema-yph5ho",
+      "tip": "7693f6dbb7aaeab829b4b1bc3d2fec116c96035b",
+      "judged": "2026-09-23",
+      "line": "docs/36 C-04",
+      "reason": "its migration 027_notification_kinds collides with main's 027_international and its docs 29–32 reuse numbers main holds; its manuals, technical reference and O-1…O-7 fixes are carried over as new work on main"
+    }
+  ]
+}

@@ -184,7 +184,27 @@ REQ-52's blind spot exactly, so REQ-52 and NEW-04 close together.
 - **Remains**: the tag, and NEW-06…NEW-13 below, found by walking the
   manual.
 
-#### C-05 · F13 round trip, F14 merge debt — open
+#### C-05 · F13 round trip, F14 merge debt — BUILT, PR as 5.18.1
+
+- **Observed**: no gate asked whether proven work was stranded on a
+  branch, or whether the book survived its own round trip. The P3 probe
+  asked only for a 200.
+- **Decision**: D-36.07 and D-36.08 below.
+- **Delivered**:
+  - `server/test/roundtrip.test.js` (F13, 5 tests, in `npm test`).
+  - `scripts/audit/merge-debt.mjs` (F14, in `npm run audit`).
+  - `docs/superseded-branches.json`, which declares the documentation
+    branch superseded (C-04) at 7693f6d.
+  - REQ-53: `register-schema.mjs` accepts file paths.
+  - The rule in CONTRIBUTING and `/product-owner`.
+- **Measure**:
+  - F13 is proven by three deliberate breaks (`'\D'`, `capitalised`
+    dropped, a healed loss left listed), each failing, and the restored
+    code passing.
+  - F14 fails on the undeclared documentation branch and passes once it
+    is declared. `--now 2026-10-05` turns three branches into debt.
+  - `npm run verify` passes 840/840.
+- **Remains**: the tag.
 
 #### NEW-05 · The export writes what the import erases — open, wave 1 (first)
 
@@ -257,6 +277,8 @@ carry it. An issue is closed as delivered only when `v5.16.0` exists.
 | D-36.02 bis | 23/09 | `PGLITE_DIR=:memory:` (KODO's MER-12 spelling) is honoured by the one resolver of D-36.01 bis, beside `MERIDIAN_EPHEMERAL=1`. KODO's `pgliteStore()` is removed. | Keep KODO's resolver as a third. Refused, for the reason of D-36.01 bis. | C-03 |
 | D-36.04 | 23/09 | **A book without `currencyUnit` stays refused**, exactly as KODO's MER-09 asked ("reject the import without it"), and a test pins it. The refusal now adds the one sentence an operator with an old export needs: a file exported by Meridian before 5.17.0 meant millions, so add `"currencyUnit": "millions"`. KODO is asked to add the header to its generator. | Default an absent unit to millions. Refused: it is the silent guess the requester called an S1, it would weaken a test, and the export carries no version marker that would make the guess safe. | C-03, MER-09 |
 | D-36.05 | 23/09 | **C-03 converges the KODO line as built**: data, engine, import. It does not add the write routes and screens KODO's registers lack. Those are NEW-04, with REQ-52, in wave 1, and five MER lines say `partial` until then. | Build the routes inside C-03. Refused: wave 0 is convergence, and a convergence PR that also adds six CRUD surfaces cannot be reviewed as either. Mark the MER lines done because the data lands. Refused: KODO's own report says they are not. | C-03 |
+| D-36.07 | 23/09 | **F13 ships strict, with the existing losses named, not fixed.** The losses are 15 collections and 38 fields (NEW-05). The gate fails on any unnamed loss and on any named loss that has been fixed, so the list only shrinks. NEW-05 becomes the first line of wave 1. | Make F13 "status 200", as the campaign's P3 probe did. Refused: it certifies an empty book, and it passed on every one of these losses. Fix NEW-05 inside C-05. Refused: rewriting the importer for 15 registers is a feature line, and the campaign keeps wave 0 to convergence. Leave F13 red until NEW-05 lands. Refused: a red main stops every other line. | C-05, NEW-05 |
+| D-36.08 | 23/09 | **A branch that must not be merged is declared, not deleted.** `docs/superseded-branches.json` names it, the tip it was judged at, and the line that judged it. F14 accepts it only at that tip. Deleting the branch remains the owner's call (C-06 proposes it). | Delete the branch from this session. Refused: the owner confirms deletions (C-06). Exempt branches by name pattern. Refused: a pattern outlives the reason it was written for. | C-05, C-04 |
 | D-36.03 | 23/09 | **C-02 is delivered as a merge of main into the RT365 line, not a commit-by-commit rebase.** The 20 commits keep their SHAs, which `docs/33` cites in about fifty places, including D-33.50 and the register's `source.commit`. The six conflicts are resolved once, in one reviewable merge commit, not up to six times across 20 replays. The line still reaches main through a pull request. | A rebase, as the campaign file says. Refused: it would invalidate every SHA the RT365 record cites, and the campaign's own rule is that a record must stay readable. | C-02 |
 
 ---

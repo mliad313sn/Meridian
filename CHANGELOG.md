@@ -22,6 +22,75 @@ Nothing yet.
 
 ---
 
+## [5.18.1] — 2026-09-23
+
+**Release becomes part of done, as two gates** (docs/36 C-05). No
+product capability changes. What changes is what the build refuses.
+
+### Added
+
+- **F13 · the book comes back** (`server/test/roundtrip.test.js`, part of
+  `npm test`). The test exports the book, imports it, and exports it
+  again. The book must come back field for field, and every collection
+  the export writes must be one the import reads. Before exporting, the
+  gate gives one row of each imported table a non-default value in every
+  column added since the importer was written. Without that, it passes on
+  the very losses it exists to catch. It fails in three cases:
+  - a loss nobody has named;
+  - a collection added to the export and not to the import;
+  - a named loss that has since been fixed. This keeps the list
+    shrinking.
+
+  It was proven in both directions:
+  - the `'\D'` bug of 5.9.1 fails it;
+  - dropping `capitalised` from the import fails it;
+  - a loss that is fixed but left on the list fails it;
+  - the restored code passes.
+- **F14 · no proven line waits on a branch**
+  (`scripts/audit/merge-debt.mjs`, in `npm run audit`, also run alone as
+  `npm run audit:debt`). The build fails when a remote branch meets all
+  three conditions, and it names the branch:
+  - it carries product code;
+  - it is ahead of `main`;
+  - it is older than seven days.
+
+  A branch that must not be merged is declared in
+  `docs/superseded-branches.json`, pinned to its tip. A new commit on it
+  makes it debt again. Proven both ways: the 23-day-old documentation
+  branch fails it until it is declared, and `--now` a fortnight ahead
+  turns every in-flight branch into debt.
+- **A field repository can check its own register** (REQ-53, RT365).
+  Run `node scripts/audit/register-schema.mjs <file>` (or
+  `npm run register:check -- <file>`) from the field repository. It
+  validates the file against `meridian-request-register/1` and names each
+  failing request by its id. RT365's current register passes. Its v7, the
+  one handed over as finished, fails with 47 violations named. The schema's
+  own description now names the command.
+
+### Why this was wrong before
+
+On 23/09 the product anyone cloned could not import its own export, while
+four unreleased lines carried the fix. Every gate was green on every
+branch, because none of them asked whether proven work was stranded, or
+whether the book survived its own round trip.
+
+Building F13 measured something no probe had seen: **the export writes 15
+collections the import never reads, and 38 fields do not survive the
+round trip** (NEW-05). A 200 had been hiding silent data loss. Those
+losses are named in the gate and are the first line of wave 1.
+
+### Changed
+
+- CONTRIBUTING and `/product-owner` now state that **a field-return round
+  ends with a pull request to `main`, not with a branch**. The register's
+  `done` means "on `main` with its test". It used to mean "on the branch".
+- `.gitignore` excludes throwaway probes (`server/test/_*.test.js`) and
+  agent worktrees.
+- CONTRIBUTING's gate count is corrected to thirteen, counted from the
+  `audit` script (it said ten).
+
+---
+
 ## [5.18.0] — 2026-09-23
 
 **The documentation branch, salvaged.** On 31/08 a documentation review
