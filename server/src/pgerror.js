@@ -15,7 +15,10 @@ const CONSTRAINT_MESSAGES = {
   allocation_dates_ordered: "An allocation cannot end before it starts",
   dep_not_self: "A stage cannot depend on itself",
   cross_dep_not_self: "A project cannot depend on itself",
-  grant_target_exclusive: "A grant names either a programme or a site, never both",
+  grant_target_exclusive: "A grant names one programme, one site or one project, never two",
+  /* D-36.12 (058) — a review grant names a programme or a project. */
+  grant_review_scope: "A review grant names a programme or a project; a write grant names a programme or a site",
+  access_grant_power_known: "A grant carries the write power or the review power",
   series_scope_exclusive: "A meeting series names one scope: group, a programme, or a site",
   cost_period_shape: "A reporting period must be written as YYYY-MM",
   app_user_email_lower_idx: "That email address is already in use",

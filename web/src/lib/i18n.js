@@ -2666,6 +2666,31 @@ export const FR = {
     "Élevé — pratiquement sans retour",
   "Weekly delivery":
     "Livraison hebdomadaire",
+  /* D-36.12 — the evidence-review grant and the seat a document waits on. */
+  "review":
+    "revue",
+  "write":
+    "écriture",
+  "Power":
+    "Pouvoir",
+  "Review grant: approves evidence here, and nothing else":
+    "Habilitation de revue : approuve les preuves ici, et rien d'autre",
+  "Add a review grant":
+    "Ajouter une habilitation de revue",
+  "A review grant carries the approval of evidence and the reads over one programme or one project, and nothing else: no plan, no RAID, no change, no baseline. Its holder never approves their own document, and gate evidence on a site-governed project still needs group level.":
+    "Une habilitation de revue porte l'approbation des preuves et la lecture sur un programme ou un projet, et rien d'autre : ni planning, ni RAID, ni modification, ni référence. Son titulaire n'approuve jamais son propre document, et la preuve de jalon d'un projet gouverné par un site exige toujours le niveau groupe.",
+  "Grant review":
+    "Habiliter à la revue",
+  "Every programme and project is already granted to this account.":
+    "Chaque programme et chaque projet sont déjà accordés à ce compte.",
+  "can no longer approve evidence on":
+    "ne peut plus approuver de preuve sur",
+  "waiting on seat":
+    "en attente du siège",
+  "Expected approver (seat)":
+    "Approbateur attendu (siège)",
+  "The seat expected to approve this document. The gate then reads “waiting on seat …”; naming a seat grants no authority.":
+    "Le siège qui doit approuver ce document. Le jalon affiche alors « en attente du siège … » ; nommer un siège ne confère aucune autorité.",
   "Monthly steering":
     "Pilotage mensuel",
   /* ── NEW-20 · the import says what a replace would erase ── */

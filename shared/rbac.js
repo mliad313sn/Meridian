@@ -16,6 +16,12 @@
  *
  * A grant names one programme or one site. There is no wildcard grant —
  * "all" is a property of the admin role, never of a grant row (R1.3).
+ *
+ * D-36.12 — a grant carries a POWER. `write` is every grant above. A
+ * `review` grant names a programme or one project and carries
+ * `document.approve` plus the reads over it, and nothing else — for any
+ * level, a viewer included. It is not a fifth role: the level still
+ * decides everything the grant does not name.
  */
 
 export const ROLES = ["admin", "group", "site", "viewer"];
@@ -157,20 +163,55 @@ const ADMIN_ONLY = new Set(["user.manage", "settings.write"]);
 
 /* ── grant helpers ────────────────────────────────────────────────── */
 
-/** Normalise the grant rows a user carries into two sets. */
+/**
+ * Normalise the grant rows a user carries.
+ *
+ * D-36.12 — a grant carries a POWER. `programmes` and `sites` hold the
+ * `write` grants only, exactly as they did before the power existed, so
+ * every rule below that reads them (canWriteProject, canWriteScope, the
+ * `case`s) is untouched by a review grant: it cannot reach them.
+ * `reviews` holds the `review` grants — a programme or one project — and
+ * only two things read it: visibility (the reads a review needs) and the
+ * `document.approve` rule. A row with no power is a write grant (001).
+ */
 export function normaliseGrants(rows = []) {
   const programmes = new Set();
   const sites = new Set();
+  const reviews = { programmes: new Set(), projects: new Set() };
   for (const g of rows) {
+    if ((g.power ?? "write") === "review") {
+      if (g.scope_kind === "programme" && g.programme_id) reviews.programmes.add(g.programme_id);
+      if (g.scope_kind === "project" && g.project_id) reviews.projects.add(g.project_id);
+      continue;
+    }
     if (g.scope_kind === "programme" && g.programme_id) programmes.add(g.programme_id);
     if (g.scope_kind === "site" && g.site_id) sites.add(g.site_id);
   }
-  return { programmes, sites };
+  return { programmes, sites, reviews };
 }
 
 function grantsOf(user) {
   if (user?.grants instanceof Object && user.grants.programmes instanceof Set) return user.grants;
   return normaliseGrants(user?.grants ?? []);
+}
+
+/**
+ * D-36.12 — does a REVIEW grant of this user name this project, by its
+ * programme or by the project itself? Says nothing about write grants:
+ * a reviewer who also writes the project is decided by the ordinary rules.
+ */
+export function holdsReview(user, project) {
+  if (!user || !project) return false;
+  const r = grantsOf(user).reviews;
+  if (!r) return false;
+  return (!!project.programme_id && r.programmes.has(project.programme_id)) ||
+         (!!project.id && r.projects.has(project.id));
+}
+
+/** The same user with its review grants set aside — sight by write grant alone. */
+function withoutReviews(user) {
+  const { programmes, sites } = grantsOf(user);
+  return { ...user, grants: { programmes, sites, reviews: { programmes: new Set(), projects: new Set() } } };
 }
 
 /* ── visibility ───────────────────────────────────────────────────── */
@@ -194,10 +235,17 @@ export function canSeeProject(user, project) {
     case "site":
       // Own sites, plus every group-governed project read-only, so a site
       // lead can see the group programmes landing on them (C1).
-      return sites.has(project.site_id) || project.governance_level === "group";
+      // D-36.12 — plus what a review grant names: a reviewer reads what
+      // they are asked to approve, and nothing beyond it.
+      return sites.has(project.site_id) || project.governance_level === "group" ||
+             holdsReview(user, project);
     case "viewer": {
+      /* An ungranted viewer is portfolio-wide. A review grant is not a
+         write grant and does not count here, so it never NARROWS an
+         observer to the one scope they review. */
       if (!programmes.size && !sites.size) return true; // ungranted observer
-      return programmes.has(project.programme_id) || sites.has(project.site_id);
+      return programmes.has(project.programme_id) || sites.has(project.site_id) ||
+             holdsReview(user, project);
     }
     default:
       return false;
@@ -374,6 +422,20 @@ export function can(user, action, resource = {}) {
   }
 
   // ── writes ──────────────────────────────────────────────────────
+  /* D-36.12 — the evidence-review grant. Evaluated BEFORE the viewer's
+     blanket refusal, because the council members it exists for are
+     viewers. It lifts exactly one action, on exactly the scope the grant
+     names, and only where the ordinary rules do not already decide (a
+     reviewer who also writes the project is judged by them, below).
+     Every other write of a review-only holder falls through to the
+     refusals that were there before: a viewer is still refused
+     everything else, a site or group account still writes only through
+     its write grants — `programmes` and `sites` never hold a review. */
+  if (action === "document.approve" && !canWriteProject(user, resource.project) &&
+      holdsReview(user, resource.project)) {
+    return approveAsReviewer(user, resource);
+  }
+
   if (user.role === "viewer") return deny("read-only account — ask an administrator to change the level if you are expected to record work here"); // R1.5
 
   if (GROUP_ONLY_WRITES.has(action) && user.role !== "group") {
@@ -698,7 +760,10 @@ export function can(user, action, resource = {}) {
       if (resource.scope && !canSeeScope(user, resource.scope)) {
         return deny("that decision's meeting is outside your scope — its chair can minute your objection");
       }
-      if (!resource.scope && resource.project && !canSeeProject(user, resource.project)) {
+      /* D-36.12 — sight that comes only from a REVIEW grant does not
+         open this door: the grant carries the reads and document.approve,
+         "and nothing else", and an objection is written on the record. */
+      if (!resource.scope && resource.project && !canSeeProject(withoutReviews(user), resource.project)) {
         return deny("that decision's project is outside your scope");
       }
       if (resource.seat_person && !selfMatch(user, resource.seat_person) && user.role !== "group") {
@@ -734,6 +799,26 @@ export function can(user, action, resource = {}) {
         ? allow()
         : outsideProject(user, resource.project);
   }
+}
+
+/**
+ * D-36.12 — approving evidence under a review grant. The two rules
+ * `document.approve` has held since committee I3, and no new one:
+ *   · never one's own document (selfMatch, so a deputy's absent person too);
+ *   · GATE evidence on a site-governed project needs group-level eyes —
+ *     a review grant does not stand in for them, whatever level holds it.
+ * The audit row names whoever is signed in, which is the reviewer: that
+ * is the point of the grant — nobody approves "on a member's behalf".
+ */
+function approveAsReviewer(user, resource) {
+  const p = resource.project;
+  if (selfMatch(user, resource.owner_id)) {
+    return deny("you own this evidence — an independent reviewer approves it; hand it to a colleague or to your programme office");
+  }
+  if (resource.gate && p?.governance_level === "site" && user.role !== "group") {
+    return deny("gate evidence on a site-governed project is approved at group level — a review grant does not stand in for it; ask your programme office");
+  }
+  return allow();
 }
 
 const allow = () => ({ ok: true, why: "" });
@@ -813,11 +898,22 @@ export function projectScopeSql(user, alias = "p") {
   if (user.role === "admin" || user.role === "group") return { sql: "true", params: [] };
   const { programmes, sites } = grantsOf(user);
 
+  /* D-36.12 — what a review grant names is read, as in canSeeProject. */
+  const rv = grantsOf(user).reviews;
+  const reviewed = (n) => rv && (rv.programmes.size || rv.projects.size)
+    ? { sql: ` OR ${alias}.programme_id = ANY($${n}) OR ${alias}.id = ANY($${n + 1})`,
+        params: [[...rv.programmes], [...rv.projects]] }
+    : { sql: "", params: [] };
+
   if (user.role === "site") {
-    if (!sites.size) return { sql: `${alias}.governance_level = 'group'`, params: [] };
+    if (!sites.size) {
+      const r = reviewed(1);
+      return { sql: `(${alias}.governance_level = 'group'${r.sql})`, params: r.params };
+    }
+    const r = reviewed(2);
     return {
-      sql: `(${alias}.site_id = ANY($1) OR ${alias}.governance_level = 'group')`,
-      params: [[...sites]],
+      sql: `(${alias}.site_id = ANY($1) OR ${alias}.governance_level = 'group'${r.sql})`,
+      params: [[...sites], ...r.params],
     };
   }
   /* INT-02 — une intégration voit tout le portefeuille, et c'est une
@@ -836,8 +932,9 @@ export function projectScopeSql(user, alias = "p") {
 
   // viewer
   if (!programmes.size && !sites.size) return { sql: "true", params: [] };
+  const r = reviewed(3);
   return {
-    sql: `(${alias}.programme_id = ANY($1) OR ${alias}.site_id = ANY($2))`,
-    params: [[...programmes], [...sites]],
+    sql: `(${alias}.programme_id = ANY($1) OR ${alias}.site_id = ANY($2)${r.sql})`,
+    params: [[...programmes], [...sites], ...r.params],
   };
 }

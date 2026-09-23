@@ -110,7 +110,11 @@ describe("schema and migrations (R2.2, R2.7)", () => {
           references (issue, pull_request, commit, ci_run, artefact) with
           a reported state, a RAID row or criterion target, and a
           citation's supersession. */
-       "057_one_typed_external_reference.sql"]);
+       "057_one_typed_external_reference.sql",
+       /* 058 - docs/36 D-36.12: an access grant carries a power, write or
+          review; a review grant may name one project; a document may name
+          the seat expected to approve it. */
+       "058_a_grant_to_review.sql"]);
     const again = await migrate({ silent: true });
     assert.deepEqual(again, [], "a second run applies nothing");
   });

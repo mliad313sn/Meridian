@@ -202,6 +202,8 @@ const ENRICH = [
   `INSERT INTO seat_conflict (seat_id, other_id, reason)
    VALUES ('SE-901', 'SE-902', 'designer cannot veto own design'),
           ('SE-902', 'SE-901', 'designer cannot veto own design')`,
+  /* D-36.12 — a document names the seat expected to approve it. */
+  `UPDATE document SET expected_seat_id = 'SE-902' WHERE id = (SELECT min(id) FROM document)`,
 
   /* NEW-05 — the fifteen registers, one realistic row each. */
   `INSERT INTO site_window (id, site_id, kind, label, detail, starts_on, ends_on)

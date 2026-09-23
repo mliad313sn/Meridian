@@ -4,7 +4,7 @@ import { Router } from "express";
 import { many, query } from "../db.js";
 import { audited } from "../audit.js";
 import {
-  login, logout, logoutOthers, publicUser, cookieOptions, SESSION_COOKIE, HttpError, sessionKey,
+  login, logout, logoutOthers, publicUser, grantsOut, cookieOptions, SESSION_COOKIE, HttpError, sessionKey,
   setPassword, verifyPassword, bridgeSession,
 } from "../auth.js";
 import { oidcEnabled, beginSignIn, completeSignIn } from "../oidc.js";
@@ -148,7 +148,7 @@ r.get("/me", async (req, res, next) => {
       ...publicUser(req.user._row, req.user.grantRows),
       displayName: req.user.displayName,
       role: req.user.role,
-      grants: { programmes: [...req.user.grants.programmes], sites: [...req.user.grants.sites] },
+      grants: grantsOut(req.user.grants),
       actingFor: req.user.actingForUserId ?? null,
     } });
   } catch (e) {
@@ -171,7 +171,7 @@ r.get("/accounts", async (_req, res, next) => {
   try {
     const rows = await many(
       `SELECT u.id, u.email, u.display_name, u.role,
-              coalesce(string_agg(coalesce(g.programme_id, g.site_id), ', ' ORDER BY 1), '') AS scope
+              coalesce(string_agg(coalesce(g.programme_id, g.site_id, g.project_id), ', ' ORDER BY 1), '') AS scope
          FROM app_user u
          LEFT JOIN access_grant g ON g.user_id = u.id
         WHERE u.active AND u.email LIKE $1

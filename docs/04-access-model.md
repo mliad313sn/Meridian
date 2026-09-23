@@ -52,7 +52,33 @@ get authority over them by being in their path.
 
 **A viewer's refusal is categorical.** Not "no dangerous writes" — no
 writes. `rbac.test.js` asserts this by iterating every action in
-`ACTIONS` and requiring a refusal for each.
+`ACTIONS` and requiring a refusal for each. The one exception is a
+grant, not a level: the review grant below.
+
+### The review grant (D-36.12, migration 058)
+
+A grant carries a **power**: `write` (every grant above) or `review`.
+A review grant names a **programme or one project** — never a site — and
+carries `document.approve` plus the reads over what it names, and
+nothing else: no plan, no RAID, no change, no baseline, no benefit
+verdict. It works for any level, a viewer included (council members are
+viewers), and it is not a fifth role: the level still decides every
+action the grant does not name.
+
+- The rules `document.approve` always had still hold: never one's own
+  document, and gate evidence on a site-governed project needs group
+  level — a review grant does not stand in for it.
+- Approving under a review grant is a pure act: the status and the
+  version, no edit in the same call.
+- It never narrows an ungranted viewer, and it is not listed among the
+  programmes or sites an account writes in.
+- The audit row names the reviewer; revoking the grant removes the power.
+- A document may name the seat expected to approve it, so the gate
+  reads "waiting on seat A1". Naming a seat grants nothing.
+
+`review-grant.test.js` asserts, over every action in `ACTIONS` and for
+each level, that a review grant changes no verdict but
+`document.approve` and `project.read`.
 
 ---
 

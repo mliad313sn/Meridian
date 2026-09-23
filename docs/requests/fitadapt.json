@@ -54,7 +54,7 @@
     },
     "counterpart": "FitAdapt delivery lead & Meridian champion (PE-14), docs/governance/05-dogfooding-loop.md"
   },
-  "registerVersion": 2,
+  "registerVersion": 3,
   "requests": [
     {
       "id": "DF-01",
@@ -353,13 +353,18 @@
         "WI-10"
       ],
       "title": "An independent council member cannot approve evidence without write authority on the project",
-      "status": "open",
+      "status": "done",
       "priority": "high",
-      "version": null,
-      "decidedOn": null,
-      "delivered": [],
-      "measure": null,
-      "remaining": "open; campaign waves 1–4 group it with KODO MER-06 (seats/vetoes, built only on claude/dynamic-gates-and-requirements)",
+      "version": "5.26.0",
+      "decidedOn": "2026-09-23",
+      "delivered": [
+        "server/migrations/058_a_grant_to_review.sql",
+        "shared/rbac.js (review grants carry document.approve and the reads of their scope, nothing else)",
+        "web/src/views/administration.js — Power column, “Add a review grant”",
+        "document.expected_seat_id — “waiting on seat A1”"
+      ],
+      "measure": "server/test/review-grant.test.js (23 tests, exhaustive with/without-grant comparison); browser: a viewer granted review approves in her own name, and the audit row names her",
+      "remaining": null,
       "issue": 16,
       "accepted": null,
       "released": false,
@@ -371,8 +376,15 @@
           "registerVersion": 1,
           "status": "open",
           "note": "issue #16 open on 2026-09-23"
+        },
+        {
+          "at": "2026-09-23",
+          "registerVersion": 3,
+          "status": "done",
+          "note": "Delivered by docs/36 wave 2 (5.26.0)."
         }
-      ]
+      ],
+      "answerToSource": "Closed in 5.26.0 (D-36.12). An administrator gives the council member a review grant on the programme or on one project (Administration → the account's grants → “Add a review grant”). It carries approving evidence and reading that scope, and nothing else, so the member stays a viewer everywhere else and signs in their own name; the product owner no longer approves on their behalf. A document can name the seat expected to approve it, and the gate reads “waiting on seat A1”. What to try: grant review on FitAdapt's programme to a council account, file a document with its seat, and approve it as the member."
     },
     {
       "id": "DF-11",

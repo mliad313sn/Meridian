@@ -745,6 +745,18 @@ export async function importBook(book, user, opts = {}) {
         "held by the person who designed it.");
     }
 
+    /* D-36.12 — the seat a document waits on, once the seats exist (the
+       documents came in long before them). A seat the file does not
+       carry is dropped rather than failing the import: the document then
+       waits on nobody in particular, which is what it did before 058. */
+    for (const d of book.docs ?? []) {
+      if (!d.expectedSeat) continue;
+      await t.query(
+        `UPDATE document SET expected_seat_id = $2${bump("document", ["expected_seat_id"], ["$2::text"])}
+          WHERE id = $1 AND EXISTS (SELECT 1 FROM seat WHERE id = $2)`,
+        [d.id, String(d.expectedSeat)]);
+    }
+
     /* ── NEW-14 · the meeting register and the RAID reviews ───────────
        The export wrote none of them and a replace import deletes every
        meeting table, so an export → import erased the governance record:
