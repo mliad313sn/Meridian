@@ -206,7 +206,16 @@ REQ-52's blind spot exactly, so REQ-52 and NEW-04 close together.
   - `npm run verify` passes 840/840.
 - **Remains**: the tag.
 
-#### NEW-05 · The export writes what the import erases — open, wave 1 (first)
+#### NEW-05 · The export writes what the import erases — BUILT, PR as 5.20.1
+
+Closed with NEW-07. All 15 collections are imported. 85 fields are
+restored: the 38 named, plus 47 that the full enrichment found. F13's two
+loss lists are empty, and a new F13 check fails if any exported field of
+an imported register holds no value in the probe. KODO's book imports,
+round-trips and merges (dry run) with 200. Tests: 866 (+6).
+
+What follows is the measurement as it stood when the line opened:
+
 
 Measured on 23/09 while building F13. The export writes **15 collections
 the importer never reads**: absences, benefits, business cases, case
@@ -237,8 +246,12 @@ contradicts `docs/25` (reversibility).
 
 | Id | Defect | Wave |
 |---|---|---|
+| NEW-14 | **The meeting register and RAID reviews are not in the book.** The export writes no meeting series, occurrence, decision, action or review, and a replace import erases them. FitAdapt's `bootstrap.mjs` says so ("the import REPLACES the whole book, meetings included"), and an imported objection cannot find its decision. | 1 |
+| NEW-15 | A real (non-dry-run) import drops the rows it refuses by name without returning `rejects`. Only a dry run says so. | 1 |
+| NEW-16 | A merge import rewrites rows without bumping `row_version`, so a screen holding the old version can still write over them. | 1 |
+| NEW-17 | A merge can leave two active tolerances on one project when the file's active tolerance has a different id. | 3 |
 | NEW-06 | The forced password change never opens: `/api/bootstrap` `me` carries no `mustChangePassword`, so an account an administrator created cannot change its password from any screen, and every write is refused. | 1 |
-| NEW-07 | A merge-mode dry run of the product's own export answers 400 on a duplicate `change_step` key (MER-08). | 1 |
+| NEW-07 | A merge-mode dry run of the product's own export answers 400 on a duplicate `change_step` key (MER-08). **BUILT with NEW-05 (5.20.1).** | 1 |
 | NEW-08 | `GET /api/v1/signals` is live and absent from the published contract: F9 reads only `routes/v1.js` (REQ-52's blind spot, a sixth time). | 1 |
 | NEW-09 | On SIGTERM the process exits before PGlite closes (`claimBook` calls `process.exit` first): `postmaster.pid` is left behind and every start clears "2 stale lock files". | 1 |
 | NEW-10 | Saving a programme's gate ladder from the screen drops `loopsTo` and `scope` (D-36.02 holds in the engine and the validator, not in the form). | 1 |

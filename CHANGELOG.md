@@ -22,6 +22,58 @@ Nothing yet.
 
 ---
 
+## [5.20.1] — 2026-09-23
+
+**The product imports what it exports** (NEW-05, NEW-07; docs/36 wave 1).
+
+### Fixed
+
+- **The book export wrote fifteen registers the import never read:**
+  site windows, absences, benefits, rollout waves, commitments,
+  timesheets, tolerances, exceptions, business cases, their gate
+  reconfirmations, lessons, gate criteria, stakeholders, the comms plan
+  and external links. A replace import deletes the projects, so the
+  cascade erased all of them. Lessons survived with their project,
+  programme, site and author nulled.
+- **On the registers the import did read, 85 fields came back changed.**
+  38 were known when the line opened. Filling every exported column in
+  the probe found 47 more. Among them:
+  - cost lines were re-numbered and rewritten as "Imported" USD capex
+    labour on the 1st, not from contingency;
+  - programmes lost their gate ladder, and people their contract fields;
+  - projects lost their review, scores, sponsor, closure signatures and
+    date basis;
+  - sites lost their country, link and champion;
+  - risks lost their gate, change and closure.
+- **All of it now comes back, field for field.**
+  - Money the export writes in millions goes back through the book's
+    declared unit. Benefits keep their own unit.
+  - Ledger and timesheet ids are kept, and their sequences follow them.
+  - Counters follow imported ids.
+  - A pointer to an account or integration this database does not hold
+    becomes null instead of failing the import. Neither is book data.
+  - A merge never rewrites a ledger posting: a different posting under a
+    held number is refused by name.
+- **A merge-mode dry run of the product's own export no longer answers
+  400** (NEW-07). Change steps, report narrative and cross-project edges
+  now carry their own conflict rule. Before this, a merge silently
+  doubled every cross-project edge.
+- The export's row order is deterministic: every `ORDER BY` ends on a
+  unique key. Only the order of ties changes.
+
+Gate F13 is now strict with **both loss lists empty**. It also fails if
+any exported field of an imported register holds no value in the probed
+book, so an empty list is measured, not assumed. KODO's own book imports,
+round-trips and dry-runs a merge, each with 200.
+
+### Still not in the book (docs/36)
+
+The meeting register (series, occurrences, decisions, actions) and RAID
+reviews are not written by the export at all, so a replace import erases
+them (NEW-14). Move a whole instance with the database backup.
+
+---
+
 ## [5.20.0] — 2026-09-23
 
 **The write contract records that a review happened** (REQ-51, RT365;

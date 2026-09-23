@@ -101,23 +101,29 @@ export async function statusDate(settings) {
  * The whole portfolio a user is entitled to see, in engine shape.
  * One round of queries; the joins are small enough at portfolio scale
  * that reassembling in JS is cheaper than eight correlated selects.
+ *
+ * NEW-07 — every ORDER BY ends on a unique key. Milestones were ordered by
+ * date alone, so two due the same day came out in whatever order the heap
+ * held them: after a merge-mode import (which rewrites rows in place) the
+ * same book exported in a different order, and two exports of an
+ * unchanged book could not be compared (the MER-14 argument).
  */
 export async function loadPortfolio(user) {
   const settings = await loadSettings();
   const scope = projectScopeSql(user, "p");
 
   const [sites, programmes, people, windows] = await Promise.all([
-    many(`SELECT * FROM site WHERE active ORDER BY city`),
-    many(`SELECT * FROM programme WHERE active ORDER BY name`),
-    many(`SELECT * FROM person WHERE active ORDER BY name`),
+    many(`SELECT * FROM site WHERE active ORDER BY city, id`),
+    many(`SELECT * FROM programme WHERE active ORDER BY name, id`),
+    many(`SELECT * FROM person WHERE active ORDER BY name, id`),
     // the plant's own calendar (010) — a site fact, not a project one
-    many(`SELECT * FROM site_window ORDER BY starts_on`),
+    many(`SELECT * FROM site_window ORDER BY starts_on, id`),
   ]);
   // absences and deputies (015 / R-02) — a people fact, like the calendar
-  const absences = await many(`SELECT * FROM person_absence ORDER BY starts_on`);
+  const absences = await many(`SELECT * FROM person_absence ORDER BY starts_on, id`);
 
   const projectRows = await many(
-    `SELECT p.* FROM project p WHERE ${scope.sql} ORDER BY p.name`,
+    `SELECT p.* FROM project p WHERE ${scope.sql} ORDER BY p.name, p.id`,
     scope.params
   );
   const ids = projectRows.map((p) => p.id);
@@ -135,10 +141,10 @@ export async function loadPortfolio(user) {
     stakeholderRows, commsRows, reconfirmRows,
     evidenceRows, findingRows, seatRows, seatConflicts, objectionRows,
   ] = await Promise.all([
-    inScope(`SELECT * FROM activity WHERE project_id = ANY($1) ORDER BY project_id, stage`),
+    inScope(`SELECT * FROM activity WHERE project_id = ANY($1) ORDER BY project_id, stage, id`),
     inScope(`SELECT d.* FROM activity_dep d JOIN activity a ON a.id = d.activity_id
-              WHERE a.project_id = ANY($1)`),
-    inScope(`SELECT * FROM milestone WHERE project_id = ANY($1) ORDER BY due_date`),
+              WHERE a.project_id = ANY($1) ORDER BY d.activity_id, d.predecessor_id`),
+    inScope(`SELECT * FROM milestone WHERE project_id = ANY($1) ORDER BY due_date, id`),
     inScope(`SELECT * FROM requirement WHERE project_id = ANY($1) ORDER BY id`),
     /* Individual postings, not a monthly sum. The aggregate was enough to
        compute actual cost, but it left no line to point at — so a
@@ -152,19 +158,19 @@ export async function loadPortfolio(user) {
     ids.length
       ? many(`SELECT * FROM raid_item WHERE project_id = ANY($1) OR project_id IS NULL ORDER BY id`, [ids])
       : many(`SELECT * FROM raid_item WHERE project_id IS NULL ORDER BY id`),
-    inScope(`SELECT * FROM change_request WHERE project_id = ANY($1) ORDER BY raised_on DESC`),
+    inScope(`SELECT * FROM change_request WHERE project_id = ANY($1) ORDER BY raised_on DESC, id`),
     inScope(`SELECT s.* FROM change_step s JOIN change_request c ON c.id = s.cr_id
               WHERE c.project_id = ANY($1) ORDER BY s.cr_id, s.seq`),
-    inScope(`SELECT * FROM allocation WHERE project_id = ANY($1)`),
+    inScope(`SELECT * FROM allocation WHERE project_id = ANY($1) ORDER BY id`),
     ids.length
-      ? many(`SELECT * FROM document WHERE project_id = ANY($1) OR project_id IS NULL ORDER BY name`, [ids])
-      : many(`SELECT * FROM document WHERE project_id IS NULL ORDER BY name`),
+      ? many(`SELECT * FROM document WHERE project_id = ANY($1) OR project_id IS NULL ORDER BY name, id`, [ids])
+      : many(`SELECT * FROM document WHERE project_id IS NULL ORDER BY name, id`),
     many(`SELECT * FROM board_column ORDER BY seq`),
     inScope(`SELECT * FROM work_item WHERE project_id = ANY($1) ORDER BY id`),
-    inScope(`SELECT * FROM cross_dep WHERE from_project = ANY($1) OR to_project = ANY($1)`),
+    inScope(`SELECT * FROM cross_dep WHERE from_project = ANY($1) OR to_project = ANY($1) ORDER BY id`),
     many(`SELECT block_key, lines FROM report_narrative`),
     // SDP federation links (005) — display caches, scoped like all else.
-    inScope(`SELECT * FROM ext_link WHERE project_id = ANY($1) ORDER BY linked_at DESC`),
+    inScope(`SELECT * FROM ext_link WHERE project_id = ANY($1) ORDER BY linked_at DESC, id`),
     // What each project promised, and what was measured (008 / V-01).
     inScope(`SELECT * FROM benefit WHERE project_id = ANY($1) ORDER BY project_id, id`),
     // the same thing, at five sites (010 / V-06)
@@ -172,7 +178,7 @@ export async function loadPortfolio(user) {
     // money promised and not yet spent (012 / V-05)
     inScope(`SELECT * FROM commitment WHERE project_id = ANY($1) ORDER BY raised_on DESC, id`),
     // the actual effort, one number a week (016 / R-03)
-    inScope(`SELECT * FROM timesheet WHERE project_id = ANY($1) ORDER BY week_start DESC`),
+    inScope(`SELECT * FROM timesheet WHERE project_id = ANY($1) ORDER BY week_start DESC, id`),
     /* PM-02 — les enseignements. Seule collection du livre qui n'est PAS
        bornée aux projets visibles, et c'est délibéré : un enseignement
        ADOPTÉ est une connaissance de groupe, sinon un site n'apprend
@@ -190,11 +196,11 @@ export async function loadPortfolio(user) {
     inScope(`SELECT * FROM project_exception
               WHERE project_id = ANY($1) ORDER BY raised_on DESC, id`),
     /* PM-03 — la promesse contre laquelle le réalisé se relira. */
-    inScope(`SELECT * FROM business_case WHERE project_id = ANY($1)`),
+    inScope(`SELECT * FROM business_case WHERE project_id = ANY($1) ORDER BY project_id`),
     /* I-4 — les critères de chaque jalon, et qui les a constatés. */
     inScope(`SELECT * FROM gate_criterion WHERE project_id = ANY($1) ORDER BY project_id, gate, seq, id`),
     /* PM-05 / PM-11 — qui compte, et qui on informe. */
-    inScope(`SELECT * FROM stakeholder WHERE project_id = ANY($1) ORDER BY project_id, influence DESC, interest DESC, name`),
+    inScope(`SELECT * FROM stakeholder WHERE project_id = ANY($1) ORDER BY project_id, influence DESC, interest DESC, name, id`),
     inScope(`SELECT * FROM comms_plan WHERE project_id = ANY($1) ORDER BY project_id, next_on NULLS LAST, id`),
     /* REQ-22 — la suite des reconfirmations : « le cas a-t-il été
        reconfirmé À CE jalon » est une question par jalon, qu'une colonne

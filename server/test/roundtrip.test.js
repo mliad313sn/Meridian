@@ -38,29 +38,29 @@ after(shutdown);
 /* Not book data: who is asking, and what they may see. */
 const NOT_BOOK = new Set(["currentUser", "viewer"]);
 
-/* NEW-05 — exported and never imported. Each is erased by an import. */
-const KNOWN_LOST_COLLECTIONS = new Set([
-  "absences", "benefits", "businessCases", "caseReconfirmations", "commitments",
-  "comms", "criteria", "exceptions", "extLinks", "lessons", "stakeholders",
-  "timesheets", "tolerances", "waves", "windows",
-]);
+/* Exported and never imported: each would be erased by an import. NEW-05
+   emptied this list (15 collections, from absences to windows). It stays,
+   empty, so that the next register added to the export without its
+   import has somewhere to be named — and the gate still fails until it is. */
+const KNOWN_LOST_COLLECTIONS = new Set([]);
 
-/* NEW-05 — fields that come back different, measured on the seeded book
-   plus the enrichment below: every column the importer never learned,
-   because it was written before them (R2.6) and nobody extended it. A
-   ledger line is re-numbered and rewritten "Imported", "Labour", USD,
-   capex, on the first of the month, not from contingency. A programme
-   loses its ladder; a person their contract; a project its review, its
-   scores and what its date rests on. */
-const KNOWN_LOST_FIELDS = new Set([
-  "ledger[].id", "ledger[].note", "ledger[].bookedOn", "ledger[].category", "ledger[].fromContingency", "ledger[].kind", "ledger[].currency", "ledger[].fx", "ledger[].amountLocal",
-  "programmes[].gateModel",
-  "people[].employment", "people[].rotation", "people[].availability", "people[].supplier",
-  "projects[].scaffoldedGates", "projects[].ladderDiffers", "projects[].pirOn", "projects[].pirVerdict", "projects[].pirNote", "projects[].closureNote", "projects[].dateBasis", "projects[].condition", "projects[].acceptanceCriteria", "projects[].plantImpact", "projects[].mocRef", "projects[].fit", "projects[].value", "projects[].risk", "projects[].effort", "projects[].rank",
-  "activities[].progressSource",
-  "milestones[].intrusive", "milestones[].acceptanceCriteria", "milestones[].dateBasis", "milestones[].condition",
-  "raid[].tp", "raid[].ti", "raid[].category",
-]);
+/* Fields that come back different. NEW-05 emptied this list too (38
+   fields: the ledger's identity and wording, a programme's ladder, a
+   person's contract, a project's review, scores and date basis, …) and
+   the enrichment below now gives every exported column of every imported
+   table a value that is not its default, so an empty list is measured,
+   not assumed. */
+const KNOWN_LOST_FIELDS = new Set([]);
+
+/* Collections the import reads that the probed book cannot hold a row of,
+   each with its reason. Shrink-only, like the two lists above.
+   · objections — an objection cites a meeting decision, and the meeting
+     register is not in the book: the export does not write it and a
+     replace import deletes it, so the decision is never there to be cited
+     and the import refuses the objection by name (`rejects`). Found by
+     NEW-05's enrichment; closing it means exporting the meeting register,
+     which is a line of its own, not a field of this one. */
+const NOT_EXERCISED = new Set(["objections"]);
 
 const importer = readFileSync(new URL("../src/import.js", import.meta.url), "utf8");
 const read = new Set([...importer.matchAll(/\bbook\??\.(\w+)/g)].map((m) => m[1]));
@@ -80,34 +80,159 @@ function differences(a, b, path = "", out = new Map()) {
 }
 
 /* A round trip only proves what the book holds, and the seeded book holds
-   defaults: no expensed allocation, no euro cost line, no programme ladder.
-   So before exporting, one row of each imported table is given a value
-   that is NOT its default in every column added since the importer was
-   written (R2.6, migrations 001–004). Without this the gate passes on the
-   very losses it exists to catch — measured: dropping `capitalised` from
-   the import went unseen until this block existed. */
+   defaults: no expensed allocation, no euro cost line, no programme ladder
+   — and not one row of fifteen registers. So before exporting, every
+   imported table is given a value that is NOT its default in every column
+   the export writes: an UPDATE of one seeded row where the seed has rows,
+   an INSERT of one realistic row where it has none. Without this the gate
+   passes on the very losses it exists to catch — measured: dropping
+   `capitalised` from the import went unseen until this block existed, and
+   the fifteen registers passed as "imported" on empty lists.
+   The last test of this file checks the block did its job: every key of
+   every collection the import reads must hold a non-empty value in at
+   least one row. */
+const P1 = `(SELECT min(id) FROM project)`;
+const PE1 = `(SELECT min(id) FROM person)`;
+const PE2 = `(SELECT max(id) FROM person)`;
+const SITE = `(SELECT min(id) FROM site)`;
+const USER = `(SELECT min(id) FROM app_user)`;
 const ENRICH = [
+  /* An integration is not book data (the import never writes one), so it
+     survives the import, and every `externalSource` that names it must
+     come back naming it. */
+  `INSERT INTO integration (id, name, key_hash) VALUES ('INT-RT', 'Round-trip probe', 'x')`,
   `UPDATE allocation SET capitalised = false WHERE id = (SELECT min(id) FROM allocation)`,
-  `UPDATE cost_line SET kind = 'opex', currency = 'EUR', fx_rate = 1.1, amount_local = amount * 1.1,
+  `UPDATE cost_line SET kind = 'opex', currency = 'EUR', fx_rate = 1.1, amount_local = round(amount * 1.1, 2),
           from_contingency = true, category = 'Contract', booked_on = (period || '-17')::date,
-          note = 'Round-trip probe'
+          note = 'Round-trip probe', created_by = ${USER},
+          risk_id = (SELECT min(id) FROM raid_item)
     WHERE id = (SELECT min(id) FROM cost_line)`,
-  `UPDATE programme SET gate_model = '[{"n":1,"name":"Idea","at":0.1,"owner":"Sponsor","evidence":""},
-          {"n":2,"name":"Build","at":0.5,"owner":"PMO","evidence":"","loopsTo":1}]'::jsonb
+  // a correction is a reversing entry (CONTRIBUTING), and the export says which lines are
+  `INSERT INTO cost_line (project_id, period, booked_on, amount, category, note)
+   SELECT project_id, period, booked_on, -amount, category, 'Reversal of #' || id || ' — mis-posted'
+     FROM cost_line WHERE id = (SELECT max(id) FROM cost_line)`,
+  `UPDATE change_step SET comment = 'Approved subject to the vendor quote'
+    WHERE id = (SELECT min(id) FROM change_step)`,
+  `UPDATE document SET supersedes = (SELECT max(id) FROM document)
+    WHERE id = (SELECT min(id) FROM document)`,
+  `UPDATE work_item SET source = 'Gate 2 review', score = 42.5, score_method = 'RICE'
+    WHERE id = (SELECT max(id) FROM work_item)`,
+  `UPDATE project SET closed = true WHERE id = (SELECT max(id) FROM project)`,
+  `UPDATE programme SET gate_model = '[{"n":1,"name":"Idea","at":0.1,"owner":"Sponsor","evidence":"Charter"},
+          {"n":2,"name":"Build","at":0.5,"owner":"PMO","evidence":"","loopsTo":1}]'::jsonb,
+          origin = 'sdp'
     WHERE id = (SELECT min(id) FROM programme)`,
+  `UPDATE site SET country = 'BF', legal_entity = 'Probe Mining SA', link_mbps = 12.5,
+          link_kind = 'VSAT', readiness = 'Preparing', readiness_note = 'probe',
+          champion_id = ${PE1}
+    WHERE id = ${SITE}`,
   `UPDATE project SET pir_on = '2026-01-15', pir_verdict = 'Partly met', pir_note = 'probe',
           plant_impact = 'plant', moc_ref = 'MOC-1', fit_score = 3, value_score = 4, risk_score = 2,
           effort_score = 5, rank_seq = 7, closure_note = 'probe', date_basis = 'placeholder',
-          condition = 'probe condition', acceptance_criteria = 'probe criteria', scaffolded_gates = 4
-    WHERE id = (SELECT min(id) FROM project)`,
+          condition = 'probe condition', acceptance_criteria = 'probe criteria', scaffolded_gates = 4,
+          health_override = 'A', health_override_why = 'probe override', origin = 'sdp',
+          ops_accepted_by = ${PE1}, benefits_owner_id = ${PE2}, closed_on = '2026-02-01',
+          sponsor_id = ${PE1}, moc_approved_on = '2026-01-10', moc_approved_label = 'Plant manager',
+          external_source = 'INT-RT', external_id = 'EXT-P1'
+    WHERE id = ${P1}`,
   `UPDATE milestone SET intrusive = true, acceptance_criteria = 'probe', date_basis = 'placeholder',
-          condition = 'probe'
+          condition = 'probe', accepted_by = ${PE1}, accepted_on = '2026-03-02', retired_gate = 2,
+          origin = 'sdp', external_source = 'INT-RT', external_id = 'EXT-M1'
     WHERE id = (SELECT min(id) FROM milestone)`,
   `UPDATE person SET employment = 'contractor', rotation = '4/2', availability = 80, supplier = 'Acme'
-    WHERE id = (SELECT min(id) FROM person)`,
-  `UPDATE raid_item SET target_probability = 1, target_impact = 1, category = 'probe'
+    WHERE id = ${PE1}`,
+  `UPDATE raid_item SET target_probability = 1, target_impact = 1, category = 'probe',
+          gate = 2, cr_id = (SELECT min(id) FROM change_request), closed_on = '2026-04-01',
+          closed_by = ${PE1}, origin_site = ${SITE}, external_source = 'INT-RT', external_id = 'EXT-R1'
     WHERE id = (SELECT min(id) FROM raid_item)`,
-  `UPDATE activity SET progress_source = 'probe' WHERE id = (SELECT min(id) FROM activity)`,
+  `UPDATE activity SET progress_source = 'probe', progress_at = '2026-08-20T08:30:00Z', origin = 'sdp',
+          external_source = 'INT-RT', external_id = 'EXT-A1'
+    WHERE id = (SELECT min(id) FROM activity)`,
+  `UPDATE change_request SET raised_by_user = ${USER} WHERE id = (SELECT min(id) FROM change_request)`,
+  `UPDATE document SET probe_state = 'ok', probed_at = '2026-08-21T06:00:00Z'
+    WHERE id = (SELECT min(id) FROM document)`,
+  `UPDATE work_item SET external_source = 'INT-RT', external_id = 'EXT-W1'
+    WHERE id = (SELECT min(id) FROM work_item)`,
+
+  /* The governance registers (MER-03/05/06/11) — empty in the seed. */
+  `INSERT INTO requirement (id, project_id, statement, source, priority, verification, verified_by,
+                           gate_n, status, waiver_reason, owner_id, updated_on)
+   VALUES ('REQ-901', ${P1}, 'The crusher PLC reports within 2 s', 'Operations charter', 'S',
+           'Site acceptance test', 'SAT-14 report', 2, 'Waived', 'Superseded by the new PLC',
+           ${PE1}, '2026-05-05')`,
+  `INSERT INTO evidence (id, project_id, document_id, kind, name, uri, digest, gate_n, gate_loop,
+                        captured_on, captured_by)
+   VALUES ('EV-901', ${P1}, (SELECT min(id) FROM document), 'ci_run', 'Nightly build 412',
+           'https://ci.example/run/412', 'sha256:ab12', 2, 2, '2026-05-06', ${PE1})`,
+  `INSERT INTO finding (id, project_id, requirement_id, gate_n, gate_loop, observed_fact,
+                       why_it_matters, severity, owner_id, proposed_fix, raised_on, retest_on,
+                       status, closed_evidence_id, waiver_reason)
+   VALUES ('FND-901', ${P1}, 'REQ-901', 2, 2, 'Latency measured at 3.4 s', 'Operators act late',
+           'S1', ${PE2}, 'Move the poller', '2026-05-07', '2026-05-20', 'Closed', 'EV-901',
+           'Re-tested on the new PLC')`,
+  `INSERT INTO seat (id, name, person_id, domain, veto_domain, observer, active)
+   VALUES ('SE-901', 'Safety officer', ${PE1}, 'safety', 'safety', true, false),
+          ('SE-902', 'Architect', ${PE2}, 'architecture', NULL, false, true)`,
+  `INSERT INTO seat_conflict (seat_id, other_id, reason)
+   VALUES ('SE-901', 'SE-902', 'designer cannot veto own design'),
+          ('SE-902', 'SE-901', 'designer cannot veto own design')`,
+
+  /* NEW-05 — the fifteen registers, one realistic row each. */
+  `INSERT INTO site_window (id, site_id, kind, label, detail, starts_on, ends_on)
+   VALUES ('SW-01', ${SITE}, 'freeze', 'Year-end freeze', 'No change to plant systems', '2026-12-15', '2027-01-05')`,
+  `INSERT INTO person_absence (id, person_id, starts_on, ends_on, reason, deputy_id, note)
+   VALUES ('ABS-001', ${PE1}, '2026-09-01', '2026-09-14', 'training', ${PE2}, 'HV authorisation course')`,
+  `INSERT INTO benefit (id, project_id, kind, title, detail, measure, unit, baseline, target, actual,
+                       owner_id, realise_on, measured_on, status, external_source, external_id)
+   VALUES ('BEN-01', ${P1}, 'Availability', 'Mill availability', 'Fewer unplanned stops',
+           'Monthly availability', '%', 91.5, 96, 94.25, ${PE2}, '2026-12-31', '2026-08-31',
+           'Partially realised', 'INT-RT', 'EXT-B1')`,
+  `INSERT INTO rollout_wave (id, project_id, site_id, seq, planned_on, actual_on, status, note)
+   VALUES ('WAVE-001', ${P1}, ${SITE}, 2, '2026-10-01', '2026-10-03', 'Live', 'Cut over on night shift')`,
+  `INSERT INTO commitment (id, project_id, reference, supplier, description, amount, currency, fx_rate,
+                          kind, raised_on, expected_on, status)
+   VALUES ('CMT-001', ${P1}, 'PO-4411', 'Acme Automation', 'PLC hardware', 250000.5, 'EUR', 1.08,
+           'opex', '2026-06-01', '2026-09-30', 'Part received')`,
+  `INSERT INTO timesheet (id, person_id, project_id, week_start, days, entered_by)
+   VALUES (7, ${PE1}, ${P1}, '2026-08-24', 3.5, ${USER})`,
+  `INSERT INTO project_tolerance (id, project_id, schedule_days, cost_pct, benefit_pct, note, set_by, set_on)
+   VALUES ('TOL-001', ${P1}, 10, 7.5, 12.5, 'Board delegation', ${USER}, '2026-07-01')`,
+  `INSERT INTO project_exception (id, project_id, tolerance_id, dimension, raised_on, measured, allowed,
+                                 detail, status, answer_kind, answer, answered_by, answered_on)
+   VALUES ('EXC-001', ${P1}, 'TOL-001', 'cost', '2026-08-02', 9.25, 7.5, 'Forecast over by 1.75 pts',
+           'Answered', 'Plan revised', 'Scope of wave 3 deferred', ${USER}, '2026-08-09')`,
+  `INSERT INTO business_case (id, project_id, summary, expected_cost, expected_benefit, value_confidence,
+                             basis, written_by, written_on, updated_on, reconfirmed_gate,
+                             reconfirmed_on, reconfirmed_by, external_source, external_id)
+   VALUES ('CAS-001', ${P1}, 'Replace the crusher PLC', 1234567.89, 2500000, 4, 'Vendor quote Q-88',
+           ${USER}, '2026-01-05', '2026-06-10', 2, '2026-05-01', ${USER}, 'INT-RT', 'EXT-C1')`,
+  `INSERT INTO case_reconfirmation (id, case_id, project_id, gate, expected_cost, expected_benefit,
+                                   verdict, note, reconfirmed_by, reconfirmed_on)
+   VALUES ('CRC-001', 'CAS-001', ${P1}, 2, 1200000, 2400000.5, 'Continue with conditions',
+           'Hold the contingency', ${PE1}, '2026-05-01')`,
+  `INSERT INTO lesson (id, project_id, programme_id, site_id, gate_n, category, title, what_happened,
+                      why, recommendation, outcome, raised_by, raised_on, status, adopted_by, adopted_on)
+   VALUES ('LSN-001', ${P1}, (SELECT min(id) FROM programme), ${SITE}, 2, 'Procurement',
+           'Order long-lead PLCs at gate 1', 'Hardware arrived late', 'Ordered after design freeze',
+           'Order at gate 1 on a cancellable PO', 'Positive', ${PE1}, '2026-06-15', 'Adopted',
+           ${USER}, '2026-06-20')`,
+  `INSERT INTO gate_criterion (id, project_id, gate, seq, text, document_id, met, reviewed_by,
+                              reviewed_on, note, external_source, external_id)
+   VALUES ('GC-1', ${P1}, 2, 3, 'FAT passed', (SELECT min(id) FROM document), true, ${PE1},
+           '2026-04-02', 'Witnessed', 'INT-RT', 'EXT-G1')`,
+  `INSERT INTO stakeholder (id, project_id, person_id, name, organisation, role_label, interest,
+                           influence, attitude, engagement, owner_id, note)
+   VALUES ('STK-1', ${P1}, ${PE2}, 'Plant manager', 'Operations', 'Accountable', 5, 4, 'Champion',
+           'Partner', ${PE1}, 'Weekly one-to-one')`,
+  `INSERT INTO comms_plan (id, project_id, audience, purpose, channel, frequency, owner_id, next_on, note)
+   VALUES ('COM-1', ${P1}, 'Shift supervisors', 'Cut-over readiness', 'Toolbox talk', 'Weekly',
+           ${PE1}, '2026-09-07', 'French and Mooré')`,
+  `INSERT INTO ext_link (id, source, ext_id, project_id, activity_id, site_id, title_cache, status_cache,
+                        kind_cache, risk_cache, due_cache, window_start, linked_by, linked_at,
+                        synced_at, stale)
+   VALUES ('XL-1', 'inspection', 'INS-77', ${P1}, (SELECT min(id) FROM activity), ${SITE},
+           'Crusher guard inspection', 'Open', 'Inspection', 'High', '2026-09-10', '2026-09-08',
+           ${USER}, '2026-08-01T10:00:00Z', '2026-08-02T10:00:00Z', true)`,
 ];
 
 describe("F13 · export → import → export", () => {
@@ -151,5 +276,68 @@ describe("F13 · export → import → export", () => {
     const diff = differences(first, second);
     const healed = [...KNOWN_LOST_FIELDS].filter((p) => !diff.has(p));
     assert.deepEqual(healed, [], "survives now — remove from KNOWN_LOST_FIELDS");
+  });
+
+  /* NEW-05 — the round trip can only lose what the book holds. A register
+     with no row, or a field that is null, empty or false in every row,
+     "survives" whatever the importer does with it: that is how fifteen
+     registers passed every probe on 23/09. So the probed book must hold,
+     for every collection the import reads, at least one row, and for
+     every field of it at least one value that is not blank. A field the
+     export gains tomorrow fails here until ENRICH gives it a value. */
+  test("the probed book exercises every field of every collection the import reads", () => {
+    const blank = (v) => v === null || v === undefined || v === "" || v === false ||
+      (Array.isArray(v) && !v.length);
+    const unexercised = [];
+    const walk = (rows, path) => {
+      if (!rows.length) { unexercised.push(path); return; }
+      const keys = new Set(rows.flatMap((r) => Object.keys(r)));
+      for (const key of keys) {
+        const values = rows.map((r) => r[key]);
+        if (values.every(blank)) unexercised.push(`${path}[].${key}`);
+        else if (values.some((v) => Array.isArray(v) && v.some((x) => x && typeof x === "object"))) {
+          walk(values.flat().filter((x) => x && typeof x === "object"), `${path}[].${key}`);
+        }
+      }
+    };
+    for (const [k, rows] of Object.entries(first)) {
+      if (!read.has(k) || NOT_BOOK.has(k) || !Array.isArray(rows)) continue;
+      walk(rows, k);
+    }
+    const healed = [...NOT_EXERCISED].filter((p) => !unexercised.includes(p));
+    assert.deepEqual(healed, [], "exercised now — remove from NOT_EXERCISED");
+    assert.deepEqual(unexercised.filter((p) => !NOT_EXERCISED.has(p)), [],
+      "these are exported and imported but the probed book holds no value for them — " +
+      "give them one in ENRICH, or the round trip proves nothing about them");
+  });
+});
+
+/* NEW-07 (docs/36) — the merge mode (MER-08) had never been run on the
+   product's own export: `change_step` has no id the export writes, so the
+   merge handle left its insert alone and the first step of the first
+   change hit the (cr_id, seq) key — 400. `cross_dep` had no key at all
+   and would have doubled every edge; `report_narrative` is keyed on its
+   block. This runs after the suite above, on the enriched book it
+   imported, so every register is exercised in merge mode too. */
+describe("NEW-07 · the product's own export merges onto itself", () => {
+  let before_, dry, merged, after_;
+  before(async () => {
+    const admin = await as("admin");
+    before_ = (await admin.get("/api/admin/export")).body;
+    dry = await admin.post("/api/admin/import?mode=merge&dryRun=1", { db: before_ });
+    merged = await admin.post("/api/admin/import?mode=merge", { db: before_ });
+    after_ = (await admin.get("/api/admin/export")).body;
+  });
+
+  test("merge-mode dry run of the product's own export answers 200", () => {
+    assert.equal(dry.status, 200, dry.text);
+    assert.equal(dry.body.mode, "merge");
+    assert.deepEqual(dry.body.rejects, [], "nothing of its own export is refused");
+  });
+
+  test("the merge itself answers 200, and the book is unchanged by it", () => {
+    assert.equal(merged.status, 200, merged.text);
+    assert.deepEqual([...differences(before_, after_)], [],
+      "merging a book onto itself must change nothing — no doubled edge, no rewritten posting");
   });
 });

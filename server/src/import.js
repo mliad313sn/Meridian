@@ -21,6 +21,17 @@ import { HttpError } from "./auth.js";
 import { translate } from "./pgerror.js";
 
 const PORTFOLIO_TABLES = [
+  /* NEW-05 — the registers the importer did not know. Most would go by
+     cascade with their project anyway; `lesson` would NOT (its project
+     key is ON DELETE SET NULL, so the row survives a replace and the
+     re-import collides with it), and naming every one is what makes
+     "replace" mean replace rather than "whatever the cascade reaches".
+     Children first: a reconfirmation before its case, an exception
+     before its tolerance, a criterion before the document it cites, a
+     link before the activity it points at. */
+  "case_reconfirmation", "business_case", "project_exception", "project_tolerance",
+  "gate_criterion", "ext_link", "benefit", "rollout_wave", "commitment", "timesheet",
+  "lesson", "stakeholder", "comms_plan", "person_absence", "site_window",
   "meeting_action", "meeting_decision", "meeting_attendance", "agenda_item",
   "meeting_occurrence", "meeting_series",
   "decision_objection", "seat_conflict", "seat",
@@ -34,6 +45,25 @@ const PORTFOLIO_TABLES = [
 
 const clean = (v) => (v === undefined || v === "" ? null : v);
 const int = (v, d = 0) => (Number.isFinite(Number(v)) ? Math.round(Number(v)) : d);
+/* NEW-05 — a number that may be absent: absent stays absent (null), it
+   does not become zero. A target probability of "none set" and one of 0
+   are different statements. */
+const num = (v) => (v === undefined || v === null || v === "" || !Number.isFinite(Number(v)) ? null : Number(v));
+const intOrNull = (v) => (num(v) === null ? null : Math.round(Number(v)));
+const origin = (v) => (v === "sdp" ? "sdp" : "local");
+
+/* NEW-05 — references the file cannot vouch for.
+   The header says it: accounts are not book data, and neither are the
+   integrations (each carries a key hash). A column that names an
+   `app_user` or an `integration` is therefore kept ONLY when that
+   account or integration already exists in this database, and null
+   otherwise — the row is book data and must come in; the name it
+   carries is a pointer into a register the file does not own. On the
+   product's own export the accounts are the same ones, so the pointer
+   survives; from someone else's file it drops to null rather than
+   failing the whole import on a foreign key. `$n` is the parameter. */
+const USER = (n) => `(SELECT id FROM app_user WHERE id = $${n})`;
+const INTEGRATION = (n) => `(SELECT id FROM integration WHERE id = $${n})`;
 
 /* MER-09 — l'unité de la monnaie était implicite, et l'unité était le
    million. Dans le livre, `"budget": 4` voulait dire quatre millions ;
@@ -151,20 +181,41 @@ export async function importBook(book, user, opts = {}) {
     /* ── reference ────────────────────────────────────────────────── */
     for (const s of book.sites ?? []) {
       await t.query(
-        `INSERT INTO site (id, city, region, tz_offset, tz_name, headcount, fte, charter)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        `INSERT INTO site (id, city, region, tz_offset, tz_name, headcount, fte, charter,
+                           country, legal_entity, link_mbps, link_kind, readiness, readiness_note)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
         [s.id, s.city, s.region ?? "", Number(s.tz ?? 0), s.tzName ?? "UTC",
-         int(s.headcount), int(s.fte), s.role ?? s.charter ?? ""]);
+         int(s.headcount), int(s.fte), s.role ?? s.charter ?? "",
+         /* NEW-05 — what the site is (V-07, MC-01), not only where. */
+         s.country ?? "", s.legalEntity ?? "", num(s.linkMbps), s.linkKind ?? "",
+         ["Unknown", "Not ready", "Preparing", "Ready"].includes(s.readiness) ? s.readiness : "Unknown",
+         s.readinessNote ?? ""]);
     }
     for (const p of book.people ?? []) {
       await t.query(
-        `INSERT INTO person (id, name, job_role, site_id, day_rate) VALUES ($1,$2,$3,$4,$5)`,
-        [p.id, p.name, p.role ?? "", p.site, Number(p.rate ?? 0)]);
+        `INSERT INTO person (id, name, job_role, site_id, day_rate,
+                             employment, rotation, availability, supplier)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        [p.id, p.name, p.role ?? "", p.site, Number(p.rate ?? 0),
+         /* NEW-05 — how this person actually works (V-09): a fly-in
+            contractor on four-and-two came back as staff at 100 %. */
+         p.employment === "contractor" ? "contractor" : "staff", p.rotation ?? "",
+         Math.max(0, Math.min(100, int(p.availability, 100))), p.supplier ?? ""]);
+    }
+    // the site champion second, so the person exists (A-12)
+    for (const s of book.sites ?? []) {
+      if (s.champion) {
+        await t.query(`UPDATE site SET champion_id = $2 WHERE id = $1`, [s.id, s.champion]);
+      }
     }
     for (const g of book.programmes ?? []) {
       await t.query(
-        `INSERT INTO programme (id, name, sponsor, manager_id) VALUES ($1,$2,$3,$4)`,
-        [g.id, g.name, g.sponsor ?? "", clean(g.managerId)]);
+        `INSERT INTO programme (id, name, sponsor, manager_id, gate_model, origin)
+         VALUES ($1,$2,$3,$4,$5,$6)`,
+        /* NEW-05 — the programme's own ladder (I-3). Dropping it put every
+           project of a six-gate programme back on the default four. */
+        [g.id, g.name, g.sponsor ?? "", clean(g.managerId),
+         g.gateModel == null ? null : JSON.stringify(g.gateModel), origin(g.origin)]);
     }
     for (const c of book.columns ?? []) {
       await t.query(`INSERT INTO board_column (id, name, seq, wip) VALUES ($1,$2,$3,$4)
@@ -179,8 +230,16 @@ export async function importBook(book, user, opts = {}) {
            (id, name, programme_id, site_id, governance_level, pm_id, method,
             start_date, finish_date, baseline_finish, budget, contingency,
             contingency_used, description, phase, gate, health_override, closed,
-            gate_loop)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
+            gate_loop,
+            health_override_why, origin, scaffolded_gates, pir_on, pir_verdict, pir_note,
+            ops_accepted_by, benefits_owner_id, closure_note, closed_on,
+            date_basis, condition, sponsor_id, acceptance_criteria,
+            plant_impact, moc_ref, moc_approved_on, moc_approved_label,
+            fit_score, value_score, risk_score, effort_score, rank_seq,
+            external_source, external_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,
+                 $20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,
+                 $38,$39,$40,$41,$42,${INTEGRATION(43)},$44)`,
         [p.id, p.name, p.programme, p.site,
          p.governanceLevel === "group" ? "group" : "site",
          clean(p.pm), p.method ?? "Hybrid",
@@ -189,16 +248,41 @@ export async function importBook(book, user, opts = {}) {
          p.desc ?? "", p.phase ?? "Initiation", int(p.gate),
          ["G", "A", "R"].includes(p.healthOverride) ? p.healthOverride : null,
          !!p.closed,
-         Math.max(1, int(p.loop, 1))]);
+         Math.max(1, int(p.loop, 1)),
+         /* NEW-05 — everything a project learned to say after R2.6: why
+            its health was overridden, which ladder it was scaffolded on
+            (E-1), its post-implementation review (V-01), the three
+            signatures of its closure (PM-08), what its date rests on
+            (REQ-19), what it reaches into (V-03) and where it sits in the
+            queue (V-04). Each came back empty, and a closed project read
+            as one nobody had accepted. `ladderDiffers` is not imported:
+            the serialiser derives it from `scaffoldedGates` and the
+            programme's ladder, both of which now are. */
+         p.healthOverrideWhy ?? "", origin(p.origin), intOrNull(p.scaffoldedGates),
+         clean(p.pirOn), ["Met", "Partly met", "Missed"].includes(p.pirVerdict) ? p.pirVerdict : null,
+         p.pirNote ?? "",
+         clean(p.opsAcceptedBy), clean(p.benefitsTo), p.closureNote ?? "", clean(p.closedOn),
+         p.dateBasis === "placeholder" ? "placeholder" : "committed", p.condition ?? "",
+         clean(p.sponsor), p.acceptanceCriteria ?? "",
+         ["none", "plant", "safety"].includes(p.plantImpact) ? p.plantImpact : "none",
+         p.mocRef ?? "", clean(p.mocApprovedOn), p.mocApprovedBy ?? "",
+         intOrNull(p.fit), intOrNull(p.value), intOrNull(p.risk), intOrNull(p.effort),
+         intOrNull(p.rank),
+         clean(p.externalSource), clean(p.externalId)]);
     }
     for (const a of book.activities ?? []) {
       await t.query(
         `INSERT INTO activity (id, project_id, name, stage, start_date, end_date,
-                               base_start, base_end, weight, pct, owner_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+                               base_start, base_end, weight, pct, owner_id,
+                               progress_source, progress_at, origin, external_source, external_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,${INTEGRATION(15)},$16)`,
         [a.id, a.project, a.name, int(a.stage), a.start, a.end,
          a.baseStart ?? a.start, a.baseEnd ?? a.end,
-         Number(a.weight ?? 0), Math.max(0, Math.min(100, int(a.pct))), clean(a.owner)]);
+         Number(a.weight ?? 0), Math.max(0, Math.min(100, int(a.pct))), clean(a.owner),
+         /* NEW-05 — who measured this progress, and when (I-5): without
+            it a figure pushed by the site's scheduler reads as typed here. */
+         a.progressSource ?? "", clean(a.progressAt), origin(a.origin),
+         clean(a.externalSource), clean(a.externalId)]);
     }
     // dependencies second, so both ends exist
     for (const a of book.activities ?? []) {
@@ -209,19 +293,43 @@ export async function importBook(book, user, opts = {}) {
       }
     }
     for (const c of book.crossDeps ?? []) {
+      /* NEW-07 — `cross_dep` has only a serial id, which the export does
+         not write, so a merge inserted every edge a second time. The
+         edge's identity is its two ends: the label is updated in place,
+         and the edge is inserted only where it is not already drawn. In
+         replace mode the table is empty and this is a plain insert. */
+      const edge = [c.from, int(c.fromStage), c.to, int(c.toStage), c.label ?? ""];
+      await t.query(
+        `UPDATE cross_dep SET label = $5
+          WHERE from_project = $1 AND from_stage = $2 AND to_project = $3 AND to_stage = $4`,
+        edge);
       await t.query(
         `INSERT INTO cross_dep (from_project, from_stage, to_project, to_stage, label)
-         VALUES ($1,$2,$3,$4,$5)`,
-        [c.from, int(c.fromStage), c.to, int(c.toStage), c.label ?? ""]);
+         SELECT $1::text, $2::int, $3::text, $4::int, $5::text
+          WHERE NOT EXISTS (SELECT 1 FROM cross_dep
+                             WHERE from_project = $1 AND from_stage = $2
+                               AND to_project = $3 AND to_stage = $4)`,
+        edge);
     }
     for (const m of book.milestones ?? []) {
       await t.query(
         `INSERT INTO milestone (id, project_id, name, due_date, base_date, gate, kind,
-                                owner_id, done, gate_loop)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+                                owner_id, done, gate_loop,
+                                intrusive, acceptance_criteria, accepted_by, accepted_on,
+                                date_basis, condition, retired_gate, origin,
+                                external_source, external_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,
+                 ${INTEGRATION(19)},$20)`,
         [m.id, m.project, m.name, m.date, m.baseDate ?? m.date,
          m.gate ?? null, m.kind === "gate" ? "gate" : "milestone", clean(m.owner), !!m.done,
-         Math.max(1, int(m.loop, 1))]);
+         Math.max(1, int(m.loop, 1)),
+         /* NEW-05 — whether it stops the plant (V-03), what it must show
+            and who saw it shown (PM-04), what its date is worth (REQ-14),
+            and the rung it held before a ladder move retired it (REQ-27). */
+         m.intrusive === true, m.acceptanceCriteria ?? "", clean(m.acceptedBy), clean(m.acceptedOn),
+         m.dateBasis === "placeholder" ? "placeholder" : "committed", m.condition ?? "",
+         intOrNull(m.retiredGate), origin(m.origin),
+         clean(m.externalSource), clean(m.externalId)]);
     }
     /* MER-03 — les exigences. Elles arrivent APRÈS les projets parce
        qu'une exigence sans projet pour la tenir n'a personne pour la
@@ -248,40 +356,110 @@ export async function importBook(book, user, opts = {}) {
          status, reason, clean(r.owner),
          r.updated ?? new Date().toISOString().slice(0, 10)]);
     }
-    for (const l of book.ledger ?? []) {
+    /* NEW-05 — the order is now changes, then RAID, then the ledger:
+       a risk names the change that carries it (I-8), and a contingency
+       draw names the risk it funds (PM-06). The old order (ledger, RAID,
+       changes) could not have carried either pointer. */
+    for (const c of book.crs ?? []) {
       await t.query(
-        `INSERT INTO cost_line (project_id, period, booked_on, amount, category, note)
-         VALUES ($1,$2,$3,$4,'Labour','Imported')`,
-        [l.project, l.period, l.period + "-01", money(l.amount)]);
+        `INSERT INTO change_request (id, project_id, title, description, raised_by, raised_on,
+                                     cost_delta, weeks_delta, funding, risk_delta, status, applied,
+                                     raised_by_user)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,${USER(13)})`,
+        [c.id, c.project, c.title, c.desc ?? "", clean(c.raisedBy), c.raised,
+         money(c.cost), int(c.weeks), c.funding ?? "Contingency", c.riskDelta ?? "0",
+         ["Pending", "Approved", "Rejected"].includes(c.status) ? c.status : "Pending",
+         !!c.applied, clean(c.raisedByUser)]);
+      const steps = c.steps ?? [];
+      for (let i = 0; i < steps.length; i++) {
+        const st = steps[i];
+        /* NEW-07 — `change_step` has no id the export writes: its identity
+           is (cr_id, seq), and the merge handle only rewrites inserts that
+           name an `id`. So a merge-mode import of the product's own export
+           hit the unique key on the first step and answered 400. The step
+           now says its own conflict rule, which is the handle's contract
+           for a table without an id. */
+        await t.query(
+          `INSERT INTO change_step (cr_id, seq, role_label, note, state, decided_on, comment)
+           VALUES ($1,$2,$3,$4,$5,$6,$7)
+           ON CONFLICT (cr_id, seq) DO UPDATE
+             SET role_label = EXCLUDED.role_label, note = EXCLUDED.note, state = EXCLUDED.state,
+                 decided_on = EXCLUDED.decided_on, comment = EXCLUDED.comment`,
+          [c.id, i, st.role ?? "Step " + (i + 1), st.note ?? "",
+           ["waiting", "current", "done", "rejected"].includes(st.state) ? st.state : "waiting",
+           clean(st.when), st.comment ?? ""]);
+      }
+      /* The file states the whole route: on a merge, a step the database
+         holds past the file's last one is not the file's route. */
+      if (mode === "merge" && Array.isArray(c.steps)) {
+        await t.query(`DELETE FROM change_step WHERE cr_id = $1 AND seq >= $2`, [c.id, steps.length]);
+      }
     }
     for (const x of book.raid ?? []) {
       await t.query(
         `INSERT INTO raid_item (id, project_id, kind, title, detail, probability, impact,
-                                status, response, owner_id, opened_on, review_on)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+                                status, response, owner_id, opened_on, review_on,
+                                target_probability, target_impact, gate, cr_id, category,
+                                closed_on, closed_by, origin_site, external_source, external_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
+                 ${INTEGRATION(21)},$22)`,
         [x.id, clean(x.project), x.type ?? "Risk", x.title, x.detail ?? "",
          Math.max(1, Math.min(5, int(x.p, 1))), Math.max(1, Math.min(5, int(x.i, 1))),
          x.status === "Closed" ? "Closed" : "Open", x.response ?? "Monitor",
-         clean(x.owner), x.opened, clean(x.review)]);
+         clean(x.owner), x.opened, clean(x.review),
+         /* NEW-05 — what the response is meant to achieve (PM-06; null
+            when nothing is targeted, never an invented 1), the gate and
+            change it stands against (I-8), the source register's own word
+            for it (REQ-13), when and on whose word it closed (REQ-18), and
+            the site that raised it. */
+         num(x.tp) === null ? null : Math.max(1, Math.min(5, int(x.tp))),
+         num(x.ti) === null ? null : Math.max(1, Math.min(5, int(x.ti))),
+         intOrNull(x.gate), clean(x.cr), x.category ?? "",
+         clean(x.closedOn), clean(x.closedBy), clean(x.originSite),
+         clean(x.externalSource), clean(x.externalId)]);
     }
-    for (const c of book.crs ?? []) {
-      await t.query(
-        `INSERT INTO change_request (id, project_id, title, description, raised_by, raised_on,
-                                     cost_delta, weeks_delta, funding, risk_delta, status, applied)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-        [c.id, c.project, c.title, c.desc ?? "", clean(c.raisedBy), c.raised,
-         money(c.cost), int(c.weeks), c.funding ?? "Contingency", c.riskDelta ?? "0",
-         ["Pending", "Approved", "Rejected"].includes(c.status) ? c.status : "Pending",
-         !!c.applied]);
-      (c.steps ?? []).forEach(() => {});
-      for (let i = 0; i < (c.steps ?? []).length; i++) {
-        const st = c.steps[i];
+    /* NEW-05 — the ledger comes back as it was written. It used to be
+       re-numbered and rewritten "Imported", "Labour", USD, capex, on the
+       first of the month and not from contingency — so a euro opex
+       contract posted on the 17th and drawn from contingency came back as
+       a dollar capex labour line, and the contingency drawn read as
+       unspent. The id is kept (like the allocations, MER-14) and the
+       sequence follows it below.
+
+       The ledger is append-only (CONTRIBUTING): a merge NEVER rewrites a
+       posting it already holds. The same id with the same content is the
+       same posting; the same id with different content is refused by
+       name, because correcting a posting is a reversing entry, not an
+       import. A line from a book with no ids (the v4 file) is appended
+       and keeps the old defaults, which is all that file could say. */
+    for (const l of book.ledger ?? []) {
+      const hasId = !(l.id === undefined || l.id === null || l.id === "");
+      const cols = `project_id, period, booked_on, amount, category, note, from_contingency,
+                    kind, currency, fx_rate, amount_local, risk_id, created_by`;
+      const vals = [l.project, l.period, clean(l.bookedOn) ?? l.period + "-01", money(l.amount),
+        l.category ?? "Labour", l.note ?? "Imported", l.fromContingency === true,
+        l.kind === "opex" ? "opex" : "capex", l.currency ?? "USD",
+        num(l.fx) ?? 1, num(l.amountLocal) === null ? null : money(l.amountLocal),
+        clean(l.risk), clean(l.createdBy)];
+      if (!hasId) {
         await t.query(
-          `INSERT INTO change_step (cr_id, seq, role_label, note, state, decided_on, comment)
-           VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-          [c.id, i, st.role ?? "Step " + (i + 1), st.note ?? "",
-           ["waiting", "current", "done", "rejected"].includes(st.state) ? st.state : "waiting",
-           clean(st.when), st.comment ?? ""]);
+          `INSERT INTO cost_line (${cols})
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,${USER(13)})`, vals);
+        continue;
+      }
+      const r = await t.query(
+        `INSERT INTO cost_line (id, ${cols})
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,${USER(14)})
+         ON CONFLICT (id) DO NOTHING RETURNING id`, [int(l.id), ...vals]);
+      if (!(r.rows ?? []).length) {
+        const held = (await t.query(
+          `SELECT project_id, period, amount FROM cost_line WHERE id = $1`, [int(l.id)])).rows?.[0];
+        if (!held || held.project_id !== l.project || held.period !== l.period
+            || Number(held.amount) !== money(l.amount)) {
+          rejects.push({ table: "cost_line", id: String(l.id),
+            reason: "this ledger already holds a different posting under that number — " +
+                    "the ledger is append-only, correct it by a reversing entry" });
+        }
       }
     }
     /* MER-14 — deux corrections sur la même table.
@@ -327,8 +505,9 @@ export async function importBook(book, user, opts = {}) {
     for (const d of book.docs ?? []) {
       await t.query(
         `INSERT INTO document (id, project_id, name, doc_type, gate, owner_id, revision,
-                               status, updated_on, gate_loop, uri, uri_locked_hash, uri_locked_on)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+                               status, updated_on, gate_loop, uri, uri_locked_hash, uri_locked_on,
+                               probe_state, probed_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
         [d.id, clean(d.project), d.name, d.type ?? "Assurance", int(d.gate),
          clean(d.owner), d.rev ?? "0.1",
          ["Draft", "In review", "Approved", "Superseded"].includes(d.status) ? d.status : "Draft",
@@ -338,7 +517,11 @@ export async function importBook(book, user, opts = {}) {
             something. Dropping the uri turned every imported approved
             document back into a label, and every cleared gate into an
             overdue one. */
-         d.uri ?? "", d.uriHash ?? "", clean(d.uriLockedOn)]);
+         d.uri ?? "", d.uriHash ?? "", clean(d.uriLockedOn),
+         /* NEW-05 — whether the link answered at the last pass (N-07): a
+            fact, not a judgement, and one the next probe overwrites. */
+         ["never", "ok", "unreachable", "forbidden"].includes(d.probeState) ? d.probeState : "never",
+         clean(d.probedAt)]);
     }
     // supersession second, so both ends exist
     for (const d of book.docs ?? []) {
@@ -349,8 +532,9 @@ export async function importBook(book, user, opts = {}) {
     for (const i of book.items ?? []) {
       await t.query(
         `INSERT INTO work_item (id, project_id, column_id, title, assignee_id, points, priority,
-                                created_on, source, score, score_method)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+                                created_on, source, score, score_method,
+                                external_source, external_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,${INTEGRATION(12)},$13)`,
         /* MER-05 — d'où vient cet élément et combien il vaut. Un
            arriéré d'améliorations arrive d'une revue de jalon, d'un
            panel d'enfants ou de la télémétrie, et il est noté par une
@@ -360,7 +544,9 @@ export async function importBook(book, user, opts = {}) {
          int(i.points, 1), i.priority ?? "P3", i.created ?? new Date().toISOString().slice(0, 10),
          i.source ?? "",
          Number.isFinite(Number(i.score)) && i.score !== null && i.score !== "" ? Number(i.score) : null,
-         i.scoreMethod ?? ""]);
+         i.scoreMethod ?? "",
+         // NEW-05 — the system that pushed it, and its name there (I-2)
+         clean(i.externalSource), clean(i.externalId)]);
     }
     /* ── la gouvernance (MER-05, MER-06, MER-07, MER-11) ───────────
        L'ordre compte : une pièce de preuve avant le constat qui la
@@ -475,9 +661,223 @@ export async function importBook(book, user, opts = {}) {
          o.resolution ?? ""]);
     }
 
+    /* ── NEW-05 · the registers the importer did not know ──────────────
+       The export wrote fifteen collections this function never read, and
+       a replace import deletes the projects, so the cascade erased every
+       row of them: a site's shutdown calendar, who covers whom, what each
+       project promised and measured, its rollout, its purchase orders,
+       its timesheets, its tolerance and the exceptions raised against it,
+       its business case and every gate at which it was reconfirmed, what
+       it taught, its gate criteria, its stakeholders and comms plan, and
+       its links to the site systems. They come in here, after everything
+       they point at: sites, people, projects, activities, documents.
+
+       Each insert names its `id`, so the merge handle turns it into an
+       upsert like every other register; the one without a text id
+       (timesheet) says its own conflict rule. */
+    for (const w of book.windows ?? []) {
+      await t.query(
+        `INSERT INTO site_window (id, site_id, kind, label, detail, starts_on, ends_on)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        [w.id, w.site, w.kind === "freeze" ? "freeze" : "shutdown", w.label ?? "", w.detail ?? "",
+         w.from, w.to ?? w.from]);
+    }
+    for (const a of book.absences ?? []) {
+      await t.query(
+        `INSERT INTO person_absence (id, person_id, starts_on, ends_on, reason, deputy_id, note)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        [a.id, a.person, a.from, a.to ?? a.from,
+         ["rotation", "leave", "training", "unavailable"].includes(a.reason) ? a.reason : "rotation",
+         clean(a.deputy), a.note ?? ""]);
+    }
+    /* Benefits carry their own unit — percent, hours, ounces, currency —
+       and the serialiser passes them through undivided. So they are NOT
+       scaled by `money` here: a 12 % availability gain is 12, not
+       twelve million. */
+    for (const b of book.benefits ?? []) {
+      await t.query(
+        `INSERT INTO benefit (id, project_id, kind, title, detail, measure, unit,
+                              baseline, target, actual, owner_id, realise_on, measured_on,
+                              status, external_source, external_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,${INTEGRATION(15)},$16)`,
+        [b.id, b.project,
+         ["Production", "Availability", "Cost", "Risk", "Compliance"].includes(b.kind) ? b.kind : "Production",
+         b.title ?? b.id, b.detail ?? "", b.measure ?? "", b.unit ?? "",
+         num(b.baseline), num(b.target), num(b.actual), clean(b.owner),
+         clean(b.realiseOn), clean(b.measuredOn),
+         ["Forecast", "Realised", "Partially realised", "Missed", "Withdrawn"].includes(b.status)
+           ? b.status : "Forecast",
+         clean(b.externalSource), clean(b.externalId)]);
+    }
+    for (const w of book.waves ?? []) {
+      await t.query(
+        `INSERT INTO rollout_wave (id, project_id, site_id, seq, planned_on, actual_on, status, note)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [w.id, w.project, w.site, int(w.seq, 1), clean(w.plannedOn), clean(w.actualOn),
+         ["Planned", "In progress", "Live", "Held", "Cancelled"].includes(w.status) ? w.status : "Planned",
+         w.note ?? ""]);
+    }
+    // money promised and not yet spent (V-05) — in millions, like the ledger
+    for (const c of book.commitments ?? []) {
+      await t.query(
+        `INSERT INTO commitment (id, project_id, reference, supplier, description, amount,
+                                 currency, fx_rate, kind, raised_on, expected_on, status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+        [c.id, c.project, c.reference ?? "", c.supplier ?? "", c.desc ?? "", money(c.amount),
+         c.currency ?? "USD", num(c.fx) ?? 1, c.kind === "opex" ? "opex" : "capex",
+         c.raisedOn ?? new Date().toISOString().slice(0, 10), clean(c.expectedOn),
+         ["Open", "Part received", "Received", "Cancelled"].includes(c.status) ? c.status : "Open"]);
+    }
+    /* A timesheet's id is a serial the export writes; it is kept, and
+       the sequence follows below. Its real identity is one person, one
+       project, one week (the unique key), so that is its conflict rule:
+       a merge updates the week's days rather than refusing the file on
+       a second row for the same week. */
+    for (const x of book.timesheets ?? []) {
+      const hasId = !(x.id === undefined || x.id === null || x.id === "");
+      const row = [x.person, x.project, x.week, Math.max(0, Math.min(7, Number(x.days ?? 0))),
+                   clean(x.enteredBy)];
+      await t.query(
+        hasId
+          ? `INSERT INTO timesheet (id, person_id, project_id, week_start, days, entered_by)
+             VALUES ($1,$2,$3,$4,$5,${USER(6)})
+             ON CONFLICT (person_id, project_id, week_start) DO UPDATE
+               SET days = EXCLUDED.days, entered_by = EXCLUDED.entered_by`
+          : `INSERT INTO timesheet (person_id, project_id, week_start, days, entered_by)
+             VALUES ($1,$2,$3,$4,${USER(5)})
+             ON CONFLICT (person_id, project_id, week_start) DO UPDATE
+               SET days = EXCLUDED.days, entered_by = EXCLUDED.entered_by`,
+        hasId ? [int(x.id), ...row] : row);
+    }
+    /* Only the ACTIVE tolerance is exported (the serialiser says why), so
+       it comes back active. An exception may cite a tolerance that has
+       since been superseded and is not in the file: the pointer is kept
+       only if that tolerance is here. */
+    for (const x of book.tolerances ?? []) {
+      await t.query(
+        `INSERT INTO project_tolerance (id, project_id, schedule_days, cost_pct, benefit_pct,
+                                        note, set_by, set_on)
+         VALUES ($1,$2,$3,$4,$5,$6,${USER(7)},$8)`,
+        [x.id, x.project, intOrNull(x.scheduleDays), num(x.costPct), num(x.benefitPct),
+         x.note ?? "", clean(x.setBy), x.setOn ?? new Date().toISOString().slice(0, 10)]);
+    }
+    for (const x of book.exceptions ?? []) {
+      await t.query(
+        `INSERT INTO project_exception (id, project_id, tolerance_id, dimension, raised_on,
+                                        measured, allowed, detail, status, answer_kind, answer,
+                                        answered_by, answered_on)
+         VALUES ($1,$2,(SELECT id FROM project_tolerance WHERE id = $3),$4,$5,$6,$7,$8,$9,$10,$11,
+                 ${USER(12)},$13)`,
+        [x.id, x.project, clean(x.tolerance),
+         ["schedule", "cost", "benefit", "benefit-review"].includes(x.dimension) ? x.dimension : "schedule",
+         x.raisedOn ?? new Date().toISOString().slice(0, 10),
+         Number(x.measured ?? 0), Number(x.allowed ?? 0), x.detail ?? "",
+         ["Open", "Answered", "Withdrawn"].includes(x.status) ? x.status : "Open",
+         ["Tolerance raised", "Plan revised", "Accepted", "Stopped"].includes(x.answerKind)
+           ? x.answerKind : null,
+         x.answer ?? "", clean(x.answeredBy), clean(x.answeredOn)]);
+    }
+    /* The business case's two figures are in millions (`toM`), so they
+       go back through `money`; absent stays absent — a case with no
+       expected benefit has not said zero. */
+    for (const c of book.businessCases ?? []) {
+      await t.query(
+        `INSERT INTO business_case (id, project_id, summary, expected_cost, expected_benefit,
+                                    value_confidence, basis, written_by, written_on, updated_on,
+                                    reconfirmed_gate, reconfirmed_on, reconfirmed_by,
+                                    external_source, external_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,${USER(8)},$9,$10,$11,$12,${USER(13)},${INTEGRATION(14)},$15)`,
+        [c.id, c.project, c.summary ?? "",
+         num(c.expectedCost) === null ? null : money(c.expectedCost),
+         num(c.expectedBenefit) === null ? null : money(c.expectedBenefit),
+         num(c.valueConfidence) === null ? null : Math.max(1, Math.min(5, int(c.valueConfidence))),
+         c.basis ?? "", clean(c.writtenBy), c.writtenOn ?? new Date().toISOString().slice(0, 10),
+         clean(c.updatedOn), intOrNull(c.reconfirmedGate), clean(c.reconfirmedOn),
+         clean(c.reconfirmedBy), clean(c.externalSource), clean(c.externalId)]);
+    }
+    for (const r of book.caseReconfirmations ?? []) {
+      await t.query(
+        `INSERT INTO case_reconfirmation (id, case_id, project_id, gate, expected_cost,
+                                          expected_benefit, verdict, note, reconfirmed_by,
+                                          reconfirmed_on)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+        [r.id, r.case, r.project, int(r.gate, 1),
+         num(r.expectedCost) === null ? null : money(r.expectedCost),
+         num(r.expectedBenefit) === null ? null : money(r.expectedBenefit),
+         ["Continue", "Continue with conditions", "Stop"].includes(r.verdict) ? r.verdict : "Continue",
+         r.note ?? "", clean(r.reconfirmedBy),
+         r.reconfirmedOn ?? new Date().toISOString().slice(0, 10)]);
+    }
+    /* A lesson outlives its project (PM-02), and the serialiser names the
+       project only to a reader who may see it; a lesson that arrives
+       without one is still a lesson. */
+    for (const l of book.lessons ?? []) {
+      await t.query(
+        `INSERT INTO lesson (id, project_id, programme_id, site_id, gate_n, category, title,
+                             what_happened, why, recommendation, outcome, raised_by, raised_on,
+                             status, adopted_by, adopted_on)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,${USER(15)},$16)`,
+        [l.id, clean(l.project), clean(l.programme), clean(l.site), intOrNull(l.gate),
+         ["Scope", "Schedule", "Cost", "Risk", "Quality", "Resources", "Stakeholders",
+          "Procurement", "Governance", "Technical", "Transition"].includes(l.category)
+           ? l.category : "Governance",
+         l.title ?? l.id, l.whatHappened ?? "", l.why ?? "", l.recommendation ?? "",
+         l.outcome === "Positive" ? "Positive" : "Negative", clean(l.raisedBy),
+         l.raisedOn ?? new Date().toISOString().slice(0, 10),
+         ["Proposed", "Adopted", "Archived"].includes(l.status) ? l.status : "Proposed",
+         clean(l.adoptedBy), clean(l.adoptedOn)]);
+    }
+    for (const c of book.criteria ?? []) {
+      await t.query(
+        `INSERT INTO gate_criterion (id, project_id, gate, seq, text, document_id, met,
+                                     reviewed_by, reviewed_on, note, external_source, external_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,${INTEGRATION(11)},$12)`,
+        [c.id, c.project, int(c.gate), int(c.seq), c.text ?? "", clean(c.document),
+         c.met === true, clean(c.reviewedBy), clean(c.reviewedOn), c.note ?? "",
+         clean(c.externalSource), clean(c.externalId)]);
+    }
+    for (const x of book.stakeholders ?? []) {
+      await t.query(
+        `INSERT INTO stakeholder (id, project_id, person_id, name, organisation, role_label,
+                                  interest, influence, attitude, engagement, owner_id, note)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+        [x.id, x.project, clean(x.person), x.name ?? x.id, x.organisation ?? "", x.role ?? "",
+         Math.max(1, Math.min(5, int(x.interest, 3))), Math.max(1, Math.min(5, int(x.influence, 3))),
+         ["Champion", "Supporter", "Neutral", "Sceptic", "Opponent"].includes(x.attitude)
+           ? x.attitude : "Neutral",
+         ["Inform", "Consult", "Involve", "Partner"].includes(x.engagement) ? x.engagement : "Inform",
+         clean(x.owner), x.note ?? ""]);
+    }
+    for (const x of book.comms ?? []) {
+      await t.query(
+        `INSERT INTO comms_plan (id, project_id, audience, purpose, channel, frequency,
+                                 owner_id, next_on, note)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        [x.id, x.project, x.audience ?? "", x.purpose ?? "", x.channel ?? "", x.frequency ?? "",
+         clean(x.owner), clean(x.nextOn), x.note ?? ""]);
+    }
+    /* A federation link is a display cache of another system's record
+       (005); the association is ours and comes back, with when it was
+       made and last synchronised. */
+    for (const l of book.extLinks ?? []) {
+      await t.query(
+        `INSERT INTO ext_link (id, source, ext_id, project_id, activity_id, site_id,
+                               title_cache, status_cache, kind_cache, risk_cache, due_cache,
+                               window_start, linked_by, linked_at, synced_at, stale)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,${USER(13)},$14,$15,$16)`,
+        [l.id, l.source, l.extId, l.project, clean(l.activity), clean(l.site),
+         l.title ?? "", l.status ?? "", l.kind ?? "", l.risk ?? "", clean(l.due),
+         clean(l.windowStart), clean(l.linkedBy), clean(l.linkedAt) ?? new Date().toISOString(),
+         clean(l.syncedAt), l.stale === true]);
+    }
+
     for (const [key, lines] of Object.entries(book.narrative ?? {})) {
       await t.query(
-        `INSERT INTO report_narrative (block_key, lines, updated_by) VALUES ($1,$2,$3)`,
+        /* NEW-07 — keyed on its block, not an id: a merge updates the
+           block rather than refusing the file on its primary key. */
+        `INSERT INTO report_narrative (block_key, lines, updated_by) VALUES ($1,$2,$3)
+         ON CONFLICT (block_key) DO UPDATE
+           SET lines = EXCLUDED.lines, updated_by = EXCLUDED.updated_by`,
         [key, JSON.stringify(lines), user?.id ?? null]);
     }
 
@@ -500,7 +900,11 @@ export async function importBook(book, user, opts = {}) {
     }
 
     for (const k of ["projects", "activities", "milestones", "requirements", "ledger", "raid", "crs", "docs", "items", "allocations",
-                     "evidence", "findings", "seats", "objections"]) {
+                     "evidence", "findings", "seats", "objections",
+                     // NEW-05 — the fifteen registers the import now reads
+                     "windows", "absences", "benefits", "waves", "commitments", "timesheets",
+                     "tolerances", "exceptions", "businessCases", "caseReconfirmations",
+                     "lessons", "criteria", "stakeholders", "comms", "extLinks"]) {
       counts[k] = (book[k] ?? []).length;
     }
 
@@ -512,6 +916,17 @@ export async function importBook(book, user, opts = {}) {
       ["DEP","raid_item","id LIKE 'DEP-%'"],["CR","change_request","true"],
       ["DOC","document","true"],["WI","work_item","true"],["PE","person","true"],
       ["REQ","requirement","true"],
+      /* NEW-05 — the registers now imported mint their ids from the same
+         counters (`allocateId`). Only ids of the counter's own shape are
+         read, so a foreign id such as "BEN-PRJ-112-2" cannot fuse its
+         digits into a number the counter would then jump to. */
+      ["SW","site_window","id ~ '^SW-[0-9]+$'"],["ABS","person_absence","id ~ '^ABS-[0-9]+$'"],
+      ["BEN","benefit","id ~ '^BEN-[0-9]+$'"],["WAVE","rollout_wave","id ~ '^WAVE-[0-9]+$'"],
+      ["CMT","commitment","id ~ '^CMT-[0-9]+$'"],["TOL","project_tolerance","id ~ '^TOL-[0-9]+$'"],
+      ["EXC","project_exception","id ~ '^EXC-[0-9]+$'"],["CAS","business_case","id ~ '^CAS-[0-9]+$'"],
+      ["CRC","case_reconfirmation","id ~ '^CRC-[0-9]+$'"],["LSN","lesson","id ~ '^LSN-[0-9]+$'"],
+      ["GC","gate_criterion","id ~ '^GC-[0-9]+$'"],["STK","stakeholder","id ~ '^STK-[0-9]+$'"],
+      ["COM","comms_plan","id ~ '^COM-[0-9]+$'"],["XL","ext_link","id ~ '^XL-[0-9]+$'"],
     ]) {
       await t.query(
         `INSERT INTO id_counter (prefix, next_value)
@@ -529,6 +944,25 @@ export async function importBook(book, user, opts = {}) {
     await t.query(
       `SELECT setval(pg_get_serial_sequence('allocation','id'),
                      GREATEST(COALESCE((SELECT MAX(id) FROM allocation), 0), 1))`);
+    /* NEW-05 — the ledger and the timesheets now keep their serial ids,
+       so their sequences follow the same way. The third argument keeps
+       an empty table's next id at 1 rather than 2. */
+    for (const table of ["cost_line", "timesheet"]) {
+      await t.query(
+        `SELECT setval(pg_get_serial_sequence('${table}','id'),
+                       COALESCE((SELECT MAX(id) FROM ${table}), 1),
+                       (SELECT MAX(id) FROM ${table}) IS NOT NULL)`);
+    }
+    /* A milestone's id is project-scoped (`PRJ-112-M4`) but its number
+       comes from one global counter — the seed's own rule, which the
+       import never followed: the first milestone placed by hand after an
+       import could collide with an imported one. */
+    await t.query(
+      `INSERT INTO id_counter (prefix, next_value)
+       SELECT 'MS', COALESCE(MAX(NULLIF(substring(id from '-M([0-9]+)$'), ''))::int, 0)
+         FROM milestone WHERE kind = 'milestone'
+       ON CONFLICT (prefix) DO UPDATE
+         SET next_value = GREATEST(id_counter.next_value, EXCLUDED.next_value)`);
 
     await record(t, user, {
       action: dryRun ? "Book import validated (dry run)" : "Book imported",
