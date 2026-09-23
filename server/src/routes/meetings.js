@@ -584,8 +584,9 @@ r.post("/occurrences/:id/decisions", async (req, res, next) => {
         await t.query(
         `INSERT INTO meeting_decision
            (id, occurrence_id, headline, rationale, project_id, cr_id, decided_by, recorded_by, referred_to_scope,
-            alternatives, dissent, raid_id, milestone_id, ratified_on)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+            alternatives, dissent, raid_id, milestone_id, ratified_on,
+            reversal_cost, supersedes_id, source_evidence_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
         [id, o.id, String(b.headline).slice(0, 300), String(b.rationale ?? "").slice(0, 4000),
          b.projectId ?? null, b.crId ?? null, b.decidedBy ?? s.chair_id, req.user.id, referredTo,
          /* I-7 — les alternatives écartées et la dissension, en salle
@@ -600,7 +601,13 @@ r.post("/occurrences/:id/decisions", async (req, res, next) => {
             le lendemain n'a pas ratifié le lendemain. Un renvoi vers le
             haut n'est pas une décision et n'entre pas en vigueur : sa
             date reste nulle, comme son statut le dit. */
-         referredTo ? null : o.meets_on]);
+         referredTo ? null : o.meets_on,
+         /* MER-07 — le coût de retour. Publier une banque d'items sous
+            licence libre est irréversible ; retirer une galerie du
+            périmètre ne l'est pas. Nul = personne ne s'est prononcé, ce
+            qui n'est pas « faible ». */
+         ["low", "medium", "high"].includes(b.reversalCost) ? b.reversalCost : null,
+         b.supersedes ?? null, b.sourceEvidence ?? null]);
         if (answers) {
           /* Still-unanswered is re-checked here: the lookup above runs
              outside this transaction (PGlite serialises one connection,

@@ -111,9 +111,23 @@ export function normaliseGateModel(input) {
     if (!Number.isFinite(at) || at <= 0 || at >= 1) throw new Error(`Gate ${i + 1} (${name}): "at" is where it sits in the project window, between 0 and 1 exclusive`);
     if (at <= last) throw new Error(`Gate ${i + 1} (${name}) must come after the previous gate`);
     last = at;
-    return { n: i + 1, name, at: Math.round(at * 1000) / 1000,
+    const rung = { n: i + 1, name, at: Math.round(at * 1000) / 1000,
       owner: String(g?.owner ?? "").trim() || "Sponsor",
       evidence: String(g?.evidence ?? "").trim() };
+    /* D-36.02 — a programme's rung may loop back (MER-01) and may clear for
+       the whole programme or portfolio (MER-02), exactly like a rung of
+       the portfolio model. Absent, nothing is added: stored ladders read
+       as they always did. */
+    if (g?.loopsTo !== undefined && g?.loopsTo !== null && g?.loopsTo !== "") {
+      const to = Number(g.loopsTo);
+      if (!Number.isInteger(to) || to < 1 || to > i + 1) throw new Error(`Gate ${i + 1} (${name}) can only loop back to itself or an earlier gate`);
+      rung.loopsTo = to;
+    }
+    if (g?.scope !== undefined && g?.scope !== null && g?.scope !== "") {
+      if (!["project", "programme", "portfolio"].includes(g.scope)) throw new Error(`Gate ${i + 1} (${name}): scope is project, programme or portfolio`);
+      if (g.scope !== "project") rung.scope = g.scope;
+    }
+    return rung;
   });
   return out;
 }
@@ -337,10 +351,58 @@ export const Engine = {
   isEvidence(d) {
     return d?.status === "Approved" && !!d.uri;
   },
-  gateStatus(db, projectId, gateN) {
-    const docs = db.docs.filter(d => d.project === projectId && d.gate === gateN);
+  /* MER-01 — le modèle de jalons est une DONNÉE, plus une constante.
+     `settings.gates` le porte ; absent, on garde exactement les quatre
+     d'origine, donc aucun portefeuille existant ne change. Un produit
+     qui en a six ne les écrase plus sur quatre, et les jalons qui
+     bloquent réellement une sortie redeviennent des jalons verrouillés
+     plutôt que des dates dans un calendrier. */
+  gateModel(db) {
+    const g = db?.settings?.gates;
+    if (!Array.isArray(g) || !g.length) return GATES;
+    return g
+      .filter(x => x && Number.isFinite(Number(x.n)))
+      .map(x => ({
+        n: Number(x.n),
+        name: x.name ?? `Gate ${x.n}`,
+        at: Number.isFinite(Number(x.at)) ? Number(x.at) : 0,
+        owner: x.owner ?? "",
+        evidence: x.evidence ?? "",
+        /* Un jalon qui RENVOIE à un autre. Une revue qui renvoie au
+           cahier des charges est un cycle d'amélioration, pas un échec,
+           et sans ceci le portefeuille ne sait pas le dire. */
+        loopsTo: Number.isFinite(Number(x.loopsTo)) ? Number(x.loopsTo) : null,
+        /* MER-02 — un jalon PEUT porter sur plus qu'un projet. Une
+           autorisation de mise en service, une revue de sécurité, une
+           revue de portefeuille franchissent pour un programme entier
+           ou pour tout le livre, et les découper par projet les rend
+           faux : chaque projet se déclare franchi pendant que la revue
+           qui les concerne tous ne s'est pas tenue.
+
+           Défaut « project » : rien d'existant ne change. */
+        scope: ["project", "programme", "portfolio"].includes(x.scope) ? x.scope : "project",
+      }))
+      .sort((a, b) => a.n - b.n);
+  },
+
+  /* Combien de tours un projet a le droit de faire avant que la boucle
+     soit elle-même une alerte. Zéro ou absent = pas de limite déclarée,
+     et la boucle ne déclenche rien. */
+  gateLoopLimit(db) {
+    const v = Number(db?.settings?.gateLoopLimit ?? 0);
+    return Number.isFinite(v) && v > 0 ? v : 0;
+  },
+
+  gateStatus(db, projectId, gateN, loop = 1) {
+    /* Les preuves et les jalons du tour PRÉCÉDENT ne franchissent pas
+       le jalon du tour courant. Sans ce filtre, le jalon 1 du deuxième
+       tour est « déjà franchi » par la preuve du premier, et la
+       deuxième revue s'ouvre en se croyant terminée. Tout ce qui n'a
+       pas de tour est au tour 1, donc rien d'existant ne bouge. */
+    const at = (x) => (x?.loop ?? 1) === loop;
+    const docs = db.docs.filter(d => d.project === projectId && d.gate === gateN && at(d));
     const approved = docs.filter(d => Engine.isEvidence(d)).length;
-    const ms = db.milestones.find(m => m.project === projectId && m.gate === gateN);
+    const ms = db.milestones.find(m => m.project === projectId && m.gate === gateN && at(m));
     const date = ms ? ms.date : null;
     /* REQ-14 — a placeholder date is a position on the timeline, not a
        commitment: it never makes a gate "Overdue" or "Cleared" by the
@@ -360,7 +422,7 @@ export const Engine = {
     const allMet = criteriaMet === criteria.length;
     const complete = approved === docs.length && allMet;
     return {
-      gate: gateN, date, docs, approved, total: docs.length, risks,
+      gate: gateN, loop, date, docs, approved, total: docs.length, risks,
       criteria, criteriaMet,
       ready: docs.length > 0 && complete,
       outstanding: docs.filter(d => !Engine.isEvidence(d)),
@@ -374,31 +436,150 @@ export const Engine = {
     };
   },
 
-  /* I-3 — the ladder this project walks: its programme's, or the default. */
+  /* D-36.02 — ONE ladder model. The ladder a project walks is, in order:
+     its programme's own (RT365, I-3, `programme.gate_model`); else the
+     portfolio's declared model (KODO, MER-01, `settings.gates`); else the
+     four of always. Any rung of either may loop (`loopsTo`) and may be
+     programme- or portfolio-scoped (`scope`, MER-02). Two answers to one
+     request were built on two branches; this is the one that holds both. */
   gates(db, projectId) {
     const p = projectId ? Engine.project(db, projectId) : null;
-    const pr = p ? Engine.programme(db, p.programme) : null;
+    const pr = p && db.programmes ? Engine.programme(db, p.programme) : null;
     const model = pr && Array.isArray(pr.gateModel) && pr.gateModel.length ? pr.gateModel : null;
-    return model ?? GATES;
+    return model ?? Engine.gateModel(db);
   },
   /* The longest ladder in the book — for filters that span every programme. */
   maxGates(db) {
-    return Math.max(GATES.length, ...(db.programmes || []).map((pr) => (pr.gateModel || []).length));
+    return Math.max(Engine.gateModel(db).length,
+      ...(db.programmes || []).map((pr) => (pr.gateModel || []).length));
   },
+  /* MER-02 — l'état d'un jalon À SA PORTÉE.
+     Un jalon de programme n'est franchi que lorsque CHAQUE projet du
+     programme en porte la preuve : c'est ce que « franchir pour le
+     programme » veut dire, et l'agréger autrement laisse un projet en
+     retard derrière une porte que le programme croit ouverte. La preuve
+     manquante reste nommée par projet, sinon le refus est inutilisable. */
+  scopedGateStatus(db, projectId, gateN, loop = 1, scope = "project") {
+    if (scope === "project") return Engine.gateStatus(db, projectId, gateN, loop);
+    const project = db.projects?.find(p => p.id === projectId);
+    const peers = (db.projects ?? []).filter(p =>
+      scope === "portfolio" ? true : p.programme === project?.programme);
+    const parts = peers.map(p => ({ project: p, st: Engine.gateStatus(db, p.id, gateN, loop) }));
+    const outstanding = parts.flatMap(({ project: p, st }) =>
+      st.outstanding.map(d => ({ ...d, projectName: p.name })));
+    const withEvidence = parts.filter(({ st }) => st.total > 0);
+    const total = parts.reduce((n, { st }) => n + st.total, 0);
+    const approved = parts.reduce((n, { st }) => n + st.approved, 0);
+    /* D-36.02 — a scoped gate carries RT365's criteria too: a programme
+       gate with a criterion nobody has found met is not ready, whatever
+       the documents say. */
+    const unmet = parts.flatMap(({ st }) => st.unmet ?? []);
+    const criteria = parts.flatMap(({ st }) => st.criteria ?? []);
+    /* La date du jalon de portée est la PLUS TARDIVE : le programme n'a
+       pas franchi tant que son dernier projet n'a pas franchi. */
+    const dates = parts.map(({ st }) => st.date).filter(Boolean).sort();
+    const date = dates.length ? dates[dates.length - 1] : null;
+    const cleared = withEvidence.length > 0 && !unmet.length &&
+      parts.every(({ st }) => st.total === 0 || st.state === "Cleared");
+    return {
+      gate: gateN, loop, scope, date, docs: parts.flatMap(({ st }) => st.docs),
+      approved, total, criteria, unmet,
+      ready: total > 0 && approved === total && !unmet.length,
+      outstanding,
+      state: cleared ? "Cleared"
+           : parts.some(({ st }) => st.state === "Overdue") ? "Overdue"
+           : parts.some(({ st }) => st.state === "At risk") ? "At risk"
+           : total > 0 && approved === total && !unmet.length ? "Ready"
+           : "Planned",
+    };
+  },
+
+  /* MER-06 — les vetos ouverts qui portent sur ce jalon.
+     Un siège à veto qui a consigné une objection non résolue dans son
+     domaine BLOQUE. C'est la fonctionnalité ; le reste est de la
+     plomberie. Un livre sans sièges n'en a aucun et rien ne change. */
+  openVetoes(db, gate) {
+    const seats = new Map((db.seats ?? []).filter(s => s.vetoDomain).map(s => [s.id, s]));
+    if (!seats.size) return [];
+
+    /* Un veto porte sur un DOMAINE, et un domaine peut être un jalon
+       précis ou la totalité du parcours. Le responsable de la sécurité
+       des enfants de KODO tient le sien À CHAQUE jalon ; l'autorité de
+       conception ne le tient qu'à la revue de conception.
+
+       La portée est donc restreinte PAR EXCEPTION : une objection d'un
+       siège à veto bloque, sauf si son domaine nomme un AUTRE jalon que
+       celui-ci. C'est le sens sûr — se tromper en bloquant fait tenir
+       une réunion, se tromper en laissant passer fait franchir une
+       porte que quelqu'un avait refusée. */
+    const names = new Set(
+      [gate?.n === undefined || gate?.n === null ? null : "G" + gate.n,
+       gate?.n === undefined || gate?.n === null ? null : "Gate " + gate.n,
+       gate?.name]
+        .filter(Boolean).map(x => String(x).toLowerCase()));
+    const namesAnotherGate = (domain) => {
+      const d = String(domain ?? "").trim().toLowerCase();
+      if (!d) return false;
+      if (names.has(d)) return false;
+      // « G3 », « Gate 3 » : une désignation de jalon, et pas celui-ci.
+      return /^(g|gate )\s*\d+$/.test(d);
+    };
+
+    return (db.objections ?? [])
+      .filter(o => o.state === "open" || o.state === "escalated")
+      .map(o => ({ objection: o, seat: seats.get(o.seat) }))
+      .filter(({ objection, seat }) => {
+        if (!seat) return false;
+        const on = objection.domain || seat.vetoDomain;
+        return !namesAnotherGate(on) && !namesAnotherGate(seat.vetoDomain);
+      });
+  },
+
   currentGate(db, projectId) {
     const ladder = Engine.gates(db, projectId);
+    const project = Engine.project(db, projectId);
+    const loop = Math.max(1, Number(project?.loop ?? 1));
     for (const g of ladder) {
-      const st = Engine.gateStatus(db, projectId, g.n);
+      const st = Engine.scopedGateStatus(db, projectId, g.n, loop, g.scope ?? "project");
       if (st.state !== "Cleared") return { ...g, ...st };
     }
     const last = ladder[ladder.length - 1];
-    return { ...last, ...Engine.gateStatus(db, projectId, last.n) };
+    return { ...last, ...Engine.scopedGateStatus(db, projectId, last.n, loop, last.scope ?? "project") };
   },
 
   canAdvance(db, projectId) {
     if (!db.settings.gateLock) return { ok: true, reason: "Gate locking is off" };
     const g = Engine.currentGate(db, projectId);
+    /* MER-06 — un veto ouvert passe AVANT la preuve. Un jalon dont
+       toutes les pièces sont réunies mais sur lequel le siège
+       responsable de la sécurité des enfants a consigné une objection
+       non résolue n'est pas franchissable, et un outil qui répond
+       « preuve complète » à cette question-là se trompe de réponse. */
+    const vetoes = Engine.openVetoes(db, g);
+    if (vetoes.length) {
+      const v = vetoes[0];
+      return {
+        ok: false,
+        reason: v.seat.name + " holds a veto on " + (v.objection.domain || v.seat.vetoDomain) +
+                " and has an unresolved objection: " + v.objection.reason,
+        items: [],
+        vetoes: vetoes.map(x => ({ seat: x.seat.id, objection: x.objection.id })),
+      };
+    }
     if (g.state === "Cleared" || g.ready) return { ok: true, reason: "Evidence complete for " + g.name };
+    /* MER-15 — a refusal SAYS what is missing. A gate to which nothing
+       was ever attached refused with « 0 evidence items outstanding »:
+       zero outstanding, and still blocked. "Nothing was asked for" and
+       "pieces remain" are different and must say so. */
+    if (!g.total && !(g.unmet && g.unmet.length)) {
+      return {
+        ok: false,
+        reason: "No evidence has been registered for " + g.name +
+                " — name what this gate requires before it can clear",
+        items: [],
+        unmet: [],
+      };
+    }
     const parts = [];
     if (g.outstanding.length) parts.push(g.outstanding.length + " evidence item" + (g.outstanding.length === 1 ? "" : "s") + " outstanding");
     if (g.unmet && g.unmet.length) parts.push(g.unmet.length + " criterion" + (g.unmet.length === 1 ? "" : "s") + " not yet found met");
@@ -892,6 +1073,33 @@ export const Engine = {
           meta: g.outstanding.length + " evidence items outstanding", urgent: g.state === "Overdue",
           route: "#/project/" + p.id, entity: "project", entityId: p.id });
     });
+    /* MER-05 — un constat ouvert, sévère et daté pour re-test est
+       exactement ce qu'une liste d'attention existe pour montrer. Il
+       n'était nulle part parce qu'il n'existait nulle part. */
+    (db.findings ?? []).forEach((f) => {
+      if (f.status === "Closed" || f.status === "Waived") return;
+      if (!["S1", "S2"].includes(f.severity)) return;
+      const late = f.retestOn && D(f.retestOn) < D(db.statusDate);
+      out.push({ kind: "Review finding", title: f.id + " · " + f.observedFact,
+        meta: f.severity + (late ? " · re-test overdue" : f.retestOn ? " · re-test " + f.retestOn : ""),
+        urgent: f.severity === "S1" || Boolean(late),
+        route: "#/project/" + (f.project ?? ""), entity: "finding", entityId: f.id });
+    });
+
+    /* MER-07 — une objection non résolue a une horloge. Le moteur
+       pousse déjà une action sur chaque ordre du jour suivant jusqu'à
+       clôture ; une objection est le même mécanisme avec un autre nom,
+       et une gouvernance par consentement ne tient pas sans elle. */
+    (db.objections ?? []).forEach((o) => {
+      if (o.state !== "open" && o.state !== "escalated") return;
+      const due = o.escalatesOn && D(o.escalatesOn) <= D(db.statusDate);
+      out.push({ kind: "Objection", title: o.reason,
+        meta: (o.domain ? o.domain + " · " : "") +
+              (o.state === "escalated" ? "escalated" : due ? "escalation due" : "open"),
+        urgent: o.state === "escalated" || Boolean(due),
+        route: "#/meetings", entity: "decision_objection", entityId: o.id });
+    });
+
     if (db.settings.capacityAlerts) {
       const over = Engine.overAllocated(db, 8);
       if (over.length) out.push({ kind: "Resourcing",

@@ -87,6 +87,13 @@ const KEEP_TABLES = new Set([
 const TABLES = [
   "event_delivery", "notification_subscription", "notification",
   "timesheet", "person_absence", "commitment",
+  /* KODO (052, MER-05/06/07/11) — content, like the registers beside
+     them: a dissent before the decision it objects to, a finding before
+     the evidence that closes it and the requirement it cites, a seat's
+     incompatibilities before the seat. Found by the REQ-52 check the
+     moment the two lines met (docs/36 C-03), not by an incident. */
+  "decision_objection", "finding", "evidence", "requirement",
+  "seat_conflict", "seat",
   "meeting_action", "meeting_decision", "meeting_attendance", "agenda_item",
   "meeting_occurrence", "meeting_series",
   "report_narrative", "work_item", "gate_criterion", "stakeholder", "comms_plan", "document", "allocation",

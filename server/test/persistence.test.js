@@ -85,7 +85,12 @@ describe("schema and migrations (R2.2, R2.7)", () => {
           and a reviewer; the next-due date is derived from the last one
           rather than replacing it. */
        "049_when_it_was_passed.sql",
-       "050_a_review_is_an_event.sql"]);
+       "050_a_review_is_an_event.sql",
+       /* 051, 052 - KODO's line (MER-01..MER-15), written as 034 and 035
+          on a branch that never reached main, renumbered by docs/36 C-03
+          before anything applied them. */
+       "051_gate_model_and_requirements.sql",
+       "052_findings_seats_and_decisions.sql"]);
     const again = await migrate({ silent: true });
     assert.deepEqual(again, [], "a second run applies nothing");
   });

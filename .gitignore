@@ -10,3 +10,8 @@ dist/
 # strict-ssl=false enseigne une faiblesse de chaîne d'approvisionnement à
 # tous ceux qui le clonent ; installez plutôt l'AC de votre proxy.
 .npmrc
+
+# Throwaway probes (docs/36 §0 P3): written, run, deleted — never committed.
+server/test/_*.test.js
+# Agent worktrees are local scratch, never content.
+.claude/worktrees/

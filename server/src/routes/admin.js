@@ -771,9 +771,18 @@ r.post("/import", async (req, res, next) => {
     if (!book || !Array.isArray(book.projects)) {
       throw new HttpError(400, "No project register found in that file");
     }
+    /* MER-08 — la chose la plus dangereuse du produit est aussi la
+       première que fait un nouveau client. `?dryRun=1` valide, dit ce
+       qu'il ÉCRIRAIT et ce qu'il refuserait, et n'écrit rien ;
+       `?mode=merge` met à jour par identifiant au lieu de remplacer le
+       livre. Les deux passent par le même chemin de code que l'import
+       réel, parce qu'une simulation qui suit un autre chemin ne
+       simule rien. */
+    const dryRun = req.query.dryRun === "1" || req.query.dryRun === "true";
+    const mode = req.query.mode === "merge" ? "merge" : "replace";
     const { importBook } = await import("../import.js");
-    const counts = await importBook(book, req.user);
-    res.json({ ok: true, counts });
+    const out = await importBook(book, req.user, { dryRun, mode });
+    res.json(out.dryRun ? out : { ok: true, mode, counts: out });
   } catch (e) { next(e); }
 });
 

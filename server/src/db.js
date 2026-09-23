@@ -202,6 +202,13 @@ async function openPglite(dataDir) {
     await mkdir(dataDir, { recursive: true });
   }
   await clearStaleLocks(dataDir);
+  if (dataDir) {
+    const { mkdirSync } = await import("node:fs");
+    /* PGlite ne crée pas le dossier parent : sans ceci le défaut
+       ci-dessus échouerait au premier lancement, ce qui remplacerait un
+       piège par un autre. */
+    mkdirSync(dataDir, { recursive: true });
+  }
   const pglite = dataDir ? new PGlite(dataDir) : new PGlite();
   await pglite.waitReady;
   claimBook(dataDir);

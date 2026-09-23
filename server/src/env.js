@@ -82,6 +82,8 @@ export function pgliteDirFor(explicit, env = process.env) {
   if (explicit === null) return null;
   if (explicit) return resolve(ROOT, explicit);
   if (env.MERIDIAN_EPHEMERAL === "1") return null;
+  /* KODO's MER-12 spelling of the same request (D-36.02 bis). */
+  if (env.PGLITE_DIR && env.PGLITE_DIR.trim() === ":memory:") return null;
   const dir = env.PGLITE_DIR && env.PGLITE_DIR.trim() ? env.PGLITE_DIR.trim() : DEFAULT_PGLITE_DIR;
   return resolve(ROOT, dir);
 }
