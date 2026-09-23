@@ -24,6 +24,8 @@ import { App, go, toast, reportError } from "../lib/state.js";
 import { api, saveText } from "../lib/api.js";
 import { t, tData } from "../lib/i18n.js";
 import { Engine, fmtDate, fmtDateLong, isoWeek, iso, addDays, D, days } from "../../../shared/engine.js";
+/* NEW-04 — seats and objections (MER-06, MER-07). */
+import { seatsSection, objectionsFor, decisionFields, decisionFacts } from "./registers.js";
 
 /* Cached between renders so switching series does not blank the screen. */
 const cache = { series: null, detail: null, detailId: null, loading: false };
@@ -92,8 +94,10 @@ export function meetingsView(db) {
       h("h3", null, "Loading the calendar…"));
   }
   if (!cache.series.length) {
-    return emptyState(t("No meeting series in your scope"),
-      "A group or site administrator sets up the weekly delivery call and the monthly steering committee.");
+    return h("div", null,
+      emptyState(t("No meeting series in your scope"),
+        "A group or site administrator sets up the weekly delivery call and the monthly steering committee."),
+      seatsSection(db));
   }
 
   const wanted = App.ui.meetingOccurrence;
@@ -107,11 +111,16 @@ export function meetingsView(db) {
     }
   }
 
-  return h("div", { class: "split" },
-    calendarPane(db),
-    cache.detail && cache.detailId === App.ui.meetingOccurrence
-      ? occurrencePane(db, cache.detail)
-      : h("div", { class: "sec" }, h("div", { class: "kicker muted" }, "Loading the meeting…")));
+  return h("div", null,
+    h("div", { class: "split" },
+      calendarPane(db),
+      cache.detail && cache.detailId === App.ui.meetingOccurrence
+        ? occurrencePane(db, cache.detail)
+        : h("div", { class: "sec" }, h("div", { class: "kicker muted" }, "Loading the meeting…"))),
+    /* NEW-04 (MER-06) — who sits in these rooms, who may veto, and what
+       one person may never combine. Below the rooms, for every reader;
+       declared and corrected at group level. */
+    seatsSection(db));
 }
 
 /* ── left: the calendar ───────────────────────────────────────────── */
@@ -119,6 +128,9 @@ export function meetingsView(db) {
 function calendarPane(db) {
   const weekly = cache.series.filter((s) => s.cadence === "weekly");
   const monthly = cache.series.filter((s) => s.cadence === "monthly");
+  /* MER-10 — a room convened by a gate or by an event. Without its own
+     group it would be a series nobody could find on this screen. */
+  const convened = cache.series.filter((s) => s.cadence === "per_gate" || s.cadence === "ad_hoc");
 
   const group = (label, list) => list.length ? h("div", { style: "margin-bottom:18px" },
     h("div", { class: "kicker", style: "padding:0 0 6px" }, label),
@@ -160,6 +172,7 @@ function calendarPane(db) {
     h("div", { class: "sec-tight", style: "padding-top:0" },
       group("Weekly delivery", weekly),
       group("Monthly steering", monthly),
+      group(t("Gate reviews and ad hoc"), convened),
       h("div", { class: "btn-row", style: "margin-top:8px;flex-direction:column" },
         h("button", {
           class: "btn btn-sm", style: "width:100%;justify-content:center",
@@ -192,12 +205,17 @@ function seriesDialog(db, existing) {
     kicker: isNew ? "Cadence" : existing.id, wide: true,
     fields: [
       { key: "name", label: "Name", required: true, span: 2, value: existing?.name ?? "" },
+      { key: "cadence", label: t("Cadence"), type: "select", value: existing?.cadence ?? "weekly",
+        options: [
+          { value: "weekly", label: t("Weekly — exception-only delivery call") },
+          { value: "monthly", label: t("Monthly — the steering pack") },
+          { value: "per_gate", label: t("Per gate — convened when a gate is due") },
+          { value: "ad_hoc", label: t("Ad hoc — convened by an event") },
+        ],
+        hint: t("A gate review or a safety board meets when its event comes, not on a weekday: closing one schedules no successor.") },
+      { key: "gateN", label: t("Gate"), type: "number", min: 1, value: existing?.gateN ?? "",
+        hint: t("For a per-gate series: the gate it reviews. Required for that cadence, ignored for the others.") },
       ...(isNew ? [
-        { key: "cadence", label: "Cadence", type: "select", value: "weekly",
-          options: [
-            { value: "weekly", label: "Weekly — exception-only delivery call" },
-            { value: "monthly", label: "Monthly — the steering pack" },
-          ] },
         { key: "scope", label: "Scope", type: "select", value: "group",
           options: [{ value: "group", label: "Group — the whole portfolio" }]
             .concat(db.programmes.map((p) => ({ value: "programme:" + p.id, label: "Programme · " + p.name })))
@@ -224,6 +242,7 @@ function seriesDialog(db, existing) {
         return act("Meeting series created", (a) => a.post("/meetings/series", {
           name: v.name,
           cadence: v.cadence,
+          gateN: v.cadence === "per_gate" && v.gateN !== "" ? Number(v.gateN) : null,
           scopeKind: kind === "group" ? "group" : kind,
           programmeId: kind === "programme" ? target : null,
           siteId: kind === "site" ? target : null,
@@ -236,6 +255,8 @@ function seriesDialog(db, existing) {
       return act("Meeting series updated", (a) => a.patch("/meetings/series/" + existing.id, {
         name: v.name, chairId: v.chairId || null, weekday: Number(v.weekday),
         startTime: v.startTime, timeboxMin: Number(v.timeboxMin),
+        cadence: v.cadence,
+        gateN: v.cadence === "per_gate" && v.gateN !== "" ? Number(v.gateN) : null,
         active: !!v.active, version: existing.version,
       }), v.name);
     },
@@ -346,7 +367,7 @@ function occurrencePane(db, d) {
 
     occurrenceHistory(d),
     agendaSection(db, d),
-    decisionsSection(d),
+    decisionsSection(db, d),
     actionsSection(db, d),
     attendanceSection(d));
 }
@@ -450,8 +471,10 @@ function followItem(it) {
 
 /* ── decisions ────────────────────────────────────────────────────── */
 
-function decisionsSection(d) {
+function decisionsSection(db, d) {
   const { decisions, occurrence } = d;
+  /* NEW-04 — the meeting's own scope decides who may object here. */
+  const scope = { scope_kind: d.series.scopeKind, programme_id: d.series.programmeId, site_id: d.series.siteId };
   return h("section", { class: "sec", style: "padding-top:0" },
     sectionHead("Decisions", decisions.length ? decisions.length + " recorded" : "none recorded"),
     decisions.length
@@ -465,7 +488,11 @@ function decisionsSection(d) {
               x.rationale ? h("div", { class: "small muted", style: "margin-top:3px;max-width:80ch" }, x.rationale) : null,
               h("div", { class: "xs muted", style: "margin-top:5px" },
                 [x.projectId, x.crId, x.decidedByName ? "decided by " + x.decidedByName : null]
-                  .filter(Boolean).join(" · ")))))))
+                  .filter(Boolean).join(" · ")),
+              /* NEW-04 (MER-07) — cost to reverse, supersession, source
+                 evidence; and the objections lodged against it. */
+              decisionFacts(x),
+              objectionsFor(db, x.id, { scope, decidedBy: x.decidedBy }))))))
       : h("p", { class: "small muted" },
           occurrence.status === "closed"
             ? "This meeting recorded no decisions."
@@ -614,6 +641,11 @@ function recordDecision(db, d) {
         options: [{ value: "", label: t("None") }].concat(referralItems),
         hint: t("Naming the referral retires it from future agendas."),
       }] : []),
+      /* NEW-04 (MER-07) — what undoing it would cost, what it rests on,
+         and the decision it replaces. */
+      ...decisionFields(db, null),
+      { key: "supersedes", label: t("Supersedes decision"), value: "", advanced: true,
+        hint: t("The identifier of the decision this one replaces, e.g. DEC-012. That one stays on the record.") },
     ],
     saveLabel: t("Record decision"),
     onSave: (v) => act(v.refer ? "Decision referred" : "Decision recorded",
@@ -621,6 +653,8 @@ function recordDecision(db, d) {
         headline: v.headline, rationale: v.rationale,
         projectId: v.projectId || null, crId: v.crId || null, decidedBy: v.decidedBy || null,
         refer: !!v.refer, referTo: v.refer || null, answers: v.answers || null,
+        reversalCost: v.reversalCost || null, sourceEvidence: v.sourceEvidence || null,
+        supersedes: v.supersedes || null,
       }),
       v.headline),
   });

@@ -22,6 +22,65 @@ Nothing yet.
 
 ---
 
+## [5.22.0] — 2026-09-23
+
+**KODO's registers are written from the product** (NEW-04; KODO MER-03,
+05, 06, 07, 10, 11; docs/36 wave 1).
+
+### Added
+
+- **Requirements, evidence, review findings, seats with their
+  incompatibilities, and objections** get session routes
+  (`server/src/routes/registers.js`), all audited, each update asserting
+  `row_version`. They also get screens:
+  - three folds on the project (Requirements, Evidence, Review findings);
+  - *Seats and vetoes* on Meetings;
+  - objections under every decision, in a meeting or in the register.
+- **Authority, decided in `shared/rbac.js`, each with its reason:**
+  - `assurance.write` is ordinary project work.
+  - `waiver.grant` is group level: the team does not rule its own gap
+    away.
+  - `seat.manage` is group level.
+  - `objection.raise` is open to whoever can see the decision. Only a
+    seat's holder speaks in its name, so a veto cannot be borrowed.
+  - `objection.resolve` is group level, and never the person who took the
+    decision.
+- **KODO's rules, enforced:**
+  - A finding closes only on evidence of its own project, captured since
+    it was raised.
+  - A waiver carries its reason.
+  - A requirement is *Done* only when its proof (`verified by`) is named,
+    not just its method.
+  - A person holding two incompatible seats is refused with a 400 naming
+    both seats, whichever order the facts arrive in. Migration 055 adds
+    the edge trigger the seat trigger lacked.
+  - A veto objection blocks the phase advance, and resolving it lifts the
+    block.
+- Meeting series may be `per_gate` (with their gate) or `ad_hoc`.
+  Decisions show their cost to reverse, their source evidence, and what
+  they supersede.
+- Migration **055**: `row_version` on evidence, finding, seat and
+  objection; `raised_by` on objections; the incompatibility edge trigger.
+
+### Fixed
+
+- The series route silently turned `per_gate` and `ad_hoc` into
+  `weekly`.
+- A supersession recorded in a meeting went to `supersedes_id`, while the
+  decision register reads `supersedes`, so it never appeared there.
+- **The browser's permission adapter dropped `personId`.** Every "is this
+  the same person" rule was therefore checked in the browser as if nobody
+  were signed in.
+- F2's shrink-only list asked for NEW-04's sixteen known gaps to be
+  struck off the moment the routes arrived, and they are.
+
+`server/test/registers.test.js` (28 tests). In the browser: 40 checks
+across admin, group (in French), site and viewer. The viewer is offered
+no control on any new section, and the site lead gets no *Waive* and no
+*+ Seat*.
+
+---
+
 ## [5.21.1] — 2026-09-23
 
 **A gate's own list is checked against the product** (REQ-52, RT365;

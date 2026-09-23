@@ -43,8 +43,51 @@ const toSeries = (s) => ({
   id: s.id, name: s.name, cadence: s.cadence, scopeKind: s.scope_kind,
   programmeId: s.programme_id, siteId: s.site_id, chairId: s.chair_id,
   weekday: s.weekday, startTime: s.start_time, timeboxMin: s.timebox_min,
+  /* MER-10 (NEW-04) — the gate a per_gate series convenes for. */
+  gateN: s.gate_n ?? null,
   active: s.active, version: s.row_version,
 });
+/* MER-10 — governance is not weekly or monthly: it is convened by a gate,
+   or by an event. 052 let the database hold both; the route offered
+   neither, so a gate-bound series entered only through the import. */
+const CADENCES = ["weekly", "monthly", "per_gate", "ad_hoc"];
+/* A room convened by an event is not rescheduled by the calendar. */
+const EVENT_DRIVEN = new Set(["per_gate", "ad_hoc"]);
+function cadenceOf(b, current = {}) {
+  const cadence = b.cadence === undefined ? current.cadence ?? "weekly" : b.cadence;
+  if (!CADENCES.includes(cadence)) throw new HttpError(400, "cadence is weekly, monthly, per_gate or ad_hoc");
+  let gateN = b.gateN === undefined ? current.gate_n ?? null : b.gateN;
+  if (gateN === "" || gateN === null) gateN = null;
+  else {
+    gateN = Number(gateN);
+    if (!Number.isInteger(gateN) || gateN < 1) throw new HttpError(400, "The gate is a whole number from 1 — the rank of a gate in the ladder");
+  }
+  if (cadence === "per_gate" && gateN === null) {
+    throw new HttpError(400, "A per-gate series names its gate — otherwise « per gate » designates no meeting");
+  }
+  return { cadence, gateN: cadence === "per_gate" ? gateN : null };
+}
+/* MER-07 — what a decision may cite: a decision it replaces, and a piece
+   of evidence it rests on. Both must exist; the evidence must be on the
+   decision's project when it names one. */
+async function decisionLinks(b, projectId) {
+  let supersedes = null;
+  if (b.supersedes) {
+    const prev = await one(`SELECT id FROM meeting_decision WHERE id = $1`, [String(b.supersedes)]);
+    if (!prev) throw new HttpError(400, "The decision this one supersedes does not exist");
+    supersedes = prev.id;
+  }
+  let evidence = null;
+  if (b.sourceEvidence) {
+    const ev = await one(`SELECT id, project_id FROM evidence WHERE id = $1`, [String(b.sourceEvidence)]);
+    if (!ev || (projectId && ev.project_id !== projectId)) throw new HttpError(400, "That evidence is not on this decision's project");
+    evidence = ev.id;
+  }
+  if (b.reversalCost && !["low", "medium", "high"].includes(b.reversalCost)) {
+    throw new HttpError(400, "reversalCost is low, medium or high — or left empty when nobody has said");
+  }
+  return { supersedes, evidence, reversalCost: b.reversalCost || null };
+}
 const toOccurrence = (o) => ({
   id: o.id, seriesId: o.series_id, meetsOn: o.meets_on, periodLabel: o.period_label,
   status: o.status,
@@ -287,17 +330,17 @@ r.post("/series", async (req, res, next) => {
     )).map((p) => p.programme_id);
     gate(req.user, "series.manage", { scope });
 
-    const cadence = b.cadence === "monthly" ? "monthly" : "weekly";
+    const { cadence, gateN } = cadenceOf(b);
     const id = "MS-" + Date.now().toString(36).toUpperCase().slice(-6);
     await audited(req.user,
       { action: "Meeting series created", entity: "meeting_series", entityId: id, detail: b.name },
       async (t) => t.query(
         `INSERT INTO meeting_series
-           (id, name, cadence, scope_kind, programme_id, site_id, chair_id, weekday, start_time, timebox_min)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+           (id, name, cadence, scope_kind, programme_id, site_id, chair_id, weekday, start_time, timebox_min, gate_n)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
         [id, b.name, cadence, kind, scope.programme_id, scope.site_id,
          b.chairId ?? req.user.personId, Math.max(0, Math.min(6, Number(b.weekday ?? 1))),
-         b.startTime ?? "09:00", Number(b.timeboxMin ?? (cadence === "monthly" ? 60 : 25))]));
+         b.startTime ?? "09:00", Number(b.timeboxMin ?? (cadence === "monthly" ? 60 : 25)), gateN]));
     res.status(201).json({ id });
   } catch (e) { next(e); }
 });
@@ -314,6 +357,11 @@ r.patch("/series/:id", async (req, res, next) => {
     if (b.startTime !== undefined) patch.start_time = b.startTime;
     if (b.timeboxMin !== undefined) patch.timebox_min = Math.max(5, Number(b.timeboxMin));
     if (b.active !== undefined) patch.active = !!b.active;
+    if (b.cadence !== undefined || b.gateN !== undefined) {
+      const c = cadenceOf(b, s);
+      patch.cadence = c.cadence;
+      patch.gate_n = c.gateN;
+    }
 
     const { updateVersioned } = await import("../db.js");
     const out = await audited(req.user,
@@ -405,6 +453,12 @@ r.get("/occurrences/:id", async (req, res, next) => {
         /* REQ-47 (049) — le jour où elle est entrée en vigueur. Une
            décision prise en salle l'est le jour où la salle a siégé. */
         ratifiedOn: d.ratified_on ?? null,
+        /* MER-07 (NEW-04) — written by this route since 5.17 and shown by
+           no screen: what undoing it would cost, what it replaces, and the
+           evidence it rests on. */
+        reversalCost: d.reversal_cost ?? null,
+        supersedes: d.supersedes_id ?? d.supersedes ?? null,
+        sourceEvidence: d.source_evidence_id ?? null,
       })),
       openActions: actions,
       actionsRaisedHere: raisedHere.map((a) => ({
@@ -448,6 +502,9 @@ r.post("/occurrences/:id/close", async (req, res, next) => {
     if (o.status === "closed") throw new HttpError(409, "This meeting is already closed");
 
     const agenda = await agendaFor(req.user, s, o);
+    /* MER-10 — a room convened by a gate or an event has no calendar
+       successor: the next one is scheduled when the gate comes. */
+    const eventDriven = EVENT_DRIVEN.has(s.cadence);
     const nextDate = nextOccurrenceDate(
       { cadence: s.cadence, weekday: s.weekday },
       iso(addDays(o.meets_on, s.cadence === "weekly" ? 1 : 1))
@@ -485,13 +542,13 @@ r.post("/occurrences/:id/close", async (req, res, next) => {
               SET status='closed', closed_at=now(), closed_by=$2, notes=$3, row_version=row_version+1
             WHERE id=$1`,
           [o.id, req.user.id, String(req.body?.notes ?? o.notes ?? "").slice(0, 4000)]);
-        await t.query(
+        if (!eventDriven) await t.query(
           `INSERT INTO meeting_occurrence (id, series_id, meets_on, period_label, status)
            VALUES ($1,$2,$3,$4,'scheduled')
            ON CONFLICT (series_id, meets_on) DO NOTHING`,
           [nextId, s.id, nextDate, periodLabel({ cadence: s.cadence }, nextDate)]);
       });
-    res.json({ ok: true, next: { id: nextId, meetsOn: nextDate } });
+    res.json({ ok: true, next: eventDriven ? null : { id: nextId, meetsOn: nextDate } });
   } catch (e) { next(e); }
 });
 
@@ -575,6 +632,10 @@ r.post("/occurrences/:id/decisions", async (req, res, next) => {
       answers = rf.id;
     }
 
+    /* MER-07 (NEW-04) — checked before the write: a supersession naming
+       nothing, or evidence from another project, was stored as given. */
+    const links = await decisionLinks(b, b.projectId ?? null);
+
     let id = null;
     await audited(req.user,
       () => ({ action: referredTo ? "Decision referred to " + referredTo : "Decision recorded",
@@ -585,8 +646,8 @@ r.post("/occurrences/:id/decisions", async (req, res, next) => {
         `INSERT INTO meeting_decision
            (id, occurrence_id, headline, rationale, project_id, cr_id, decided_by, recorded_by, referred_to_scope,
             alternatives, dissent, raid_id, milestone_id, ratified_on,
-            reversal_cost, supersedes_id, source_evidence_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+            reversal_cost, supersedes_id, source_evidence_id, supersedes)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$16)`,
         [id, o.id, String(b.headline).slice(0, 300), String(b.rationale ?? "").slice(0, 4000),
          b.projectId ?? null, b.crId ?? null, b.decidedBy ?? s.chair_id, req.user.id, referredTo,
          /* I-7 — les alternatives écartées et la dissension, en salle
@@ -606,8 +667,13 @@ r.post("/occurrences/:id/decisions", async (req, res, next) => {
             licence libre est irréversible ; retirer une galerie du
             périmètre ne l'est pas. Nul = personne ne s'est prononcé, ce
             qui n'est pas « faible ». */
-         ["low", "medium", "high"].includes(b.reversalCost) ? b.reversalCost : null,
-         b.supersedes ?? null, b.sourceEvidence ?? null]);
+         links.reversalCost,
+         /* NEW-04 — two columns say "supersedes": 034's `supersedes`,
+            which the register reads, and 052's `supersedes_id`, which
+            only this route wrote. A supersession minuted in a room was
+            therefore invisible in the register. Both are written now,
+            with the one value ($16). */
+         links.supersedes, links.evidence]);
         if (answers) {
           /* Still-unanswered is re-checked here: the lookup above runs
              outside this transaction (PGlite serialises one connection,

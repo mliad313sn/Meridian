@@ -3790,6 +3790,10 @@ const REGISTER_ACTIONS = [
   "Change request approved", "Change request rejected",
   "Project re-baselined", "Gate overridden", "Governance level changed",
   "Project moved", "Project status overridden",
+  /* NEW-04 — a waiver says a gap does not count, and answering an
+     objection decides against, or for, a dissenting seat: both are
+     decisions somebody will ask about. */
+  "Requirement waived", "Finding waived", "Objection resolved",
 ];
 
 /* A-08 — la mesure de l'adoption, au niveau groupe.
@@ -3821,6 +3825,7 @@ r.get("/decisions/log", async (req, res, next) => {
               COALESCE(o.meets_on, d.decided_on) AS decided_on, d.external_source, d.external_id,
               d.council, d.evidence_uri, d.provenance, d.status, d.ratified_by, d.ratified_on,
               d.row_version, ru.person_id AS recorded_by_person,
+              d.reversal_cost, d.supersedes_id, d.source_evidence_id,
               s.name AS series_name, s.scope_kind, pe.name AS decided_by_name
          FROM meeting_decision d
          LEFT JOIN meeting_occurrence o ON o.id = d.occurrence_id
@@ -3843,7 +3848,9 @@ r.get("/decisions/log", async (req, res, next) => {
         series: d.series_name ?? null,
         scope: d.scope_kind ?? null, referred: d.referred_to_scope ?? null,
         project: d.project_id ?? null, cr: d.cr_id ?? null, raid: d.raid_id ?? null,
-        milestone: d.milestone_id ?? null, supersedes: d.supersedes ?? null,
+        milestone: d.milestone_id ?? null, supersedes: d.supersedes ?? d.supersedes_id ?? null,
+        /* MER-07 (NEW-04) — what undoing it would cost, and what it rests on. */
+        reversalCost: d.reversal_cost ?? null, sourceEvidence: d.source_evidence_id ?? null,
         externalSource: d.external_source ?? null, externalId: d.external_id ?? null,
         council: d.council ?? "", evidenceUri: d.evidence_uri ?? "", provenance: d.provenance ?? "",
         status: d.status ?? "Ratified", ratifiedBy: d.ratified_by ?? "",
@@ -4146,6 +4153,19 @@ r.post("/decisions", async (req, res, next) => {
       if (!prev) bad("The decision this one supersedes does not exist");
       supersedes = prev.id;
     }
+    /* MER-07 (NEW-04) — what undoing it would cost, and the evidence it
+       rests on. Empty cost = nobody has said, which is not « low ». */
+    if (b.reversalCost && !["low", "medium", "high"].includes(b.reversalCost)) {
+      bad("reversalCost is low, medium or high — or left empty when nobody has said");
+    }
+    let sourceEvidence = null;
+    if (b.sourceEvidence) {
+      const ev = await one(`SELECT id, project_id FROM evidence WHERE id = $1`, [String(b.sourceEvidence)]);
+      if (!ev || (p && ev.project_id !== p.id) || (!p && !canSeeProject(req.user, await projectFor(ev.project_id)))) {
+        bad("That evidence is not on this decision's project");
+      }
+      sourceEvidence = ev.id;
+    }
     /* REQ-49 (RT365) — the contract door resolved the ratifier in the
        directory and refused the decider or the recording hand as their
        own second pair of eyes; this door took any text at all. Since 5.15
@@ -4170,14 +4190,16 @@ r.post("/decisions", async (req, res, next) => {
           `INSERT INTO meeting_decision
              (id, occurrence_id, headline, rationale, alternatives, dissent, project_id, cr_id,
               raid_id, milestone_id, supersedes, decided_by, decided_on, recorded_by,
-              council, evidence_uri, provenance, status, ratified_by, ratified_on)
-           VALUES ($1,NULL,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
+              council, evidence_uri, provenance, status, ratified_by, ratified_on,
+              supersedes_id, reversal_cost, source_evidence_id)
+           VALUES ($1,NULL,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$10,$20,$21)`,
           [id, String(b.headline).slice(0, 1000), String(b.rationale ?? "").slice(0, 4000),
            String(b.alternatives ?? "").slice(0, 4000), String(b.dissent ?? "").slice(0, 2000),
            p?.id ?? null, crId, raidId, msId, supersedes, who?.id ?? null, on, req.user.id,
            council, evidence, String(b.provenance ?? "").slice(0, 200),
            status, ratifier ?? "",
-           status === "Ratified" ? ratifiedOn : null]);
+           status === "Ratified" ? ratifiedOn : null,
+           b.reversalCost || null, sourceEvidence]);
       });
     res.status(201).json({ id });
   } catch (e) { next(e); }

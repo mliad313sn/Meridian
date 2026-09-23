@@ -240,6 +240,11 @@ export async function loadPortfolio(user) {
     if (!conflictsBySeat.has(c.seat_id)) conflictsBySeat.set(c.seat_id, []);
     conflictsBySeat.get(c.seat_id).push(c.other_id);
   }
+  const conflictReasons = new Map();
+  for (const c of seatConflicts) {
+    if (!conflictReasons.has(c.seat_id)) conflictReasons.set(c.seat_id, []);
+    conflictReasons.get(c.seat_id).push({ other: c.other_id, reason: c.reason ?? "" });
+  }
 
   const depsByActivity = new Map();
   for (const d of deps) {
@@ -441,6 +446,8 @@ export async function loadPortfolio(user) {
       kind: e.kind, name: e.name, uri: e.uri, digest: e.digest,
       gate: e.gate_n, loop: e.gate_loop,
       capturedOn: e.captured_on, capturedBy: e.captured_by,
+      /* NEW-04 — correctable from a screen, so it carries its version. */
+      version: e.row_version ?? 1,
     })),
 
     /* MER-05 — le constat. `observedFact` est ce qui a été VU ;
@@ -453,6 +460,7 @@ export async function loadPortfolio(user) {
       severity: f.severity, owner: f.owner_id, proposedFix: f.proposed_fix,
       raisedOn: f.raised_on, retestOn: f.retest_on, status: f.status,
       closedEvidence: f.closed_evidence_id, waiverReason: f.waiver_reason,
+      version: f.row_version ?? 1,
     })),
 
     /* MER-06 — qui siège, sur quel domaine, avec ou sans veto, et ce
@@ -461,6 +469,11 @@ export async function loadPortfolio(user) {
       id: s2.id, name: s2.name, person: s2.person_id, domain: s2.domain,
       vetoDomain: s2.veto_domain, observer: s2.observer, active: s2.active,
       incompatibleWith: conflictsBySeat.get(s2.id) ?? [],
+      /* NEW-04 — each incompatibility with its own reason: the screen
+         says WHY two seats may not be combined, and the import writes
+         the edge back with the reason it left with. */
+      conflicts: conflictReasons.get(s2.id) ?? [],
+      version: s2.row_version ?? 1,
     })),
 
     /* MER-07 — les objections. Une gouvernance par consentement a
@@ -471,6 +484,9 @@ export async function loadPortfolio(user) {
       id: o.id, decision: o.decision_id, seat: o.seat_id, domain: o.domain,
       reason: o.reason, raisedOn: o.raised_on, escalatesOn: o.escalates_on,
       state: o.state, resolution: o.resolution,
+      /* NEW-04 — whose objection it is: rewording, escalating and
+         withdrawing it are theirs (rbac objection.own). */
+      raisedBy: o.raised_by ?? null, version: o.row_version ?? 1,
     })),
 
     ledger: ledger.map((l) => ({

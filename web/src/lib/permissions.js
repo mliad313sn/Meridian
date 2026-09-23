@@ -22,6 +22,13 @@ function adapt(me) {
     id: me.id,
     role: me.role,
     active: me.active !== false,
+    /* NEW-04 — who is at the keyboard, as rbac's `selfMatch` reads it.
+       Dropped here until now, so every independence rule (the objector
+       rewording their own objection, the decider never answering one)
+       was decided in the browser as if nobody were signed in, and the
+       screen drew what the server then refused. */
+    personId: me.personId ?? null,
+    actingForPersonId: me.actingForPersonId ?? null,
     grants: {
       programmes: new Set(me.grants?.programmes ?? []),
       sites: new Set(me.grants?.sites ?? []),

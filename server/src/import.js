@@ -643,12 +643,18 @@ export async function importBook(book, user, opts = {}) {
        arête posée dans un seul sens laisse la moitié de la séparation
        des devoirs sans effet. */
     for (const st of book.seats ?? []) {
-      for (const other of st.incompatibleWith ?? []) {
+      /* NEW-04 — the export now writes each edge with its own reason
+         (`conflicts`); a hand-written book may still give the bare list
+         and one reason for all of them. */
+      const edges = Array.isArray(st.conflicts) && st.conflicts.length
+        ? st.conflicts.map((c) => ({ other: c.other, reason: c.reason ?? "" }))
+        : (st.incompatibleWith ?? []).map((other) => ({ other, reason: st.conflictReason ?? "" }));
+      for (const { other, reason } of edges) {
         for (const [a, b] of [[st.id, other], [other, st.id]]) {
           await t.query(
             `INSERT INTO seat_conflict (seat_id, other_id, reason) VALUES ($1,$2,$3)
              ON CONFLICT (seat_id, other_id) DO NOTHING`,
-            [a, b, st.conflictReason ?? ""]);
+            [a, b, reason]);
         }
       }
     }
@@ -940,12 +946,14 @@ export async function importBook(book, user, opts = {}) {
       }
       await t.query(
         `INSERT INTO decision_objection (id, decision_id, seat_id, domain, reason,
-                                         raised_on, escalates_on, state, resolution)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+                                         raised_on, escalates_on, state, resolution, raised_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
         [o.id, o.decision, clean(o.seat), o.domain ?? "", o.reason,
          o.raisedOn ?? new Date().toISOString().slice(0, 10), clean(o.escalatesOn),
          ["open", "resolved", "escalated", "withdrawn"].includes(o.state) ? o.state : "open",
-         o.resolution ?? ""]);
+         o.resolution ?? "",
+         // NEW-04 — whose objection it is (055)
+         clean(o.raisedBy)]);
     }
 
     /* ── NEW-05 · the registers the importer did not know ──────────────

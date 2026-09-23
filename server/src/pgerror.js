@@ -79,6 +79,23 @@ export function translate(err) {
       return { status: 400, message: "One of those values is not in a form the system can read" };
     case "22003": // numeric_value_out_of_range
       return { status: 400, message: "That number is too large for this field" };
+    /* NEW-04 — raise_exception from a trigger. Only the rules this
+       product writes are translated, by the sentence they open with;
+       anything else raised in PL/pgSQL is still a fault. The
+       segregation-of-duties guard (052, 055) says in full which seat
+       clashes with which, so its own words are the answer: a conflict
+       with a fact already on the record. 400, not 409: the client reads a
+       409 as "someone saved first — reload", which would replace this
+       sentence in the dialog with a stale-version story (found in the
+       browser walk). It is the same class of refusal as a CHECK. */
+    case "P0001": {
+      const text = String(err.message ?? "");
+      if (/^Segregation of duties:/.test(text)) {
+        return { status: 400, message: text +
+          " — give one of the two seats to someone else, or remove the incompatibility if it was declared in error" };
+      }
+      return null;
+    }
     case "40001": // serialization_failure
     case "40P01": // deadlock_detected
       return { status: 409, message: "That change collided with another — try again" };
