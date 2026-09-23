@@ -55,7 +55,7 @@
     },
     "counterpart": "KODO Product Owner (docs/reports/MERIDIAN_PRODUCT_REPORT.md); no issue filed upstream yet — the report says 'ready to send … as issues'"
   },
-  "registerVersion": 3,
+  "registerVersion": 4,
   "requests": [
     {
       "id": "MER-01",
@@ -495,7 +495,8 @@
         "evidence table",
         "server/src/routes/registers.js",
         "web/src/views/registers.js",
-        "server/migrations/055 (row_version, raised_by, incompatibility edge trigger)"
+        "server/migrations/055 (row_version, raised_by, incompatibility edge trigger)",
+        "5.25.0: typed external references (057) — a criterion cites a commit SHA, CI run or artefact digest, versioned after the gate"
       ],
       "measure": "server/test/registers.test.js (28 tests) · browser walk, 40 checks across four roles",
       "remaining": null,
@@ -522,6 +523,12 @@
           "registerVersion": 3,
           "status": "done",
           "note": "Write routes and screens delivered by docs/36 NEW-04 (5.22.0)."
+        },
+        {
+          "at": "2026-09-23",
+          "registerVersion": 4,
+          "status": "done",
+          "note": "5.25.0 adds what M1's evidence actually was: a commit, a CI run and an artefact, cited by ref and versioned after the gate (D-36.14)."
         }
       ]
     },

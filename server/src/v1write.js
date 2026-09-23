@@ -49,6 +49,7 @@ import { isEvidenceLocator, EVIDENCE_REFUSAL } from "./evidence.js";
 import { assertCaseReconfirmed } from "./value.js";
 import { canRatifyDecision } from "../../shared/rbac.js";
 import { reprojectNextReview } from "./raidreview.js";
+import { upsertReference } from "./references.js";
 
 const bad = (msg) => { throw new HttpError(400, msg); };
 const sha = (s) => crypto.createHash("sha256").update(s).digest("hex");
@@ -1356,7 +1357,24 @@ export const WRITE_BODIES = {
      register row reviewed, `on` the day, `by` the person, `next` the due
      date it sets (which the row's `review` then projects). */
   "raid-reviews": { item: "string", on: "date", by: "string", note: "string", next: "date", version: "integer" },
+  /* D-36.14 (#17, REQ-29) — a typed external reference and the state a
+     repository's own automation reports for it. Meridian never fetches
+     it: `state` is what this integration says, stamped `stateAt`. */
+  references: { adopt: "string", project: "string", activity: "string", raid: "string", criterion: "string",
+    kind: "string", ref: "string", url: "string", title: "string", state: "string", stateAt: "date-time",
+    version: "integer" },
 };
+
+/* D-36.14 — the reference contract, speaking the integration's own ids
+   for the project and the thing it hangs on (references.js holds the
+   rules the screen shares). */
+export function upsertReferenceV1(user, externalId, b) {
+  return upsertReference(user, externalId, b, {
+    resolveProject,
+    lookup: async (table, ref) => (await one(
+      `SELECT id FROM ${table} WHERE id = $1 OR (external_source = $2 AND external_id = $1)`, [ref, user.id]))?.id,
+  });
+}
 
 /* ── REQ-19 · un corps que la collection ne comprend pas est REFUSÉ ───
  *

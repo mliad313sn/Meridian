@@ -1225,15 +1225,31 @@ export async function importBook(book, user, opts = {}) {
        (005); the association is ours and comes back, with when it was
        made and last synchronised. */
     for (const l of book.extLinks ?? []) {
+      /* D-36.14 — a repository reference carries its url, the state an
+         integration last reported (and which integration, kept only when
+         it exists here, like every integration pointer), what it hangs
+         on, and — for a criterion citation — when it was superseded. */
       await t.query(
         `INSERT INTO ext_link (id, source, ext_id, project_id, activity_id, site_id,
                                title_cache, status_cache, kind_cache, risk_cache, due_cache,
-                               window_start, linked_by, linked_at, synced_at, stale)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,${USER(13)},$14,$15,$16)`,
+                               window_start, linked_by, linked_at, synced_at, stale,
+                               url, state, state_at, state_source, raid_id, criterion_id,
+                               superseded_at, external_source, external_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,${USER(13)},$14,$15,$16,
+                 $17,$18,$19,${INTEGRATION(20)},$21,$22,$23,${INTEGRATION(24)},$25)`,
         [l.id, l.source, l.extId, l.project, clean(l.activity), clean(l.site),
          l.title ?? "", l.status ?? "", l.kind ?? "", l.risk ?? "", clean(l.due),
          clean(l.windowStart), clean(l.linkedBy), clean(l.linkedAt) ?? new Date().toISOString(),
-         clean(l.syncedAt), l.stale === true]);
+         clean(l.syncedAt), l.stale === true,
+         l.url ?? "", l.state ?? "", clean(l.stateAt), clean(l.stateSource), clean(l.raid),
+         clean(l.criterion), clean(l.supersededAt), clean(l.externalSource), clean(l.externalId)]);
+    }
+    // a citation's lineage second, so both versions exist (as documents do)
+    for (const l of book.extLinks ?? []) {
+      if (l.supersedes) {
+        await t.query(`UPDATE ext_link SET supersedes = $2${bump("ext_link", ["supersedes"], ["$2::text"])}
+                        WHERE id = $1`, [l.id, l.supersedes]);
+      }
     }
 
     for (const [key, lines] of Object.entries(book.narrative ?? {})) {

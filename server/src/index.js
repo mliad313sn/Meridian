@@ -33,6 +33,7 @@ import signalsRoutes from "./routes/signals.js";
 import ladderRoutes from "./routes/ladder.js";
 import valuePageRoutes from "./routes/valuepage.js";
 import registerRoutes from "./routes/registers.js";
+import referenceRoutes from "./routes/references.js";
 import federationServiceRoutes from "./routes/federationService.js";
 import { translate } from "./pgerror.js";
 import { say, localeOf } from "./i18n.js";
@@ -225,6 +226,8 @@ export function buildApp() {
   app.use("/api", valuePageRoutes);
   /* NEW-04 — requirements, evidence, findings, seats, objections. */
   app.use("/api", registerRoutes);
+  /* D-36.14 — typed external references (issue, PR, commit, CI run, artefact). */
+  app.use("/api", referenceRoutes);
   app.use("/api/import", importRoutes);
   app.use("/api/meetings", meetingRoutes);
   app.use("/api/admin", adminRoutes);

@@ -2599,6 +2599,85 @@ export const ES = {
     "Reemplazar el libro",
   "Book merged":
     "Libro fusionado",
+  /* D-36.14 — typed external references (#17, REQ-29). */
+  "Tracker issue":
+    "Ticket",
+  "Pull request":
+    "Solicitud de fusión",
+  "Commit":
+    "Commit",
+  "Merged":
+    "Fusionada",
+  "Passed":
+    "Superada",
+  "Failed":
+    "Fallida",
+  "stage":
+    "etapa",
+  "RAID":
+    "RAID",
+  "criterion":
+    "criterio",
+  "project level":
+    "nivel de proyecto",
+  "Project level":
+    "Nivel de proyecto",
+  "Named by its hash — it has no state to report.":
+    "Designado por su huella — no tiene estado que informar.",
+  "No state reported yet. Meridian does not look it up; an integration reports it.":
+    "Aún no se ha informado ningún estado. Meridian no lo consulta; una integración lo informa.",
+  "as last reported by":
+    "según lo informó por última vez",
+  "an integration":
+    "una integración",
+  "at":
+    "el",
+  "Part of the gate record — a change cites a new version and keeps this one.":
+    "Forma parte del expediente del hito: un cambio cita una nueva versión y conserva esta.",
+  "Correct the reference":
+    "Corregir la referencia",
+  "Remove the reference":
+    "Quitar la referencia",
+  "Where the work is":
+    "Dónde está el trabajo",
+  "reference(s)":
+    "referencia(s)",
+  "Link a reference":
+    "Vincular una referencia",
+  "No issue, pull request, commit, CI run or artefact is linked to this project.":
+    "Ningún ticket, solicitud de fusión, commit, ejecución de CI o artefacto está vinculado a este proyecto.",
+  "What the reference is. Its state, if it has one, is reported by an integration — never typed here.":
+    "Qué es la referencia. Su estado, si lo tiene, lo informa una integración: nunca se escribe aquí.",
+  "Canonical form: owner/repo#123 for an issue or a pull request, owner/repo@<sha> for a commit, owner/repo/runs/<id> for a CI run, sha256:<digest> for an artefact.":
+    "Forma canónica: owner/repo#123 para un ticket o una solicitud de fusión, owner/repo@<sha> para un commit, owner/repo/runs/<id> para una ejecución de CI, sha256:<huella> para un artefacto.",
+  "Attached to":
+    "Vinculada a",
+  "The project, or one stage, RAID row or gate criterion of it.":
+    "El proyecto, o una de sus etapas, filas RAID o criterios de hito.",
+  "Web address":
+    "Dirección web",
+  "Where a person can look. Stored for people to follow — Meridian never opens it.":
+    "Donde una persona puede mirar. Se guarda para que la sigan las personas: Meridian nunca la abre.",
+  "Title":
+    "Título",
+  "A readable name for the card. An integration may replace it with the title it reports.":
+    "Un nombre legible para la tarjeta. Una integración puede sustituirlo por el título que informa.",
+  "Link":
+    "Vincular",
+  "This criterion's gate relies on this citation: a new reference is recorded as a new version, and this one is kept as it was.":
+    "El hito de este criterio se apoya en esta cita: una nueva referencia se registra como una nueva versión, y esta se conserva tal cual.",
+  "Correcting the reference clears the reported state — it was about the old one.":
+    "Corregir la referencia borra el estado informado: se refería a la anterior.",
+  "Cite a new version":
+    "Citar una nueva versión",
+  "cites":
+    "cita",
+  "cited by":
+    "citado por",
+  "superseded":
+    "sustituido",
+  "Cite a reference":
+    "Citar una referencia",
 };
 
 /* ── fragments composés autour de nombres vivants (R-15) ────────────── */
