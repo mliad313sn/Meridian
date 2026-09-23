@@ -50,16 +50,21 @@ Stated here rather than discovered later:
   `docs/24-comite-marche.md`, which is an independent committee's
   assessment saying exactly that, in more detail than a vendor would.
 - **The reports and committee records are in French.** The code, its
-  comments and the interface are in English and French; the twenty-five
-  documents in `docs/` that explain *why* each decision was taken are
-  mostly French.
+  comments and the interface are in English and French (Spanish as a
+  draft); the documents in `docs/` that explain *why* each decision was
+  taken are mostly French. The technical reference and the user manual
+  exist in English ([`docs/37`](docs/37-technical-reference.md),
+  [`docs/38`](docs/38-user-manual.md)), the manual in French too
+  ([`docs/39`](docs/39-manuel-utilisateur.md)).
 - **Three blocking operational findings are yours to close**, not the
   software's: a tested backup, a second instance, and a written security
   policy. See [SECURITY.md](SECURITY.md).
 
 You are getting the source, an archive format that gets all your data
-back out (`npm run restore`), and a build that fails on eight static
-gates before it will let a change through.
+back out (`npm run restore`), and a build that fails on twelve static
+gates before it will let a change through. What each part of it does,
+table by table and screen by screen, is
+[`docs/37-technical-reference.md`](docs/37-technical-reference.md).
 
 ---
 
@@ -96,10 +101,10 @@ npm run audit         # twelve gates: routes, CRUD+audit, versions, controls, la
 npm run verify        # tests + build + the twelve gates + a dependency audit
 npm run backup        # pg_dump (PostgreSQL) or the data directory (PGlite) → server/.data/backups
 npm run restore-drill # restore the newest backup ELSEWHERE, recount, time it — /api/health reports it
-npm run sweep         # 286 use cases × 4 roles + 72 view renders, on a fresh instance
+npm run sweep         # 73 use cases run as each of 4 roles — 286 exercised cases — on a fresh instance
 npm run build         # build the client into web/dist
 npm run package:installer  # dist/MeridianSetup.exe — Windows service installer
-powershell -File scripts/deploy-local.ps1   # extract it, install it elevated, check /api/health
+powershell -ExecutionPolicy Bypass -File scripts\deploy-local.ps1   # extract it, install it elevated, check /api/health
 npm run openapi       # regenerate docs/openapi.v1.json from the mounted routes
 npm run restore       # reload an exported archive into an empty instance (M-01)
 npm run training      # a separate practice instance on :4180 — never touches the real book
@@ -114,6 +119,56 @@ bash scripts/restart.sh   # restart the dev server *gracefully* — see the note
 > recovery the way a server does; a `SIGKILL` mid-write leaves the data
 > directory unopenable. Use `scripts/restart.sh`. (Stale locks from an
 > earlier unclean stop are cleared automatically on the next start.)
+
+---
+
+## Deploying it
+
+Four ways, same code, same migrations — they differ only in where the
+database lives and who starts the process. The full walk-through of each
+is [`docs/37-technical-reference.md` §8](docs/37-technical-reference.md);
+running it for real (PostgreSQL, backup and the restore drill, a second
+instance, the proxy, fleets) is
+[`docs/34-exploitation.md`](docs/34-exploitation.md); the Windows story
+in depth is [`docs/13-windows-service.md`](docs/13-windows-service.md).
+
+1. **Evaluation, from source** — the three commands above. PGlite in
+   `server/.data/pgdata` (or `PGLITE_DIR`), nothing to install;
+   `MERIDIAN_EPHEMERAL=1` or `PGLITE_DIR=:memory:` for a book that dies
+   with the process; `scripts/restart.sh` to restart.
+2. **Production, from source** — Node 24 + your PostgreSQL:
+   `DATABASE_URL=… npm run migrate`, then `npm run admin:handover` (or a
+   seed, or `npm run restore <archive>`), then `npm start`, under your own
+   supervisor (systemd, pm2). The server **refuses to start** in
+   production on PGlite (unless `MERIDIAN_ALLOW_PGLITE=1`) and while a
+   published demo password still opens an account (unless
+   `MERIDIAN_ALLOW_DEMO_ACCOUNTS=1`). It binds to 127.0.0.1 unless
+   `MERIDIAN_BIND` says otherwise. Set `MERIDIAN_SECURE_COOKIES=1` only
+   once it is behind HTTPS — never on plain HTTP, where the Secure cookie
+   is silently dropped and sign-in loops. Take backups with
+   `npm run backup` and prove them with `npm run restore-drill`.
+3. **Windows service, one `.exe`** — for a machine with no Node and
+   possibly no internet. `npm run package:installer` produces
+   `dist/MeridianSetup.exe` (built with IExpress, which ships with
+   Windows). Copy it to the target and run it — double-click, or
+   `MeridianSetup.exe /quiet` unattended. It self-elevates, unpacks to
+   `C:\Apps\Meridian`, **finds or installs PostgreSQL** (falling back to
+   the embedded engine, and saying so, when neither is possible),
+   registers the `MeridianITPMO` service — Automatic start, restart on
+   failure, waiting on the database service across reboots — and starts
+   it on `http://localhost:4173`. **Upgrading is running the new setup
+   again**: it stops the service, replaces the files, keeps your
+   `meridian.config.json`, and restarts. From a checkout,
+   `powershell -ExecutionPolicy Bypass -File scripts\deploy-local.ps1`
+   does the whole extract-install-verify cycle; `Uninstall-Service.cmd`
+   in the install directory reverses everything.
+4. **Training instance** — `npm run training`, a separate practice book
+   on `:4180` that never touches the real one.
+
+Moving between any of these — or away from Meridian entirely — is
+`npm run restore` with an exported archive. A whole-book JSON export
+carries `"currencyUnit": "millions"`; a book exported before 5.17.0 needs
+that line added before it imports (D-36.04).
 
 ---
 
@@ -161,8 +216,9 @@ server/          src/env.js        .env, the data directory, the one version num
                  src/auth.js       scrypt, server-side sessions
                  src/audit.js      append-only, inside the mutation's transaction
                  src/portfolio.js  rows → the shape the engine reads
-                 src/routes/       auth · portfolio · meetings · admin · import
-                 migrations/       ordered SQL (001–041, applied at boot)
+                 src/routes/       auth · portfolio · meetings · admin · import ·
+                                   ladder · signals · valuepage · federation · v1
+                 migrations/       ordered SQL (001–053, 63 tables, applied at boot)
                  test/             the suites — count in CHANGELOG.md
 
 web/             src/ui/kit.js     h() builder, dialogs, tables, charts (from v4)
@@ -175,9 +231,9 @@ web/             src/ui/kit.js     h() builder, dialogs, tables, charts (from v4
 `shared/rbac.js`, server-side — the browser imports the same module, but
 only to decide what to draw. Every mutation goes through `audited()`,
 which writes the audit row inside the same transaction, so a change that
-is not audited does not commit. Every mutable row carries `row_version`,
-and an update asserts the version it read — a second writer gets a 409,
-never a silent overwrite.
+is not audited does not commit. Every versioned entity row carries
+`row_version`, and an update asserts the version it read — a second
+writer gets a 409, never a silent overwrite.
 
 ---
 
@@ -188,7 +244,7 @@ never a silent overwrite.
 | [`docs/00-committee-charter.md`](docs/00-committee-charter.md) | Who specified this and what they decided |
 | [`docs/01-requirements-register.md`](docs/01-requirements-register.md) | 48 requirements, each traced to a test |
 | [`docs/02-gap-analysis.md`](docs/02-gap-analysis.md) | What the v4 build got right, and its 15 defects |
-| [`docs/03-target-architecture.md`](docs/03-target-architecture.md) | Architecture decisions, API surface, authority matrix |
+| [`docs/03-target-architecture.md`](docs/03-target-architecture.md) | Architecture decisions, API surface, authority matrix — as targeted; what shipped is `37` |
 | [`docs/04-access-model.md`](docs/04-access-model.md) | Group / site / admin / viewer, and how it is enforced |
 | [`docs/05-meeting-animation.md`](docs/05-meeting-animation.md) | The meetings module and the playbook for running one |
 | [`docs/06-amdec-uat.md`](docs/06-amdec-uat.md) | AMDEC/FMEA acceptance review — 22 failure modes scored and closed |
@@ -221,6 +277,11 @@ never a silent overwrite.
 | [`docs/33-retour-terrain-rt365.md`](docs/33-retour-terrain-rt365.md) | **The RT365 field return** — the first real programme's twelve findings, the request register in detail, the Product Owner's charter and decisions, the communication loop; [`docs/requests/rt365.json`](docs/requests/rt365.json) is the same as data |
 | [`docs/34-exploitation.md`](docs/34-exploitation.md) | Operating it for real — PostgreSQL, backup and the restore drill that proves it, second instance, proxy, upgrade tenant by tenant, fleet template |
 | [`docs/35-field-return-loop.md`](docs/35-field-return-loop.md) | **The field-return loop as a pattern** (EN) — how a programme files a request register, how every branch of it is reviewed, the three acceptance states, and how a second field repository joins; the shape is published in [`docs/requests/register.schema.json`](docs/requests/register.schema.json) |
+| [`docs/36-convergence.md`](docs/36-convergence.md) | Convergence — one main, every field return closed: the campaign, the measured state, and the decisions D-36.xx |
+| [`docs/37-technical-reference.md`](docs/37-technical-reference.md) | **Technical reference** (EN) — project description, the module map, the 63-table database schema, every functionality, the API surface, the 21 screens, deployment, and the known limits, each with its `docs/36` line |
+| [`docs/38-user-manual.md`](docs/38-user-manual.md) | **User manual** (EN) — role by role, workflow by workflow, walked against 5.18.0, with the product description in five languages |
+| [`docs/39-manuel-utilisateur.md`](docs/39-manuel-utilisateur.md) | **Manuel utilisateur** (FR) — rôle par rôle, processus par processus, avec les libellés que l'écran affiche |
+| [`docs/40-comite-revue-documentation.md`](docs/40-comite-revue-documentation.md) | Documentation review committee of 31/08 (FR) — four seats, 71 findings on the 5.3.0 text; kept as the record, renumbered from 29–32 |
 | [`docs/security-policy-template.md`](docs/security-policy-template.md) | The written security policy SECURITY.md says is yours — as a page to fill in |
 | [`docs/en/`](docs/en/) | The committee record 16–32 in English (the French originals govern) |
 
@@ -282,7 +343,11 @@ Stated plainly rather than buried; all scored in the AMDEC.
   server refuses to start in production while one still opens an active
   account, and Administration shows which (docs/33, REQ-12).
 - **Three settings wait on the sponsor** (accepted in writing,
-  `docs/18-amdec-recette.md`): `MERIDIAN_SMTP_URL` before notifications
-  actually send, `MERIDIAN_OIDC_*` before Entra sign-in appears, and the
-  real `documentHosts` before documents can be approved — the trusted-host
-  list ships **closed by default** and says so.
+  `docs/18-amdec-recette.md`): an outbound destination before
+  notifications actually leave — a Teams webhook
+  (`MERIDIAN_TEAMS_WEBHOOK`) or an HTTPS webhook (`MERIDIAN_NOTIFY_URL`),
+  either gated by `notifyHosts`; `MERIDIAN_SMTP_URL` is reserved, no SMTP
+  client is carried — `MERIDIAN_OIDC_*` before Entra sign-in appears, and
+  the real `documentHosts` before documents can be approved — the
+  trusted-host list ships **closed by default** and says so
+  (Administration → Evidence → "Trusted evidence hosts").

@@ -974,7 +974,7 @@ Views.mysite = (db) => {
             h("div", { class: "list-row linkish", onClick: () => go("#/risk/" + r.id) },
               h("span", { class: "mark" + (Engine.escalation(db, r).level === "Steering" ? " mark-acc" : "") }),
               h("div", { style: "min-width:0" },
-                h("div", { class: "kicker" }, r.type + " · " + r.id + (r.originSite ? " · concern from " + r.originSite : "")),
+                h("div", { class: "kicker" }, t(r.type) + " · " + r.id + (r.originSite ? " · concern from " + r.originSite : "")),
                 h("div", { class: "strong small" }, r.title),
                 h("div", { class: "xs muted" }, "Exposure " + Engine.exposure(r) + " · " + Engine.escalation(db, r).why)))))
             : h("div", { class: "small muted" }, t("Register is clear for this site.")))));
@@ -1055,9 +1055,39 @@ function newProject(db) {
         });
         return r.id;
       }, { detail: v.name });
-      if (id && id !== true) go("#/project/" + id);
+      if (id && id !== true) {
+        go("#/project/" + id);
+        showRelevantLessons(id);
+      }
       return id;
     },
+  });
+}
+
+/* PM-02 / O-3 (docs/32 → docs/36 C-04) — what earlier projects learned,
+   offered at the one moment it can still change the plan: right after
+   creation. The relevant-lessons route existed with no caller. Adopted
+   lessons only, from the same programme or the same site, never the new
+   project's own. Quietly absent when the register has nothing to say. */
+export async function showRelevantLessons(projectId) {
+  let rows = [];
+  try { rows = (await api.get("/projects/" + projectId + "/lessons/relevant")).lessons ?? []; }
+  catch { return; }
+  if (!rows.length) return;
+  dialog({
+    title: t("Before you plan"), kicker: t("Lessons learned"),
+    body: h("div", null,
+      h("div", { class: "small muted", style: "margin-bottom:10px;max-width:62ch" },
+        t("Adopted lessons from this programme and this site. Two minutes here is what the register is for.")),
+      ...rows.slice(0, 8).map((l) => h("div", { class: "list-row" },
+        h("div", null,
+          h("div", { class: "small strong" }, (l.outcome === "Positive" ? "✓ " : "△ ") + l.title),
+          h("div", { class: "xs muted" }, t(l.category) +
+            (l.recommendation ? " — " + l.recommendation : "")))))),
+    actions: (close) => [
+      h("button", { class: "btn btn-sm", onClick: () => { close(); go("#/lessons"); } }, t("Open the register")),
+      h("button", { class: "btn btn-sm btn-primary", onClick: close }, t("Noted")),
+    ],
   });
 }
 
@@ -1242,7 +1272,7 @@ Views.project = (db) => {
     h("div", { class: "list-row linkish", onClick: () => go("#/risk/" + r.id) },
       h("span", { class: "mark" + (r.type === "Issue" || Engine.exposureBand(r) === "Critical" ? " mark-acc" : "") }),
       h("div", { style: "min-width:0" },
-        h("div", { class: "kicker" }, r.type + " · " + r.id),
+        h("div", { class: "kicker" }, t(r.type) + " · " + r.id),
         h("div", { class: "strong small", style: "margin:2px 0 1px" }, r.title),
         h("div", { class: "xs muted" }, "P" + r.p + "×I" + r.i + " = " + Engine.exposure(r) + " · " + r.response +
           " · " + Engine.personName(db, r.owner) + " · review " + fmtDate(r.review)))));
@@ -1643,10 +1673,23 @@ function setHealth(db, p) {
     extra: h("div", { class: "small muted" }, "Derived status right now: " + RAG_LABEL[m.health.rag] + " — " + m.health.why),
     saveLabel: "Set status",
     onSave: (v) => App.write("Project status set", (a) => a.patch("/projects/" + p.id + "/health", {
-      rag: v.rag === "auto" ? null : v.rag, why: v.why, version: p.version,
-    }), { detail: v.rag === "auto" ? "Back to automatic" : v.why }),
+      ...healthPayload(v), version: p.version,
+    }), { detail: v.mode === "auto" ? "Back to automatic" : v.note }),
   });
 }
+
+/* docs/32 → docs/36 C-04 — the dialog above collects the source under
+   `mode` and the reason under `note`. It posted `why: v.why` (undefined,
+   which the server rightly refuses: an override without a readable reason
+   is not an override) and tested `v.rag === "auto"` (never true, the RAG
+   select has no "auto"), so every manual override answered 400 and
+   returning to the automatic status was impossible. Named and exported so
+   the payload is held by a test rather than by eye; the version stays at
+   the call site, where the version-audit gate can see it. */
+export const healthPayload = (v) => ({
+  rag: v.mode === "auto" ? null : v.rag,
+  why: v.mode === "auto" ? "" : (v.note ?? ""),
+});
 
 function advancePhase(db, p) {
   const i = PHASES.indexOf(p.phase);
@@ -2255,10 +2298,19 @@ Views.schedule = (db) => {
       "Drag a bar to move it, drag an edge to change its length, double-click to edit. Arrow keys nudge a day, shift-arrow a week."));
 
   const breaches = shown.flatMap(p => Engine.depBreaches(db, p.id));
-  const banner = breaches.length ? h("div", { class: "sec-tight band banner-warn" },
-    h("div", { class: "strong small warn" }, breaches.length + " dependency breach" + (breaches.length === 1 ? "" : "es") + " in this view"),
+  /* O-7 (docs/32 → docs/36 C-04) — the cross-project links drawn on this
+     chart are tolerance-checked too, by the same five-day rule. */
+  const xBreaches = Engine.crossDepBreaches(db, shown);
+  const nBreach = breaches.length + xBreaches.length;
+  const banner = nBreach ? h("div", { class: "sec-tight band banner-warn" },
+    h("div", { class: "strong small warn" }, nBreach + " dependency breach" + (nBreach === 1 ? "" : "es") + " in this view"),
     h("div", { class: "xs muted" }, breaches.slice(0, 3).map(b =>
-      b.activity.name + " starts " + b.overlap + "d before " + b.predecessor.name + " ends").join(" · "))) : null;
+      b.activity.name + " starts " + b.overlap + "d before " + b.predecessor.name + " ends")
+      .concat(xBreaches.slice(0, 3).map(b =>
+        (b.toProject?.id ?? b.dep.to) + " starts " + b.overlap + "d before " +
+        (b.fromProject?.id ?? b.dep.from) + " delivers" +
+        (b.dep.label ? " (" + b.dep.label + ")" : "")))
+      .join(" · "))) : null;
 
   return h("div", null, controls, banner,
     h("div", { class: "sec", style: "overflow-x:auto;padding-top:0" }, grid),
@@ -2531,7 +2583,7 @@ Views.risk = (db) => {
 function raidDetail(db, r) {
   const e = Engine.escalation(db, r);
   dialog({
-    title: r.title, kicker: r.type + " · " + r.id + " · " + (r.project || "Portfolio-wide"), wide: true,
+    title: r.title, kicker: t(r.type) + " · " + r.id + " · " + (r.project || "Portfolio-wide"), wide: true,
     body: h("div", null,
       h("div", { class: "kpis", style: "grid-template-columns:repeat(4,1fr);border-bottom:0;margin-bottom:14px" },
         h("div", { class: "kpi", style: "padding:0 14px 0 0" }, h("div", { class: "kicker" }, "Exposure"),
@@ -2699,7 +2751,9 @@ async function moveOntoLadder(db, p) {
 
 function raidFields(db, r, projectId) {
   return [
-    { key: "type", label: "Type", type: "select", value: r ? r.type : "Risk", options: RAID_TYPES },
+    /* O-6 — the stored value stays English; only the label translates. */
+    { key: "type", label: "Type", type: "select", value: r ? r.type : "Risk",
+      options: RAID_TYPES.map((k) => ({ value: k, label: t(k) })) },
     { key: "project", label: "Project", type: "select", value: r ? (r.project || "") : (projectId || ""),
       options: [{ value: "", label: "Portfolio-wide" }].concat(db.projects.map(p => ({ value: p.id, label: p.id + " · " + p.name }))) },
     { key: "title", label: "Title", required: true, span: 2, value: r ? r.title : "" },
@@ -6302,6 +6356,23 @@ Views.admin = (db) => {
             ...["Weekly — Monday 09:00", "Weekly — Friday 16:00", "Fortnightly — Wednesday 10:00", "Monthly — first working day"]
               .map(o => h("option", { value: o, selected: o === st.cadence }, o))))),
 
+      /* R-01 — le réglage que le refus d'approbation nomme (« name the
+         group's document estate ») et qu'aucun écran ne proposait : la
+         preuve de jalon restait inapprouvable sans passer par l'API
+         (comité de revue documentaire, docs/32 P-03 → docs/36 C-04).
+         Même patron fermé par défaut que les hôtes de webhook plus bas. */
+      h("div", { style: "height:22px" }), h("hr", { class: "hr" }), h("div", { style: "height:18px" }),
+      sectionHead(t("Evidence"), t("where a proof may point")),
+      h("div", { class: "form-grid" },
+        h("div", { class: "field full" }, h("label", null, t("Trusted evidence hosts")),
+          h("input", { class: "input input-sm", value: st.documentHosts ?? "",
+            placeholder: "docs.example.com, dms.example.com",
+            onChange: e => App.write("Evidence hosts changed",
+              (a) => a.patch("/admin/settings", { documentHosts: e.target.value }),
+              { detail: e.target.value || "(none)" }) }),
+          h("div", { class: "xs muted" },
+            t("Closed by default: with none named, no document can be approved as evidence.")))),
+
       /* N-05 / G-13 — les réglages que le produit EXIGE et qu'aucun écran
          ne proposait. Sans durée de conservation, la purge s'abstient et
          le dit : c'est une décision du mandant, pas de l'ingénierie, et
@@ -6721,11 +6792,16 @@ const firstWritable = (db) => db.projects.find((p) => mayWrite(p)) ?? null;
 export const HEADER_ACTIONS = {
   /* The permission probe needs a real site and programme to ask about —
      on an empty book the old probe asked about `undefined` and silently
-     hid the button from everyone but admin (adoption committee B1). */
-  portfolio: (db) => db.programmes.length && db.sites.length && App.can("project.create", {
-    programme_id: db.programmes[0].id, site_id: db.sites[0].id,
-    governance_level: App.me.role === "site" ? "site" : "group",
-  }) ? { label: "New project", run: () => newProject(db) } : null,
+     hid the button from everyone but admin (adoption committee B1). And
+     it must ask about EVERY combination, not the first: a site lead whose
+     granted site was not first in the list saw no button at all (docs/32
+     O-5 → docs/36 C-04). */
+  portfolio: (db) => db.programmes.length && db.sites.length
+    && db.programmes.some((pr) => db.sites.some((s) => App.can("project.create", {
+         programme_id: pr.id, site_id: s.id,
+         governance_level: App.me.role === "site" ? "site" : "group",
+       })))
+    ? { label: "New project", run: () => newProject(db) } : null,
 
   my: () => null,          // the personal surface reads; it does not create
   programmes: (db) => HEADER_ACTIONS.portfolio(db),

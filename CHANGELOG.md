@@ -22,6 +22,73 @@ Nothing yet.
 
 ---
 
+## [5.18.0] — 2026-09-23
+
+**The documentation branch, salvaged.** On 31/08 a documentation review
+committee wrote a technical reference and a user manual in two languages,
+and found seven product defects (O-1…O-7) plus three more while walking
+the product. None of it was merged, and the branch could not be merged:
+its migration 027 and its docs 29–32 reused numbers main already held.
+Each fix was re-checked against 5.17.0. Nine were still missing and are
+delivered here as new work; one (the in-memory quick start) had been
+fixed by 5.9.1. See `docs/36` line C-04. The branch is declared
+superseded, not merged.
+
+### Fixed
+
+- **Nobody was ever told a tolerance was breached, or that a benefit was due to be measured.** Migration 026's sweep queued `tolerance-breached`, a kind that migration 018's CHECK refused, in a call that also omitted the NOT NULL `dedupe_key`. The catch that protects the sweep swallowed both errors, so management by exception stopped at its last link, silently. The benefit-review sweep added later (`benefit-review-due`) copied the same call and the same defect. Migration 053 admits both kinds, both calls carry their key, and the catch now logs instead of staying silent. (docs/32, re-delivered by docs/36 C-04; the committee branch numbered this migration 027, which main had already used for 027_international.)
+- **Every manual health override returned 400, and "back to automatic" was impossible.** The "Set project status" dialog collected the reason under `note` but posted `why: v.why` (undefined), which the server rightly refuses. It also tested `v.rag === "auto"` where the source select is `v.mode`. Both keys had been wrong since the dialog was written. (docs/32)
+- **A site lead whose granted site was not first in the list saw no "New project" button** (O-5). The visibility probe asked about `programmes[0]`/`sites[0]` only; it now asks about every combination.
+- **The notifications panel said "configured" for a transport the product does not carry.** It read `MERIDIAN_SMTP_URL`. It now reports whether the outbound webhook (or the Teams webhook) would actually send, and names those settings. (O-2)
+
+### Added
+
+- **The notification module keeps its whole promise** (O-1, O-2). Five kinds were defined in 013/018 and never emitted. The hourly sweep now sends all five:
+  - a referred decision still unanswered, to the chair of the room it was referred to;
+  - a concern a site raised on a group project, to that project's manager;
+  - a site quiet for thirty days, to its champion (same signal as the Adoption screen);
+  - a week of effort not recorded, to the person and never to their manager;
+  - the daily or weekly digest.
+
+  Delivery now honours all four subscription settings (kind, minimum severity, **scope**, and **per-subscription cadence**, one batch per period). Before, scope and cadence were stored and ignored. The bell's notification preferences now carry the quiet hours and the fine-grained subscriptions that the API held with no screen.
+- **Adopted lessons are offered at project creation** (O-3). The relevant-lessons endpoint finally has a caller, at the one moment a lesson can still change the plan.
+- **The person form carries employment, supplier, rotation and availability** (O-4). The API has accepted these since migration 012, but the form never offered them, so they could only arrive by CSV import. The directory shows them. The capacity arithmetic is deliberately untouched, because availability is already net of rotation.
+- **Role labels and RAID natures speak the interface's language** (O-6), in French and Spanish. Stored values stay English.
+- **Cross-project links are tolerance-checked** (O-7). `Engine.crossDepBreaches` applies the same five-day-past-baseline rule to the edges of the integrated master schedule, and the Schedule banner counts those breaches. The addition is purely additive: no existing engine output changes.
+- **The trusted evidence hosts are on a screen** (docs/32 P-03). The approval refusal named `documentHosts`, "in Administration", but Administration had no field for it. Settings gains an **Evidence** section, closed by default like the webhook hosts.
+
+### Documentation
+
+- **The technical reference and the user manuals reach main** (docs/36
+  C-04). They were written on 31/08 against 5.3.0, on a branch that never
+  merged. They are carried over renumbered:
+  - **37**: technical reference.
+  - **38**: user manual (EN).
+  - **39**: manuel utilisateur (FR).
+  - **40**: the documentation committee's record, kept as the record of
+    31/08.
+
+  They are rewritten from the 5.18.0 source, not from this changelog:
+  - the 63 tables of migrations 001–053 (the old text counted 46);
+  - the gate ladder of up to twelve gates, with loops and scopes
+    (D-36.02);
+  - the import's dry run, merge mode and mandatory `currencyUnit`
+    (D-36.04);
+  - the `N` health state (D-36.01);
+  - the notification kinds, all eleven now emitted.
+
+  Every number was counted in the tree, and the documents say how. Every
+  procedure was walked against a seeded book, by API and in the browser,
+  21 screens × 4 roles × EN/FR. Where a procedure still fails, the manual
+  says so at that point and cites its docs/36 id (NEW-06…NEW-13), rather
+  than describing the intended behaviour. The README gains a *Deploying
+  it* section and loses four numbers that were no longer true.
+- **Why this was wrong before:** main carried no current description of
+  the product at all, and the 31/08 texts described a 5.3.0 with fixes
+  that had never reached main.
+
+---
+
 ## [5.17.0] — 2026-09-23
 
 **Convergence: the KODO line reaches main.** KODO's fifteen findings

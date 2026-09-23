@@ -231,8 +231,12 @@ function scopeSentence(db, me) {
     ...me.grants.programmes.map((id) => (db.programmes.find((p) => p.id === id) || {}).name || id),
     ...me.grants.sites.map((id) => (db.sites.find((s) => s.id === id) || {}).city || id),
   ];
-  if (!names.length) return me.role === "viewer" ? "Viewer · read-only" : `${me.role} · no grants held`;
-  return `${me.role === "viewer" ? "Viewer" : me.role === "group" ? "Group" : "Site"} · ${names.join(", ")}`;
+  /* O-6 (docs/32 → docs/36 C-04) — the level names speak the interface's
+     language; the stored role value stays English, as everywhere. */
+  if (!names.length) return me.role === "viewer"
+    ? t("Viewer") + " · " + t("read-only")
+    : `${me.role} · ` + t("no grants held");
+  return `${me.role === "viewer" ? t("Viewer") : me.role === "group" ? t("Group") : t("Site")} · ${names.join(", ")}`;
 }
 
 function header(db) {
@@ -563,7 +567,68 @@ function forcePasswordChange() {
   });
 }
 
-/* R-11 — language of the messages, and how often they come. */
+/* R-11 — language of the messages, and how often they come.
+   O-1 (docs/32 → docs/36 C-04) — the quiet hours and the fine-grained
+   subscriptions lived in the API with no screen; they live here now, in
+   the one dialog people already open for their notification settings. */
+const HOURS = [{ value: "", label: "—" }]
+  .concat(Array.from({ length: 24 }, (_, i) => ({ value: String(i), label: String(i).padStart(2, "0") + ":00" })));
+
+const NOTIFY_KINDS = ["*", "action-due", "action-overdue", "gate-blocked", "decision-owed",
+  "concern-raised", "site-quiet", "timesheet-missing", "evidence-unreachable",
+  "tolerance-breached", "benefit-review-due", "digest"];
+
+function subsPanel() {
+  const box = h("div", { style: "margin-top:14px" });
+  const scopeOpts = () => [{ value: "portfolio:", label: t("Whole portfolio") }]
+    .concat((App.db?.programmes ?? []).map((p) => ({ value: "programme:" + p.id, label: t("Programme") + " · " + p.name })))
+    .concat((App.db?.sites ?? []).map((s) => ({ value: "site:" + s.id, label: t("Site") + " · " + s.city })))
+    .concat((App.db?.projects ?? []).filter((p) => !p.closed).map((p) => ({ value: "project:" + p.id, label: p.id + " · " + p.name })));
+  const addRow = () => {
+    const sel = (label, opts) => h("select", { class: "input input-sm", "aria-label": label },
+      ...opts.map((o) => h("option", { value: o.value ?? o }, o.label ?? o)));
+    const kind = sel(t("Kind"), NOTIFY_KINDS.map((k) => ({ value: k, label: k === "*" ? t("Everything") : k })));
+    const scope = sel(t("Scope"), scopeOpts());
+    const sev = sel(t("Minimum severity"), ["info", "attention", "urgent"]);
+    const cad = sel(t("Cadence"), [
+      { value: "immediate", label: t("As things happen") },
+      { value: "daily", label: t("Daily") }, { value: "weekly", label: t("Weekly") }]);
+    return h("div", { style: "display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;align-items:center" },
+      kind, scope, sev, cad,
+      h("button", { class: "btn btn-sm", onClick: async () => {
+        const i = scope.value.indexOf(":");
+        try {
+          await api.post("/auth/subscriptions", {
+            kind: kind.value, scopeKind: scope.value.slice(0, i), scopeId: scope.value.slice(i + 1),
+            minSeverity: sev.value, cadence: cad.value,
+          });
+          render();
+        } catch (e) { reportError(e, t("Subscriptions")); }
+      } }, t("Add")));
+  };
+  const render = async () => {
+    let subs = [];
+    try { subs = (await api.get("/auth/subscriptions")).subscriptions ?? []; } catch { /* shown empty */ }
+    clear(box);
+    box.append(
+      h("div", { class: "strong small", style: "margin-bottom:4px" }, t("Fine-grained subscriptions")),
+      h("div", { class: "xs muted", style: "margin-bottom:8px;max-width:60ch" },
+        t("With none, the cadence above governs everything. With any, only what a subscription covers goes out — the centre always receives everything.")),
+      ...subs.map((s) => h("div", { class: "list-row", style: "align-items:center" },
+        h("div", { class: "small", style: "flex:1" },
+          (s.kind === "*" ? t("Everything") : s.kind) + " · " +
+          (s.scopeKind === "portfolio" ? t("Whole portfolio") : s.scopeKind + " " + s.scopeId) +
+          " · ≥ " + s.minSeverity + " · " + s.cadence),
+        h("button", { class: "btn btn-xs btn-ghost", onClick: async () => {
+          try { await api.del("/auth/subscriptions/" + s.id); render(); }
+          catch (e) { reportError(e, t("Subscriptions")); }
+        } }, t("Remove")))),
+      addRow());
+  };
+  render();
+  return box;
+}
+
 function prefsDialog() {
   formDialog({
     title: t("Notification preferences"), kicker: App.me.name,
@@ -577,13 +642,32 @@ function prefsDialog() {
           { value: "immediate", label: t("As things happen") },
           { value: "daily", label: t("Daily") }, { value: "weekly", label: t("Weekly") },
           { value: "off", label: t("Nothing by email") }] },
+      { key: "quietFrom", label: t("Quiet from (hour)"), type: "select",
+        value: App.me.quietFrom === null || App.me.quietFrom === undefined ? "" : String(App.me.quietFrom),
+        options: HOURS },
+      { key: "quietTo", label: t("Quiet until (hour)"), type: "select",
+        value: App.me.quietTo === null || App.me.quietTo === undefined ? "" : String(App.me.quietTo),
+        options: HOURS,
+        hint: t("Read in your site's timezone. Nothing is lost — messages wait for morning; urgent passes.") },
     ],
+    extra: subsPanel(),
     saveLabel: "Save preferences",
     onSave: async (v) => {
-      const ok = await App.write(t("Preferences saved"),
-        (a) => a.patch("/auth/preferences", { locale: v.locale, notifyPref: v.notifyPref }),
-        { refresh: false });
-      if (ok !== false) { App.me.locale = v.locale; App.me.notifyPref = v.notifyPref; }
+      const from = v.quietFrom === "" ? null : Number(v.quietFrom);
+      const to = v.quietTo === "" ? null : Number(v.quietTo);
+      if ((from === null) !== (to === null)) {
+        toast(t("Could not complete: ") + t("Notification preferences"),
+          t("Quiet hours need both ends, or neither"), true);
+        return false;
+      }
+      const ok = await App.write(t("Preferences saved"), async (a) => {
+        await a.patch("/auth/preferences", { locale: v.locale, notifyPref: v.notifyPref });
+        return a.patch("/auth/quiet-hours", { from, to });
+      }, { refresh: false });
+      if (ok !== false) {
+        App.me.locale = v.locale; App.me.notifyPref = v.notifyPref;
+        App.me.quietFrom = from; App.me.quietTo = to;
+      }
       return ok;
     },
   });

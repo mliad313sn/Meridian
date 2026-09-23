@@ -117,8 +117,8 @@ export function notificationsPanel() {
   return h("div", null,
     sectionHead("Notifications",
       d.transport === "configured"
-        ? "a mail transport is configured"
-        : "no mail transport — messages queue and are shown here",
+        ? t("an outbound webhook is configured")
+        : t("no outbound webhook — messages queue and are shown here"),
       h("button", {
         class: "btn btn-sm",
         onClick: async () => {
@@ -133,8 +133,8 @@ export function notificationsPanel() {
 
     h("div", { class: "small muted", style: "margin-bottom:10px;max-width:64ch" },
       d.transport === "configured"
-        ? "Queued messages are handed to the configured transport."
-        : "Nothing is sent until a transport is configured (MERIDIAN_SMTP_URL). Until then this is what people would have been told — which is deliberately visible rather than silent."),
+        ? t("Queued messages are handed to the outbound webhook.")
+        : t("Nothing is sent until the outbound webhook is configured: MERIDIAN_NOTIFY_URL or MERIDIAN_TEAMS_WEBHOOK, plus its host in the trusted webhook hosts setting. Until then this is what people would have been told — deliberately visible rather than silent.")),
 
     h("div", { style: "display:flex;gap:16px;margin-bottom:12px" },
       h("span", { class: "small" }, h("span", { class: "strong mono" }, String(c.queued ?? 0)), " queued"),
@@ -314,8 +314,10 @@ export function accessPanel(db) {
 function levelTable(db, users) {
   return table({
     cols: [
-      { key: "l", label: "Level", get: (x) => h("span", { class: "strong small" }, x.label) },
-      { key: "s", label: "What it confers", get: (x) => h("span", { class: "xs muted" }, x.scope) },
+      /* O-6 (docs/36 C-04) — the level names and what they confer speak
+         the interface's language; the stored role value stays English. */
+      { key: "l", label: "Level", get: (x) => h("span", { class: "strong small" }, t(x.label)) },
+      { key: "s", label: "What it confers", get: (x) => h("span", { class: "xs muted" }, t(x.scope)) },
       { key: "g", label: "Scoped by", get: (x) => h("span", { class: "xs" },
           x.grantedBy === null ? "—" : x.grantedBy === "either" ? "programme or site" : x.grantedBy) },
       { key: "n", label: "Accounts", align: "r", get: (x) => h("span", { class: "mono small" },
@@ -345,7 +347,7 @@ function userFields(db, u) {
     { key: "displayName", label: "Name", required: true, span: 2, value: u ? u.displayName : "" },
     { key: "email", label: "Email", type: "email", required: true, span: 2, value: u ? u.email : "" },
     { key: "role", label: "Access level", type: "select", value: u ? u.role : "site",
-      options: LEVELS.map((l) => ({ value: l.role, label: l.label })) },
+      options: LEVELS.map((l) => ({ value: l.role, label: t(l.label) })) },
     { key: "personId", label: "Directory entry", type: "select", value: u?.personId ?? "",
       options: [{ value: "", label: "Not linked" }]
         .concat(db.people.map((p) => ({ value: p.id, label: p.name + " — " + p.role }))),
@@ -533,7 +535,12 @@ export function directoryPanel(db) {
             h("div", null,
               h("div", { class: "small strong" }, p.name),
               h("div", { class: "xs muted" }, p.id))) },
-        { key: "r", label: "Role", get: (p) => h("span", { class: "small" }, p.role) },
+        { key: "r", label: "Role", get: (p) => h("span", { class: "small" }, p.role,
+            p.employment === "contractor" ? h("span", { class: "tag tag-out", style: "margin-left:6px" }, t("Contractor")) : null) },
+        { key: "rot", label: t("Rotation"), align: "c", get: (p) => h("span", { class: "mono xs" },
+            p.rotation || "—") },
+        { key: "av", label: t("Avail."), align: "r", get: (p) => h("span", { class: "mono small" },
+            (p.availability ?? 100) + "%") },
         { key: "s", label: "Site", get: (p) => h("span", { class: "small" },
             (Engine.site(db, p.site) || {}).city ?? p.site) },
         { key: "d", label: "Day rate", align: "r", get: (p) => h("span", { class: "mono small" },
@@ -564,16 +571,36 @@ function personFields(db, p) {
     { key: "site", label: "Site", type: "select", value: p ? p.site : db.sites[0]?.id,
       options: db.sites.map((s) => ({ value: s.id, label: s.city + " · " + s.region })) },
     { key: "rate", label: "Day rate", type: "number", min: 0, step: 10, value: p ? p.rate : 0 },
+    /* V-09 / O-4 (docs/32 → docs/36 C-04) — the API carried these from
+       migration 012; the form never offered them, so rotation and
+       availability could only arrive by CSV import. */
+    { key: "employment", label: t("Employment"), type: "select",
+      value: p ? (p.employment ?? "staff") : "staff",
+      options: [{ value: "staff", label: t("Staff") }, { value: "contractor", label: t("Contractor") }] },
+    { key: "supplier", label: t("Supplier"), value: p ? (p.supplier ?? "") : "",
+      hint: t("Contractors only — who the day rate is paid to.") },
+    { key: "rotation", label: t("Rotation"), value: p ? (p.rotation ?? "") : "",
+      hint: t("\"4/2\", \"14/14\" — blank for an ordinary office roster. Informative: the capacity number below is what counts.") },
+    { key: "availability", label: t("Availability (%)"), type: "number", min: 0, max: 100, step: 5,
+      value: p ? (p.availability ?? 100) : 100,
+      hint: t("The fraction of a year actually available for project work, after rotation, leave and the day job. This is what the capacity arithmetic uses.") },
   ];
 }
+
+/* One payload for add, edit and the forced leaver: three copies of the
+   same object literal is how the form lost four fields in the first place. */
+export const personPayload = (v) => ({
+  name: v.name, role: v.role, site: v.site, rate: Number(v.rate),
+  employment: v.employment === "contractor" ? "contractor" : "staff",
+  supplier: v.supplier ?? "", rotation: v.rotation ?? "",
+  availability: Number(v.availability ?? 100),
+});
 
 function newPerson(db) {
   formDialog({
     title: "Add person", kicker: "Directory", wide: true,
     fields: personFields(db, null), saveLabel: "Add person",
-    onSave: (v) => write("Person added", (a) => a.post("/admin/people", {
-      name: v.name, role: v.role, site: v.site, rate: Number(v.rate),
-    }), v.name),
+    onSave: (v) => write("Person added", (a) => a.post("/admin/people", personPayload(v)), v.name),
   });
 }
 
@@ -589,8 +616,7 @@ function editPerson(db, p) {
     onSave: (v) => write("Person updated", async (a) => {
       try {
         return await a.patch("/admin/people/" + p.id, {
-          name: v.name, role: v.role, site: v.site, rate: Number(v.rate),
-          active: !!v.active, version: p.version,
+          ...personPayload(v), active: !!v.active, version: p.version,
         });
       } catch (e) {
         /* A leaver who still holds work is a real refusal, not a failure —
@@ -603,8 +629,7 @@ function editPerson(db, p) {
           });
           if (!go) throw e;
           return a.patch("/admin/people/" + p.id, {
-            name: v.name, role: v.role, site: v.site, rate: Number(v.rate),
-            active: false, force: true, version: p.version,
+            ...personPayload(v), active: false, force: true, version: p.version,
           });
         }
         throw e;

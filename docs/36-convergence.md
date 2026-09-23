@@ -147,9 +147,84 @@ not parse `IF NOT EXISTS` (fixed in C-03), and then because its entity
 list is hand-written and does not name them. That second cause is
 REQ-52's blind spot exactly, so REQ-52 and NEW-04 close together.
 
-#### C-04 · Salvage the documentation branch — open
+#### C-04 · Salvage the documentation branch — BUILT, PR as 5.18.0
+
+- **Observed**: `claude/project-analysis-db-schema-yph5ho` (31/08,
+  forked from **5.3.0**) held a technical reference, the user manual (EN
+  and FR), the documentation committee's record, and the fixes that
+  committee found: O-1…O-7, the tolerance notification, the health
+  override dialog and the evidence-hosts field. It could not be merged:
+  its `027_notification_kinds` collides with main's `027_international`,
+  and its docs 29–32 reuse numbers main holds.
+- **Decision**: carried over, not merged. Each fix was re-checked against
+  5.17.0 and delivered as new work (migration **053**, not 027). The
+  documents were renumbered **37–40** and rewritten from the 5.18.0
+  source. The branch is declared superseded in
+  `docs/superseded-branches.json` (gate F14).
+- **Delivered**:
+  - **O-1 and O-2**: notification scope and cadence honoured, the five
+    silent kinds emitted, and quiet hours and subscriptions put on a
+    screen.
+  - **053**: `tolerance-breached` and `benefit-review-due`, both refused
+    by the CHECK and swallowed by a catch.
+  - **O-3**: lessons offered at project creation.
+  - **O-4**: the person form's contract fields.
+  - **O-5**: the New project probe.
+  - **O-6**: translated labels in FR and ES.
+  - **O-7**: `Engine.crossDepBreaches`, additive.
+  - The health override dialog.
+  - The Evidence hosts field.
+  - docs/37–40, and the README's *Deploying it* section.
+- **Measure**:
+  - `npm test` passes 835/835, up 19 from 816 (`outreach.test.js` 11,
+    `committee-fixes.test.js` 8).
+  - Every gate is green.
+  - Manual procedures were walked by API and in the browser, across 21
+    screens × 4 roles × EN/FR.
+- **Remains**: the tag, and NEW-06…NEW-13 below, found by walking the
+  manual.
 
 #### C-05 · F13 round trip, F14 merge debt — open
+
+#### NEW-05 · The export writes what the import erases — open, wave 1 (first)
+
+Measured on 23/09 while building F13. The export writes **15 collections
+the importer never reads**: absences, benefits, business cases, case
+reconfirmations, commitments, the comms plan, gate criteria, exceptions,
+external links, lessons, stakeholders, timesheets, tolerances, rollout
+waves and site windows. An import deletes the projects, so the cascade
+erases every one of those rows.
+
+On the collections the importer does read, **38 fields** come back
+different:
+- A cost line is re-numbered and rewritten as "Imported", "Labour", USD,
+  capex, on the first of the month, and not from contingency.
+- A programme loses its gate ladder.
+- A person loses their contract fields.
+- A project loses its post-implementation review, its scores, and what
+  its date rests on.
+- A milestone loses its acceptance criteria.
+- A RAID row loses its residual target.
+
+Every earlier round-trip probe answered 200, because the seeded book
+holds none of these values. F13 now names each loss (collections and
+fields) and fails on any new one. The line closes when both lists in
+`server/test/roundtrip.test.js` are empty. This outranks everything else
+in wave 1: it is data that cannot leave the product, and it silently
+contradicts `docs/25` (reversibility).
+
+#### NEW-06 … NEW-13 · Found by walking the manual (C-04) — open
+
+| Id | Defect | Wave |
+|---|---|---|
+| NEW-06 | The forced password change never opens: `/api/bootstrap` `me` carries no `mustChangePassword`, so an account an administrator created cannot change its password from any screen, and every write is refused. | 1 |
+| NEW-07 | A merge-mode dry run of the product's own export answers 400 on a duplicate `change_step` key (MER-08). | 1 |
+| NEW-08 | `GET /api/v1/signals` is live and absent from the published contract: F9 reads only `routes/v1.js` (REQ-52's blind spot, a sixth time). | 1 |
+| NEW-09 | On SIGTERM the process exits before PGlite closes (`claimBook` calls `process.exit` first): `postmaster.pid` is left behind and every start clears "2 stale lock files". | 1 |
+| NEW-10 | Saving a programme's gate ladder from the screen drops `loopsTo` and `scope` (D-36.02 holds in the engine and the validator, not in the form). | 1 |
+| NEW-11 | Administration's notifications panel still names SMTP, and the CSV import panel is French in every language. | 3 |
+| NEW-12 | `/` answers 404 when the install path contains a dot-directory (`sendFile` refuses it). | 4 |
+| NEW-13 | Spanish notification strings reach nobody: `inLocale` treats any non-`fr` locale as English, and `/auth/preferences` accepts only `en` and `fr`. | 3 |
 
 #### C-06 · Refresh the public record — open
 
