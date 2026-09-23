@@ -275,10 +275,11 @@ const ENRICH = [
                            recorded_by, recorded_at, external_source, external_id)
    VALUES ('RVW-001', (SELECT min(id) FROM raid_item), '2026-08-03', ${PE1}, 'Still likely; owner chasing',
            '2026-08-01', '2026-08-17', ${USER}, '2026-08-04T07:00:00Z', 'INT-RT', 'EXT-V1')`,
+  /* raised_by since 055 (NEW-04): who objected, a person of the directory. */
   `INSERT INTO decision_objection (id, decision_id, seat_id, domain, reason, raised_on, escalates_on,
-                                  state, resolution)
+                                  state, resolution, raised_by)
    VALUES ('OBJ-901', 'DEC-901', 'SE-901', 'safety', 'Night work on live plant needs a permit',
-           '2026-07-15', '2026-07-22', 'resolved', 'Permit-to-work added to the plan')`,
+           '2026-07-15', '2026-07-22', 'resolved', 'Permit-to-work added to the plan', ${PE1})`,
 ];
 
 describe("F13 · export → import → export", () => {

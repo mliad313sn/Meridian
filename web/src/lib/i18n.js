@@ -2316,6 +2316,354 @@ export const FR = {
     "Lu des mois plus tard par quelqu'un qui conteste un rang. Une pondération dont la raison n'est pas écrite est un verdict.",
   "Weighting set":
     "Pondération posée",
+  /* ── NEW-04 · KODO's registers: requirements, evidence, findings, seats,
+     objections, and a series convened per gate (MER-03/05/06/07/10/11). */
+  "A closed finding rests on this evidence, so it is not edited underneath it.":
+    "Un constat clos repose sur cette preuve : elle ne se modifie pas sous lui.",
+  "A gate review or a safety board meets when its event comes, not on a weekday: closing one schedules no successor.":
+    "Une revue de jalon ou un comité de sécurité se réunit quand son événement arrive, pas un jour de la semaine : en clore une n'en programme pas de suivante.",
+  "A hash of the artefact, when there is one — it proves the piece read later is the piece captured.":
+    "Une empreinte de l'artefact, s'il y en a une — elle prouve que la pièce relue plus tard est celle qui a été saisie.",
+  "A seat with a veto in this domain blocks the gate until the objection is resolved.":
+    "Un siège qui tient un veto sur ce domaine bloque le jalon jusqu'à ce que l'objection soit résolue.",
+  "Ad hoc — convened by an event":
+    "Ad hoc — convoquée par un événement",
+  "Address":
+    "Adresse",
+  "Against":
+    "Contre",
+  "Both directions are removed. One person could then hold both seats.":
+    "Les deux sens sont retirés. Une même personne pourra alors tenir les deux sièges.",
+  "Cannot be combined with":
+    "Incompatible avec",
+  "Capture evidence":
+    "Consigner une preuve",
+  "Capture":
+    "Consigner",
+  "Captured by":
+    "Consignée par",
+  "Captured on":
+    "Consignée le",
+  "Captured":
+    "Consignée",
+  "Close on re-test evidence":
+    "Clore sur une preuve de re-test",
+  "Cost to reverse":
+    "Coût de retour",
+  "Declare a seat":
+    "Déclarer un siège",
+  "Declare an incompatibility":
+    "Déclarer une incompatibilité",
+  "Declare it":
+    "Déclarer",
+  "Digest":
+    "Empreinte",
+  "Document":
+    "Document",
+  "Domain":
+    "Domaine",
+  "Edit evidence":
+    "Modifier la preuve",
+  "Edit finding":
+    "Modifier le constat",
+  "Edit requirement":
+    "Modifier l'exigence",
+  "Edit seat":
+    "Modifier le siège",
+  "Empty: no veto. A veto is on a domain, never on everything — « child safety », or « G2 » for one gate only. An open objection from this seat in its domain blocks the gate.":
+    "Vide : pas de veto. Un veto porte sur un domaine, jamais sur tout — « sécurité des enfants », ou « G2 » pour un seul jalon. Une objection ouverte de ce siège dans son domaine bloque le jalon.",
+  "Empty: one working week from today. Unresolved by then, it goes up.":
+    "Vide : une semaine ouvrée à partir d'aujourd'hui. Non résolue d'ici là, elle remonte.",
+  "Escalate this objection?":
+    "Faire remonter cette objection ?",
+  "Escalate":
+    "Faire remonter",
+  "Escalates on":
+    "Remonte le",
+  "Finding":
+    "Constat",
+  "For a finding raised in error. One that was closed or waived is a record, and is reopened instead.":
+    "Pour un constat relevé par erreur. Un constat clos ou dérogé est un enregistrement : on le rouvre plutôt.",
+  "For a per-gate series: the gate it reviews. Required for that cadence, ignored for the others.":
+    "Pour une série par jalon : le jalon qu'elle revoit. Obligatoire pour cette cadence, ignoré pour les autres.",
+  "For a piece captured in error. The audit trail keeps what it pointed at.":
+    "Pour une pièce consignée par erreur. La piste d'audit garde ce vers quoi elle pointait.",
+  "For a requirement stated in error. One that no longer applies is waived, with its reason, so the record says so.":
+    "Pour une exigence énoncée par erreur. Celle qui ne s'applique plus est dérogée, avec sa raison, pour que le registre le dise.",
+  "For a seat declared in error. One that objections were lodged in is retired instead, so the record keeps its name.":
+    "Pour un siège déclaré par erreur. Celui au nom duquel des objections ont été portées est retiré plutôt, pour que le registre garde son nom.",
+  "Gate reviews and ad hoc":
+    "Revues de jalon et ad hoc",
+  "Held by":
+    "Tenu par",
+  "How it WILL be verified — a test, an inspection, a measurement. Writing this does not verify it.":
+    "Comment elle SERA vérifiée — un test, une inspection, une mesure. L'écrire ne la vérifie pas.",
+  "How it was answered — what changed, or why the decision stands. The objector and the room will read this back.":
+    "Comment elle a été traitée — ce qui a changé, ou pourquoi la décision tient. L'auteur de l'objection et la salle le reliront.",
+  "In my own name":
+    "En mon nom propre",
+  "In the name of a seat":
+    "Au nom d'un siège",
+  "It goes to the level above the room, and stays live — a veto seat's escalated objection still blocks its gate.":
+    "Elle remonte au niveau au-dessus de la salle et reste ouverte — l'objection remontée d'un siège à veto bloque toujours son jalon.",
+  "It stays on the record as withdrawn — that is how a board shows it heard it.":
+    "Elle reste au registre comme retirée — c'est ainsi qu'un comité montre qu'il l'a entendue.",
+  "Loop":
+    "Tour",
+  "Monthly — the steering pack":
+    "Mensuelle — le dossier de pilotage",
+  "No evidence captured since this finding was raised":
+    "Aucune preuve consignée depuis que ce constat a été relevé",
+  "No evidence captured yet.":
+    "Aucune preuve consignée pour l'instant.",
+  "No evidence captured. A CI run, a traceability report or a measurement is evidence too; it does not have to be forced into the document register.":
+    "Aucune preuve consignée. Une exécution d'intégration continue, un rapport de traçabilité ou une mesure sont aussi des preuves ; inutile de les forcer dans le registre documentaire.",
+  "No finding raised yet.":
+    "Aucun constat relevé pour l'instant.",
+  "No finding raised. A finding is neither a risk — it has happened — nor a lesson — it is open and owned.":
+    "Aucun constat relevé. Un constat n'est ni un risque — il s'est produit — ni un enseignement — il est ouvert et porté par quelqu'un.",
+  "No requirement stated yet.":
+    "Aucune exigence énoncée pour l'instant.",
+  "No requirement stated. A gate reviewed against documents answers « here is a dossier »; one reviewed against requirements answers « here is what was promised, and the proof each one holds ».":
+    "Aucune exigence énoncée. Un jalon revu sur des documents répond « voici un dossier » ; revu sur des exigences, il répond « voici ce qui était promis, et la preuve que chacune tient ».",
+  "No seat declared yet.":
+    "Aucun siège déclaré pour l'instant.",
+  "No seat declared. A seat carries a domain, sometimes a veto on it, and the seats it may never be combined with — the segregation of duties an auditor asks about first.":
+    "Aucun siège déclaré. Un siège porte un domaine, parfois un veto sur ce domaine, et les sièges avec lesquels il ne peut jamais être cumulé — la séparation des devoirs, première question d'un auditeur.",
+  "Not stated":
+    "Non énoncé",
+  "Object":
+    "Objecter",
+  "Observer — voice, no vote":
+    "Observateur — voix sans vote",
+  "One thing that must hold, testable as written — « settles within 10 s », not « is fast ».":
+    "Une chose qui doit tenir, vérifiable telle qu'écrite — « se règle en 10 s », pas « est rapide ».",
+  "Per gate — convened when a gate is due":
+    "Par jalon — convoquée quand un jalon arrive",
+  "Priority":
+    "Priorité",
+  "Proposed fix":
+    "Correctif proposé",
+  "Raise a finding":
+    "Relever un constat",
+  "Raise an objection":
+    "Porter une objection",
+  "Raise it":
+    "Relever",
+  "Raised on":
+    "Relevé le",
+  "Re-test due":
+    "Re-test prévu le",
+  "Re-test evidence":
+    "Preuve de re-test",
+  "Read by whoever asks, a year from now, why this finding stopped counting. A waiver without its reason is a finding nobody decided to drop.":
+    "Lu par quiconque demandera, dans un an, pourquoi ce constat a cessé de compter. Une dérogation sans raison est un constat que personne n'a décidé d'abandonner.",
+  "Read by whoever asks, a year from now, why this requirement stopped counting. Required to waive.":
+    "Lu par quiconque demandera, dans un an, pourquoi cette exigence a cessé de compter. Obligatoire pour déroger.",
+  "Reasoned, and within the domain. An objection without a reason is not an objection — it is a vote. The room reads this back.":
+    "Motivée, et dans le domaine. Une objection sans raison n'est pas une objection — c'est un vote. La salle la relira.",
+  "Remove evidence":
+    "Retirer la preuve",
+  "Remove finding":
+    "Retirer le constat",
+  "Remove incompatibility":
+    "Retirer l'incompatibilité",
+  "Remove requirement":
+    "Retirer l'exigence",
+  "Remove seat":
+    "Retirer le siège",
+  "Remove this evidence?":
+    "Retirer cette preuve ?",
+  "Remove this finding?":
+    "Retirer ce constat ?",
+  "Remove this incompatibility?":
+    "Retirer cette incompatibilité ?",
+  "Remove this requirement?":
+    "Retirer cette exigence ?",
+  "Remove this seat?":
+    "Retirer ce siège ?",
+  "Reopen this finding?":
+    "Rouvrir ce constat ?",
+  "Requirement":
+    "Exigence",
+  "Requirements":
+    "Exigences",
+  "Resolution":
+    "Résolution",
+  "Resolve objection":
+    "Résoudre l'objection",
+  "Resolve":
+    "Résoudre",
+  "Review findings":
+    "Constats de revue",
+  "Reword objection":
+    "Reformuler l'objection",
+  "Seat is sitting":
+    "Le siège siège",
+  "Seat":
+    "Siège",
+  "Seats and vetoes":
+    "Sièges et vetos",
+  "Severity":
+    "Sévérité",
+  "Source evidence":
+    "Preuve d'origine",
+  "Source":
+    "Source",
+  "State a requirement":
+    "Énoncer une exigence",
+  "State it":
+    "Énoncer",
+  "The closure or the waiver is lifted; the audit trail keeps what it rested on.":
+    "La clôture ou la dérogation est levée ; la piste d'audit garde ce sur quoi elle reposait.",
+  "The consequence, kept apart from the fact so the finding can be read without the reviewer.":
+    "La conséquence, séparée du fait pour que le constat se lise sans son auteur.",
+  "The database refuses a person who already holds a seat declared incompatible with this one.":
+    "La base refuse une personne qui tient déjà un siège déclaré incompatible avec celui-ci.",
+  "The evidence the decision rests on, from the project's evidence register.":
+    "La preuve sur laquelle repose la décision, tirée du registre de preuves du projet.",
+  "The fact, as seen — « Esc does not close the palette ». Not the consequence, and not an opinion.":
+    "Le fait, tel que vu — « Échap ne ferme pas la palette ». Ni la conséquence, ni une opinion.",
+  "The proof produced — the named test, run or report. Required before it can be Done.":
+    "La preuve produite — le test, l'exécution ou le rapport nommé. Obligatoire avant « Terminée ».",
+  "The role the committee knows it by — « Child safety officer », « Design authority ».":
+    "Le rôle sous lequel le comité le connaît — « Responsable de la sécurité des enfants », « Autorité de conception ».",
+  "The run, report or measurement that shows it fixed. A merged fix is an intention; its re-test is the fact. Capture the evidence first, under Evidence.":
+    "L'exécution, le rapport ou la mesure qui montre que c'est corrigé. Un correctif fusionné est une intention ; son re-test est le fait. Consignez d'abord la preuve, sous Preuves.",
+  "The separation it protects — « the officer who must refuse a mechanic did not design it ». Refused if one person already holds both.":
+    "La séparation qu'elle protège — « celui qui doit refuser un mécanisme ne l'a pas conçu ». Refusée si une même personne tient déjà les deux.",
+  "Untick to retire a seat that objections were lodged in: the record keeps its name.":
+    "Décochez pour retirer un siège au nom duquel des objections ont été portées : le registre garde son nom.",
+  "Verification method":
+    "Méthode de vérification",
+  "Verification":
+    "Vérification",
+  "Verified by":
+    "Vérifiée par",
+  "Veto on":
+    "Veto sur",
+  "Veto":
+    "Veto",
+  "Waive this finding":
+    "Déroger à ce constat",
+  "Waive":
+    "Déroger",
+  "Weekly — exception-only delivery call":
+    "Hebdomadaire — point de livraison sur exceptions",
+  "What a reader will look for — « Nightly build 412 », « SAT-14 report ».":
+    "Ce qu'un lecteur cherchera — « Build de nuit 412 », « Rapport SAT-14 ».",
+  "What the reviewer suggests. Merging it does not close the finding — its re-test does.":
+    "Ce que suggère le relecteur. Le fusionner ne clôt pas le constat — son re-test, si.",
+  "What undoing it would cost. Publishing under an open licence is one-way; descoping a gallery is not — a register that records only the rationale makes the two look alike.":
+    "Ce que coûterait de la défaire. Publier sous licence libre est sans retour ; retirer une galerie du périmètre ne l'est pas — un registre qui ne garde que la justification les fait se ressembler.",
+  "What was observed":
+    "Ce qui a été observé",
+  "Where it can be found again: a link, a repository path at a revision, a commit, or run:/artifact:. Either this or a document.":
+    "Où la retrouver : un lien, un chemin de dépôt à une révision, un commit, ou run:/artifact:. Soit ceci, soit un document.",
+  "Where it comes from: a contract clause, a regulation, a decision. Without it a requirement is an opinion.":
+    "D'où elle vient : une clause de contrat, un règlement, une décision. Sans cela, une exigence est une opinion.",
+  "Why it is waived":
+    "Pourquoi on y déroge",
+  "Why it matters":
+    "Pourquoi c'est important",
+  "Withdraw this objection?":
+    "Retirer cette objection ?",
+  "Your own words, corrected. The trail keeps what it said before.":
+    "Vos propres mots, corrigés. La piste garde ce qu'ils disaient avant.",
+  "captured":
+    "consignée(s)",
+  "closed or waived":
+    "clos ou dérogé(s)",
+  "cost to reverse":
+    "coût de retour",
+  "escalates":
+    "remonte le",
+  "no method stated":
+    "aucune méthode énoncée",
+  "none captured":
+    "aucune consignée",
+  "none raised":
+    "aucun relevé",
+  "none stated":
+    "aucune énoncée",
+  "not yet verified":
+    "pas encore vérifiée",
+  "observer":
+    "observateur",
+  "on":
+    "sur",
+  "re-test":
+    "re-test",
+  "rests on":
+    "repose sur",
+  "stated":
+    "énoncée(s)",
+  "supersedes":
+    "remplace",
+  "the proof a gate or a finding rests on — a document, or a run, a report, a measurement":
+    "la preuve sur laquelle repose un jalon ou un constat — un document, ou une exécution, un rapport, une mesure",
+  "the seat's veto domain, if empty":
+    "le domaine du veto du siège, si vide",
+  "veto":
+    "veto",
+  "voting":
+    "votant",
+  "waived":
+    "dérogée(s)",
+  "what a review observed — closed on re-test evidence, never on a merged fix":
+    "ce qu'une revue a observé — clos sur une preuve de re-test, jamais sur un correctif fusionné",
+  "what the project must hold, how it will be verified, and the proof that it was":
+    "ce que le projet doit tenir, comment ce sera vérifié, et la preuve que ça l'a été",
+  "who sits, on which domain, who may block a gate — and what one person may never combine":
+    "qui siège, sur quel domaine, qui peut bloquer un jalon — et ce qu'une même personne ne peut jamais cumuler",
+  "Not started":
+    "Pas commencée",
+  "Done":
+    "Terminée",
+  "Waived":
+    "Dérogée",
+  "Re-test":
+    "Re-test",
+  "escalated":
+    "remontée",
+  "resolved":
+    "résolue",
+  "withdrawn":
+    "retirée",
+  "blocking":
+    "bloquant",
+  "major":
+    "majeur",
+  "minor":
+    "mineur",
+  "cosmetic":
+    "cosmétique",
+  "Must":
+    "Doit",
+  "Should":
+    "Devrait",
+  "Could":
+    "Pourrait",
+  "Won't":
+    "Pas cette fois",
+  "CI run":
+    "Exécution CI",
+  "Test report":
+    "Rapport de test",
+  "Measurement":
+    "Mesure",
+  "Recording":
+    "Enregistrement",
+  "Sign-off":
+    "Signature",
+  "External":
+    "Externe",
+  "High — effectively one-way":
+    "Élevé — pratiquement sans retour",
+  "Weekly delivery":
+    "Livraison hebdomadaire",
+  "Monthly steering":
+    "Pilotage mensuel",
 };
 
 /* ── enregistrement des dictionnaires ─────────────────────────────────

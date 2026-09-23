@@ -162,6 +162,23 @@ const ENTITIES = {
     u: /post\("\/projects\/:id\/case\/reconfirm"/,
     d: NA("A reconfirmation happened, at a date, with a verdict — like a decision it is superseded by the next, never removed") },
 
+  /* NEW-04 (docs/36) — KODO's registers (051, 052). Until this line they
+     entered only through the import, and this map did not name them —
+     so the gate that asks whether an entity is correctable could not ask
+     it of them. Routes in server/src/routes/registers.js. */
+  requirement: { c: /post\("\/requirements"/, u: /patch\("\/requirements\/:id"/, d: /delete\("\/requirements\/:id"/ },
+  evidence: { c: /post\("\/evidence"/, u: /patch\("\/evidence\/:id"/, d: /delete\("\/evidence\/:id"/ },
+  /* A finding is corrected in place, closed on evidence, waived with a
+     reason, reopened; removed only when raised in error (open). */
+  finding: { c: /post\("\/findings"/, u: /patch\("\/findings\/:id"/, d: /findings\/:id\/reopen|delete\("\/findings\/:id"/ },
+  seat: { c: /post\("\/seats"/, u: /patch\("\/seats\/:id"/, d: /delete\("\/seats\/:id"/ },
+  seat_conflict: { c: /post\("\/seats\/:id\/conflicts"/,
+    u: NA("An incompatibility is an edge with only its reason — remove it and declare it again"),
+    d: /delete\("\/seats\/:id\/conflicts\/:other"/ },
+  /* Dissent is a record: withdrawn by its author, never deleted. */
+  decision_objection: { c: /post\("\/decisions\/:id\/objections"/, u: /patch\("\/objections\/:id"/,
+    d: /objections\/:id\/withdraw/ },
+
   meeting_series: { c: /post\("\/series"/, u: /patch\("\/series\/:id"/,
     d: NA("Retired via active=false — its history must remain readable") },
   meeting_occurrence: { c: /post\("\/series\/:id\/occurrences"/, u: /occurrences\/:id\/(open|close)/,
@@ -219,46 +236,24 @@ const NOT_ENTITIES = {
 };
 
 /* ── known gaps: shrink-only ─────────────────────────────────────────
-   KODO's six registers (docs/36 NEW-04, D-36.05) arrived in C-03 with
-   their data, engine and import, and without a single write route or
-   screen: requirements, evidence, findings, seats and their conflicts,
-   and objections enter the book only through the import. F2 did not
-   report it, because this map did not name them (REQ-52).
-
-   They are named above as what NEW-04 owes, and every gap they show is
-   listed here with its line and the day it was measured, so the gate
-   reports them on every run without failing the build. The list only
-   shrinks, as F13's did:
+   Every gap listed here is reported on every run with its line and the
+   day it was measured, without failing the build. The list only shrinks:
      · a gap not listed here fails the build (a new table, a new column);
      · a listed gap that has closed fails too, until it is struck off;
-     · a listed table that gains a write path outside the import (an
-       INSERT, UPDATE or DELETE in server/src) fails until its verbs are
-       declared for real and its lines are struck off. */
-const KNOWN_GAP = "NEW-04 · measured 2026-09-23 — enters the book only through the import";
-Object.assign(ENTITIES, {
-  requirement: { c: /post\("\/requirements"/, u: /patch\("\/requirements\/:id"/, d: /delete\("\/requirements\/:id"/ },
-  evidence: { c: /post\("\/evidence"/, u: /patch\("\/evidence\/:id"/, d: /delete\("\/evidence\/:id"/ },
-  finding: { c: /post\("\/findings"/, u: /patch\("\/findings\/:id"/, d: /delete\("\/findings\/:id"/ },
-  seat: { c: /post\("\/seats"/, u: /patch\("\/seats\/:id"/, d: /delete\("\/seats\/:id"/ },
-  seat_conflict: { c: /post\("\/seats\/:id\/conflicts"/, u: NA("A conflict is a pair and a reason — removed and re-declared"),
-    d: /delete\("\/seats\/:id\/conflicts/ },
-  decision_objection: { c: /post\("\/decisions\/:id\/objections"/, u: /patch\("\/objections\/:id"/,
-    d: NA("An objection raised is a record — it is resolved or withdrawn through its state, never deleted") },
-});
+     · a listed table that gains a write path outside the import fails
+       until its verbs are declared for real and its lines struck off.
+
+   KODO's six registers were listed here from REQ-52 (5.21.1) until NEW-04
+   (5.22.0) gave them routes and screens; the gate itself asked for their
+   sixteen lines to be struck off, which is how this list is meant to
+   empty. */
 const KNOWN_GAPS = new Map(Object.entries({
-  "requirement: no create": KNOWN_GAP, "requirement: no update": KNOWN_GAP, "requirement: no remove": KNOWN_GAP,
-  "evidence: no create": KNOWN_GAP, "evidence: no update": KNOWN_GAP, "evidence: no remove": KNOWN_GAP,
-  "finding: no create": KNOWN_GAP, "finding: no update": KNOWN_GAP, "finding: no remove": KNOWN_GAP,
-  "seat: no create": KNOWN_GAP, "seat: no update": KNOWN_GAP, "seat: no remove": KNOWN_GAP,
-  "seat_conflict: no create": KNOWN_GAP, "seat_conflict: no remove": KNOWN_GAP,
-  "decision_objection: no create": KNOWN_GAP, "decision_objection: no update": KNOWN_GAP,
-  /* Found by naming the nine tables above (REQ-52, 23/09). Each is a
-     field stored and never drawn; none is a KODO table, so none is
-     NEW-04's. They are reported here, not closed and not hidden. */
-  "notification.acted_at": "REQ-52 finding · measured 2026-09-23 — no code writes or reads it: a column with no life at all",
-  "integration.rotated_at": "REQ-52 finding · measured 2026-09-23 — GET /admin/integrations sends it, the connected-systems table does not draw when a key was last rotated",
-  "event_delivery.last_error": "REQ-52 finding · measured 2026-09-23 — GET /admin/integrations/:id/deliveries serves it and no screen calls that route (F1 lists it): an administrator cannot see why a webhook failed",
-  "event_delivery.delivered_at": "REQ-52 finding · measured 2026-09-23 — same route, same absence",
+  /* Found by naming the nine tables above (REQ-52, 23/09) — NEW-21. Each
+     is a field stored and never drawn; reported here, not hidden. */
+  "notification.acted_at": "NEW-21 · measured 2026-09-23 — no code writes or reads it: a column with no life at all",
+  "integration.rotated_at": "NEW-21 · measured 2026-09-23 — GET /admin/integrations sends it, the connected-systems table does not draw when a key was last rotated",
+  "event_delivery.last_error": "NEW-21 · measured 2026-09-23 — GET /admin/integrations/:id/deliveries serves it and no screen calls that route (F1 lists it): an administrator cannot see why a webhook failed",
+  "event_delivery.delivered_at": "NEW-21 · measured 2026-09-23 — same route, same absence",
 }));
 /* The files allowed to write a known-gap table without that being "a
    route arrived": the import that brings KODO's book in, the seed and

@@ -55,7 +55,7 @@
     },
     "counterpart": "KODO Product Owner (docs/reports/MERIDIAN_PRODUCT_REPORT.md); no issue filed upstream yet — the report says 'ready to send … as issues'"
   },
-  "registerVersion": 2,
+  "registerVersion": 3,
   "requests": [
     {
       "id": "MER-01",
@@ -142,15 +142,18 @@
       "status": "partial",
       "priority": "high",
       "effort": "L",
-      "version": "5.17.0",
+      "version": "5.22.0",
       "decidedOn": null,
       "delivered": [
         "server/migrations/051_gate_model_and_requirements.sql",
-        "requirement table, import and export"
+        "requirement table, import and export",
+        "server/src/routes/registers.js",
+        "web/src/views/registers.js",
+        "server/migrations/055 (row_version, raised_by, incompatibility edge trigger)"
       ],
-      "measure": "server/test/requirements.test.js",
+      "measure": "server/test/registers.test.js (28 tests) · browser walk, 40 checks across four roles",
       "remaining": [
-        "No write route for a requirement yet, and no CI endpoint to post a verification result (report:336-339)."
+        "No CI endpoint to post a verification result (an idempotent contract PUT), no bulk requirement import, and gate evidence does not yet read requirements."
       ],
       "issue": null,
       "accepted": null,
@@ -169,6 +172,12 @@
           "registerVersion": 2,
           "status": "partial",
           "note": "Built on claude/dynamic-gates-and-requirements (19/09), converged onto main by docs/36 C-03 as 5.17.0; migrations renumbered 034/035 → 051/052 before any main or tag applied them."
+        },
+        {
+          "at": "2026-09-23",
+          "registerVersion": 3,
+          "status": "partial",
+          "note": "Write routes and screens delivered by docs/36 NEW-04 (5.22.0)."
         }
       ]
     },
@@ -212,19 +221,20 @@
         "MER-05"
       ],
       "title": "A review finding is neither a risk nor a lesson, and there is nowhere to put it",
-      "status": "partial",
+      "status": "done",
       "priority": "high",
       "effort": "S",
-      "version": "5.17.0",
+      "version": "5.22.0",
       "decidedOn": null,
       "delivered": [
         "server/migrations/052_findings_seats_and_decisions.sql",
-        "shared/engine.js#attention (Review finding)"
+        "shared/engine.js#attention (Review finding)",
+        "server/src/routes/registers.js",
+        "web/src/views/registers.js",
+        "server/migrations/055 (row_version, raised_by, incompatibility edge trigger)"
       ],
-      "measure": "server/test/governance.test.js — describe « MER-05 »",
-      "remaining": [
-        "A session route and a screen to raise, edit and close it — today it enters only through the book import (your report:39-43). Tracked as NEW-04 in docs/36."
-      ],
+      "measure": "server/test/registers.test.js (28 tests) · browser walk, 40 checks across four roles",
+      "remaining": null,
       "issue": null,
       "accepted": null,
       "released": false,
@@ -242,6 +252,12 @@
           "registerVersion": 2,
           "status": "partial",
           "note": "Built on claude/dynamic-gates-and-requirements (19/09), converged onto main by docs/36 C-03 as 5.17.0; migrations renumbered 034/035 → 051/052 before any main or tag applied them."
+        },
+        {
+          "at": "2026-09-23",
+          "registerVersion": 3,
+          "status": "done",
+          "note": "Write routes and screens delivered by docs/36 NEW-04 (5.22.0)."
         }
       ]
     },
@@ -251,20 +267,21 @@
         "MER-06"
       ],
       "title": "Authority is data — but only two kinds of it",
-      "status": "partial",
+      "status": "done",
       "priority": "high",
       "effort": "M",
-      "version": "5.17.0",
+      "version": "5.22.0",
       "decidedOn": null,
       "delivered": [
         "server/migrations/052_findings_seats_and_decisions.sql",
         "shared/engine.js#openVetoes",
-        "seat_conflict_guard trigger"
+        "seat_conflict_guard trigger",
+        "server/src/routes/registers.js",
+        "web/src/views/registers.js",
+        "server/migrations/055 (row_version, raised_by, incompatibility edge trigger)"
       ],
-      "measure": "server/test/governance.test.js — describe « MER-06 »",
-      "remaining": [
-        "A session route and a screen to raise, edit and close it — today it enters only through the book import (your report:39-43). Tracked as NEW-04 in docs/36."
-      ],
+      "measure": "server/test/registers.test.js (28 tests) · browser walk, 40 checks across four roles",
+      "remaining": null,
       "issue": null,
       "accepted": null,
       "released": false,
@@ -282,6 +299,12 @@
           "registerVersion": 2,
           "status": "partial",
           "note": "Built on claude/dynamic-gates-and-requirements (19/09), converged onto main by docs/36 C-03 as 5.17.0; migrations renumbered 034/035 → 051/052 before any main or tag applied them."
+        },
+        {
+          "at": "2026-09-23",
+          "registerVersion": 3,
+          "status": "done",
+          "note": "Write routes and screens delivered by docs/36 NEW-04 (5.22.0)."
         }
       ]
     },
@@ -291,19 +314,20 @@
         "MER-07"
       ],
       "title": "Decisions record a rationale, but not an objection, a reversal cost, or a supersession",
-      "status": "partial",
+      "status": "done",
       "priority": "high",
       "effort": "S",
-      "version": "5.17.0",
+      "version": "5.22.0",
       "decidedOn": null,
       "delivered": [
         "server/migrations/052_findings_seats_and_decisions.sql",
-        "server/src/routes/meetings.js (reversal_cost, supersedes_id, source_evidence_id)"
+        "server/src/routes/meetings.js (reversal_cost, supersedes_id, source_evidence_id)",
+        "server/src/routes/registers.js",
+        "web/src/views/registers.js",
+        "server/migrations/055 (row_version, raised_by, incompatibility edge trigger)"
       ],
-      "measure": "server/test/governance.test.js — describe « MER-07 »",
-      "remaining": [
-        "Reversal cost and supersession are written by the meetings route; objections enter only through the book import, and no screen shows any of the three. Tracked as NEW-04 in docs/36."
-      ],
+      "measure": "server/test/registers.test.js (28 tests) · browser walk, 40 checks across four roles",
+      "remaining": null,
       "issue": null,
       "accepted": null,
       "released": false,
@@ -321,6 +345,12 @@
           "registerVersion": 2,
           "status": "partial",
           "note": "Built on claude/dynamic-gates-and-requirements (19/09), converged onto main by docs/36 C-03 as 5.17.0; migrations renumbered 034/035 → 051/052 before any main or tag applied them."
+        },
+        {
+          "at": "2026-09-23",
+          "registerVersion": 3,
+          "status": "done",
+          "note": "Write routes and screens delivered by docs/36 NEW-04 (5.22.0)."
         }
       ]
     },
@@ -410,14 +440,17 @@
       "status": "partial",
       "priority": "medium",
       "effort": "S",
-      "version": "5.17.0",
+      "version": "5.22.0",
       "decidedOn": null,
       "delivered": [
-        "server/migrations/052_findings_seats_and_decisions.sql"
+        "server/migrations/052_findings_seats_and_decisions.sql",
+        "server/src/routes/registers.js",
+        "web/src/views/registers.js",
+        "server/migrations/055 (row_version, raised_by, incompatibility edge trigger)"
       ],
-      "measure": "server/test/governance.test.js — describe « MER-10 »",
+      "measure": "server/test/registers.test.js (28 tests) · browser walk, 40 checks across four roles",
       "remaining": [
-        "The database accepts per_gate and ad_hoc and a series' gate, but the meetings route and screen do not offer them yet: a gate-bound series enters only through the import. Tracked as NEW-04."
+        "A per-gate series does not yet get an agenda built from the gate's outstanding evidence."
       ],
       "issue": null,
       "accepted": null,
@@ -436,6 +469,12 @@
           "registerVersion": 2,
           "status": "partial",
           "note": "Built on claude/dynamic-gates-and-requirements (19/09), converged onto main by docs/36 C-03 as 5.17.0; migrations renumbered 034/035 → 051/052 before any main or tag applied them."
+        },
+        {
+          "at": "2026-09-23",
+          "registerVersion": 3,
+          "status": "partial",
+          "note": "Write routes and screens delivered by docs/36 NEW-04 (5.22.0)."
         }
       ]
     },
@@ -445,19 +484,20 @@
         "MER-11"
       ],
       "title": "The document is the unit of evidence, and evidence is increasingly not a document",
-      "status": "partial",
+      "status": "done",
       "priority": "medium",
       "effort": "S",
-      "version": "5.17.0",
+      "version": "5.22.0",
       "decidedOn": null,
       "delivered": [
         "server/migrations/052_findings_seats_and_decisions.sql",
-        "evidence table"
+        "evidence table",
+        "server/src/routes/registers.js",
+        "web/src/views/registers.js",
+        "server/migrations/055 (row_version, raised_by, incompatibility edge trigger)"
       ],
-      "measure": "server/test/governance.test.js — describe « MER-11 »",
-      "remaining": [
-        "A session route and a screen to raise, edit and close it — today it enters only through the book import (your report:39-43). Tracked as NEW-04 in docs/36."
-      ],
+      "measure": "server/test/registers.test.js (28 tests) · browser walk, 40 checks across four roles",
+      "remaining": null,
       "issue": null,
       "accepted": null,
       "released": false,
@@ -475,6 +515,12 @@
           "registerVersion": 2,
           "status": "partial",
           "note": "Built on claude/dynamic-gates-and-requirements (19/09), converged onto main by docs/36 C-03 as 5.17.0; migrations renumbered 034/035 → 051/052 before any main or tag applied them."
+        },
+        {
+          "at": "2026-09-23",
+          "registerVersion": 3,
+          "status": "done",
+          "note": "Write routes and screens delivered by docs/36 NEW-04 (5.22.0)."
         }
       ]
     },

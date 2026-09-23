@@ -2169,6 +2169,353 @@ export const ES = {
     "Leído meses después por alguien que discrepa de un rango. Una ponderación cuya razón no está escrita es un veredicto.",
   "Weighting set":
     "Ponderación fijada",
+  /* ── NEW-04 · los registros de KODO (ver FR). */
+  "A closed finding rests on this evidence, so it is not edited underneath it.":
+    "Un hallazgo cerrado se apoya en esta evidencia: no se modifica por debajo de él.",
+  "A gate review or a safety board meets when its event comes, not on a weekday: closing one schedules no successor.":
+    "Una revisión de hito o un comité de seguridad se reúne cuando llega su evento, no un día de la semana: cerrar una no programa ninguna siguiente.",
+  "A hash of the artefact, when there is one — it proves the piece read later is the piece captured.":
+    "Un hash del artefacto, si lo hay — prueba que la pieza leída después es la que se registró.",
+  "A seat with a veto in this domain blocks the gate until the objection is resolved.":
+    "Un puesto con veto en este dominio bloquea el hito hasta que la objeción se resuelva.",
+  "Ad hoc — convened by an event":
+    "Ad hoc — convocada por un evento",
+  "Address":
+    "Dirección",
+  "Against":
+    "Contra",
+  "Both directions are removed. One person could then hold both seats.":
+    "Se retiran ambos sentidos. Una misma persona podrá entonces ocupar los dos puestos.",
+  "Cannot be combined with":
+    "Incompatible con",
+  "Capture evidence":
+    "Registrar una evidencia",
+  "Capture":
+    "Registrar",
+  "Captured by":
+    "Registrada por",
+  "Captured on":
+    "Registrada el",
+  "Captured":
+    "Registrada",
+  "Close on re-test evidence":
+    "Cerrar con evidencia de re-prueba",
+  "Cost to reverse":
+    "Coste de revertir",
+  "Declare a seat":
+    "Declarar un puesto",
+  "Declare an incompatibility":
+    "Declarar una incompatibilidad",
+  "Declare it":
+    "Declarar",
+  "Digest":
+    "Hash",
+  "Document":
+    "Documento",
+  "Domain":
+    "Dominio",
+  "Edit evidence":
+    "Editar la evidencia",
+  "Edit finding":
+    "Editar el hallazgo",
+  "Edit requirement":
+    "Editar el requisito",
+  "Edit seat":
+    "Editar el puesto",
+  "Empty: no veto. A veto is on a domain, never on everything — « child safety », or « G2 » for one gate only. An open objection from this seat in its domain blocks the gate.":
+    "Vacío: sin veto. Un veto recae sobre un dominio, nunca sobre todo — « seguridad infantil », o « G2 » para un solo hito. Una objeción abierta de este puesto en su dominio bloquea el hito.",
+  "Empty: one working week from today. Unresolved by then, it goes up.":
+    "Vacío: una semana laboral desde hoy. Si no se resuelve para entonces, sube.",
+  "Escalate this objection?":
+    "¿Escalar esta objeción?",
+  "Escalate":
+    "Escalar",
+  "Escalates on":
+    "Escala el",
+  "Finding":
+    "Hallazgo",
+  "For a finding raised in error. One that was closed or waived is a record, and is reopened instead.":
+    "Para un hallazgo registrado por error. Uno cerrado o dispensado es un registro: se reabre en su lugar.",
+  "For a per-gate series: the gate it reviews. Required for that cadence, ignored for the others.":
+    "Para una serie por hito: el hito que revisa. Obligatorio para esa cadencia, ignorado para las demás.",
+  "For a piece captured in error. The audit trail keeps what it pointed at.":
+    "Para una pieza registrada por error. La pista de auditoría conserva a qué apuntaba.",
+  "For a requirement stated in error. One that no longer applies is waived, with its reason, so the record says so.":
+    "Para un requisito enunciado por error. El que ya no aplica se dispensa, con su motivo, para que el registro lo diga.",
+  "For a seat declared in error. One that objections were lodged in is retired instead, so the record keeps its name.":
+    "Para un puesto declarado por error. Aquel en cuyo nombre se presentaron objeciones se retira en su lugar, para que el registro conserve su nombre.",
+  "Gate reviews and ad hoc":
+    "Revisiones de hito y ad hoc",
+  "Held by":
+    "Ocupado por",
+  "How it WILL be verified — a test, an inspection, a measurement. Writing this does not verify it.":
+    "Cómo SE verificará — una prueba, una inspección, una medición. Escribirlo no lo verifica.",
+  "How it was answered — what changed, or why the decision stands. The objector and the room will read this back.":
+    "Cómo se respondió — qué cambió, o por qué la decisión se mantiene. Quien objetó y la sala lo volverán a leer.",
+  "In my own name":
+    "En mi propio nombre",
+  "In the name of a seat":
+    "En nombre de un puesto",
+  "It goes to the level above the room, and stays live — a veto seat's escalated objection still blocks its gate.":
+    "Sube al nivel por encima de la sala y sigue viva — la objeción escalada de un puesto con veto sigue bloqueando su hito.",
+  "It stays on the record as withdrawn — that is how a board shows it heard it.":
+    "Queda en el registro como retirada — así muestra un comité que la escuchó.",
+  "Loop":
+    "Vuelta",
+  "Monthly — the steering pack":
+    "Mensual — el paquete de dirección",
+  "No evidence captured since this finding was raised":
+    "Ninguna evidencia registrada desde que se abrió este hallazgo",
+  "No evidence captured yet.":
+    "Aún no hay evidencias registradas.",
+  "No evidence captured. A CI run, a traceability report or a measurement is evidence too; it does not have to be forced into the document register.":
+    "Ninguna evidencia registrada. Una ejecución de CI, un informe de trazabilidad o una medición también son evidencias; no hace falta forzarlas en el registro documental.",
+  "No finding raised yet.":
+    "Aún no hay hallazgos registrados.",
+  "No finding raised. A finding is neither a risk — it has happened — nor a lesson — it is open and owned.":
+    "Ningún hallazgo registrado. Un hallazgo no es un riesgo — ya ocurrió — ni una lección — está abierto y tiene responsable.",
+  "No requirement stated yet.":
+    "Aún no hay requisitos enunciados.",
+  "No requirement stated. A gate reviewed against documents answers « here is a dossier »; one reviewed against requirements answers « here is what was promised, and the proof each one holds ».":
+    "Ningún requisito enunciado. Un hito revisado contra documentos responde « aquí hay un expediente »; revisado contra requisitos responde « esto es lo prometido, y la prueba de que cada uno se cumple ».",
+  "No seat declared yet.":
+    "Aún no hay puestos declarados.",
+  "No seat declared. A seat carries a domain, sometimes a veto on it, and the seats it may never be combined with — the segregation of duties an auditor asks about first.":
+    "Ningún puesto declarado. Un puesto lleva un dominio, a veces un veto sobre él, y los puestos con los que nunca puede combinarse — la segregación de funciones, lo primero que pregunta un auditor.",
+  "Not stated":
+    "No indicado",
+  "Object":
+    "Objetar",
+  "Observer — voice, no vote":
+    "Observador — voz sin voto",
+  "One thing that must hold, testable as written — « settles within 10 s », not « is fast ».":
+    "Una cosa que debe cumplirse, verificable tal como está escrita — « se liquida en 10 s », no « es rápido ».",
+  "Per gate — convened when a gate is due":
+    "Por hito — convocada cuando llega un hito",
+  "Priority":
+    "Prioridad",
+  "Proposed fix":
+    "Corrección propuesta",
+  "Raise a finding":
+    "Registrar un hallazgo",
+  "Raise an objection":
+    "Presentar una objeción",
+  "Raise it":
+    "Registrar",
+  "Raised on":
+    "Registrado el",
+  "Re-test due":
+    "Re-prueba prevista el",
+  "Re-test evidence":
+    "Evidencia de re-prueba",
+  "Read by whoever asks, a year from now, why this finding stopped counting. A waiver without its reason is a finding nobody decided to drop.":
+    "Lo leerá quien pregunte, dentro de un año, por qué este hallazgo dejó de contar. Una dispensa sin motivo es un hallazgo que nadie decidió abandonar.",
+  "Read by whoever asks, a year from now, why this requirement stopped counting. Required to waive.":
+    "Lo leerá quien pregunte, dentro de un año, por qué este requisito dejó de contar. Obligatorio para dispensar.",
+  "Reasoned, and within the domain. An objection without a reason is not an objection — it is a vote. The room reads this back.":
+    "Razonada, y dentro del dominio. Una objeción sin motivo no es una objeción — es un voto. La sala la volverá a leer.",
+  "Remove evidence":
+    "Retirar la evidencia",
+  "Remove finding":
+    "Retirar el hallazgo",
+  "Remove incompatibility":
+    "Retirar la incompatibilidad",
+  "Remove requirement":
+    "Retirar el requisito",
+  "Remove seat":
+    "Retirar el puesto",
+  "Remove this evidence?":
+    "¿Retirar esta evidencia?",
+  "Remove this finding?":
+    "¿Retirar este hallazgo?",
+  "Remove this incompatibility?":
+    "¿Retirar esta incompatibilidad?",
+  "Remove this requirement?":
+    "¿Retirar este requisito?",
+  "Remove this seat?":
+    "¿Retirar este puesto?",
+  "Reopen this finding?":
+    "¿Reabrir este hallazgo?",
+  "Requirement":
+    "Requisito",
+  "Requirements":
+    "Requisitos",
+  "Resolution":
+    "Resolución",
+  "Resolve objection":
+    "Resolver la objeción",
+  "Resolve":
+    "Resolver",
+  "Review findings":
+    "Hallazgos de revisión",
+  "Reword objection":
+    "Reformular la objeción",
+  "Seat is sitting":
+    "El puesto está en funciones",
+  "Seat":
+    "Puesto",
+  "Seats and vetoes":
+    "Puestos y vetos",
+  "Severity":
+    "Severidad",
+  "Source evidence":
+    "Evidencia de origen",
+  "Source":
+    "Fuente",
+  "State a requirement":
+    "Enunciar un requisito",
+  "State it":
+    "Enunciar",
+  "The closure or the waiver is lifted; the audit trail keeps what it rested on.":
+    "Se levanta el cierre o la dispensa; la pista de auditoría conserva en qué se apoyaba.",
+  "The consequence, kept apart from the fact so the finding can be read without the reviewer.":
+    "La consecuencia, separada del hecho para que el hallazgo se lea sin quien revisó.",
+  "The database refuses a person who already holds a seat declared incompatible with this one.":
+    "La base de datos rechaza a una persona que ya ocupa un puesto declarado incompatible con este.",
+  "The evidence the decision rests on, from the project's evidence register.":
+    "La evidencia en la que se apoya la decisión, del registro de evidencias del proyecto.",
+  "The fact, as seen — « Esc does not close the palette ». Not the consequence, and not an opinion.":
+    "El hecho, tal como se vio — « Esc no cierra la paleta ». Ni la consecuencia, ni una opinión.",
+  "The proof produced — the named test, run or report. Required before it can be Done.":
+    "La prueba producida — la prueba, ejecución o informe con nombre. Obligatoria antes de « Hecho ».",
+  "The role the committee knows it by — « Child safety officer », « Design authority ».":
+    "El rol por el que el comité lo conoce — « Responsable de seguridad infantil », « Autoridad de diseño ».",
+  "The run, report or measurement that shows it fixed. A merged fix is an intention; its re-test is the fact. Capture the evidence first, under Evidence.":
+    "La ejecución, el informe o la medición que muestra que está corregido. Una corrección fusionada es una intención; su re-prueba es el hecho. Registre primero la evidencia, en Evidencias.",
+  "The separation it protects — « the officer who must refuse a mechanic did not design it ». Refused if one person already holds both.":
+    "La separación que protege — « quien debe rechazar una mecánica no la diseñó ». Se rechaza si una misma persona ya ocupa ambos.",
+  "Untick to retire a seat that objections were lodged in: the record keeps its name.":
+    "Desmarque para retirar un puesto en cuyo nombre se presentaron objeciones: el registro conserva su nombre.",
+  "Verification method":
+    "Método de verificación",
+  "Verification":
+    "Verificación",
+  "Verified by":
+    "Verificado por",
+  "Veto on":
+    "Veto sobre",
+  "Veto":
+    "Veto",
+  "Waive this finding":
+    "Dispensar este hallazgo",
+  "Waive":
+    "Dispensar",
+  "Weekly — exception-only delivery call":
+    "Semanal — llamada de entrega solo con excepciones",
+  "What a reader will look for — « Nightly build 412 », « SAT-14 report ».":
+    "Lo que un lector buscará — « Build nocturno 412 », « Informe SAT-14 ».",
+  "What the reviewer suggests. Merging it does not close the finding — its re-test does.":
+    "Lo que sugiere quien revisa. Fusionarlo no cierra el hallazgo — su re-prueba sí.",
+  "What undoing it would cost. Publishing under an open licence is one-way; descoping a gallery is not — a register that records only the rationale makes the two look alike.":
+    "Lo que costaría deshacerla. Publicar con licencia abierta no tiene vuelta atrás; quitar una galería del alcance sí — un registro que solo guarda la justificación hace que parezcan iguales.",
+  "What was observed":
+    "Lo que se observó",
+  "Where it can be found again: a link, a repository path at a revision, a commit, or run:/artifact:. Either this or a document.":
+    "Dónde volver a encontrarla: un enlace, una ruta de repositorio en una revisión, un commit, o run:/artifact:. O esto, o un documento.",
+  "Where it comes from: a contract clause, a regulation, a decision. Without it a requirement is an opinion.":
+    "De dónde viene: una cláusula de contrato, una normativa, una decisión. Sin ello, un requisito es una opinión.",
+  "Why it is waived":
+    "Por qué se dispensa",
+  "Why it matters":
+    "Por qué importa",
+  "Withdraw this objection?":
+    "¿Retirar esta objeción?",
+  "Your own words, corrected. The trail keeps what it said before.":
+    "Sus propias palabras, corregidas. La pista conserva lo que decían antes.",
+  "captured":
+    "registrada(s)",
+  "closed or waived":
+    "cerrado(s) o dispensado(s)",
+  "cost to reverse":
+    "coste de revertir",
+  "escalates":
+    "escala el",
+  "no method stated":
+    "ningún método indicado",
+  "none captured":
+    "ninguna registrada",
+  "none raised":
+    "ninguno registrado",
+  "none stated":
+    "ninguno enunciado",
+  "not yet verified":
+    "aún no verificado",
+  "observer":
+    "observador",
+  "on":
+    "sobre",
+  "re-test":
+    "re-prueba",
+  "rests on":
+    "se apoya en",
+  "stated":
+    "enunciado(s)",
+  "supersedes":
+    "reemplaza",
+  "the proof a gate or a finding rests on — a document, or a run, a report, a measurement":
+    "la prueba en la que se apoya un hito o un hallazgo — un documento, o una ejecución, un informe, una medición",
+  "the seat's veto domain, if empty":
+    "el dominio de veto del puesto, si está vacío",
+  "veto":
+    "veto",
+  "voting":
+    "con voto",
+  "waived":
+    "dispensado(s)",
+  "what a review observed — closed on re-test evidence, never on a merged fix":
+    "lo que observó una revisión — se cierra con evidencia de re-prueba, nunca con una corrección fusionada",
+  "what the project must hold, how it will be verified, and the proof that it was":
+    "lo que el proyecto debe cumplir, cómo se verificará, y la prueba de que se verificó",
+  "who sits, on which domain, who may block a gate — and what one person may never combine":
+    "quién ocupa un puesto, en qué dominio, quién puede bloquear un hito — y lo que una misma persona nunca puede acumular",
+  "Not started":
+    "Sin empezar",
+  "Done":
+    "Hecho",
+  "Waived":
+    "Dispensado",
+  "Re-test":
+    "Re-prueba",
+  "escalated":
+    "escalada",
+  "resolved":
+    "resuelta",
+  "withdrawn":
+    "retirada",
+  "blocking":
+    "bloqueante",
+  "major":
+    "mayor",
+  "minor":
+    "menor",
+  "cosmetic":
+    "cosmético",
+  "Must":
+    "Debe",
+  "Should":
+    "Debería",
+  "Could":
+    "Podría",
+  "Won't":
+    "Esta vez no",
+  "CI run":
+    "Ejecución de CI",
+  "Test report":
+    "Informe de pruebas",
+  "Measurement":
+    "Medición",
+  "Recording":
+    "Grabación",
+  "Sign-off":
+    "Firma",
+  "External":
+    "Externa",
+  "High — effectively one-way":
+    "Alto — prácticamente sin vuelta atrás",
+  "Weekly delivery":
+    "Entrega semanal",
+  "Monthly steering":
+    "Dirección mensual",
 };
 
 /* ── fragments composés autour de nombres vivants (R-15) ────────────── */

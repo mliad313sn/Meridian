@@ -138,7 +138,15 @@ weakened). Both files now stand. The restored tests pass against the
 KODO code, so the removal hid no regression; it removed only the ability
 to see one.
 
-#### NEW-04 · KODO's registers have no write route and no screen — open, wave 1
+#### NEW-04 · KODO's registers have no write route and no screen — BUILT, PR as 5.22.0
+
+Routes, screens, authority in `rbac.js` (six actions, each with its
+reason), migration 055, 28 tests, and a browser walk across four roles.
+F2's shrink-only list emptied of its sixteen NEW-04 lines, as designed.
+KODO MER-05, 06, 07 and 11 are done. MER-03 (CI endpoint, bulk import)
+and MER-10 (agenda from outstanding evidence) stay partial, with their
+remaining work in `kodo.json`.
+
 
 Requirements, evidence, findings, seats (with their incompatibilities)
 and objections enter the book only through the import. KODO says so

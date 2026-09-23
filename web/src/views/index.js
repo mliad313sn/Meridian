@@ -49,6 +49,9 @@ import {
 } from "../../../shared/prioritise.js";
 
 import { meetingsView, invalidateMeetings } from "./meetings.js";
+/* NEW-04 — KODO's registers: requirements, evidence, findings, seats,
+   objections, and what a decision costs to reverse. */
+import { assuranceFolds, objectionsFor, decisionFields, decisionFacts } from "./registers.js";
 import { accessPanel, directoryPanel, referencePanel, federationPanel, notificationsPanel, importPanel, continuityPanel, integrationsPanel, invalidateAdmin } from "./administration.js";
 
 export const Views = {};
@@ -1367,6 +1370,10 @@ Views.project = (db) => {
         cm.length ? cm.length + t(" audience(s)") + (due ? " · " + due + t(" overdue") : "") : t("no plan"),
         due > 0, commsBlock(db, p, cm));
     })(),
+    /* NEW-04 (MER-03/05/11) — what the project must hold, the proof it
+       holds it, and what a review found. Folded like the registers above;
+       the findings fold opens itself while an S1 or S2 is open. */
+    ...assuranceFolds(db, p),
     fold(t("Plant & rollout"),
       (p.plantImpact ?? "none") === "none" ? t("business systems only") : t(IMPACT_LABEL[p.plantImpact]),
       false, plantBlock(db, p)),
@@ -6078,7 +6085,12 @@ Views.reports = (db) => {
                 { key: "on", label: "Date", width: "92px", get: x => h("span", { class: "mono small" }, x.on) },
                 { key: "what", label: "Decision", get: x => h("div", null,
                     h("div", { class: "strong small" }, x.what),
-                    x.detail ? h("div", { class: "xs muted" }, String(x.detail).slice(0, 110)) : null) },
+                    x.detail ? h("div", { class: "xs muted" }, String(x.detail).slice(0, 110)) : null,
+                    /* NEW-04 (MER-07) — what undoing it costs, and who objects. */
+                    x.decision ? decisionFacts(x.decision) : null,
+                    x.decision ? objectionsFor(db, x.decision.id, {
+                      project: x.decision.project ? asRow(db.projects.find((p) => p.id === x.decision.project)) : null,
+                      decidedBy: x.decision.by }) : null) },
                 { key: "by", label: "By", get: x => h("span", { class: "small" }, x.by) },
                 { key: "ratify", label: "", width: "96px", get: x => mayRatify(db, x.decision)
                     ? h("button", { class: "btn btn-sm", onClick: () => ratifyDecision(x.decision) }, t("Ratify"))
@@ -6783,6 +6795,8 @@ function recordDecision(db) {
         options: [{ value: "", label: "—" }].concat(db.crs.map((c) => ({ value: c.id, label: c.id + " · " + c.title }))) },
       { key: "supersedes", label: t("Supersedes decision"), value: "", advanced: true,
         hint: t("The identifier of the decision this one replaces, e.g. DEC-012. That one stays on the record.") },
+      /* NEW-04 (MER-07) — reversal cost, and the evidence it rests on. */
+      ...decisionFields(db, null),
     ],
     saveLabel: t("Record"),
     onSave: (v) => App.write("Decision recorded", (a) => a.post("/decisions", {
@@ -6791,6 +6805,7 @@ function recordDecision(db) {
       rationale: v.rationale, alternatives: v.alternatives, dissent: v.dissent,
       raidId: v.raidId || null, milestoneId: v.milestoneId || null, crId: v.crId || null,
       supersedes: v.supersedes || null,
+      reversalCost: v.reversalCost || null, sourceEvidence: v.sourceEvidence || null,
     }), { detail: v.headline }).then((ok) => { if (ok !== false) { delete live.data.register; App.emit(); } return ok; }),
   });
 }

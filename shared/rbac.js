@@ -89,6 +89,16 @@ export const ACTIONS = [
      et seulement sous la règle d'indépendance de `canRatifyDecision`,
      que la route et l'écran appliquent EN PLUS de ce `case`. */
   "decision.ratify",
+  /* NEW-04 (docs/36) — KODO's registers (MER-03/05/06/07/11), which had
+     no write route. Six decisions, each argued at its `case` below:
+       assurance.write    requirement, evidence and finding on a project
+       waiver.grant       waiving a requirement or a finding
+       seat.manage        seats, vetoes and their incompatibilities
+       objection.raise    lodging a reasoned objection to a decision
+       objection.own      the objector rewording, escalating, withdrawing
+       objection.resolve  answering an objection */
+  "assurance.write", "waiver.grant", "seat.manage",
+  "objection.raise", "objection.own", "objection.resolve",
   // system
   "user.manage", "settings.write", "data.export", "data.import",
 ];
@@ -125,6 +135,21 @@ const GROUP_ONLY_WRITES = new Set([
      inside the margin; it does not set it, and it does not get to rule
      that going past it was fine. */
   "tolerance.set", "exception.answer",
+  /* NEW-04 — a waiver says "this gap does not count". The team whose
+     requirement or finding it is does not get to rule that its own gap
+     does not matter: benefit.review's independence, applied to
+     assurance. The reason is enforced by the database (051, 052); the
+     level is enforced here. */
+  "waiver.grant",
+  /* NEW-04 — who sits, who may veto, and what may not be combined. A seat
+     is a fact of group governance, not of a project (portfolio.js reads
+     seats unscoped for that reason), and the people a veto can stop do
+     not get to decide who holds it. */
+  "seat.manage",
+  /* NEW-04 — answering an objection is the level above the room, as
+     KODO's rule has it: an unresolved objection goes to the product
+     owner, not back to whoever took the decision. */
+  "objection.resolve",
 ]);
 
 /** Admin-only, full stop. */
@@ -574,6 +599,85 @@ export function can(user, action, resource = {}) {
           : deny("portfolio-wide register items are kept at group level — raise it on the project it lands on, or ask your programme office");
       }
       return canWriteProject(user, resource.project) ? allow() : outsideProject(user, resource.project);
+
+    /* ── NEW-04 · KODO's registers ──────────────────────────────────
+
+       assurance.write — requirements, evidence and findings belong to
+       the project that must hold them, and keeping them is the ordinary
+       work of whoever delivers it: the same authority as its RAID
+       register and its documents. It is named, rather than borrowed from
+       project.write, so that the day assurance needs its own level there
+       is one line to change. What keeps it honest is not the level but
+       the database: a finding closes only on evidence (052), a waiver
+       only with a reason (051, 052) — and waiving is not this action. */
+    case "assurance.write":
+      return canWriteProject(user, resource.project) ? allow() : outsideProject(user, resource.project);
+
+    /* waiver.grant — GROUP_ONLY_WRITES above has already refused every
+       level below group. What remains is the programme grant: group
+       level waives inside its own programmes, like any project write. */
+    case "waiver.grant":
+      return canWriteProject(user, resource.project)
+        ? allow()
+        : deny("that project is outside your programmes — the programme office that holds it grants its waivers");
+
+    /* seat.manage — portfolio-wide (a seat names no project), so it needs
+       its own case: the project-scoped default would refuse it to
+       everyone for having nothing in scope, the trap data.import and
+       lesson.adopt paid for. Group level only, already established by
+       GROUP_ONLY_WRITES; admin returned earlier. Not administrator-only:
+       who sits on a committee is governance, not machine configuration —
+       the reasoning priority.weighting gives. */
+    case "seat.manage":
+      return allow();
+
+    /* objection.raise — consent governance runs on the reasoned
+       objection, and anyone who can SEE a decision can object to it:
+       an objection is a voice, not an act on the record's substance.
+       Visibility is the decision's own — its meeting's scope, else its
+       project, else (a portfolio-wide decision) everyone who reads the
+       portfolio. The viewer stays refused (R1.5, above): an objection is
+       written on the record.
+
+       One narrowing, and it is the one that matters: an objection lodged
+       IN THE NAME OF A SEAT can carry that seat's veto, which stops a
+       gate. It is raised by the person who holds the seat (their deputy
+       included, `selfMatch`), or minuted for them by group level —
+       otherwise anyone could stop a gate by borrowing the child-safety
+       officer's name. */
+    case "objection.raise": {
+      if (resource.scope && !canSeeScope(user, resource.scope)) {
+        return deny("that decision's meeting is outside your scope — its chair can minute your objection");
+      }
+      if (!resource.scope && resource.project && !canSeeProject(user, resource.project)) {
+        return deny("that decision's project is outside your scope");
+      }
+      if (resource.seat_person && !selfMatch(user, resource.seat_person) && user.role !== "group") {
+        return deny("that seat is held by someone else — its holder raises an objection in its name, or your programme office minutes it for them");
+      }
+      return allow();
+    }
+
+    /* objection.own — the objection is the objector's word: rewording
+       it, pushing it up when it is not heard, or withdrawing it is theirs
+       (or their deputy's), and group level may do it for them — a
+       secretary minuting a withdrawal said in the room. Nobody else puts
+       words in an objector's mouth. */
+    case "objection.own":
+      if (selfMatch(user, resource.raised_by)) return allow();
+      return user.role === "group"
+        ? allow()
+        : deny("this objection is someone else's — only its author, or your programme office, can reword, escalate or withdraw it");
+
+    /* objection.resolve — GROUP_ONLY_WRITES has established the level.
+       The one person who may never resolve it is whoever took the
+       decision objected to: resolving your own objection away is the
+       self-approval change.approve has refused since I1. */
+    case "objection.resolve":
+      if (selfMatch(user, resource.decided_by)) {
+        return deny("you took the decision this objection is against — someone else answers it; ask your programme office");
+      }
+      return allow();
 
     default:
       // Every remaining write is project-scoped.

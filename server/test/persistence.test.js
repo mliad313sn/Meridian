@@ -96,7 +96,12 @@ describe("schema and migrations (R2.2, R2.7)", () => {
           branch, renumbered because main's 027 is international). */
        "053_notification_kinds.sql",
        /* 054 - REQ-51, a review written through the contract has an external identity. */
-       "054_raid_review_external.sql"]);
+       "054_raid_review_external.sql",
+       /* 055 - docs/36 NEW-04: KODO's registers get their write routes,
+          so the four that lacked row_version gain it, an objection names
+          who raised it, and an incompatibility declared after the fact
+          is refused like one assigned after it. */
+       "055_registers_are_correctable.sql"]);
     const again = await migrate({ silent: true });
     assert.deepEqual(again, [], "a second run applies nothing");
   });
