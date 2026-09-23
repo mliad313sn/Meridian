@@ -22,6 +22,62 @@ Nothing yet.
 
 ---
 
+## [5.23.0] — 2026-09-23
+
+**Each step of a change request is signed by a different person** (PR-04,
+D-36.11; docs/36 wave 1).
+
+### Changed
+
+- **The approval chain showed four roles and let one person sign all
+  four.** The roles were labels, not authorities. A person who has signed
+  one step of a request now cannot sign another step of the same request
+  ("you signed step N of this request — a different person signs each
+  step"), and the raiser still signs none. "Person" is the person behind
+  the account, or the account itself when it represents nobody: two
+  accounts of one person are one signatory, and a deputy is matched for
+  the person they act for. The rule is `distinctSignatory` in
+  `shared/rbac.js`.
+- **It holds for administrators too.** Their break-glass covers signing a
+  request they raised, for one step, not signing the whole chain. The
+  administration panel's sentence said an administrator "may sign every
+  step"; it now says what is true (EN, FR, ES), as do SECURITY.md,
+  docs/37 §6 and docs/38.
+- A rejection ends the chain and is not held to the rule.
+- The change request view says what the chain guarantees, no longer draws
+  *Approve* for someone who already signed a step, and says why.
+
+### Added
+
+- Migration 056: `change_step.decided_by_person`, beside the account
+  already recorded in `decided_by` since 002. Steps signed before it keep
+  no person rather than an invented one, and a step with no recorded
+  signer blocks nobody.
+- The export and import carry who signed each step (`by`, `byUser`); F13
+  checks both.
+
+### Upgrade note
+
+**Every four-step chain now needs four distinct authorised people.** On a
+site-governed project below the threshold that means the site lead, the
+programme office, the administrators, or further named accounts. The
+seeded book has one group account per programme, so a demo chain needs
+the administrators or new accounts to complete.
+
+### Known limit
+
+A deputy who signs step 1 *for* X is recorded as the deputy's own person,
+so X could then sign step 2 (NEW-22, docs/36).
+
+### Measure
+
+`change-chain.test.js`, 15 tests. Five existing tests walk their chains
+with distinct signers and assert more than before (journey §7, uat A2,
+posture S-13, rbac R4.5, roundtrip ENRICH); none is weakened. Sweep: 286
+cases, the same 11 points as 5.22.0. `npm run verify`: 929/929.
+
+---
+
 ## [5.22.0] — 2026-09-23
 
 **KODO's registers are written from the product** (NEW-04; KODO MER-03,

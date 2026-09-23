@@ -1662,8 +1662,12 @@ export const ES = {
     "ningún host de notificación designado — nada sale de la instancia",
   "Break-glass: ":
     "Rotura de cristal: ",
-  "an administrator is exempt from segregation of duties and may sign every step of a change request, including one it raised; each such signature is marked break-glass in the audit trail. Run the portfolio from named group and site accounts.":
-    "un administrador está exento de la segregación de funciones y puede firmar cada paso de una solicitud de cambio, incluida una que él mismo planteó; cada firma de ese tipo se marca como rotura de cristal en la pista de auditoría. Gestione la cartera desde cuentas de grupo y de sitio nominativas.",
+  "an administrator may sign a change request it raised — the one exemption from segregation of duties, marked break-glass in the audit trail. It still signs at most one step of a chain: each step is signed by a different person. Run the portfolio from named group and site accounts.":
+    "un administrador puede firmar una solicitud de cambio que él mismo planteó — la única exención a la segregación de funciones, marcada como rotura de cristal en la pista de auditoría. Aun así firma como máximo un paso de una cadena: cada paso lo firma una persona distinta. Gestione la cartera desde cuentas de grupo y de sitio nominativas.",
+  "You signed an earlier step of this request — a different person signs this one.":
+    "Usted firmó un paso anterior de esta solicitud — otra persona firma este.",
+  "Each step is signed by a different person, and never by whoever raised the request.":
+    "Cada paso lo firma una persona distinta, y nunca quien planteó la solicitud.",
   "you raised this request. As an administrator you may still sign it — the exemption exists for emergencies, and the audit trail will mark the signature as break-glass. Prefer having a colleague with group authority decide it.":
     "usted planteó esta solicitud. Como administrador aún puede firmarla — la exención existe para emergencias, y la pista de auditoría marcará la firma como rotura de cristal. Es preferible que la decida un colega con autoridad de grupo.",
 

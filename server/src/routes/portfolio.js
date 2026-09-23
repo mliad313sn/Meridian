@@ -1307,7 +1307,7 @@ r.patch("/change/:id", async (req, res, next) => {
         if (resetChain) {
           await t.query(
             `UPDATE change_step SET state = CASE WHEN seq = 0 THEN 'current' ELSE 'waiting' END,
-                    decided_by = NULL, decided_on = NULL, comment = ''
+                    decided_by = NULL, decided_by_person = NULL, decided_on = NULL, comment = ''
               WHERE cr_id = $1`, [cr.id]);
         }
         return rv;
@@ -1334,6 +1334,12 @@ r.delete("/change/:id", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+/* PR-04 — the steps already signed, as rbac.js's distinct-signatory
+   rule reads them. Only `done` steps are signatures on a live chain. */
+const stepSigners = (steps) => steps
+  .filter((s) => s.state === "done")
+  .map((s) => ({ seq: s.seq, person: s.decided_by_person ?? null, user: s.decided_by ?? null }));
+
 /** R4.5 — magnitude decides the authority, not the org chart alone. */
 r.post("/change/:id/approve", async (req, res, next) => {
   try {
@@ -1343,16 +1349,19 @@ r.post("/change/:id/approve", async (req, res, next) => {
     if (cr.status !== "Pending") throw new HttpError(409, "This request is already decided");
 
     const st = await loadSettings();
+    const steps = await many(`SELECT * FROM change_step WHERE cr_id = $1 ORDER BY seq`, [cr.id]);
     gate(req.user, "change.approve", {
       project: p,
       raised_by: cr.raised_by,   // segregation of duties (I1): the raiser never decides
       raised_by_user: cr.raised_by_user, // PR-03: the ACCOUNT too — a person link is optional
+      /* PR-04 (D-36.11): who already signed which step — each step is
+         signed by a different person, and rbac.js decides that. */
+      signers: stepSigners(steps),
       cost_delta: Number(cr.cost_delta) / 1_000_000,
       weeks_delta: cr.weeks_delta,
       threshold: { cost: st.ccbThreshold, weeks: st.ccbWeeks },
     });
 
-    const steps = await many(`SELECT * FROM change_step WHERE cr_id = $1 ORDER BY seq`, [cr.id]);
     const current = steps.find((s) => s.state === "current");
     if (!current) throw new HttpError(409, "This request has no step awaiting a decision");
     const isLast = current.seq === steps.length - 1;
@@ -1371,8 +1380,10 @@ r.post("/change/:id/approve", async (req, res, next) => {
                 (selfSigned ? " — BREAK-GLASS: administrator signing a request they raised" : "") },
       async (t) => {
         await t.query(
-          `UPDATE change_step SET state='done', decided_by=$2, decided_on=CURRENT_DATE, comment=$3
-            WHERE id = $1`, [current.id, req.user.id, String(req.body?.comment ?? "").slice(0, 500)]);
+          `UPDATE change_step SET state='done', decided_by=$2, decided_by_person=$4,
+                  decided_on=CURRENT_DATE, comment=$3
+            WHERE id = $1`, [current.id, req.user.id, String(req.body?.comment ?? "").slice(0, 500),
+                             req.user.personId ?? null]);
         if (!isLast) {
           await t.query(`UPDATE change_step SET state='current' WHERE cr_id=$1 AND seq=$2`,
             [cr.id, current.seq + 1]);
@@ -1424,6 +1435,9 @@ r.post("/change/:id/reject", async (req, res, next) => {
       project: p,
       raised_by: cr.raised_by,   // segregation holds for reject too — deciding is deciding
       raised_by_user: cr.raised_by_user, // PR-03: same account check as approve
+      /* PR-04: a rejection ends the chain — no later step to collide with,
+         so the one-signatory-per-step rule is an approval rule. */
+      decision: "reject",
       cost_delta: Number(cr.cost_delta) / 1_000_000,
       weeks_delta: cr.weeks_delta,
       threshold: { cost: st.ccbThreshold, weeks: st.ccbWeeks },
@@ -1435,9 +1449,10 @@ r.post("/change/:id/reject", async (req, res, next) => {
       async (t) => {
         await t.query(`UPDATE change_request SET status='Rejected', row_version=row_version+1 WHERE id=$1`, [cr.id]);
         await t.query(
-          `UPDATE change_step SET state='rejected', decided_by=$2, decided_on=CURRENT_DATE, comment=$3
+          `UPDATE change_step SET state='rejected', decided_by=$2, decided_by_person=$4,
+                  decided_on=CURRENT_DATE, comment=$3
             WHERE cr_id=$1 AND state='current'`,
-          [cr.id, req.user.id, String(req.body?.comment ?? "").slice(0, 500)]);
+          [cr.id, req.user.id, String(req.body?.comment ?? "").slice(0, 500), req.user.personId ?? null]);
       });
     res.json({ ok: true });
   } catch (e) { next(e); }

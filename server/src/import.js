@@ -419,14 +419,20 @@ export async function importBook(book, user, opts = {}) {
            now says its own conflict rule, which is the handle's contract
            for a table without an id. */
         await t.query(
-          `INSERT INTO change_step (cr_id, seq, role_label, note, state, decided_on, comment)
-           VALUES ($1,$2,$3,$4,$5,$6,$7)
+          `INSERT INTO change_step (cr_id, seq, role_label, note, state, decided_on, comment,
+                                    decided_by_person, decided_by)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,${USER(9)})
            ON CONFLICT (cr_id, seq) DO UPDATE
              SET role_label = EXCLUDED.role_label, note = EXCLUDED.note, state = EXCLUDED.state,
-                 decided_on = EXCLUDED.decided_on, comment = EXCLUDED.comment`,
+                 decided_on = EXCLUDED.decided_on, comment = EXCLUDED.comment,
+                 decided_by_person = EXCLUDED.decided_by_person, decided_by = EXCLUDED.decided_by`,
+          /* PR-04 — who signed comes back with the step: the one-signatory
+             rule reads it, and a chain imported without it would let its
+             signers sign again. The account resolves like every other
+             account reference (an unknown one reads NULL, never a guess). */
           [c.id, i, st.role ?? "Step " + (i + 1), st.note ?? "",
            ["waiting", "current", "done", "rejected"].includes(st.state) ? st.state : "waiting",
-           clean(st.when), st.comment ?? ""]);
+           clean(st.when), st.comment ?? "", clean(st.by), clean(st.byUser)]);
       }
       /* The file states the whole route: on a merge, a step the database
          holds past the file's last one is not the file's route. */

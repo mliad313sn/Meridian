@@ -101,7 +101,11 @@ describe("schema and migrations (R2.2, R2.7)", () => {
           so the four that lacked row_version gain it, an objection names
           who raised it, and an incompatibility declared after the fact
           is refused like one assigned after it. */
-       "055_registers_are_correctable.sql"]);
+       "055_registers_are_correctable.sql",
+       /* 056 - PR-04 (D-36.11): each step of a change chain has its own
+          signatory, so a signed step records the PERSON beside the
+          account it already recorded. No backfill. */
+       "056_each_step_its_own_signatory.sql"]);
     const again = await migrate({ silent: true });
     assert.deepEqual(again, [], "a second run applies nothing");
   });

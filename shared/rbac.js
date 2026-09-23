@@ -285,6 +285,42 @@ export function selfMatch(user, personId) {
   return false;
 }
 
+/* ── one signatory per step (PR-04, D-36.11) ──────────────────────────
+   The comité de recette found a change chain whose four roles were
+   labels: one person could sign every step, and the segregation of
+   duties only kept the raiser out. Each step now needs a distinct
+   signatory. "Person" is the person behind the account; an account that
+   represents nobody is its own identity. A deputy acting for someone is
+   both people at once (selfMatch), so a deputy cannot sign a step the
+   absent person already signed.
+
+   `resource.signers` lists the steps already signed, as the route loads
+   them: [{ seq, person, user }] — `person` the directory person recorded
+   at signing (056; NULL before it), `user` the account (recorded since
+   002). A step with neither blocks nobody: history that recorded no
+   signer is not guessed at.
+
+   It applies to APPROVING. A rejection ends the chain, so there is no
+   later step for it to collide with; the reject route says so with
+   `decision: "reject"`. For an approval the list is required — a caller
+   that forgot to load the signers fails CLOSED, as a missing threshold
+   does, rather than reading "no list" as "nobody signed". */
+export function distinctSignatory(user, resource = {}) {
+  if (resource.decision === "reject") return allow();
+  if (!Array.isArray(resource.signers)) {
+    return deny("the signatures already on this request were not loaded — each step is signed by a different person, so this cannot be decided without them");
+  }
+  for (const s of resource.signers) {
+    if (!s) continue;
+    const samePerson = s.person && selfMatch(user, s.person);
+    const sameAccount = s.user && user.id && s.user === user.id;
+    if (samePerson || sameAccount) {
+      return deny(`you signed step ${Number(s.seq) + 1} of this request — a different person signs each step`);
+    }
+  }
+  return allow();
+}
+
 /* ── the gate ─────────────────────────────────────────────────────── */
 
 /**
@@ -310,7 +346,16 @@ export function can(user, action, resource = {}) {
     return user.role === "admin" ? allow() : deny("administrator only — ask an account marked ADMIN on the sign-in directory");
   }
 
-  if (user.role === "admin") return allow();
+  if (user.role === "admin") {
+    /* PR-04 (D-36.11) — the distinct-signatory rule is independence, not
+       level: like canRatifyDecision, it holds for an administrator too.
+       Only the raiser exemption below is break-glass. */
+    if (action === "change.approve") {
+      const v = distinctSignatory(user, resource);
+      if (!v.ok) return v;
+    }
+    return allow();
+  }
 
   // ── reads ───────────────────────────────────────────────────────
   if (READ_ACTIONS.has(action)) {
@@ -381,7 +426,11 @@ export function can(user, action, resource = {}) {
       if ((overCost || overTime) && user.role !== "group") {
         return deny("above the change-control threshold — group authority required; send it to your programme office to decide");
       }
-      return allow();
+      /* PR-04 (D-36.11) — each step is signed by a different person.
+         Asked last: who MAY decide at this magnitude is the first
+         answer a refused user needs; which step they already signed is
+         the answer to "why not me, again". */
+      return distinctSignatory(user, resource);
     }
 
     case "document.approve": {
