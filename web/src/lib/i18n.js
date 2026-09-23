@@ -82,6 +82,21 @@ export function t(s) {
    FRAGMENTS by pattern, leaving the numbers alone. Applied to composed
    notes and to server-composed agenda text at render time. */
 export const FRAG = [
+  /* REQ-30 — la population d'une figure de la page de valeur : la phrase
+     qui fait qu'un zéro se lit comme un zéro. Elle porte des nombres,
+     donc elle passe par ici et non par le dictionnaire. En TÊTE : les
+     motifs génériques plus bas (« against », « open ») mangeraient un
+     mot de ces phrases avant qu'elles soient reconnues. */
+  [/(\d+) case\(s\) with an expected cost, of (\d+) project\(s\)/g, "$1 cas chiffré(s), sur $2 projet(s)"],
+  [/(\d+) live of (\d+) benefit\(s\) stated/g, "$1 en vigueur sur $2 bénéfice(s) énoncé(s)"],
+  [/of (\d+) dated review\(s\)/g, "sur $1 revue(s) datée(s)"],
+  [/highest of (\d+) open risk\(s\)/g, "la plus haute de $1 risque(s) ouvert(s)"],
+  [/within (\d+) days, of (\d+) committed gate\(s\)/g, "dans les $1 jours, sur $2 porte(s) engagée(s)"],
+  [/against (\d+) project\(s\) carrying a tolerance/g, "sur $1 projet(s) portant une tolérance"],
+  /* I-4 — the criteria half of "phase advance is blocked"; precise
+     patterns first, like the rest of this table. */
+  [/(\d+) criterions? not yet found met\b/g, "$1 critère(s) pas encore constaté(s) tenu(s)"],
+  [/\bno evidence item filed\b/g, "aucune preuve déposée"],
   [/\bbehind the plan\b/g, "en retard sur le plan"],
   [/\bahead of plan\b/g, "en avance sur le plan"],
   [/\bspending faster than earning\b/g, "dépense plus vite que la valeur acquise"],
@@ -143,6 +158,165 @@ export function tData(s) {
 /* ── the dictionary ─────────────────────────────────────────────────── */
 
 export const FR = {
+  "Some business cases state no expected cost, so their spend is in no comparison either":
+    "Certains cas d'affaire n'énoncent aucun coût attendu : leur dépense n'entre dans aucune comparaison non plus",
+  "benefit-review": "revue de bénéfice",
+  "No period is closed at today's status date, so there is nothing to store this page against. Close the reporting period first — these figures are read from the book as it stands today, and a period closed on another day would carry them under a date on which they were not true.":
+    "Aucune période n'est close à la date d'état du jour : il n'y a donc rien sur quoi déposer cette page. Closez d'abord la période de rapport — ces chiffres sont lus dans le livre tel qu'il est aujourd'hui, et une période close un autre jour les porterait sous une date à laquelle ils n'étaient pas vrais.",
+  /* ── REQ-30 · la page de valeur (RT365 V-11) ───────────────────────
+     Les phrases de shared/valuepage.js arrivent à l'écran par une
+     VARIABLE — t(f.label), t(f.why) — donc la porte F5 ne peut pas les
+     voir : elles sont ajoutées ici à la main, avec les mots que les
+     données portent (bandes d'exposition, niveaux de remontée,
+     dimensions d'une exception). C'est exactement le piège de 5.14.0. */
+  "What it was worth": "Ce que ça valait",
+  "Spend against the case, benefits by status, reviews overdue, exposure, gates due and exceptions open — read from the book, nothing typed.": "La dépense contre le cas, les bénéfices par statut, les revues en retard, l'exposition, les portes à venir et les exceptions ouvertes — lus dans le livre, rien de saisi.",
+  "Spend against case": "Dépense contre le cas",
+  "Benefits by status": "Bénéfices par statut",
+  "Benefit reviews overdue": "Revues de bénéfice en retard",
+  "Top risk exposure": "Exposition la plus haute",
+  "Gates due": "Portes à venir",
+  "Exceptions open": "Exceptions ouvertes",
+  "No project is in scope for this reader": "Aucun projet dans le périmètre de ce lecteur",
+  "No project in scope carries a business case — there is nothing to set the spend against": "Aucun projet du périmètre ne porte de cas d'affaire — il n'y a rien contre quoi comparer la dépense",
+  "The business cases in scope state no expected cost, so spend cannot be compared with one": "Les cas d'affaire du périmètre n'énoncent aucun coût attendu : la dépense ne se compare à rien",
+  "No project in scope has stated a benefit — there is nothing to report by status": "Aucun projet du périmètre n'a énoncé de bénéfice — il n'y a rien à répartir par statut",
+  "No benefit carries the date it was to be realised — nothing can be overdue, which is not the same as nothing being late": "Aucun bénéfice ne porte la date à laquelle il devait être réalisé — rien ne peut être en retard, ce qui n'est pas la même chose que rien n'est en retard",
+  "No risk is open in this scope — there is no exposure to rank": "Aucun risque ouvert dans ce périmètre — il n'y a pas d'exposition à classer",
+  "No gate in scope carries a committed date — a placeholder is a position on a timeline, not a commitment": "Aucune porte du périmètre ne porte de date engagée — une date de position n'est pas un engagement",
+  "No project in scope carries a tolerance, so no exception can be raised — an empty exception register here is not a clean one": "Aucun projet du périmètre ne porte de tolérance : aucune exception ne peut donc être levée — un registre vide n'est pas ici un registre sain",
+  "No cost line has been booked against those cases — the spend is nil, not unmeasured": "Aucune écriture n'a été passée contre ces cas — la dépense est nulle, pas non mesurée",
+  "None of the dated benefit reviews is past due": "Aucune des revues datées n'est échue",
+  "No committed gate falls inside the horizon": "Aucune porte engagée ne tombe dans l'horizon",
+  "No exception is open against the tolerances that are set": "Aucune exception ouverte contre les tolérances posées",
+  "Some benefits carry no measurement yet": "Certains bénéfices ne portent pas encore de mesure",
+  "Some projects in scope carry no business case and are not in this comparison": "Certains projets du périmètre n'ont pas de cas d'affaire et ne sont pas dans cette comparaison",
+  "Issues are open too, and are counted apart from risks": "Des problèmes sont ouverts aussi, comptés à part des risques",
+  "Gates dated with a placeholder are excluded — a placeholder is not a commitment": "Les portes datées d'une position sont exclues — une position n'est pas un engagement",
+  " · Value report · as at ": " · Rapport de valeur · au ",
+  "Print this page": "Imprimer cette page",
+  "Store this page": "Déposer cette page",
+  "Store this value page": "Déposer cette page de valeur",
+  "Which page": "Quelle page",
+  "Stored figures — written down when the page was stored, not recalculated. ": "Chiffres déposés — écrits au moment du dépôt, non recalculés. ",
+  "Stored ": "Déposée le ",
+  " · scope: ": " · portée : ",
+  "That stored page could not be loaded — refresh to try again.": "Cette page déposée n'a pas pu être chargée — actualisez pour réessayer.",
+  "As at ": "Au ",
+  " · every project you can see: ": " · tous les projets que vous voyez : ",
+  " project(s), of which ": " projet(s), dont ",
+  " closed": " clos",
+  " · this page ignores the scope filter above, because the page that is stored is this one.": " · cette page ignore le filtre de portée ci-dessus, parce que la page déposée est celle-ci.",
+  "measured": "mesurée",
+  "The project-by-project table is computed from the book as it stands and is not part of what was stored, so it is not shown beside stored figures. Switch to the live page to read it.": "Le tableau projet par projet est calculé sur le livre tel qu'il est et ne fait pas partie de ce qui a été déposé : il n'est donc pas affiché à côté de chiffres déposés. Revenez à la page vivante pour le lire.",
+  "Project by project": "Projet par projet",
+  "Top exposure": "Exposition la plus haute",
+  "Next gate": "Prochaine porte",
+  "No project in scope": "Aucun projet dans le périmètre",
+  "Nothing is in your scope to report on.": "Rien dans votre périmètre à rapporter.",
+  "Generated from the book — no figure on this page was typed. ": "Engendrée depuis le livre — aucun chiffre de cette page n'a été saisi. ",
+  "Stored against ": "Déposée sur ",
+  " and readable unchanged for as long as the record lasts.": " et relisible telle quelle aussi longtemps que dure l'enregistrement.",
+  "Nothing here is on the record until this page is stored against a closed reporting period.": "Rien ici n'est enregistré tant que cette page n'est pas déposée sur une période close.",
+  "Case cost": "Coût du cas",
+  "Booked": "Engagé au grand livre",
+  "Left against the case": "Reste contre le cas",
+  "Case benefit / yr": "Bénéfice du cas / an",
+  "Spent outside any case": "Dépensé hors de tout cas",
+  "Variance": "Écart",
+  "Case standing": "Tenue du cas",
+  "Partly": "Partiellement",
+  "Ruled on": "Statués",
+  "project(s)": "projet(s)",
+  "Dated reviews": "Revues datées",
+  "Undated promises": "Promesses non datées",
+  "Longest overdue": "Retard le plus long",
+  "Was due": "Était due",
+  "Open issues": "Problèmes ouverts",
+  "portfolio-wide": "portefeuille entier",
+  "Exposure": "Exposition",
+  "Band": "Bande",
+  "Escalates to": "Remonte au",
+  "Inside the horizon": "Dans l'horizon",
+  "Already past": "Déjà échues",
+  "Dated with a placeholder": "Datées d'une position",
+  "Due": "Échéance",
+  "In": "Dans",
+  "d late": "j de retard",
+  "State": "État",
+  "Outstanding": "Manquant",
+  " evidence": " preuve(s)",
+  " criteria": " critère(s)",
+  "Projects with a tolerance": "Projets avec tolérance",
+  "Oldest open": "La plus ancienne ouverte",
+  "Schedule / cost / benefit": "Délai / coût / bénéfice",
+  "Open for": "Ouverte depuis",
+  "Reporting period": "Période de rapport",
+  "No period is closed at today's status date": "Aucune période close à la date d'état du jour",
+  "No period is closed at today's status date.": "Aucune période close à la date d'état du jour.",
+  "Close the period first (the button above), then store the page against it.": "Closez d'abord la période (le bouton ci-dessus), puis déposez la page dessus.",
+  "Why this page reads as it does — read back months later by people who were not there": "Pourquoi cette page se lit ainsi — relue des mois plus tard par des gens qui n'étaient pas là",
+  "The six figures are written down exactly as they read now — including the ones that are not measured, which are stored as absences with their reason and never as zeros. A stored page cannot be edited or deleted: a correction is a new period that restates this one, with its own page.": "Les six figures sont écrites exactement comme elles se lisent maintenant — y compris celles qui ne sont pas mesurées, déposées comme des absences avec leur raison et jamais comme des zéros. Une page déposée ne peut être ni modifiée ni supprimée : une correction est une nouvelle période qui reprend celle-ci, avec sa propre page.",
+  "Nothing to store": "Rien à déposer",
+  "Value page stored": "Page de valeur déposée",
+  "Low": "Faible",
+  "Medium": "Moyen",
+  "Steering": "Comité de pilotage",
+  "PMO": "Bureau des projets",
+  "schedule": "délai",
+  "cost": "coût",
+  "benefit": "bénéfice",
+  // ── REQ-27 · un projet passe sur l'échelle de son programme
+  "Move onto the programme's ladder": "Passer sur l'échelle du programme",
+  "See what this would do": "Voir ce que cela ferait",
+  "Adopted — kept with its date, its acceptance and its evidence": "Adopté — conservé avec sa date, son acceptation et ses preuves",
+  "Created — this rung is not on the project yet": "Créé — ce barreau n'est pas encore sur le projet",
+  "Retired — it leaves the ladder and keeps everything it carries": "Retiré — il quitte l'échelle et garde tout ce qu'il porte",
+  "Nothing is deleted. A retired gate becomes an ordinary milestone and keeps its date, its acceptance and its filed evidence.": "Rien n'est supprimé. Un jalon retiré redevient un jalon ordinaire et garde sa date, son acceptation et ses preuves déposées.",
+  "I have read what leaves the ladder": "J'ai lu ce qui quitte l'échelle",
+  "Move this project onto the ladder": "Faire passer ce projet sur l'échelle",
+  "This project is already on its programme's ladder — there is nothing to move.": "Ce projet est déjà sur l'échelle de son programme — il n'y a rien à déplacer.",
+  "Scaffolded on this many gates": "Jalons à la création",
+  "Declared by the programme": "Déclarés par le programme",
+  "These milestones already exist and simply take their place on the ladder.": "Ces jalons existent déjà et prennent simplement leur place sur l'échelle.",
+  "Scaffolded exactly as it would have been at birth: its draft evidence and the criteria the ladder declares.": "Dressé exactement comme il l'aurait été à la création : sa preuve en brouillon et les critères que l'échelle déclare.",
+  "marked done": "marqué fait",
+  "accepted by a named person": "accepté par une personne nommée",
+  "acceptance criteria posed": "des critères d'acceptation posés",
+  "filed evidence citation(s)": "preuve(s) déposée(s)",
+  "criterion(s) found met by a named reviewer": "critère(s) tenu(s) par un réviseur nommé",
+  "adopted": "adoptés",
+  "created": "créés",
+  "retired": "retirés",
+  "No period in this window carries a value \u2014 there is nothing to trend": "Aucune p\u00e9riode de cette fen\u00eatre ne porte de valeur \u2014 il n'y a rien \u00e0 mettre en tendance",
+  // ── REQ-28 · les cinq signaux de gouvernance, et pourquoi l'un d'eux ne se mesure pas
+  "Governance signals": "Signaux de gouvernance",
+  "Not measured": "Non mesuré",
+  "Decision latency": "Délai de décision",
+  "Action ageing": "Ancienneté des actions",
+  "Gate cycle time": "Durée entre portes",
+  "RAID review compliance": "Respect des revues du registre",
+  "Exception age": "Ancienneté des exceptions",
+  "No decision carries both the day it was taken and the day it was recorded": "Aucune décision ne porte à la fois le jour où elle a été prise et le jour où le registre l'a su",
+  "No action is open — there is no ageing to measure": "Aucune action n'est ouverte — il n'y a pas d'ancienneté à mesurer",
+  "No gate has been closed — there is no cycle time": "Aucune porte n'a été franchie — il n'y a pas de durée de cycle",
+  "Gates were closed without a recorded acceptance date": "Des portes ont été franchies sans date d'acceptation consignée",
+  "These projects were scaffolded under a gate ladder we cannot name": "Ces projets ont été dressés sous une échelle de portes que nous ne savons pas nommer",
+  "These cycle times come from ladders of different lengths and are not comparable": "Ces durées viennent d'échelles de longueurs différentes et ne sont pas comparables",
+  "No RAID item is open": "Aucune ligne de registre n'est ouverte",
+  "No open RAID item carries a review date": "Aucune ligne ouverte ne porte de date de revue",
+  "No exception is open — there is no age to measure": "Aucune exception n'est ouverte — il n'y a pas d'ancienneté à mesurer",
+  "One period only — a trend needs at least two": "Une seule période — une tendance en demande au moins deux",
+  "The register records the next review date, not that a review happened — there is no history": "Le registre consigne la prochaine date de revue, non qu'une revue a eu lieu — il n'y a pas d'historique",
+  "Some actions were closed without a date, so the register cannot be replayed": "Des actions ont été closes sans date : le registre ne peut pas être rejoué",
+  "Some exceptions were answered without a date, so the register cannot be replayed": "Des exceptions ont été répondues sans date : le registre ne peut pas être rejoué",
+  "Some decisions are proposed and not ratified, and no ratification date is recorded": "Des décisions sont proposées et non ratifiées, et aucune date de ratification n'est consignée",
+  "Reading the clocks the book already keeps…": "Lecture des horloges que le livre tient déjà…",
+  "since the previous period: ": "depuis la période précédente : ",
+  "Five clocks the book already keeps, as at ": "Cinq horloges que le livre tient déjà, au ",
+  ", over ": ", sur ",
+  " months. Nothing here asks anyone to type anything.": " mois. Rien ici ne demande à quiconque de saisir quoi que ce soit.",
+  "No programme has measured any of the five yet — the reasons are on the tiles above.": "Aucun programme n'a encore mesuré l'un des cinq — les raisons sont sur les tuiles ci-dessus.",
   // ── shell: navigation & titles
   "My week": "Ma semaine",
   "Portfolio": "Portefeuille",
@@ -195,6 +369,58 @@ export const FR = {
   "Expected cost": "Coût attendu",
   "Expected cost ($M)": "Coût attendu (M$)",
   "If the case no longer holds, do not reconfirm it — revise it, or take the project to the steering committee.": "Si le cas ne tient plus, ne le reconfirmez pas — révisez-le, ou portez le projet au comité de pilotage.",
+  "Is it still worth doing?": "Cela vaut-il encore la peine ?",
+  "At which gate": "À quel jalon",
+  "The verdict": "Le verdict",
+  "Continue \u2014 it still holds": "Continuer — cela tient toujours",
+  "Continue, with conditions": "Continuer, sous conditions",
+  "Stop \u2014 it is no longer worth doing": "Arrêter — cela ne vaut plus la peine",
+  "Stop is not decoration: the next gate is refused until somebody says otherwise.": "« Arrêter » n'est pas décoratif : le jalon suivant est refusé tant que personne ne dit le contraire.",
+  "Who reconfirmed it": "Qui l'a reconfirmé",
+  "The case is reconfirmed by whoever pays for it, named \u2014 not by whoever typed.": "Le cas est reconfirmé par qui paie, nommé — pas par qui a tapé.",
+  "What changed since the last one": "Ce qui a changé depuis la dernière",
+  "Read at the next gate beside the two figures: this is what makes the act useful rather than ritual.": "Lu au jalon suivant à côté des deux chiffres : c'est ce qui rend le geste utile plutôt que rituel.",
+  "Record the reconfirmation": "Enregistrer la reconfirmation",
+  "A gate cannot be passed until the case has been reconfirmed at that gate: passing a gate is the decision to carry on spending.": "Un jalon ne se franchit pas tant que le cas n'a pas été reconfirmé à ce jalon : franchir un jalon est la décision de continuer à dépenser.",
+  " \u2014 already reconfirmed": " — déjà reconfirmé",
+  "Reconfirmed at": "Reconfirmé à",
+  "Not reconfirmed at any gate yet \u2014 the next gate will ask for it.": "Reconfirmé à aucun jalon pour l'instant — le prochain jalon le demandera.",
+  "Gate ": "Jalon ",
+  " at gate ": " au jalon ",
+  "cost ": "coût ",
+  "benefit ": "bénéfice ",
+  "Benefits due to be measured": "Bénéfices à mesurer",
+  "This project is on a ladder its programme no longer declares.": "Ce projet suit une échelle que son programme ne déclare plus.",
+  "It was set up with ": "Il a été dressé avec ",
+  " gates; the programme now declares ": " jalons ; le programme en déclare aujourd'hui ",
+  ". Its dated gates and their filed evidence were deliberately left alone \u2014 but read \u201cwhat is next\u201d with that in mind.": ". Ses jalons datés et les preuves déposées ont été délibérément laissés en place — mais lisez « ce qui vient ensuite » en le sachant.",
+  "accepted by ": "accepté par ",
+  "Promised, and measured": "Promis, et mesuré",
+  "what the case said it was for, against what the benefits have actually shown": "ce à quoi le cas disait que cela servait, contre ce que les bénéfices ont réellement montré",
+  "No case written": "Aucun cas écrit",
+  "Reviews overdue": "Revues en retard",
+  "The totals above sum money only. ": "Les totaux ci-dessus n'additionnent que l'argent. ",
+  " benefit(s) are counted in their own units and deliberately left out of any total: ": " bénéfice(s) sont comptés dans leur propre unité et délibérément hors de tout total : ",
+  ". Converting them to a currency would invent a number.": ". Les convertir en une devise inventerait un nombre.",
+  "The case": "Le cas",
+  "What was measured": "Ce qui a été mesuré",
+  "benefits, but no case": "des bénéfices, mais pas de cas",
+  "nothing promised": "rien de promis",
+  "never reconfirmed": "jamais reconfirmé",
+  " \u00b7 revised since": " · révisé depuis",
+  "no benefit named yet": "aucun bénéfice nommé pour l'instant",
+  "not measured": "non mesuré",
+  "now ": "aujourd'hui ",
+  "review ": "revue ",
+  " days overdue": " jours de retard",
+  "undated": "non daté",
+  "closed": "clos",
+  "No project in scope.": "Aucun projet dans le périmètre.",
+  "Check now": "Vérifier maintenant",
+  "The sweep runs hourly on its own; this asks for it now.": "Le balayage tourne tout seul à l'heure ; ceci le demande tout de suite.",
+  " not measured": " non mesuré(s)",
+  " project(s), none of them measured yet": " projet(s), aucun mesuré pour l'instant",
+  "nothing measured to index": "rien de mesuré à indicer",
   "It still holds": "Il tient toujours",
   "Last reconfirmed": "Dernière reconfirmation",
   "Nothing here says why this project deserves its budget. Gate 1 asks for the business case as evidence — and without it, nobody can ever answer whether it still holds.": "Rien ici ne dit pourquoi ce projet mérite son budget. Le jalon 1 exige le cas d'affaire comme preuve — et sans lui, personne ne pourra jamais répondre s'il tient encore.",
@@ -1497,6 +1723,531 @@ export const FR = {
   "Risk and effort pull the score down": "Le risque et l'effort font BAISSER le score",
   "Four notes are needed — fit, value, risk and effort. An unscored project sorts last, not worst.":
     "Quatre notes sont nécessaires — adéquation, valeur, risque et effort. Un projet sans score se place en dernier, pas en pire.",
+
+  // ── I-12 · la posture du jour 1 (retour de terrain RT365)
+  "demonstration account(s) still open with the password printed in the README":
+    "compte(s) de démonstration encore ouvert(s) avec le mot de passe imprimé dans le README",
+  "Anyone who reads the repository can sign in as them. Change each password, or deactivate the account, before this instance carries anything real. In production the server refuses to start while this is true.":
+    "Quiconque lit le dépôt peut se connecter avec. Changez chaque mot de passe, ou désactivez le compte, avant que cette instance ne porte quoi que ce soit de réel. En production, le serveur refuse de démarrer tant que c'est vrai.",
+  "Closed by default, waiting on a decision":
+    "Fermé par défaut, en attente d'une décision",
+  "no trusted document host named — evidence cannot be approved":
+    "aucun hôte documentaire de confiance nommé — aucune preuve ne peut être approuvée",
+  "no mail transport — notifications queue and do not send":
+    "aucun transport de courriel — les notifications s'accumulent sans partir",
+  "no notification host named — nothing leaves the instance":
+    "aucun hôte de notification nommé — rien ne sort de l'instance",
+  "Break-glass: ":
+    "Bris de glace : ",
+  "an administrator is exempt from segregation of duties and may sign every step of a change request, including one it raised; each such signature is marked break-glass in the audit trail. Run the portfolio from named group and site accounts.":
+    "un administrateur est exempté de la séparation des tâches et peut signer chaque étape d'une demande de modification, y compris celle qu'il a émise ; chacune de ces signatures est marquée bris de glace dans la piste d'audit. Pilotez le portefeuille depuis des comptes groupe et site nommés.",
+  "you raised this request. As an administrator you may still sign it — the exemption exists for emergencies, and the audit trail will mark the signature as break-glass. Prefer having a colleague with group authority decide it.":
+    "vous avez émis cette demande. En tant qu'administrateur vous pouvez tout de même la signer — l'exemption existe pour les urgences, et la piste d'audit marquera la signature comme bris de glace. Préférez la faire décider par un collègue de niveau groupe.",
+
+  // ── I-7 / I-8 · le registre des décisions et le RAID relié (retour de terrain RT365)
+  "The agenda of the next meeting in scope asks for this item once the date has come.":
+    "L'ordre du jour du prochain comité concerné réclame cet élément une fois la date venue.",
+  "Against gate":
+    "Contre le jalon",
+  "Not linked to a gate":
+    "Sans lien avec un jalon",
+  "The gate whose passage this item puts at risk. The gate line shows how many open items stand against it.":
+    "Le jalon de gouvernance dont cet élément menace le passage. La ligne du jalon dit combien d'éléments ouverts pèsent contre lui.",
+  "Change request":
+    "Demande de modification",
+  "Not linked to a change":
+    "Sans lien avec une modification",
+  "Against gate ":
+    "Contre le jalon ",
+  "open register item(s) against it":
+    "élément(s) de registre ouvert(s) contre lui",
+  "outside a meeting":
+    "hors réunion",
+  "alternatives: ":
+    "alternatives : ",
+  "dissent: ":
+    "dissension : ",
+  "supersedes ":
+    "remplace ",
+  "Decision register":
+    "Registre des décisions",
+  "One sentence, in the past tense, that someone will read in a year without the context.":
+    "Une phrase, au passé, que quelqu'un lira dans un an sans le contexte.",
+  "Portfolio-wide (group level)":
+    "Tout le portefeuille (niveau groupe)",
+  "Decided by":
+    "Décidé par",
+  "Decided on":
+    "Décidé le",
+  "The reasoning, so the committee can read it back without the person who wrote it.":
+    "Le raisonnement, pour que le comité puisse le relire sans la personne qui l'a écrit.",
+  "Alternatives considered":
+    "Alternatives examinées",
+  "What was refused, and why. A register that keeps only the winner cannot explain the choice.":
+    "Ce qui a été écarté, et pourquoi. Un registre qui ne garde que le choix retenu n'explique pas le choix.",
+  "Dissent":
+    "Dissension",
+  "Who disagreed, and on what. Recorded dissent protects the dissenter and the decision alike.":
+    "Qui n'était pas d'accord, et sur quoi. Une dissension consignée protège autant celui qui l'exprime que la décision.",
+  "Register item":
+    "Élément de registre",
+  "Milestone or gate":
+    "Jalon",
+  "Supersedes decision":
+    "Remplace la décision",
+  "The identifier of the decision this one replaces, e.g. DEC-012. That one stays on the record.":
+    "L'identifiant de la décision que celle-ci remplace, p. ex. DEC-012. Celle-là reste au registre.",
+
+  // ── I-3 / I-4 · l'échelle de jalons et les critères (retour de terrain RT365)
+  "Default ladder":
+    "Échelle par défaut",
+  "Every programme":
+    "Tous les programmes",
+  "programme(s) with their own ladder":
+    "programme(s) avec leur propre échelle",
+  "evidence required at each gate":
+    "preuves exigées à chaque jalon",
+  "A programme declares its own ladder from Reference data → programme. Projects take their programme's ladder when they are created; changing a ladder later leaves existing projects as they are.":
+    "Un programme déclare sa propre échelle depuis Données de référence → programme. Les projets prennent l'échelle de leur programme à leur création ; changer une échelle ensuite laisse les projets existants tels quels.",
+  "Criteria for ":
+    "Critères de ",
+  "found met":
+    "constaté(s) tenu(s)",
+  "Criterion":
+    "Critère",
+  "No criterion posed for this gate. Evidence alone clears it; a criterion says what the evidence must prove.":
+    "Aucun critère posé pour ce jalon. Les preuves seules le franchissent ; un critère dit ce que la preuve doit démontrer.",
+  "found met by ":
+    "constaté tenu par ",
+  "not yet found met":
+    "pas encore constaté tenu",
+  "Found met":
+    "Constaté tenu",
+  "Reopen":
+    "Rouvrir",
+  "Edit criterion":
+    "Modifier le critère",
+  "Remove criterion":
+    "Retirer le critère",
+  "Pose a criterion":
+    "Poser un critère",
+  "What must be true":
+    "Ce qui doit être vrai",
+  "One testable sentence, written before the evidence. A reviewer will say whether it holds.":
+    "Une phrase vérifiable, écrite avant la preuve. Un réviseur dira si elle tient.",
+  "Pose":
+    "Poser",
+  "Evidence document":
+    "Document de preuve",
+  "Where to look, or why it was reformulated — read by the reviewer, months later.":
+    "Où regarder, ou pourquoi il a été reformulé — lu par le réviseur, des mois plus tard.",
+  "Save criterion":
+    "Enregistrer le critère",
+  "The evidence cited is ":
+    "La preuve citée est ",
+  ", owned by ":
+    ", détenue par ",
+  "Reviewed by":
+    "Revu par",
+  "The named person who checked it — not the owner of the evidence it cites. The name stays.":
+    "La personne nommée qui l'a vérifié — pas le propriétaire de la preuve citée. Le nom reste.",
+  "criteria":
+    "critères",
+  "Gate ladder":
+    "Échelle de jalons",
+  "One gate per line: name | owner | evidence, comma separated | position in the project window as a percentage. Leave empty for the default ladder. Projects take the ladder at creation; a later change does not rewrite them.":
+    "Un jalon par ligne : nom | propriétaire | preuves, séparées par des virgules | position dans la fenêtre du projet en pourcentage. Vide = échelle par défaut. Les projets prennent l'échelle à leur création ; un changement ultérieur ne les réécrit pas.",
+
+  // ── PM-05 / PM-11 · parties prenantes et plan de communication (I-10)
+  " named":
+    " nommée(s)",
+  " sceptical or opposed":
+    " sceptique(s) ou opposée(s)",
+  "none named":
+    "aucune nommée",
+  "Communication plan":
+    "Plan de communication",
+  " audience(s)":
+    " audience(s)",
+  " overdue":
+    " en retard",
+  "no plan":
+    "aucun plan",
+  "interest × influence, attitude, and who owns the relationship":
+    "intérêt × influence, attitude, et qui tient la relation",
+  "Stakeholder":
+    "Partie prenante",
+  "Who":
+    "Qui",
+  "Interest / influence":
+    "Intérêt / influence",
+  "Attitude":
+    "Attitude",
+  "Champion":
+    "Champion",
+  "Supporter":
+    "Soutien",
+  "Neutral":
+    "Neutre",
+  "Sceptic":
+    "Sceptique",
+  "Opponent":
+    "Opposant",
+  "Engagement":
+    "Association",
+  "Inform":
+    "Informer",
+  "Consult":
+    "Consulter",
+  "Involve":
+    "Impliquer",
+  "Partner":
+    "Associer",
+  "Owner":
+    "Responsable",
+  "No stakeholder named yet.":
+    "Aucune partie prenante nommée pour l'instant.",
+  "No stakeholder named. The most frequent cause of failure on a multi-site project leaves no trace here until somebody writes a name.":
+    "Aucune partie prenante nommée. La cause d'échec la plus fréquente d'un projet multi-sites ne laisse aucune trace ici tant que personne n'écrit un nom.",
+  "Edit stakeholder":
+    "Modifier la partie prenante",
+  "Name a stakeholder":
+    "Nommer une partie prenante",
+  "A person or an organisation — a regulator, a supplier, a works council count.":
+    "Une personne ou une organisation — un régulateur, un fournisseur, un comité d'entreprise comptent.",
+  "In the directory":
+    "Dans l'annuaire",
+  "Not in the directory":
+    "Hors annuaire",
+  "Organisation":
+    "Organisation",
+  "Role":
+    "Rôle",
+  "Interest (1–5)":
+    "Intérêt (1–5)",
+  "How much the outcome matters to them.":
+    "À quel point le résultat compte pour eux.",
+  "Influence (1–5)":
+    "Influence (1–5)",
+  "How much they can change the outcome.":
+    "À quel point ils peuvent changer le résultat.",
+  "Inform: they hear. Consult: they are asked. Involve: they shape it. Partner: they decide with you.":
+    "Informer : ils entendent. Consulter : on leur demande. Impliquer : ils façonnent. Associer : ils décident avec vous.",
+  "Relationship owner":
+    "Tient la relation",
+  "What they want, what they fear, what was agreed with them — read by whoever takes over.":
+    "Ce qu'ils veulent, ce qu'ils craignent, ce qui a été convenu avec eux — lu par qui prend la suite.",
+  "Add stakeholder":
+    "Ajouter la partie prenante",
+  "who hears what, how often, from whom":
+    "qui entend quoi, à quelle fréquence, de qui",
+  "Audience":
+    "Audience",
+  "Channel":
+    "Canal",
+  "Frequency":
+    "Fréquence",
+  "Next":
+    "Prochaine",
+  "No audience planned yet.":
+    "Aucune audience planifiée pour l'instant.",
+  "No communication planned. The meetings and the digest carry most of it in practice; the plan says who else must hear, and when.":
+    "Aucune communication planifiée. Les comités et le digest en portent l'essentiel en pratique ; le plan dit qui d'autre doit entendre, et quand.",
+  "Edit communication":
+    "Modifier la communication",
+  "Plan a communication":
+    "Planifier une communication",
+  "Who must hear: a committee, a site, a supplier, the users of a branch.":
+    "Qui doit entendre : un comité, un site, un fournisseur, les utilisateurs d'une agence.",
+  "What they need to know":
+    "Ce qu'ils doivent savoir",
+  "The message, in one line — status, a decision owed, a date that moves.":
+    "Le message, en une ligne — un état, une décision due, une date qui bouge.",
+  "weekly call, e-mail, town hall…":
+    "point hebdomadaire, courriel, réunion plénière…",
+  "weekly, at each gate, once…":
+    "hebdomadaire, à chaque jalon, une fois…",
+  "What was said last time, or what must not be said yet — read by whoever sends the next one.":
+    "Ce qui a été dit la dernière fois, ou ce qui ne doit pas encore l'être — lu par qui envoie la prochaine.",
+  "Plan it":
+    "Planifier",
+
+  // ── REQ-07 second tour · organe, preuve, provenance, statut
+  "A body, not a person (name it below)":
+    "Un organe, pas une personne (nommez-le ci-dessous)",
+  "Deciding body":
+    "Organe décideur",
+  "When a committee decided rather than one person: its name, as the minutes call it. Either a person or a body is required.":
+    "Quand c'est un comité qui a décidé plutôt qu'une personne : son nom, tel que le procès-verbal l'appelle. Une personne ou un organe est requis.",
+  "Ratified":
+    "Ratifiée",
+  "Proposed — awaiting ratification":
+    "Proposée — en attente de ratification",
+  "Record of the decision":
+    "Trace de la décision",
+  "The minutes, the gate report, the page where the decision is written down — a link a reader can open.":
+    "Le procès-verbal, le rapport de porte, la page où la décision est écrite — un lien qu'un lecteur peut ouvrir.",
+  "Provenance":
+    "Provenance",
+  "Where the authority for it comes from, in your organisation's own tags.":
+    "D'où vient son autorité, dans les étiquettes de votre organisation.",
+  "proposed":
+    "proposée",
+
+  // ── REQ-14 · la date de jalon dit sur quoi elle repose (RT365 D-057)
+  "The date is":
+    "La date est",
+  "a commitment":
+    "un engagement",
+  "a placeholder — no calendar date yet":
+    "une position — pas encore de date calendaire",
+  "A placeholder is drawn where it sits but is never reported missed or overdue; make it a commitment once the condition below has been measured.":
+    "Une position se dessine là où elle est mais n'est jamais dite manquée ni en retard ; faites-en un engagement une fois la condition ci-dessous mesurée.",
+  "Dated after":
+    "Datée après",
+  "the capacity model at gate C…":
+    "le modèle de capacité au jalon C…",
+  "The predecessor or the measurement that will produce the real date — read by whoever re-baselines.":
+    "Le prédécesseur ou la mesure qui produira la vraie date — lu par qui reposera la référence.",
+  "placeholder":
+    "position",
+  "after: ":
+    "après : ",
+
+  "Unscheduled": "Sans date",
+
+  // ── REQ-13 / REQ-18 / REQ-19 (RT365, 3e tour) — ce sur quoi une ligne
+  //    repose, et quand elle s'est close.
+  "What has to happen, or be measured, before this date can be promised.":
+    "Ce qui doit arriver, ou être mesuré, avant que cette date puisse être promise.",
+  "No condition recorded":
+    "Aucune condition consignée",
+  "The finish date is a placeholder — not a commitment.":
+    "La date de fin est un remplissage — ce n'est pas un engagement.",
+  "Not named":
+    "Non nommé",
+  "The person who answers for the business case, not for the delivery.":
+    "La personne qui répond du cas d'affaire, pas de la livraison.",
+  "What has to be true for this project to be finished. Written before it is, or it is an opinion afterwards.":
+    "Ce qui doit être vrai pour que ce projet soit fini. Écrit avant qu'il le soit, sinon ce n'est qu'un avis après coup.",
+  "safety, supply, regulatory…":
+    "sécurité, approvisionnement, réglementaire…",
+  "Your own classification, kept beside the RAID type the engine reads.":
+    "Votre propre classement, gardé à côté du genre RAID que le moteur lit.",
+  "Closed on":
+    "Close le",
+  "The day this item actually closed — stamped when it was closed here, corrected when it was closed elsewhere.":
+    "Le jour où cette ligne s'est réellement close — apposé quand on la clôt ici, corrigé quand elle a été close ailleurs.",
+  "Closed by":
+    "Close par",
+  "The person on whose word it closed.":
+    "La personne sur la parole de qui elle s'est close.",
+  "Closed — the date was not recorded":
+    "Close — la date n'a pas été consignée",
+
+  /* ── REQ-24 (V-5) · le classement du portefeuille : valeur, confiance,
+     exposition et capacité, la pondération et la ligne. Les phrases de
+     PRIORITY_TEXT arrivent par une VARIABLE et sont donc invisibles pour
+     la porte F5 : elles sont posées ici à la main, exactement comme le
+     tour 5.14.0 a dû le faire pour SIGNAL_TEXT. */
+  "Value and risk against capacity":
+    "Valeur et risque contre capacité",
+  "Not placed":
+    "Non placé",
+  "Claimed value":
+    "Valeur revendiquée",
+  "Confidence":
+    "Confiance",
+  "RAID exposure":
+    "Exposition RAID",
+  "Capacity consumed":
+    "Capacité consommée",
+  "From the business case — expected benefit a year":
+    "Du cas d'affaire — bénéfice attendu par an",
+  "From the request — the benefit its sponsor claims":
+    "De la demande — le bénéfice que son commanditaire revendique",
+  "From the business case — how far the payer trusts that figure":
+    "Du cas d'affaire — à quel point celui qui paie croit à ce chiffre",
+  "From the request — how far the sponsor trusts that figure":
+    "De la demande — à quel point le commanditaire croit à ce chiffre",
+  "The worst open RAID item, probability × impact":
+    "La pire ligne RAID ouverte, probabilité × impact",
+  "From the request — the worst thing its sponsor expects":
+    "De la demande — la pire chose que son commanditaire attend",
+  "From the allocations, averaged over the horizon":
+    "Des affectations, moyennées sur l'horizon",
+  "From the request — the people its sponsor expects to need":
+    "De la demande — les gens que son commanditaire pense qu'il faudra",
+  "No business case — this project has never said what it is worth":
+    "Aucun cas d'affaire — ce projet n'a jamais dit ce qu'il vaut",
+  "The business case states no expected benefit":
+    "Le cas d'affaire n'énonce aucun bénéfice attendu",
+  "The request states no expected benefit — a benefit in words is not a number":
+    "La demande n'énonce aucun bénéfice attendu — un bénéfice en mots n'est pas un chiffre",
+  "Nobody has recorded how far this figure is trusted":
+    "Personne n'a consigné à quel point on croit à ce chiffre",
+  "No RAID item has ever been logged here — the exposure is not known, and it is not zero":
+    "Aucune ligne RAID n'a jamais été consignée ici — l'exposition n'est pas connue, et elle ne vaut pas zéro",
+  "The request records no probability and impact for the worst thing it expects":
+    "La demande ne consigne ni probabilité ni impact pour la pire chose qu'elle attend",
+  "Nobody is allocated to this project — what it consumes is not known, and it is not zero":
+    "Personne n'est affecté à ce projet — ce qu'il consomme n'est pas connu, et cela ne vaut pas zéro",
+  "The request does not estimate the people it will take":
+    "La demande n'estime pas les gens qu'elle prendra",
+  "Ranked on all four inputs":
+    "Classé sur les quatre entrées",
+  "Missing an input — not placed in the order, and not placed last either":
+    "Une entrée manque — pas placé dans l'ordre, et pas placé en dernier non plus",
+  "Weighting":
+    "Pondération",
+  "These are the weights this software shipped with — nobody in this group has reviewed them":
+    "Ce sont les poids livrés avec ce logiciel — personne dans ce groupe ne les a revus",
+  "Set by":
+    "Posée par",
+  "Every weight is zero — nothing is being weighed, so nothing is ranked":
+    "Tous les poids sont nuls — rien n'est pesé, donc rien n'est classé",
+  "Where capacity runs out":
+    "Où la capacité s'épuise",
+  "Capacity runs out here":
+    "La capacité s'épuise ici",
+  "The capital envelope runs out here":
+    "L'enveloppe d'investissement s'épuise ici",
+  "No person in this book carries availability — there is no capacity to rank against, so no line is drawn":
+    "Personne dans ce livre ne porte de disponibilité — il n'y a pas de capacité contre laquelle classer, donc aucune ligne n'est tracée",
+  "Work that is not in this ranking already consumes the whole pool — nothing here is above the line":
+    "Le travail qui n'est pas dans ce classement consomme déjà tout le vivier — rien ici n'est au-dessus de la ligne",
+  "No capital envelope has been agreed — no money line is drawn":
+    "Aucune enveloppe d'investissement n'a été convenue — aucune ligne d'argent n'est tracée",
+  "Some ranked rows carry no cost, so a money line would understate the demand — none is drawn":
+    "Des lignes classées ne portent aucun coût : une ligne d'argent sous-estimerait la demande — aucune n'est tracée",
+  "Everything ranked fits inside the capacity":
+    "Tout ce qui est classé tient dans la capacité",
+  "The capital queue":
+    "La file d'investissement",
+  "The older V-04 queue: four hand notes from 1 to 5, live projects only, against the money alone. It is kept because the notes and the hand-placed rank are still recorded here; the ranking above is the one that reads value, confidence, exposure and capacity.":
+    "L'ancienne file V-04 : quatre notes à la main de 1 à 5, projets vivants seulement, contre l'argent seul. Elle est gardée parce que les notes et le rang posé à la main s'y consignent encore ; le classement ci-dessus est celui qui lit valeur, confiance, exposition et capacité.",
+  "Reading the book, the register and the allocations…":
+    "Lecture du livre, du registre et des affectations…",
+  " open of ":
+    " ouvertes sur ",
+  " allocations":
+    " affectations",
+  " pts × ":
+    " pts × ",
+  " available":
+    " disponibles",
+  "Row":
+    "Ligne",
+  "live project":
+    "projet vivant",
+  "request":
+    "demande",
+  "of 100":
+    "sur 100",
+  "Running capacity":
+    "Capacité cumulée",
+  "Inputs":
+    "Entrées",
+  "What is missing":
+    "Ce qui manque",
+  "No programme":
+    "Sans programme",
+  " ranked, ":
+    " classées, ",
+  " not placed":
+    " non placées",
+  "Nothing in this programme carries all four inputs yet.":
+    "Rien dans ce programme ne porte encore les quatre entrées.",
+  "Not placed. These are not ranked last and they are not ranked first — they are not in the order at all, because a rank built on an input nobody has recorded is a confident-looking guess.":
+    "Non placées. Elles ne sont ni classées dernières ni classées premières — elles ne sont pas dans l'ordre du tout, parce qu'un rang bâti sur une entrée que personne n'a consignée est une supposition qui a l'air sûre.",
+  " ranked and ":
+    " classées et ",
+  " not placed, as at ":
+    " non placées, au ",
+  "Set the weighting":
+    "Poser la pondération",
+  "Value and confidence pull a row up; exposure and the people it takes push it down. Each input is put on a 0–100 scale against the largest in the set being ranked, then weighted — so points move when the set changes, and the order of any two rows against each other does not.":
+    "La valeur et la confiance tirent une ligne vers le haut ; l'exposition et les gens qu'elle prend la poussent vers le bas. Chaque entrée est ramenée sur une échelle de 0 à 100 contre la plus grande de l'ensemble classé, puis pondérée — les points bougent donc quand l'ensemble change, et l'ordre de deux lignes l'une contre l'autre, non.",
+  "Capacity pool":
+    "Vivier de capacité",
+  " people at their availability, up to the ":
+    " personnes à leur disponibilité, jusqu'au plafond de ",
+  "% ceiling":
+    " %",
+  "Held outside this ranking":
+    "Retenue hors de ce classement",
+  "Allocated to work that is closed or could not be placed — those people are busy whether or not their project has been scored.":
+    "Affectée à du travail clos ou impossible à placer — ces gens sont pris que leur projet ait été noté ou non.",
+  "Available to this ranking":
+    "Disponible pour ce classement",
+  "Over the next ":
+    "Sur les ",
+  " days, from ":
+    " prochains jours, du ",
+  " to ":
+    " au ",
+  "Capital envelope":
+    "Enveloppe d'investissement",
+  "The second line: the running cost crosses it, or the people run out first.":
+    "La seconde ligne : le coût cumulé la franchit, ou bien les gens manquent avant.",
+  "before the first row":
+    "avant la première ligne",
+  "Nothing is competing for capacity: no live project and no open request.":
+    "Rien ne se dispute la capacité : aucun projet vivant et aucune demande ouverte.",
+  "That request is still loading — try again in a moment.":
+    "Cette demande charge encore — réessayez dans un instant.",
+  "Inputs: ":
+    "Entrées : ",
+  "Expected benefit a year (M)":
+    "Bénéfice attendu par an (M)",
+  "The number, not the words. Leave it empty rather than guessing — an empty claim keeps the request out of the order; a guessed one moves it up it.":
+    "Le chiffre, pas les mots. Laissez vide plutôt que de deviner — une revendication vide tient la demande hors de l'ordre ; une revendication devinée l'y fait monter.",
+  "Confidence in that figure 1–5":
+    "Confiance dans ce chiffre 1–5",
+  "How far the sponsor would stand behind it. Nobody can compute this, so nothing here computes it.":
+    "À quel point le commanditaire s'en porterait garant. Personne ne peut le calculer, donc rien ici ne le calcule.",
+  "People it will take (FTE)":
+    "Gens que cela prendra (ETP)",
+  "Averaged over the ranking horizon, in the same unit as the allocations a project carries.":
+    "Moyennés sur l'horizon du classement, dans l'unité même des affectations que porte un projet.",
+  "Worst case — probability 1–5":
+    "Pire cas — probabilité 1–5",
+  "Worst case — impact 1–5":
+    "Pire cas — impact 1–5",
+  "The same 1–5 scale the RAID register uses, so a request and a live project are exposed on one scale.":
+    "L'échelle 1–5 du registre RAID, pour qu'une demande et un projet vivant s'exposent sur une seule échelle.",
+  "Ranking inputs saved":
+    "Entrées du classement enregistrées",
+  "Exposure comes from this project's RAID register and the capacity from its allocations — both are edited on the project, not here, because a second place to state them is a second answer.":
+    "L'exposition vient du registre RAID de ce projet et la capacité de ses affectations — les deux se modifient sur le projet, pas ici : un second endroit pour les énoncer serait une seconde réponse.",
+  "Why this deserves its budget":
+    "Pourquoi cela mérite son budget",
+  "The payer's justification, read back at every gate.":
+    "La justification de celui qui paie, relue à chaque jalon.",
+  "Expected cost (M)":
+    "Coût attendu (M)",
+  "The claimed value the ranking reads. Empty keeps this project out of the order rather than placing it at the bottom of it.":
+    "La valeur revendiquée que lit le classement. Vide tient ce projet hors de l'ordre plutôt que de le placer au bas de celui-ci.",
+  "How far the payer would stand behind it. Nobody can compute this, so nothing here computes it.":
+    "À quel point celui qui paie s'en porterait garant. Personne ne peut le calculer, donc rien ici ne le calcule.",
+  "The weighting":
+    "La pondération",
+  "Weights are shares of their own total, so 40/20/20/20 and 4/2/2/2 are the same weighting. Saving re-ranks every programme immediately.":
+    "Les poids sont des parts de leur propre total : 40/20/20/20 et 4/2/2/2 sont la même pondération. Enregistrer reclasse tous les programmes immédiatement.",
+  "What the business case, or the request, says it is worth a year.":
+    "Ce que le cas d'affaire, ou la demande, dit que cela vaut par an.",
+  "How far the person who claimed that figure would stand behind it.":
+    "À quel point celui qui a revendiqué ce chiffre s'en porterait garant.",
+  "The worst open item, probability × impact. Pushes a row down.":
+    "La pire ligne ouverte, probabilité × impact. Pousse une ligne vers le bas.",
+  "The people it takes over the horizon. Pushes a row down.":
+    "Les gens qu'elle prend sur l'horizon. Pousse une ligne vers le bas.",
+  "Why these weights":
+    "Pourquoi ces poids",
+  "Read months later by somebody who disagrees with a rank. A weighting whose reason is not written is a verdict.":
+    "Lu des mois plus tard par quelqu'un qui conteste un rang. Une pondération dont la raison n'est pas écrite est un verdict.",
+  "Weighting set":
+    "Pondération posée",
 };
 
 /* ── enregistrement des dictionnaires ─────────────────────────────────

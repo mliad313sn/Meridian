@@ -9,6 +9,7 @@
 import { test, before, after, describe } from "node:test";
 import assert from "node:assert/strict";
 import { boot, shutdown, as } from "./harness.js";
+import { many } from "../src/db.js";
 import { buildAgenda, nextOccurrenceDate, periodLabel, seriesProjects } from "../../shared/meetings.js";
 import { iso, addDays, D } from "../../shared/engine.js";
 
@@ -145,6 +146,52 @@ describe("agenda generation (R5.2, R5.3, R5.9)", () => {
         assert.match(item.headline, /LATAM/, "no other site's project may appear");
       }
     }
+  });
+
+  /* REQ-19, after REQ-14. A placeholder finish is a POSITION on the
+     timeline waiting for the measurement that will produce the real
+     date. The agenda used to tell a steering meeting it was "42d late",
+     which sends a room after a slip nobody promised not to have. */
+  test("a project whose finish is a placeholder is never called late in the agenda", () => {
+    const book = (dateBasis) => {
+      const db = emptyBook();
+      db.programmes = [{ id: "PG", name: "Renewal", site: null }];
+      db.projects = [{
+        id: "P1", name: "Ledger replacement", programme: "PG", site: null,
+        start: "2026-01-05", finish: "2026-03-31", budget: 1_000_000,
+        phase: "Delivery", dateBasis, condition: dateBasis === "placeholder"
+          ? "after the capacity model at gate C" : "",
+        healthOverride: null, contingency: 0,
+      }];
+      /* Half-done work that should have finished: PV runs to today, EV
+         stops at 20 % — an SPI a long way under the red threshold, and a
+         forecast finish well beyond the planned one. */
+      db.activities = [{
+        id: "A1", project: "P1", name: "Migrate the ledger",
+        baseStart: "2026-01-05", baseEnd: "2026-03-31",
+        start: "2026-01-05", end: "2026-03-31", pct: 20, weight: 1, deps: [],
+      }];
+      db.ledger = [{ id: "L1", project: "P1", date: "2026-06-01", amount: 900_000,
+        kind: "Actual", source: "plan" }];
+      return db;
+    };
+
+    const agendaFor = (db) => buildAgenda(
+      db, { id: "S", cadence: "weekly", scopeKind: "group", timeboxMin: 20 },
+      { id: "O", meetsOn: "2026-07-01" }, []);
+
+    const committed = agendaFor(book("committed")).sections.find((x) => x.key === "exceptions");
+    assert.ok(committed, "a project this far behind belongs on the agenda whatever its date rests on");
+    assert.match(committed.items[0].detail, /\d+d late/,
+      "a date somebody committed to, and missed, is still reported late");
+
+    const placeholder = agendaFor(book("placeholder")).sections.find((x) => x.key === "exceptions");
+    assert.ok(placeholder, "it is still off track — the verdict on the DATE is what changes");
+    assert.doesNotMatch(placeholder.items[0].detail, /\d+d late/,
+      "nobody promised this date, so nothing about it is late");
+    assert.match(placeholder.items[0].detail, /forecast finish/,
+      "the forecast is still worth saying — it is the verdict that is withdrawn");
+    assert.match(placeholder.items[0].detail, /placeholder, not a commitment/);
   });
 
   test("nothing outstanding still produces a section that says so", () => {
@@ -352,3 +399,48 @@ function emptyBook() {
     columns: [], allocations: [], narrative: {},
   };
 }
+
+/**
+ * E-8 — la même décision, consignée deux fois dans la même séance.
+ *
+ * Constaté par mesure, sur la route que l'écran emploie : deux POST
+ * identiques, deux lignes, et le procès-verbal porte la décision deux
+ * fois. Le chemin par identifiant externe était gardé depuis I-2 ; la
+ * route de session ne l'était pas.
+ */
+describe("E-8 · un procès-verbal ne porte pas deux fois la même ligne", () => {
+  test("la même décision et la même action, deux fois dans la même séance, sont refusées", async () => {
+    const pmo = await as("pmo");
+    const s = await nextOf(pmo, GROUP_MONTHLY);
+    const id = s.next.id;
+    await pmo.post(`/api/meetings/occurrences/${id}/open`);
+
+    const headline = "E-8 · the corridor test date holds";
+    const first = await pmo.post(`/api/meetings/occurrences/${id}/decisions`, { headline });
+    assert.equal(first.status, 201, first.text);
+    const again = await pmo.post(`/api/meetings/occurrences/${id}/decisions`, { headline });
+    assert.equal(again.status, 409, again.text);
+    assert.match(again.body.error, /already recorded in this meeting/);
+    const rows = await many(
+      `SELECT id FROM meeting_decision WHERE occurrence_id = $1 AND headline = $2`, [id, headline]);
+    assert.equal(rows.length, 1, "une décision, une ligne");
+
+    const title = "E-8 · confirm the corridor slot with the vendor";
+    const a1 = await pmo.post(`/api/meetings/occurrences/${id}/actions`, { title, owner: "PE-14" });
+    assert.equal(a1.status, 201, a1.text);
+    const a2 = await pmo.post(`/api/meetings/occurrences/${id}/actions`, { title, owner: "PE-14" });
+    assert.equal(a2.status, 409, a2.text);
+    assert.match(a2.body.error, /already raised in this meeting/);
+
+    /* La portée du garde est LA SÉANCE : la même phrase reste
+       légitimement consignable dans une séance ultérieure — c'est le cas
+       normal d'un point revu, et le casser serait pire que le doublon. */
+    await pmo.post(`/api/meetings/occurrences/${id}/close`);
+    const s2 = await nextOf(pmo, GROUP_MONTHLY);
+    if (s2.next && s2.next.id !== id) {
+      await pmo.post(`/api/meetings/occurrences/${s2.next.id}/open`);
+      const later = await pmo.post(`/api/meetings/occurrences/${s2.next.id}/decisions`, { headline });
+      assert.equal(later.status, 201, "la même décision, une autre séance : c'est un point revu");
+    }
+  });
+});

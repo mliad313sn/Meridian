@@ -14,10 +14,16 @@ import { many, one, tx, updateVersioned, allocateId, insertMany, requiredVersion
 import { can, canSeeProject } from "../../../shared/rbac.js";
 import { audited, readAudit, record } from "../audit.js";
 import { HttpError } from "../auth.js";
-import { loadPortfolio, projectFor, fromM, toM, loadSettings } from "../portfolio.js";
+import { loadPortfolio, projectFor, fromM, toM, loadSettings, loadWeighting } from "../portfolio.js";
 import { adoptionBySite } from "../adoption.js";
 import { Engine, GATES, PHASES, LESSON_CATEGORIES, iso, addDays, days, D } from "../../../shared/engine.js";
 import { scaffoldProject, reschedule, phaseFor } from "../wbs.js";
+import { ladderLength } from "../v1write.js";
+import { assertPlantWindow } from "../plant.js";
+import { sweepExceptions } from "../exceptions.js";
+import { isEvidenceLocator, EVIDENCE_REFUSAL } from "../evidence.js";
+import { assertCaseReconfirmed, deltaAgainst, reconfirmationsFor } from "../value.js";
+import { prioritise, INPUTS } from "../../../shared/prioritise.js";
 
 
 const r = Router();
@@ -50,6 +56,38 @@ function visible(user, p) {
   if (!canSeeProject(user, p)) throw new HttpError(404, "No such project");
   return p;
 }
+/**
+ * An ISO calendar date the caller stated, or nothing at all.
+ *
+ * `undefined` and `""` mean "I am not telling you" — the caller gets the
+ * default the route chooses. A malformed date is REFUSED rather than
+ * coerced: `new Date("last tuesday")` is Invalid Date, and a clock built
+ * on one reads as a null that nobody meant to write.
+ */
+function isoDay(v, what) {
+  if (v === undefined || v === null || v === "") return null;
+  const s = String(v).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s) || !Number.isFinite(D(s).getTime())) {
+    bad(`${what} must be an ISO date (YYYY-MM-DD)`);
+  }
+  return s;
+}
+/**
+ * The person a governance act is recorded under.
+ *
+ * The name that stays on the record is a PERSON of the directory — the
+ * rule `accepted_by` (032) and `closed_by` (045) already follow — and it
+ * defaults to the person behind the account doing it. The audit trail
+ * carries the account either way, so this is the human name, not the
+ * login. An account with no person attached records no name rather than
+ * a false one.
+ */
+async function personOrSelf(user, stated, what) {
+  if (stated === undefined || stated === null || stated === "") return user.personId ?? null;
+  const who = await one(`SELECT id FROM person WHERE id = $1 AND active`, [String(stated)]);
+  if (!who) bad(`${what} must be an active person in the directory`);
+  return who.id;
+}
 /** AD-6 — a version mismatch is a 409 the client resolves by re-reading. */
 function conflict(result) {
   if (!result.ok) throw new HttpError(409, "Someone else changed this record — reload and try again");
@@ -71,6 +109,37 @@ function assertLocalOrigin(row, what) {
    GREATER than everything, so `CHECK (budget >= 0)` waves it straight
    through — after which every derived figure on that project (SPI, CPI,
    EAC, the RAG, the published period) is NaN, silently and for good. */
+/* REQ-14 — ce que vaut une date de jalon : un engagement, ou une position
+   en attendant la mesure qui produira la vraie date (RT365 D-057). */
+const dateBasis = (v) => {
+  if (v === undefined || v === null || v === "") return "committed";
+  if (!["committed", "placeholder"].includes(v)) bad("dateBasis is committed or placeholder");
+  return v;
+};
+/* I-8 — un lien vers un jalon de gouvernance est un numéro dans l'échelle
+   du programme ; vide veut dire « aucun ». */
+const gateLink = (v) => {
+  if (v === undefined || v === null || v === "") return null;
+  const n = Number(v);
+  if (!Number.isInteger(n) || n < 1) bad("The gate is the rank of a gate in the programme's ladder — a whole number");
+  return n;
+};
+/* …et un lien vers une modification doit exister ET appartenir au même
+   projet : relier un risque de Toronto à une modification de Singapour
+   ne veut rien dire, et un identifiant deviné ne doit rien révéler. */
+/* …et un numéro de jalon doit exister dans l'échelle du programme (I-3) :
+   « contre le jalon 9 » sur un programme à quatre jalons ne veut rien dire. */
+async function assertGateExists(projectId, gateN) {
+  const n = await ladderLength(projectId);
+  if (gateN > n) bad(`Gate ${gateN} does not exist — this project's programme has ${n} gates`);
+}
+async function crLink(v, projectId) {
+  if (v === undefined || v === null || v === "") return null;
+  const cr = await one(`SELECT id, project_id FROM change_request WHERE id = $1`, [String(v)]);
+  if (!cr || (projectId && cr.project_id !== projectId)) bad("That change request does not exist on this project");
+  return cr.id;
+}
+
 const num = (v, fallback = 0) => {
   if (v === undefined || v === null || v === "") return fallback;
   const n = Number(v);
@@ -144,6 +213,13 @@ r.post("/projects", async (req, res, next) => {
 
     if (!b.start || !b.finish) bad("A project needs a start and a finish date");
     if (D(b.finish) < D(b.start)) bad("A project cannot finish before it starts");
+    /* REQ-19 (045) — la date de fin dit sur quoi elle repose, comme celle
+       d'un jalon depuis REQ-14. La même règle des deux côtés : ce que
+       l'API accepte, l'écran l'écrit, sinon l'un des deux chemins ment. */
+    if (b.dateBasis !== undefined && !["committed", "placeholder"].includes(b.dateBasis)) {
+      bad("dateBasis is committed or placeholder");
+    }
+    const basis = b.dateBasis === "placeholder" ? "placeholder" : "committed";
 
     let id = null;
     await audited(req.user,
@@ -159,11 +235,13 @@ r.post("/projects", async (req, res, next) => {
           `INSERT INTO project
              (id, name, programme_id, site_id, governance_level, pm_id, method,
               start_date, finish_date, baseline_finish, budget, contingency,
-              description, phase)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'Initiation')`,
+              description, phase, date_basis, condition, sponsor_id, acceptance_criteria)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'Initiation',$14,$15,$16,$17)`,
           [id, b.name, b.programme, b.site, level, b.pm ?? null, b.method ?? "Hybrid",
            b.start, b.finish, b.baselineFinish ?? b.finish,
-           fromM(num(b.budget)), fromM(num(b.contingency)), b.desc ?? ""]
+           fromM(num(b.budget)), fromM(num(b.contingency)), b.desc ?? "",
+           basis, String(b.condition ?? "").slice(0, 500),
+           b.sponsor || null, String(b.acceptanceCriteria ?? "").slice(0, 4000)]
         );
         /* The schedule, the four gates, their evidence and the project
            manager's own allocation come with the project. A bare project
@@ -215,6 +293,17 @@ r.patch("/projects/:id", async (req, res, next) => {
     if (b.governanceLevel !== undefined) patch.governance_level = b.governanceLevel;
     if (b.programme !== undefined) patch.programme_id = b.programme;
     if (b.site !== undefined) patch.site_id = b.site;
+    /* REQ-19 (045) — ce sur quoi la date repose, qui répond du cas
+       d'affaire, et ce que « fini » voudra dire. */
+    if (b.dateBasis !== undefined) {
+      if (!["committed", "placeholder"].includes(b.dateBasis)) bad("dateBasis is committed or placeholder");
+      patch.date_basis = b.dateBasis;
+    }
+    if (b.condition !== undefined) patch.condition = String(b.condition ?? "").slice(0, 500);
+    if (b.sponsor !== undefined) patch.sponsor_id = b.sponsor || null;
+    if (b.acceptanceCriteria !== undefined) {
+      patch.acceptance_criteria = String(b.acceptanceCriteria ?? "").slice(0, 4000);
+    }
 
     /* Moving the window re-stretches the activities but leaves the
        baseline alone: re-planning is not re-baselining, and merging the
@@ -267,7 +356,7 @@ r.patch("/projects/:id", async (req, res, next) => {
         const rv = conflict(await updateVersioned(t, "project", p.id, requiredVersion(b, "project"), patch));
         if (shifted) {
           const fresh = (await t.query(
-            `SELECT id, method, start_date, finish_date FROM project WHERE id = $1`, [p.id])).rows[0];
+            `SELECT id, method, start_date, finish_date, date_basis FROM project WHERE id = $1`, [p.id])).rows[0];
           const acts = (await t.query(
             `SELECT id, stage FROM activity WHERE project_id = $1`, [p.id])).rows;
           const restretched = reschedule({
@@ -279,10 +368,18 @@ r.patch("/projects/:id", async (req, res, next) => {
               `UPDATE activity SET start_date = $2, end_date = $3, row_version = row_version + 1
                 WHERE id = $1`, [m.id, m.start, m.end]);
           }
-          await t.query(`UPDATE project SET phase = $2 WHERE id = $1`, [
-            p.id,
-            phaseFor({ start: fresh.start_date, finish: fresh.finish_date }, statusToday),
-          ]);
+          /* REQ-19 — `phaseFor` lit la fraction de la fenêtre écoulée
+             AUJOURD'HUI : sur une date de fin qui n'est qu'une position,
+             elle ferait glisser le projet en Transition puis en Closure
+             toute seule, sur une date que personne n'a promise. Une
+             position n'avance pas une phase ; la phase reste où la
+             gouvernance l'a mise, et se lève à la porte. */
+          if (fresh.date_basis !== "placeholder") {
+            await t.query(`UPDATE project SET phase = $2 WHERE id = $1`, [
+              p.id,
+              phaseFor({ start: fresh.start_date, finish: fresh.finish_date }, statusToday),
+            ]);
+          }
         }
         return rv;
       });
@@ -441,9 +538,10 @@ r.post("/milestones", async (req, res, next) => {
         const n = await allocateId(t, "MS");
         id = p.id + "-M" + n.split("-")[1];
         return t.query(
-          `INSERT INTO milestone (id, project_id, name, due_date, base_date, gate, kind, owner_id, intrusive)
-           VALUES ($1,$2,$3,$4,$4,NULL,'milestone',$5,$6)`,
-          [id, p.id, b.name, b.date, b.owner ?? p.pm_id ?? null, !!b.intrusive]);
+          `INSERT INTO milestone (id, project_id, name, due_date, base_date, gate, kind, owner_id, intrusive, date_basis, condition)
+           VALUES ($1,$2,$3,$4,$4,NULL,'milestone',$5,$6,$7,$8)`,
+          [id, p.id, b.name, b.date, b.owner ?? p.pm_id ?? null, !!b.intrusive,
+           dateBasis(b.dateBasis), String(b.condition ?? "").slice(0, 500)]);
       });
     res.status(201).json({ id });
   } catch (e) { next(e); }
@@ -476,10 +574,42 @@ r.patch("/milestones/:id", async (req, res, next) => {
         patch.accepted_by = b.acceptedBy;
         patch.accepted_on = iso(new Date());
       }
-      if (!patch.done) { patch.accepted_by = null; patch.accepted_on = null; }
+      /* REQ-45 (049) — mesuré sur le livre de démonstration : VINGT-QUATRE
+         portes sur vingt-quatre cochées `done` sans aucune date, parce que
+         la ligne ci-dessus n'écrit que sur une porte À CRITÈRES. Une porte
+         sans critères n'a rien à accepter — et le produit ne savait donc
+         pas dire QUAND il avait franchi la plupart de ses portes.
+
+         Ce couple-ci est le plus faible des deux, et c'est voulu : il dit
+         qu'on a coché, ce jour-là, sous ce nom. `accepted_on` continue de
+         dire qu'un nommé a CONSTATÉ des critères posés d'avance ; élargir
+         cette colonne-là aurait effacé la distinction que la 032 tient.
+
+         Seulement sur la TRANSITION : re-cocher une porte déjà cochée ne
+         la coche pas aujourd'hui, et une ligne cochée avant la 049 garde
+         sa date nulle — on ne rétro-date pas. */
+      if (patch.done && !m.done) {
+        patch.done_on = isoDay(b.doneOn, "doneOn") ?? iso(new Date());
+        patch.done_by = await personOrSelf(req.user, b.doneBy, "doneBy");
+      }
+      if (!patch.done) {
+        patch.accepted_by = null; patch.accepted_on = null;
+        /* Un jalon qui n'est pas fait ne l'a pas été un jour donné : la
+           même symétrie que la réouverture d'une ligne de registre (045). */
+        patch.done_on = null; patch.done_by = null;
+      }
     }
     if (b.owner !== undefined) patch.owner_id = b.owner || null;
     if (b.intrusive !== undefined) patch.intrusive = !!b.intrusive;
+    /* REQ-14 — a placeholder becomes a commitment when the condition
+       that produces the date has been measured; the reverse is allowed
+       too, and both are audited like any milestone change. */
+    if (b.dateBasis !== undefined) patch.date_basis = dateBasis(b.dateBasis);
+    if (b.condition !== undefined) patch.condition = String(b.condition ?? "").slice(0, 500);
+    /* REQ-22 (V-3) — franchir un jalon de gouvernance est la décision de
+       continuer à dépenser : le cas doit avoir été reconfirmé à CE jalon.
+       Lu ici, avant toute transaction (garde de db.js). */
+    if (b.done !== undefined) await assertCaseReconfirmed(p, m, { done: !!b.done });
     /* Moving a cutover, or newly marking one as intrusive, asks the same
        freeze question the original planning did. */
     const wantsIntrusive = b.intrusive === undefined ? m.intrusive : !!b.intrusive;
@@ -801,6 +931,11 @@ r.post("/raid", async (req, res, next) => {
     if (!b.title) bad("An item needs a title");
     const kind = ["Risk", "Issue", "Assumption", "Dependency"].includes(b.type) ? b.type : "Risk";
     const prefix = { Risk: "RSK", Issue: "ISS", Assumption: "ASM", Dependency: "DEP" }[kind];
+    /* I-8 — résolu AVANT la transaction : le garde de db.js refuse, à
+       raison, une lecture hors de la transaction ouverte. */
+    const crId = await crLink(b.cr, b.project || null);
+    const gateN = gateLink(b.gate);
+    if (gateN && b.project) await assertGateExists(b.project, gateN);
 
     let id = null;
     await audited(req.user,
@@ -811,14 +946,20 @@ r.post("/raid", async (req, res, next) => {
         return t.query(
           `INSERT INTO raid_item
              (id, project_id, kind, title, detail, probability, impact, status, response, owner_id, opened_on, review_on, origin_site,
-              target_probability, target_impact)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,'Open',$8,$9,CURRENT_DATE,$10,$11,$12,$13)`,
+              target_probability, target_impact, gate, cr_id, category)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,'Open',$8,$9,CURRENT_DATE,$10,$11,$12,$13,$14,$15,$16)`,
           [id, b.project || null, kind, b.title, b.detail ?? "",
            Math.max(1, Math.min(5, num(b.p, 3))), Math.max(1, Math.min(5, num(b.i, 3))),
            b.response ?? "Monitor", b.owner ?? null, b.review ?? null, originSite,
            /* PM-06 — la cible résiduelle dès la levée, quand elle est connue. */
            b.tp === undefined || b.tp === "" || b.tp === null ? null : Math.max(1, Math.min(5, num(b.tp))),
-           b.ti === undefined || b.ti === "" || b.ti === null ? null : Math.max(1, Math.min(5, num(b.ti)))]);
+           b.ti === undefined || b.ti === "" || b.ti === null ? null : Math.max(1, Math.min(5, num(b.ti))),
+           /* I-8 — contre quoi ce risque se lève : le jalon de gouvernance
+              qu'il menace, la modification qui le porte. */
+           gateN, crId,
+           /* REQ-13 — le mot du registre qui tient cette ligne, à côté du
+              nôtre : `kind` reste le contrat que le moteur lit. */
+           String(b.category ?? "").slice(0, 120)]);
       });
     res.status(201).json({ id });
   } catch (e) { next(e); }
@@ -846,10 +987,42 @@ r.patch("/raid/:id", async (req, res, next) => {
       b.tp === "" || b.tp === null ? null : Math.max(1, Math.min(5, num(b.tp)));
     if (b.ti !== undefined) patch.target_impact =
       b.ti === "" || b.ti === null ? null : Math.max(1, Math.min(5, num(b.ti)));
-    if (b.status !== undefined) patch.status = b.status === "Closed" ? "Closed" : "Open";
+    if (b.category !== undefined) patch.category = String(b.category ?? "").slice(0, 120);
+    if (b.status !== undefined) {
+      patch.status = b.status === "Closed" ? "Closed" : "Open";
+      /* REQ-18 — mesuré par l'intégrateur sur le chemin de l'API, et le
+         même trou ici : l'écran fermait une ligne sans jamais dire QUAND
+         ni SUR LA PAROLE DE QUI. Une clôture sans date n'est pas une
+         clôture, c'est un état courant sans histoire. Le nom est celui de
+         la PERSONNE derrière le compte (`person_id`) — la piste d'audit
+         porte déjà le compte ; ce qui reste au registre est le nom. */
+      if (patch.status === "Closed" && item.status !== "Closed") {
+        patch.closed_on = b.closedOn || iso(new Date());
+        patch.closed_by = b.closedBy || req.user.personId || null;
+      }
+      /* Rouvrir efface les deux : une ligne ouverte n'a pas de clôture,
+         et garder la vieille date serait le mensonge symétrique. */
+      if (patch.status === "Open" && item.status === "Closed") {
+        patch.closed_on = null;
+        patch.closed_by = null;
+      }
+    }
+    /* Rectifier la clôture d'une ligne déjà close : ce sont des faits
+       consignés, pas des verrous. */
+    if (b.closedOn !== undefined && patch.closed_on === undefined) {
+      patch.closed_on = b.closedOn || null;
+    }
+    if (b.closedBy !== undefined && patch.closed_by === undefined) {
+      patch.closed_by = b.closedBy || null;
+    }
     if (b.response !== undefined) patch.response = b.response;
     if (b.owner !== undefined) patch.owner_id = b.owner || null;
     if (b.review !== undefined) patch.review_on = b.review || null;
+    if (b.gate !== undefined) {
+      patch.gate = gateLink(b.gate);
+      if (patch.gate && item.project_id) await assertGateExists(item.project_id, patch.gate);
+    }
+    if (b.cr !== undefined) patch.cr_id = await crLink(b.cr, item.project_id);
 
     const out = await audited(req.user,
       { action: b.status === "Closed" ? "Item closed" : "Item updated",
@@ -873,6 +1046,184 @@ r.delete("/raid/:id", async (req, res, next) => {
         detail: item.title, before: { ...item } },
       async (t) => t.query(`DELETE FROM raid_item WHERE id = $1`, [item.id]));
     res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
+/* ── REQ-46 (050) · une revue est un ÉVÉNEMENT ─────────────────────────
+   `raid_item.review_on` portait la PROCHAINE revue, et faire une revue
+   avançait la date — ce qui effaçait la seule preuve qu'il y en avait eu
+   une. La conformité était donc énonçable aujourd'hui et impossible pour
+   le mois dernier, sur n'importe quel livre, à jamais.
+
+   Ici, une revue s'inscrit : un jour, une personne, ce qui a été dit, ce
+   qui était dû, et quand la suivante l'est. La colonne du registre reste
+   ce qu'elle était et devient la PROJECTION de la dernière revue —
+   dérivée, non remplacée. Poser `review` directement reste possible et
+   reste un autre geste : PLANIFIER la première revue n'affirme pas que
+   quelqu'un a regardé quoi que ce soit. */
+
+/** Le registre auquel cette ligne appartient, et l'autorité d'y écrire. */
+async function raidItemFor(id, user, { write = false } = {}) {
+  const item = await one(`SELECT * FROM raid_item WHERE id = $1`, [id]);
+  if (!item) throw new HttpError(404, "No such item");
+  if (item.project_id) {
+    const p = await project(item.project_id, user);
+    if (write) gate(user, "raid.write", { project: p });
+  } else if (write) {
+    /* Aucun rôle écrit à la main ici : la règle des lignes de
+       portefeuille est dite une fois, dans shared/rbac.js. */
+    gate(user, "raid.write", {});
+  }
+  return item;
+}
+
+/**
+ * La date de prochaine revue du registre, RECALCULÉE depuis les revues
+ * qui subsistent.
+ *
+ * Elle s'écrit sous `updateVersioned` comme toute ligne mutable, mais la
+ * version assertée est celle lue DANS la transaction et non celle que
+ * l'appelant tenait : ce n'est pas une valeur qu'il a lue puis remplacée,
+ * c'est une conséquence de l'événement qu'il vient d'inscrire. Ce que sa
+ * version garde, c'est la revue elle-même (`requiredVersion` plus bas).
+ *
+ * `fallback` sert au retrait de la DERNIÈRE revue : la date qui redevient
+ * due est celle que cette revue avait trouvée en place — sans quoi
+ * annuler une revue laisserait le registre sans échéance du tout.
+ */
+async function reprojectNextReview(t, itemId, fallback = null) {
+  const cur = (await t.query(`SELECT row_version, review_on FROM raid_item WHERE id = $1`, [itemId])).rows[0];
+  const last = (await t.query(
+    `SELECT next_review_on FROM raid_review WHERE raid_id = $1
+      ORDER BY reviewed_on DESC, recorded_at DESC, id DESC LIMIT 1`, [itemId])).rows[0];
+  const next = last ? (last.next_review_on ?? null) : (fallback ?? null);
+  if (String(cur.review_on ?? "") === String(next ?? "")) return next;   // rien n'a bougé
+  await updateVersioned(t, "raid_item", itemId, cur.row_version, { review_on: next });
+  return next;
+}
+
+const asReview = (v) => ({
+  id: v.id, item: v.raid_id,
+  reviewedOn: v.reviewed_on, reviewedBy: v.reviewed_by ?? null,
+  reviewedByName: v.reviewed_by_name ?? null,
+  note: v.note ?? "",
+  /* Ce qui était dû quand la revue a eu lieu, et ce qui l'est ensuite :
+     le triplet dont la conformité se lit sans rejouer le registre. */
+  dueOn: v.due_on ?? null, nextReviewOn: v.next_review_on ?? null,
+  onTime: v.due_on ? v.reviewed_on <= v.due_on : null,
+  recordedBy: v.recorded_by ?? null, recordedAt: v.recorded_at,
+  version: v.row_version,
+});
+
+const reviewsOf = async (itemId) => (await many(
+  `SELECT v.*, p.name AS reviewed_by_name
+     FROM raid_review v LEFT JOIN person p ON p.id = v.reviewed_by
+    WHERE v.raid_id = $1
+    ORDER BY v.reviewed_on DESC, v.recorded_at DESC, v.id DESC`, [itemId])).map(asReview);
+
+/** Les revues d'une ligne, la plus récente d'abord. */
+r.get("/raid/:id/reviews", async (req, res, next) => {
+  try {
+    const item = await raidItemFor(req.params.id, req.user);
+    res.json({ item: item.id, review: item.review_on, reviews: await reviewsOf(item.id) });
+  } catch (e) { next(e); }
+});
+
+/** Enregistrer une revue : elle a eu lieu, ce jour-là, par quelqu'un. */
+r.post("/raid/:id/reviews", async (req, res, next) => {
+  try {
+    const item = await raidItemFor(req.params.id, req.user, { write: true });
+    const b = req.body ?? {};
+    const on = isoDay(b.on, "on") ?? iso(new Date());
+    const next = isoDay(b.next, "next");
+    /* Une revue ne prépare pas la suivante pour hier : la date qu'elle
+       pose est postérieure au jour où elle a eu lieu, sinon elle naît en
+       retard et le registre se met à mentir dès l'écriture. */
+    if (next && next < on) bad("The next review falls after the one being recorded, not before it");
+    const who = await personOrSelf(req.user, b.by, "by");
+    const note = String(b.note ?? "").slice(0, 2000);
+
+    let id = null;
+    await audited(req.user,
+      () => ({ action: "Register item reviewed", entity: "raid_item", entityId: item.id,
+               detail: `${item.title} — reviewed ${on}` + (next ? `, next due ${next}` : ", no next review set"),
+               before: { review_on: item.review_on }, after: { review_on: next } }),
+      async (t) => {
+        id = await allocateId(t, "RVW", { pad: 3 });
+        await t.query(
+          `INSERT INTO raid_review
+             (id, raid_id, reviewed_on, reviewed_by, note, due_on, next_review_on, recorded_by)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [id, item.id, on, who, note, item.review_on ?? null, next, req.user.id]);
+        /* La ligne du registre bouge sous la version que l'appelant
+           tenait : c'est bien SA lecture qu'il remplace en décidant que
+           la revue a eu lieu maintenant. */
+        conflict(await updateVersioned(t, "raid_item", item.id,
+          requiredVersion(b, "register item"), { review_on: next }));
+        return { ok: true };
+      });
+    const fresh = (await many(
+      `SELECT v.*, p.name AS reviewed_by_name FROM raid_review v
+         LEFT JOIN person p ON p.id = v.reviewed_by WHERE v.id = $1`, [id])).map(asReview)[0];
+    const it = await one(`SELECT review_on, row_version FROM raid_item WHERE id = $1`, [item.id]);
+    res.status(201).json({ id, review: fresh, item: { id: item.id, review: it.review_on, version: it.row_version } });
+  } catch (e) { next(e); }
+});
+
+/** Corriger une revue mal consignée : la date, le nom, ce qui a été dit. */
+r.patch("/raid/reviews/:id", async (req, res, next) => {
+  try {
+    const v = await one(`SELECT * FROM raid_review WHERE id = $1`, [req.params.id]);
+    if (!v) throw new HttpError(404, "No such review");
+    const item = await raidItemFor(v.raid_id, req.user, { write: true });
+    const b = req.body ?? {};
+    const patch = {};
+    if (b.on !== undefined) patch.reviewed_on = isoDay(b.on, "on") ?? v.reviewed_on;
+    if (b.by !== undefined) patch.reviewed_by = await personOrSelf(req.user, b.by, "by");
+    if (b.note !== undefined) patch.note = String(b.note ?? "").slice(0, 2000);
+    if (b.next !== undefined) patch.next_review_on = isoDay(b.next, "next");
+    const on = patch.reviewed_on ?? v.reviewed_on;
+    const nx = patch.next_review_on !== undefined ? patch.next_review_on : v.next_review_on;
+    if (nx && nx < on) bad("The next review falls after the one being recorded, not before it");
+
+    const out = await audited(req.user,
+      { action: "Review corrected", entity: "raid_item", entityId: item.id,
+        detail: `${item.title} — ${v.id}`,
+        before: { reviewed_on: v.reviewed_on, reviewed_by: v.reviewed_by, next_review_on: v.next_review_on },
+        after: patch },
+      async (t) => {
+        const r2 = conflict(await updateVersioned(t, "raid_review", v.id, requiredVersion(b, "review"), patch));
+        await reprojectNextReview(t, item.id);
+        return r2;
+      });
+    const it = await one(`SELECT review_on, row_version FROM raid_item WHERE id = $1`, [item.id]);
+    res.json({ version: out.version, item: { id: item.id, review: it.review_on, version: it.row_version } });
+  } catch (e) { next(e); }
+});
+
+/**
+ * Retirer une revue consignée par erreur.
+ *
+ * Une revue qui a eu lieu ne se retire pas parce qu'elle dérange : ce
+ * qu'on retire est une ligne qui n'aurait pas dû être écrite — mauvaise
+ * ligne de registre, double saisie. Le retrait est lui-même consigné,
+ * avec la revue entière en image d'avant, et la date de prochaine revue
+ * redevient celle que cette revue avait trouvée en place.
+ */
+r.delete("/raid/reviews/:id", async (req, res, next) => {
+  try {
+    const v = await one(`SELECT * FROM raid_review WHERE id = $1`, [req.params.id]);
+    if (!v) throw new HttpError(404, "No such review");
+    const item = await raidItemFor(v.raid_id, req.user, { write: true });
+    await audited(req.user,
+      { action: "Review withdrawn", entity: "raid_item", entityId: item.id,
+        detail: `${item.title} — ${v.id} of ${v.reviewed_on}`, before: { ...v } },
+      async (t) => {
+        await t.query(`DELETE FROM raid_review WHERE id = $1`, [v.id]);
+        await reprojectNextReview(t, item.id, v.due_on ?? null);
+      });
+    const it = await one(`SELECT review_on, row_version FROM raid_item WHERE id = $1`, [item.id]);
+    res.json({ ok: true, item: { id: item.id, review: it.review_on, version: it.row_version } });
   } catch (e) { next(e); }
 });
 
@@ -1021,10 +1372,18 @@ r.post("/change/:id/approve", async (req, res, next) => {
     if (!current) throw new HttpError(409, "This request has no step awaiting a decision");
     const isLast = current.seq === steps.length - 1;
 
+    /* S-13 / I-12 — l'exemption break-glass se LIT dans la piste. Un
+       administrateur qui signe sa propre demande passe la porte que
+       rbac.js lui ouvre exprès ; la piste dit que c'est arrivé, en toutes
+       lettres, plutôt que de laisser un auditeur le déduire. */
+    const selfSigned = req.user.role === "admin" &&
+      ((cr.raised_by_user && cr.raised_by_user === req.user.id) ||
+       (cr.raised_by && req.user.personId && cr.raised_by === req.user.personId));
     await audited(req.user,
       { action: isLast ? "Change request approved" : "Change step signed",
         entity: "change_request", entityId: cr.id,
-        detail: `${current.role_label}${req.body?.comment ? " — " + req.body.comment : ""}` },
+        detail: `${current.role_label}${req.body?.comment ? " — " + req.body.comment : ""}` +
+                (selfSigned ? " — BREAK-GLASS: administrator signing a request they raised" : "") },
       async (t) => {
         await t.query(
           `UPDATE change_step SET state='done', decided_by=$2, decided_on=CURRENT_DATE, comment=$3
@@ -1380,6 +1739,27 @@ const DEMAND_STATES = ["New", "Triaged", "Approved", "Declined", "Converted"];
 const score = (v) => (v === undefined || v === null || v === "" ? null
   : Math.max(1, Math.min(5, Math.round(Number(v)))));
 
+/* REQ-24 — les entrées du classement, refusées plutôt que rabotées.
+   `score()` au-dessus SERRE dans 1–5, ce qui convient à une note de salle
+   qu'on ajuste au doigt ; ces trois-ci nourrissent une arithmétique, et
+   un 9 silencieusement devenu 5 serait un chiffre que personne n'a dit.
+   Vide veut dire « retiré », et c'est un geste légitime : une confiance
+   qu'on n'a plus se retire, elle ne se met pas à 3. */
+const oneToFive = (v, what) => {
+  if (v === undefined || v === null || v === "") return null;
+  const n = Number(v);
+  if (!Number.isInteger(n) || n < 1 || n > 5) bad(what);
+  return n;
+};
+const fteValue = (v) => {
+  if (v === undefined || v === null || v === "") return null;
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < 0) {
+    bad("The people this will take is a number of full-time equivalents, zero or more");
+  }
+  return Math.round(n * 1000) / 1000;
+};
+
 r.get("/demand", async (req, res, next) => {
   try {
     gate(req.user, "portfolio.read");
@@ -1393,6 +1773,16 @@ r.get("/demand", async (req, res, next) => {
         decidedBy: d.decided_label, decidedOn: d.decided_on, decisionNote: d.decision_note,
         project: d.project_id,
         fit: d.fit_score, value: d.value_score, risk: d.risk_score, effort: d.effort_score,
+        /* REQ-24 (046) — ce qu'il faut pour qu'une demande tienne sur la
+           MÊME liste qu'un projet vivant : un montant, une confiance, une
+           exposition sur l'échelle du registre RAID, et des ETP. Nul
+           partout par défaut, et nul veut dire « pas dit ». */
+        expectedBenefit: d.expected_benefit === null || d.expected_benefit === undefined
+          ? null : toM(d.expected_benefit),
+        valueConfidence: d.value_confidence ?? null,
+        estFte: d.est_fte === null || d.est_fte === undefined ? null : Number(d.est_fte),
+        raidProbability: d.raid_probability ?? null,
+        raidImpact: d.raid_impact ?? null,
         version: d.row_version,
       })),
     });
@@ -1411,11 +1801,23 @@ r.post("/demand", async (req, res, next) => {
         id = await allocateId(t, "DEM", { pad: 3 });
         return t.query(
           `INSERT INTO demand (id, title, detail, sponsor, programme_id, site_id,
-                               benefit_note, est_cost, raised_by, raised_label)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+                               benefit_note, est_cost, raised_by, raised_label,
+                               expected_benefit, value_confidence, est_fte,
+                               raid_probability, raid_impact)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
           [id, b.title, b.detail ?? "", b.sponsor ?? "", b.programme || null, b.site || null,
            b.benefitNote ?? "", b.estCost === undefined || b.estCost === "" ? null : fromM(num(b.estCost)),
-           req.user.id, `${req.user.displayName} (${req.user.role})`]);
+           req.user.id, `${req.user.displayName} (${req.user.role})`,
+           /* REQ-24 — le demandeur peut chiffrer sa propre demande dès
+              l'intention. Rien n'est obligatoire : une demande sans
+              chiffres reste une demande, elle n'est simplement pas
+              plaçable dans l'ordre tant qu'elle n'en porte pas. */
+           b.expectedBenefit === undefined || b.expectedBenefit === "" || b.expectedBenefit === null
+             ? null : fromM(num(b.expectedBenefit)),
+           oneToFive(b.valueConfidence, "Confidence is a whole number from 1 to 5, or nothing at all"),
+           fteValue(b.estFte),
+           oneToFive(b.raidProbability, "Probability and impact are whole numbers from 1 to 5, or nothing at all"),
+           oneToFive(b.raidImpact, "Probability and impact are whole numbers from 1 to 5, or nothing at all")]);
       });
     res.status(201).json({ id });
   } catch (e) { next(e); }
@@ -1431,7 +1833,13 @@ r.patch("/demand/:id", async (req, res, next) => {
     /* Editing what was asked for is open; deciding it is not. The split
        is per-field rather than per-route so the funnel stays one object. */
     const decides = b.status !== undefined || b.decisionNote !== undefined ||
-      b.fit !== undefined || b.value !== undefined || b.risk !== undefined || b.effort !== undefined;
+      b.fit !== undefined || b.value !== undefined || b.risk !== undefined || b.effort !== undefined ||
+      /* REQ-24 — ces cinq-là nourrissent le rang d'une ligne contre
+         toutes les autres. Les corriger est du même ordre que la noter :
+         le partage par CHAMP de cette route est justement ce qui permet
+         de le dire sans couper l'objet en deux. */
+      b.expectedBenefit !== undefined || b.valueConfidence !== undefined ||
+      b.estFte !== undefined || b.raidProbability !== undefined || b.raidImpact !== undefined;
     if (decides) gate(req.user, "demand.decide");
     else gate(req.user, "demand.raise");
 
@@ -1446,6 +1854,23 @@ r.patch("/demand/:id", async (req, res, next) => {
     if (b.value !== undefined) patch.value_score = score(b.value);
     if (b.risk !== undefined) patch.risk_score = score(b.risk);
     if (b.effort !== undefined) patch.effort_score = score(b.effort);
+    if (b.expectedBenefit !== undefined) {
+      patch.expected_benefit = b.expectedBenefit === "" || b.expectedBenefit === null
+        ? null : fromM(num(b.expectedBenefit));
+    }
+    if (b.valueConfidence !== undefined) {
+      patch.value_confidence = oneToFive(b.valueConfidence,
+        "Confidence is a whole number from 1 to 5, or nothing at all");
+    }
+    if (b.estFte !== undefined) patch.est_fte = fteValue(b.estFte);
+    if (b.raidProbability !== undefined) {
+      patch.raid_probability = oneToFive(b.raidProbability,
+        "Probability and impact are whole numbers from 1 to 5, or nothing at all");
+    }
+    if (b.raidImpact !== undefined) {
+      patch.raid_impact = oneToFive(b.raidImpact,
+        "Probability and impact are whole numbers from 1 to 5, or nothing at all");
+    }
     if (b.status !== undefined) {
       if (!DEMAND_STATES.includes(b.status)) bad("That is not a request status");
       if (b.status === "Converted") bad("A request becomes Converted by creating its project, not by hand");
@@ -1526,6 +1951,41 @@ r.post("/demand/:id/convert", async (req, res, next) => {
           id, name: b.name ?? d.title, programme, site,
           pm: b.pm ?? null, method: b.method ?? "Hybrid", start: b.start, finish: b.finish,
         });
+        /* V-15 — porter la promesse par-dessus la conversion.
+           La route copiait les quatre notes, `est_cost` dans le budget et
+           `detail` dans la description, et LAISSAIT TOMBER
+           `benefit_note` — le champ dont le commentaire de schéma dit
+           « ce à quoi ça SERT, dans les mots du demandeur » — sans créer
+           de cas d'affaire. L'en-tête de la 028 décrit pourtant la chaîne
+           voulue : demande → cas → bénéfice → revue. Elle se rompait à
+           son premier maillon, au moment exact où l'argent est engagé et
+           où la justification est la plus fraîche.
+
+           Le cas créé ici est un BROUILLON honnête : il porte les mots du
+           demandeur, ou dit qu'il n'y en avait pas. Fabriquer une
+           justification serait pire que n'en avoir aucune. */
+        const note = String(d.benefit_note ?? "").trim();
+        const caseId = await allocateId(t, "CAS", { pad: 3 });
+        await t.query(
+          /* REQ-24 — la conversion portait les MOTS du demandeur et
+             laissait tomber son CHIFFRE : le cas naissait sans bénéfice
+             attendu, donc le projet naissait sans valeur revendiquée et
+             tombait hors du classement le jour même où l'argent est
+             engagé et où la justification est la plus fraîche. Les deux
+             restent nuls quand la demande ne les portait pas — on ne
+             fabrique pas le chiffre qu'on n'a pas reçu. */
+          `INSERT INTO business_case
+             (id, project_id, summary, expected_cost, expected_benefit,
+              value_confidence, basis, written_by)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [caseId, id,
+           note || `Carried from request ${d.id} — the request stated no benefit. ` +
+                   `This case is a draft: write what this is for before the next gate.`,
+           d.est_cost ?? null,
+           d.expected_benefit ?? null,
+           d.value_confidence ?? null,
+           `From request ${d.id}, approved ${d.decided_on ?? "on conversion"}.`,
+           req.user.id]);
         await t.query(
           `UPDATE demand SET status = 'Converted', project_id = $2, row_version = row_version + 1
             WHERE id = $1`, [d.id, id]);
@@ -1559,37 +2019,156 @@ r.patch("/projects/:id/priority", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+/* ═══════════════════════════════════════════════════════════════════
+   REQ-24 (RT365 V-5) · WHAT WE CHOOSE NOT TO DO
+   ───────────────────────────────────────────────────────────────────
+   The ranked list, its weighting, and the line where capacity runs out.
+
+   Two routes and one computation. The arithmetic is `shared/prioritise.js`
+   — pure, and the same module the browser imports for its formatters, for
+   the reason `shared/govsignals.js` gives: two projections of the same
+   number diverge at the first change, and then the room is arguing about
+   which screen is right instead of about which project to stop.
+
+   AUTHORITY. Reading the ranking is `portfolio.read`, narrowed by the
+   query itself: every row it emits — a project, a request, a business
+   case figure, a RAID exposure, an allocation — is already readable by an
+   account that can open the pipeline page, and `loadPortfolio` has
+   already refused to put an out-of-scope project into the object (R1.10).
+   Nothing new is disclosed; what is new is the ORDER.
+
+   SETTING THE WEIGHTING is a different question and has its own action,
+   `priority.weighting`, decided in shared/rbac.js and nowhere else.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/** How far ahead capacity is counted. Two quarters, unless asked. */
+function horizonOf(req) {
+  const asked = Number(req.query.days);
+  if (!Number.isFinite(asked)) return 180;
+  return Math.min(730, Math.max(28, Math.floor(asked)));
+}
+
+/** Everything the pure computation needs, gathered for one reader. */
+async function rankingFor(user, horizonDays) {
+  const db = await loadPortfolio(user);
+  /* Requests are not in the serialiser — they are the funnel in front of
+     the portfolio, not part of it — so they are read here. A request is
+     not scoped by project: it names at most a programme and a site, and
+     `portfolio.read` is the action that governs it, exactly as
+     `GET /demand` above already does. */
+  const demandRows = await many(
+    `SELECT * FROM demand WHERE status IN ('New','Triaged','Approved')`);
+  const weighting = await loadWeighting();
+
+  return prioritise({
+    asAt: db.statusDate,
+    horizonDays,
+    weighting,
+    ceiling: db.settings.capacityCeiling,
+    envelope: db.settings.capexEnvelope,
+    programmes: db.programmes,
+    people: db.people,
+    projects: db.projects,
+    cases: db.businessCases,
+    raid: db.raid,
+    allocations: db.allocations,
+    demand: demandRows.map((d) => ({
+      id: d.id, title: d.title, programme: d.programme_id, site: d.site_id,
+      status: d.status,
+      estCost: d.est_cost === null || d.est_cost === undefined ? null : toM(d.est_cost),
+      expectedBenefit: d.expected_benefit === null || d.expected_benefit === undefined
+        ? null : toM(d.expected_benefit),
+      valueConfidence: d.value_confidence ?? null,
+      estFte: d.est_fte === null || d.est_fte === undefined ? null : Number(d.est_fte),
+      raidProbability: d.raid_probability ?? null,
+      raidImpact: d.raid_impact ?? null,
+    })),
+  });
+}
+
+r.get("/prioritisation", async (req, res, next) => {
+  try {
+    gate(req.user, "portfolio.read");
+    res.json(await rankingFor(req.user, horizonOf(req)));
+  } catch (e) { next(e); }
+});
+
+/**
+ * The weighting, changed. Which is to say: the order of the whole
+ * portfolio, changed — so it asserts a row version like every other
+ * mutable row, it is audited inside its own transaction, and the audit
+ * image says what each weight WAS and what it BECAME. That last part is
+ * the point: a rank that moved and cannot be explained is worse than no
+ * rank, and six months later the only thing that can explain it is this
+ * row.
+ */
+r.patch("/prioritisation/weighting", async (req, res, next) => {
+  try {
+    gate(req.user, "priority.weighting");
+    const w = await one(`SELECT * FROM prioritisation_weighting WHERE id = 'default'`);
+    if (!w) throw new HttpError(404, "No weighting row — the book is not migrated");
+    const b = req.body ?? {};
+
+    const weight = (v) => {
+      const n = Number(v);
+      if (!Number.isInteger(n) || n < 0 || n > 100) bad("A weight is a whole number from 0 to 100");
+      return n;
+    };
+    const patch = {};
+    const col = { value: "w_value", confidence: "w_confidence",
+                  exposure: "w_exposure", capacity: "w_capacity" };
+    for (const k of INPUTS) {
+      if (b[k] !== undefined) patch[col[k]] = weight(b[k]);
+    }
+    if (b.note !== undefined) patch.note = String(b.note);
+    if (!Object.keys(patch).length) bad("Nothing recognised to change");
+
+    /* Toutes nulles = plus rien n'est pesé, donc plus rien n'est classé.
+       Refusé ici plutôt que rendu comme un classement vide : le module
+       sait le DIRE (`weightsZero`) parce qu'un livre peut arriver ainsi,
+       mais on ne laisse personne l'écrire exprès. */
+    const after = { ...w, ...patch };
+    if (after.w_value + after.w_confidence + after.w_exposure + after.w_capacity <= 0) {
+      bad("Every weight cannot be zero — a weighting has to weigh something");
+    }
+    /* Une pondération sans sa raison est un verdict. Exigée au PREMIER
+       réglage humain, et à chaque changement de poids ensuite. */
+    const changesWeights = INPUTS.some((k) => b[k] !== undefined);
+    if (changesWeights && !String(b.note ?? w.note ?? "").trim()) {
+      bad("Say why these weights — a ranking whose reason is not written is a verdict");
+    }
+
+    patch.set_by = req.user.id;
+    patch.set_label = `${req.user.displayName} (${req.user.role})`;
+    patch.set_on = iso(new Date());
+
+    const out = await audited(req.user,
+      { action: "Prioritisation weighting set", entity: "prioritisation_weighting",
+        entityId: w.id,
+        detail: INPUTS.map((k) => `${k} ${w[col[k]]} → ${after[col[k]]}`).join(" · "),
+        before: { value: w.w_value, confidence: w.w_confidence,
+                  exposure: w.w_exposure, capacity: w.w_capacity, note: w.note },
+        after: { value: after.w_value, confidence: after.w_confidence,
+                 exposure: after.w_exposure, capacity: after.w_capacity,
+                 note: after.note } },
+      async (t) => conflict(await updateVersioned(t, "prioritisation_weighting", w.id,
+        requiredVersion(b, "weighting"), patch)));
+    res.json({ version: out.version });
+  } catch (e) { next(e); }
+});
+
 /* ── the plant's calendar, and what may not cross it (V-03) ───────────
    A freeze is the site saying "not during this". Intrusive work planned
    into one is refused unless management of change has released it — the
    control the head of Operational Technology came looking for. */
 
 /** Freezes at a site covering a date. Read before a transaction opens. */
-async function freezesCovering(siteId, on) {
-  if (!siteId || !on) return [];
-  return many(
-    `SELECT id, label, starts_on, ends_on FROM site_window
-      WHERE site_id = $1 AND kind = 'freeze' AND $2 BETWEEN starts_on AND ends_on
-      ORDER BY starts_on`, [siteId, on]);
-}
 
 /**
  * The rule, in one place so every path that dates intrusive work asks the
  * same question: a milestone marked intrusive, at a site in a freeze, on
  * a project that touches the plant, needs a released MOC.
  */
-async function assertPlantWindow(project, { date, intrusive }) {
-  if (!intrusive) return;
-  if (project.plant_impact === "none" || !project.plant_impact) return;
-  if (project.moc_approved_on) return;   // released; the window is theirs to use
-  const hits = await freezesCovering(project.site_id, date);
-  if (!hits.length) return;
-  const w = hits[0];
-  throw new HttpError(409,
-    `${w.label} runs ${w.starts_on} to ${w.ends_on} at this site and this project is ` +
-    `classified as ${project.plant_impact} work. Move the date, or have management of ` +
-    `change release it at group level.`);
-}
 
 r.post("/windows", async (req, res, next) => {
   try {
@@ -1976,6 +2555,33 @@ r.put("/projects/:id/tolerance", async (req, res, next) => {
  * close sans raison écrite ne se relit pas, et c'est précisément ce
  * qu'un comité viendra relire.
  */
+/**
+ * Q-2 — constater maintenant, plutôt qu'à la prochaine heure.
+ *
+ * Le balayage tourne sur un `setInterval` horaire, sans première passe
+ * immédiate et sans aucun moyen de le déclencher. Le premier programme
+ * réel l'a rencontré en essayant de VÉRIFIER un contrôle :
+ *
+ *   « Nous avons posé une tolérance d'un jour, enregistré une fin de
+ *     référence, glissé de quatre mois, et vu `exceptions: []` tout du
+ *     long […] rien ne pouvait être observé dans une session. »
+ *
+ * Un contrôle qu'on ne peut pas observer est un contrôle que personne ne
+ * peut croire. Le geste reste celui du système — c'est un CONSTAT, pas
+ * une décision, et il s'inscrit sous « system » comme le tour horaire —
+ * mais quelqu'un peut désormais demander qu'il ait lieu tout de suite.
+ * Réservé au niveau qui pose les marges : lui seul a une raison de
+ * vérifier qu'elles mordent.
+ */
+r.post("/exceptions/sweep", async (req, res, next) => {
+  try {
+    gate(req.user, "exception.sweep");
+    const out = await sweepExceptions();
+    res.json({ ok: true, considered: out.considered, opened: out.opened,
+               exceptions: out.exceptions ?? [] });
+  } catch (e) { next(e); }
+});
+
 r.post("/exceptions/:id/answer", async (req, res, next) => {
   try {
     const row = await one(`SELECT * FROM project_exception WHERE id = $1`, [req.params.id]);
@@ -2026,6 +2632,11 @@ r.put("/projects/:id/case", async (req, res, next) => {
     };
     const cost = num(b.expectedCost, "The expected cost");
     const benefit = num(b.expectedBenefit, "The expected annual benefit");
+    /* REQ-24 — à quel point on croit à CE chiffre-là. Absente tant que
+       personne ne l'a dite : le classement refuse alors de placer la
+       ligne, plutôt que de supposer une confiance moyenne. */
+    const confidence = oneToFive(b.valueConfidence,
+      "Confidence is a whole number from 1 to 5, or nothing at all");
 
     const existing = await one(
       `SELECT * FROM business_case WHERE project_id = $1`, [p.id]);
@@ -2039,9 +2650,10 @@ r.put("/projects/:id/case", async (req, res, next) => {
           id = await allocateId(t, "CAS", { pad: 3 });
           return t.query(
             `INSERT INTO business_case
-               (id, project_id, summary, expected_cost, expected_benefit, basis, written_by)
-             VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-            [id, p.id, b.summary, cost, benefit, b.basis ?? "", req.user.id]);
+               (id, project_id, summary, expected_cost, expected_benefit,
+                value_confidence, basis, written_by)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+            [id, p.id, b.summary, cost, benefit, confidence, b.basis ?? "", req.user.id]);
         });
       return res.status(201).json({ id });
     }
@@ -2053,11 +2665,16 @@ r.put("/projects/:id/case", async (req, res, next) => {
       { action: "Business case updated", entity: "business_case", entityId: existing.id,
         detail: p.id,
         before: { summary: existing.summary, cost: existing.expected_cost,
-                  benefit: existing.expected_benefit },
-        after: { summary: b.summary, cost, benefit } },
+                  benefit: existing.expected_benefit,
+                  confidence: existing.value_confidence },
+        after: { summary: b.summary, cost, benefit, confidence } },
       async (t) => conflict(await updateVersioned(t, "business_case", existing.id,
         requiredVersion(b, "business case"),
         { summary: b.summary, expected_cost: cost, expected_benefit: benefit,
+          /* Omise du corps = inchangée ; envoyée vide = retirée. Une
+             confiance qu'on n'a plus se retire, elle ne se met pas à 3. */
+          value_confidence: b.valueConfidence === undefined
+            ? existing.value_confidence : confidence,
           basis: b.basis ?? existing.basis, updated_on: iso(new Date()) })));
     res.json({ version: out.version });
   } catch (e) { next(e); }
@@ -2075,14 +2692,58 @@ r.post("/projects/:id/case/reconfirm", async (req, res, next) => {
     const existing = await one(`SELECT * FROM business_case WHERE project_id = $1`, [p.id]);
     if (!existing) bad("There is no business case to reconfirm — write it first");
     const g = Number(req.body?.gate ?? p.gate ?? 0);
-    if (!(g >= 1 && g <= 4)) bad("Reconfirmation happens at a gate — 1 to 4");
+    /* La borne suit l'échelle du programme (036), plus les quatre jalons
+       câblés de la 028 : un programme à six jalons ne pouvait pas
+       reconfirmer son cas aux jalons 5 et 6. */
+    const ladder = await ladderLength(p.id);
+    if (!(g >= 1 && g <= ladder)) bad(`Reconfirmation happens at a gate — 1 to ${ladder} on this project's ladder`);
+    const verdict = VERDICTS.includes(req.body?.verdict) ? req.body.verdict : "Continue";
+    const note = String(req.body?.note ?? "").slice(0, 2000);
+    /* Qui reconfirme est une personne de l'annuaire, pas seulement le
+       compte qui tape : le cas est reconfirmé par celui qui paie. */
+    let who = null;
+    if (req.body?.reconfirmedBy) {
+      who = await one(`SELECT id FROM person WHERE id = $1 AND active`, [String(req.body.reconfirmedBy)]);
+      if (!who) bad("The reconfirmer must be an active person in the directory");
+      who = who.id;
+    }
+    /* Ce que la reconfirmation précédente avait vu — lu AVANT la
+       transaction, pour dire l'écart sans relire un historique. */
+    const previous = await one(
+      `SELECT * FROM case_reconfirmation WHERE case_id = $1 AND gate < $2 ORDER BY gate DESC LIMIT 1`,
+      [existing.id, g]);
+    const delta = deltaAgainst(previous, existing.expected_cost, existing.expected_benefit);
 
     const out = await audited(req.user,
       { action: "Business case reconfirmed", entity: "business_case", entityId: existing.id,
-        detail: `${p.id} — still worth doing, at gate ${g}`,
+        /* « Continuer » se dit dans les mots du geste, pas dans ceux de
+           la colonne : ce qu'on inscrit à la piste est la phrase qu'un
+           lecteur comprendra dans un an. */
+        detail: `${p.id} — ${verdict === "Continue" ? "still worth doing"
+                            : verdict === "Stop" ? "STOP — no longer worth doing"
+                            : "worth doing, with conditions"}, at gate ${g}`
+          + (delta && (delta.cost || delta.benefit)
+             ? ` — since gate ${delta.sinceGate}: cost ${delta.cost ?? "?"}M, benefit ${delta.benefit ?? "?"}M` : ""),
         before: { gate: existing.reconfirmed_gate, on: existing.reconfirmed_on },
-        after: { gate: g } },
-      async (t) => conflict(await updateVersioned(t, "business_case", existing.id,
+        after: { gate: g, verdict } },
+      async (t) => {
+        /* Une reconfirmation par (cas, jalon) : reconfirmer deux fois le
+           même jalon CORRIGE, ne s'empile pas. */
+        const rid = await allocateId(t, "CRC", { pad: 3 });
+        await t.query(
+          `INSERT INTO case_reconfirmation
+             (id, case_id, project_id, gate, expected_cost, expected_benefit,
+              verdict, note, reconfirmed_by, recorded_by)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+           ON CONFLICT (case_id, gate) DO UPDATE SET
+             expected_cost = EXCLUDED.expected_cost,
+             expected_benefit = EXCLUDED.expected_benefit,
+             verdict = EXCLUDED.verdict, note = EXCLUDED.note,
+             reconfirmed_by = EXCLUDED.reconfirmed_by, recorded_by = EXCLUDED.recorded_by,
+             reconfirmed_on = CURRENT_DATE, row_version = case_reconfirmation.row_version + 1`,
+          [rid, existing.id, p.id, g, existing.expected_cost, existing.expected_benefit,
+           verdict, note, who, req.user.id]);
+        return conflict(await updateVersioned(t, "business_case", existing.id,
         requiredVersion(req.body, "business case"),
         /* updated_on repasse à NULL : la reconfirmation couvre le texte
            PRÉSENT. Comparer deux dates ne suffit pas — une révision le
@@ -2090,8 +2751,9 @@ r.post("/projects/:id/case/reconfirm", async (req, res, next) => {
            reconfirmation du matin. L'ordre des événements se code par
            l'effacement, pas par l'horloge. */
         { reconfirmed_gate: g, reconfirmed_on: iso(new Date()), reconfirmed_by: req.user.id,
-          updated_on: null })));
-    res.json({ version: out.version });
+          updated_on: null }));
+      });
+    res.json({ version: out.version, gate: g, verdict, delta });
   } catch (e) { next(e); }
 });
 
@@ -2119,7 +2781,17 @@ r.post("/lessons", async (req, res, next) => {
     if (!b.title) bad("A lesson needs a title");
     if (b.category && !LESSON_CATEGORIES.includes(b.category)) bad("That is not a lesson category");
     const gateN = b.gate === undefined || b.gate === null || b.gate === "" ? null : Number(b.gate);
-    if (gateN !== null && !(gateN >= 1 && gateN <= 4)) bad("A gate is 1, 2, 3 or 4");
+    /* V-13 — l'échelle du programme, pas les quatre jalons de 2024. Sur
+       une échelle à six, un enseignement ne pouvait pas être rattaché aux
+       jalons 5 et 6 : la contrainte refusait la ligne sans rien dire.
+       Brider en silence est pire que de ne pas avoir d'échelle
+       configurable, parce que la panne est invisible jusqu'à l'essai. */
+    if (gateN !== null) {
+      const n = await ladderLength(p.id);
+      if (!(Number.isInteger(gateN) && gateN >= 1 && gateN <= n)) {
+        bad(`A lesson is tagged to a gate 1..${n} of this project's programme ladder`);
+      }
+    }
 
     let id = null;
     await audited(req.user,
@@ -3154,13 +3826,21 @@ r.get("/decisions/log", async (req, res, next) => {
     await noteConsultation(req.user, "Decision register", "");   // R-14
     const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 200));
     const audits = await readAudit({ action: REGISTER_ACTIONS.join(","), limit });
+    /* I-7 — les décisions d'une salle ET celles prises hors salle par
+       qui en a l'autorité (occurrence_id NULL, date + décideur nommés).
+       Un seul registre : un lecteur ne doit pas avoir à savoir dans
+       quelle pièce une décision a été prise pour la trouver. */
     const minuted = await many(
-      `SELECT d.id, d.headline, d.rationale, d.decided_by, d.referred_to_scope,
-              o.meets_on, s.name AS series_name, s.scope_kind
+      `SELECT d.id, d.headline, d.rationale, d.alternatives, d.dissent, d.decided_by,
+              d.referred_to_scope, d.project_id, d.cr_id, d.raid_id, d.milestone_id, d.supersedes,
+              COALESCE(o.meets_on, d.decided_on) AS decided_on, d.external_source, d.external_id,
+              d.council, d.evidence_uri, d.provenance, d.status, d.ratified_by, d.ratified_on,
+              s.name AS series_name, s.scope_kind, pe.name AS decided_by_name
          FROM meeting_decision d
-         JOIN meeting_occurrence o ON o.id = d.occurrence_id
-         JOIN meeting_series s ON s.id = o.series_id
-        ORDER BY o.meets_on DESC, d.id DESC
+         LEFT JOIN meeting_occurrence o ON o.id = d.occurrence_id
+         LEFT JOIN meeting_series s ON s.id = o.series_id
+         LEFT JOIN person pe ON pe.id = d.decided_by
+        ORDER BY COALESCE(o.meets_on, d.decided_on) DESC, d.id DESC
         LIMIT $1`, [limit]);
     res.json({
       register: audits.map((a) => ({
@@ -3169,11 +3849,334 @@ r.get("/decisions/log", async (req, res, next) => {
         before: a.before_json ?? null, after: a.after_json ?? null,
       })),
       minuted: minuted.map((d) => ({
-        kind: "meeting", id: d.id, headline: d.headline, rationale: d.rationale,
-        by: d.decided_by, on: d.meets_on, series: d.series_name,
-        scope: d.scope_kind, referred: d.referred_to_scope ?? null,
+        kind: d.series_name ? "meeting" : "standalone",
+        id: d.id, headline: d.headline, rationale: d.rationale,
+        alternatives: d.alternatives ?? "", dissent: d.dissent ?? "",
+        by: d.decided_by, byName: d.decided_by_name ?? null, on: d.decided_on,
+        series: d.series_name ?? null,
+        scope: d.scope_kind ?? null, referred: d.referred_to_scope ?? null,
+        project: d.project_id ?? null, cr: d.cr_id ?? null, raid: d.raid_id ?? null,
+        milestone: d.milestone_id ?? null, supersedes: d.supersedes ?? null,
+        externalSource: d.external_source ?? null, externalId: d.external_id ?? null,
+        council: d.council ?? "", evidenceUri: d.evidence_uri ?? "", provenance: d.provenance ?? "",
+        status: d.status ?? "Ratified", ratifiedBy: d.ratified_by ?? "",
+        /* REQ-47 (049) — le jour où elle est entrée en vigueur. Nul sur
+           une ligne ratifiée avant que nous sachions le noter. */
+        ratifiedOn: d.ratified_on ?? null,
       })),
     });
+  } catch (e) { next(e); }
+});
+
+/* ── PM-05 · les parties prenantes — PM-11 · le plan de communication ──
+   Retour de terrain RT365 (I-10). Écriture de projet ordinaire
+   (project.write) : connaître ses parties prenantes et dire qui informer
+   est le travail de qui livre, pas un acte de gouvernance. */
+/* REQ-22 — ce qu'un reconfirmant peut dire : continuer, continuer sous
+   condition, ou arrêter. « Arrêter » n'est pas décoratif : le jalon
+   suivant est alors refusé (server/src/value.js). */
+const VERDICTS = ["Continue", "Continue with conditions", "Stop"];
+
+const ATTITUDES = ["Champion", "Supporter", "Neutral", "Sceptic", "Opponent"];
+const ENGAGEMENTS = ["Inform", "Consult", "Involve", "Partner"];
+const scale5 = (v, fallback = 3) => Math.max(1, Math.min(5, num(v, fallback)));
+
+r.post("/stakeholders", async (req, res, next) => {
+  try {
+    const b = req.body ?? {};
+    const p = await project(b.project, req.user);
+    gate(req.user, "project.write", { project: p });
+    if (!String(b.name ?? "").trim()) bad("A stakeholder needs a name — a person, or an organisation");
+    if (b.person) {
+      const who = await one(`SELECT id FROM person WHERE id = $1`, [String(b.person)]);
+      if (!who) bad("No such person in the directory");
+    }
+    let id = null;
+    await audited(req.user,
+      () => ({ action: "Stakeholder added", entity: "stakeholder", entityId: id, detail: b.name }),
+      async (t) => {
+        id = await allocateId(t, "STK");
+        await t.query(
+          `INSERT INTO stakeholder (id, project_id, person_id, name, organisation, role_label, interest, influence, attitude, engagement, owner_id, note)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+          [id, p.id, b.person || null, String(b.name).trim().slice(0, 200), String(b.organisation ?? "").slice(0, 200),
+           String(b.role ?? "").slice(0, 200), scale5(b.interest), scale5(b.influence),
+           ATTITUDES.includes(b.attitude) ? b.attitude : "Neutral",
+           ENGAGEMENTS.includes(b.engagement) ? b.engagement : "Inform",
+           b.owner || null, String(b.note ?? "").slice(0, 2000)]);
+      });
+    res.status(201).json({ id });
+  } catch (e) { next(e); }
+});
+
+r.patch("/stakeholders/:id", async (req, res, next) => {
+  try {
+    const row = await one(`SELECT * FROM stakeholder WHERE id = $1`, [req.params.id]);
+    if (!row) throw new HttpError(404, "No such stakeholder");
+    gate(req.user, "project.write", { project: await project(row.project_id, req.user) });
+    const b = req.body ?? {};
+    const patch = {};
+    if (b.name !== undefined) { if (!String(b.name).trim()) bad("A stakeholder needs a name"); patch.name = String(b.name).trim().slice(0, 200); }
+    if (b.person !== undefined) patch.person_id = b.person || null;
+    if (b.organisation !== undefined) patch.organisation = String(b.organisation).slice(0, 200);
+    if (b.role !== undefined) patch.role_label = String(b.role).slice(0, 200);
+    if (b.interest !== undefined) patch.interest = scale5(b.interest);
+    if (b.influence !== undefined) patch.influence = scale5(b.influence);
+    if (b.attitude !== undefined) { if (!ATTITUDES.includes(b.attitude)) bad("attitude is " + ATTITUDES.join(", ")); patch.attitude = b.attitude; }
+    if (b.engagement !== undefined) { if (!ENGAGEMENTS.includes(b.engagement)) bad("engagement is " + ENGAGEMENTS.join(", ")); patch.engagement = b.engagement; }
+    if (b.owner !== undefined) patch.owner_id = b.owner || null;
+    if (b.note !== undefined) patch.note = String(b.note).slice(0, 2000);
+    const out = await audited(req.user,
+      { action: "Stakeholder updated", entity: "stakeholder", entityId: row.id, detail: patch.name ?? row.name,
+        before: b.attitude !== undefined && b.attitude !== row.attitude ? { attitude: row.attitude } : undefined,
+        after: b.attitude !== undefined && b.attitude !== row.attitude ? { attitude: b.attitude } : undefined },
+      async (t) => conflict(await updateVersioned(t, "stakeholder", row.id, requiredVersion(b, "stakeholder"), patch)));
+    res.json({ version: out.version });
+  } catch (e) { next(e); }
+});
+
+r.delete("/stakeholders/:id", async (req, res, next) => {
+  try {
+    const row = await one(`SELECT * FROM stakeholder WHERE id = $1`, [req.params.id]);
+    if (!row) throw new HttpError(404, "No such stakeholder");
+    gate(req.user, "project.write", { project: await project(row.project_id, req.user) });
+    await audited(req.user,
+      { action: "Stakeholder removed", entity: "stakeholder", entityId: row.id, detail: row.name, before: { ...row } },
+      async (t) => t.query(`DELETE FROM stakeholder WHERE id = $1`, [row.id]));
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
+r.post("/comms", async (req, res, next) => {
+  try {
+    const b = req.body ?? {};
+    const p = await project(b.project, req.user);
+    gate(req.user, "project.write", { project: p });
+    if (!String(b.audience ?? "").trim()) bad("A communication line names its audience");
+    let id = null;
+    await audited(req.user,
+      () => ({ action: "Communication planned", entity: "comms_plan", entityId: id, detail: b.audience }),
+      async (t) => {
+        id = await allocateId(t, "COM");
+        await t.query(
+          `INSERT INTO comms_plan (id, project_id, audience, purpose, channel, frequency, owner_id, next_on, note)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+          [id, p.id, String(b.audience).trim().slice(0, 200), String(b.purpose ?? "").slice(0, 1000),
+           String(b.channel ?? "").slice(0, 200), String(b.frequency ?? "").slice(0, 100),
+           b.owner || null, b.nextOn || null, String(b.note ?? "").slice(0, 2000)]);
+      });
+    res.status(201).json({ id });
+  } catch (e) { next(e); }
+});
+
+r.patch("/comms/:id", async (req, res, next) => {
+  try {
+    const row = await one(`SELECT * FROM comms_plan WHERE id = $1`, [req.params.id]);
+    if (!row) throw new HttpError(404, "No such communication line");
+    gate(req.user, "project.write", { project: await project(row.project_id, req.user) });
+    const b = req.body ?? {};
+    const patch = {};
+    if (b.audience !== undefined) { if (!String(b.audience).trim()) bad("A communication line names its audience"); patch.audience = String(b.audience).trim().slice(0, 200); }
+    if (b.purpose !== undefined) patch.purpose = String(b.purpose).slice(0, 1000);
+    if (b.channel !== undefined) patch.channel = String(b.channel).slice(0, 200);
+    if (b.frequency !== undefined) patch.frequency = String(b.frequency).slice(0, 100);
+    if (b.owner !== undefined) patch.owner_id = b.owner || null;
+    if (b.nextOn !== undefined) patch.next_on = b.nextOn || null;
+    if (b.note !== undefined) patch.note = String(b.note).slice(0, 2000);
+    const out = await audited(req.user,
+      { action: "Communication updated", entity: "comms_plan", entityId: row.id, detail: patch.audience ?? row.audience },
+      async (t) => conflict(await updateVersioned(t, "comms_plan", row.id, requiredVersion(b, "communication line"), patch)));
+    res.json({ version: out.version });
+  } catch (e) { next(e); }
+});
+
+r.delete("/comms/:id", async (req, res, next) => {
+  try {
+    const row = await one(`SELECT * FROM comms_plan WHERE id = $1`, [req.params.id]);
+    if (!row) throw new HttpError(404, "No such communication line");
+    gate(req.user, "project.write", { project: await project(row.project_id, req.user) });
+    await audited(req.user,
+      { action: "Communication removed", entity: "comms_plan", entityId: row.id, detail: row.audience, before: { ...row } },
+      async (t) => t.query(`DELETE FROM comms_plan WHERE id = $1`, [row.id]));
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
+/* ── I-4 · les critères d'un jalon, et qui a constaté ───────────────
+   Retour de terrain RT365 : « voir preuve 0/1 » était un compte de
+   documents. Un critère est une phrase posée d'avance ; il est TENU par
+   un réviseur nommé, qui n'est pas le propriétaire de la preuve qu'il
+   cite. Poser ou reformuler un critère est de l'écriture de preuve ;
+   le déclarer tenu est de l'approbation de preuve — deux pouvoirs que
+   rbac.js distingue déjà (document.write / document.approve). */
+r.post("/criteria", async (req, res, next) => {
+  try {
+    const b = req.body ?? {};
+    const p = await project(b.project, req.user);
+    gate(req.user, "document.write", { project: p });
+    const g = Math.round(Number(b.gate));
+    const n = await ladderLength(p.id);
+    if (!(g >= 1 && g <= n)) bad(`A criterion belongs to a gate 1..${n} of this project's programme`);
+    if (!String(b.text ?? "").trim()) bad("A criterion is a sentence — what must be true for the gate to pass");
+    let id = null;
+    await audited(req.user,
+      () => ({ action: "Gate criterion posed", entity: "gate_criterion", entityId: id, detail: `gate ${g} · ${b.text}` }),
+      async (t) => {
+        id = await allocateId(t, "GC");
+        await t.query(
+          `INSERT INTO gate_criterion (id, project_id, gate, seq, text)
+           VALUES ($1,$2,$3,(SELECT COALESCE(MAX(seq), -1) + 1 FROM gate_criterion WHERE project_id = $2 AND gate = $3),$4)`,
+          [id, p.id, g, String(b.text).trim().slice(0, 500)]);
+      });
+    res.status(201).json({ id });
+  } catch (e) { next(e); }
+});
+
+r.patch("/criteria/:id", async (req, res, next) => {
+  try {
+    const c = await one(`SELECT * FROM gate_criterion WHERE id = $1`, [req.params.id]);
+    if (!c) throw new HttpError(404, "No such criterion");
+    const p = await project(c.project_id, req.user);
+    const b = req.body ?? {};
+    const patch = {};
+    if (b.text !== undefined) {
+      gate(req.user, "document.write", { project: p });
+      if (!String(b.text).trim()) bad("A criterion is a sentence");
+      patch.text = String(b.text).trim().slice(0, 500);
+    }
+    if (b.note !== undefined) { gate(req.user, "document.write", { project: p }); patch.note = String(b.note).slice(0, 2000); }
+    let doc = null;
+    if (b.document !== undefined) {
+      gate(req.user, "document.write", { project: p });
+      if (b.document) {
+        doc = await one(`SELECT id, owner_id, project_id, gate FROM document WHERE id = $1`, [String(b.document)]);
+        if (!doc || (doc.project_id && doc.project_id !== p.id)) bad("That document does not exist on this project");
+        patch.document_id = doc.id;
+      } else patch.document_id = null;
+    }
+    if (b.met !== undefined) {
+      const met = !!b.met;
+      if (met) {
+        /* Le constat : un réviseur nommé, indépendant de la preuve. */
+        const who = b.reviewedBy ? await one(`SELECT id FROM person WHERE id = $1 AND active`, [String(b.reviewedBy)]) : null;
+        if (!who) bad("Finding a criterion met needs reviewedBy — the named person who checked it");
+        const linked = doc ?? (c.document_id ? await one(`SELECT id, owner_id FROM document WHERE id = $1`, [c.document_id]) : null);
+        gate(req.user, "document.approve", { project: p, owner_id: linked?.owner_id ?? null, gate: c.gate });
+        if (linked?.owner_id && linked.owner_id === who.id) {
+          bad("The reviewer owns the evidence this criterion cites — an independent reviewer finds it met");
+        }
+        patch.met = true; patch.reviewed_by = who.id; patch.reviewed_on = iso(new Date());
+      } else {
+        gate(req.user, "document.approve", { project: p, owner_id: null, gate: c.gate });
+        patch.met = false; patch.reviewed_by = null; patch.reviewed_on = null;
+      }
+    }
+    const out = await audited(req.user,
+      { action: b.met === true ? "Gate criterion met" : b.met === false ? "Gate criterion reopened" : "Gate criterion updated",
+        entity: "gate_criterion", entityId: c.id, detail: `gate ${c.gate} · ${patch.text ?? c.text}` },
+      async (t) => conflict(await updateVersioned(t, "gate_criterion", c.id, requiredVersion(b, "criterion"), patch)));
+    res.json({ version: out.version });
+  } catch (e) { next(e); }
+});
+
+r.delete("/criteria/:id", async (req, res, next) => {
+  try {
+    const c = await one(`SELECT * FROM gate_criterion WHERE id = $1`, [req.params.id]);
+    if (!c) throw new HttpError(404, "No such criterion");
+    gate(req.user, "document.write", { project: await project(c.project_id, req.user) });
+    if (c.met) throw new HttpError(409, "A criterion found met is on the record — reopen it first");
+    await audited(req.user,
+      { action: "Gate criterion removed", entity: "gate_criterion", entityId: c.id, detail: c.text, before: { ...c } },
+      async (t) => t.query(`DELETE FROM gate_criterion WHERE id = $1`, [c.id]));
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
+/* ── I-7 · la décision hors réunion ─────────────────────────────────
+   Retour de terrain RT365 : les décisions prises par le propriétaire
+   d'un produit ENTRE deux comités n'avaient pas de place et ont été
+   consignées dans une occurrence de réunion artificielle. Ici, une
+   décision est un enregistrement à part entière : un décideur nommé, une
+   date, ce qui a été écarté, qui n'était pas d'accord, et ce qu'elle
+   tranche (projet, modification, risque, jalon). Elle ne se modifie pas
+   et ne s'efface pas : une décision qui change en est une nouvelle, qui
+   nomme celle qu'elle remplace. */
+r.post("/decisions", async (req, res, next) => {
+  try {
+    const b = req.body ?? {};
+    if (!b.headline) bad("A decision needs a headline");
+    const council = String(b.council ?? "").trim().slice(0, 200);
+    if (!b.decidedBy && !council) bad("A decision outside a meeting names who decided — an active person in the directory, or the deciding body");
+    const who = b.decidedBy ? await one(`SELECT id FROM person WHERE id = $1 AND active`, [String(b.decidedBy)]) : null;
+    if (b.decidedBy && !who) bad("The decider must be an active person in the directory");
+    const evidence = String(b.evidenceUri ?? "").trim().slice(0, 1000);
+    /* D-8 — le premier programme réel a consigné DIX-NEUF décisions avec
+       une preuve vide parce que la sienne était un fichier versionné dans
+       un dépôt, et non une page web. La règle s'élargit à ce qu'une trace
+       de gouvernance cite réellement ; la prose reste refusée. */
+    if (evidence && !isEvidenceLocator(evidence)) bad(EVIDENCE_REFUSAL);
+    const on = b.decidedOn ? String(b.decidedOn).slice(0, 10) : iso(new Date());
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(on)) bad("decidedOn must be an ISO date");
+    /* REQ-47 (049) — la 039 a donné à une décision un ÉTAT et un
+       ratifieur, et aucune date de ratification : « combien de temps
+       ratifier prend-il dans ce programme » ne pouvait pas se poser.
+
+       Une décision qui NAÎT ratifiée l'a été quand elle a été prise :
+       « Ratified » à la création veut dire qu'elle est en vigueur, et
+       elle l'est depuis le jour de la décision. Celle qui le DEVIENT
+       plus tard est ratifiée le jour de ce geste-là (v1write.js). Qui
+       connaît le vrai jour le dit ; personne ne l'invente pour lui, et
+       les lignes déjà ratifiées avant la 049 gardent une date nulle. */
+    const status = b.status === "Proposed" ? "Proposed" : "Ratified";
+    const ratifiedOn = isoDay(b.ratifiedOn, "ratifiedOn") ?? on;
+
+    /* L'autorité : sur un projet, celle d'y écrire ; sans projet, c'est
+       une décision de portefeuille, un acte de niveau groupe. */
+    let p = null;
+    if (b.projectId) {
+      p = await project(b.projectId, req.user);
+      gate(req.user, "project.write", { project: p });
+    } else if (!["admin", "group"].includes(req.user.role)) {
+      throw new HttpError(403, "Portfolio-wide decisions are recorded at group level");
+    }
+    /* Les liens doivent exister, et sur CE projet : un identifiant deviné
+       ne doit rien révéler et rien relier de travers. */
+    const link = async (table, id, col = "project_id") => {
+      if (!id) return null;
+      const row = await one(`SELECT id, ${col} AS pid FROM ${table} WHERE id = $1`, [String(id)]);
+      if (!row || (p && row.pid && row.pid !== p.id)) bad(`That ${table.replace("_", " ")} does not exist on this project`);
+      return row.id;
+    };
+    const crId = await link("change_request", b.crId);
+    const raidId = await link("raid_item", b.raidId);
+    const msId = await link("milestone", b.milestoneId);
+    let supersedes = null;
+    if (b.supersedes) {
+      const prev = await one(`SELECT id FROM meeting_decision WHERE id = $1`, [String(b.supersedes)]);
+      if (!prev) bad("The decision this one supersedes does not exist");
+      supersedes = prev.id;
+    }
+
+    let id = null;
+    await audited(req.user,
+      () => ({ action: "Decision recorded", entity: "meeting_decision", entityId: id,
+               detail: String(b.headline).slice(0, 300) + (supersedes ? " — supersedes " + supersedes : "") }),
+      async (t) => {
+        id = await allocateId(t, "DEC", { pad: 3 });
+        await t.query(
+          `INSERT INTO meeting_decision
+             (id, occurrence_id, headline, rationale, alternatives, dissent, project_id, cr_id,
+              raid_id, milestone_id, supersedes, decided_by, decided_on, recorded_by,
+              council, evidence_uri, provenance, status, ratified_by, ratified_on)
+           VALUES ($1,NULL,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
+          [id, String(b.headline).slice(0, 1000), String(b.rationale ?? "").slice(0, 4000),
+           String(b.alternatives ?? "").slice(0, 4000), String(b.dissent ?? "").slice(0, 2000),
+           p?.id ?? null, crId, raidId, msId, supersedes, who?.id ?? null, on, req.user.id,
+           council, evidence, String(b.provenance ?? "").slice(0, 200),
+           status, String(b.ratifiedBy ?? "").slice(0, 200),
+           status === "Ratified" ? ratifiedOn : null]);
+      });
+    res.status(201).json({ id });
   } catch (e) { next(e); }
 });
 

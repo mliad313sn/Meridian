@@ -116,7 +116,7 @@ export function buildAgenda(db, series, occurrence, openActions = [], extras = {
   /* 2 · Exceptions — the substance of a weekly. Ordered worst first. */
   const metrics = projects.map(p => Engine.metrics(db, p.id)).filter(Boolean);
   const exceptions = metrics
-    .filter(m => m.health.rag !== "G")
+    .filter(m => m.health.rag === "A" || m.health.rag === "R")
     .sort((a, b) => (a.health.rag === b.health.rag ? a.spi - b.spi : a.health.rag === "R" ? -1 : 1));
   if (exceptions.length) {
     sections.push({
@@ -126,7 +126,19 @@ export function buildAgenda(db, series, occurrence, openActions = [], extras = {
       items: exceptions.map(m => ({
         headline: (m.health.rag === "R" ? "RED · " : "AMBER · ") + m.project.name,
         detail: m.health.why +
-          (m.slipDays > 7 ? " · forecast finish " + fmtDate(m.forecastFinish) + " (" + m.slipDays + "d late)" : "") +
+          /* REQ-19, after REQ-14. A placeholder finish is a POSITION on
+             the timeline waiting for the measurement that will produce
+             the real date — it is never late, because nobody promised
+             it. Saying "42d late" of a date nobody committed to sends a
+             steering meeting after a slip that does not exist, and the
+             agenda is the one place where that costs a room's time.
+             The forecast is still worth saying; the verdict is not. */
+          (m.slipDays > 7
+            ? (m.project.dateBasis === "placeholder"
+                ? " · forecast finish " + fmtDate(m.forecastFinish) +
+                  " (the finish date is a placeholder, not a commitment)"
+                : " · forecast finish " + fmtDate(m.forecastFinish) + " (" + m.slipDays + "d late)")
+            : "") +
           (m.vac < -0.005 ? " · " + signedMoney(m.vac) + " against budget" : ""),
         entity: "project", entityId: m.project.id,
         urgent: m.health.rag === "R",
@@ -188,7 +200,10 @@ export function buildAgenda(db, series, occurrence, openActions = [], extras = {
   const lookOn = series.cadence === "weekly" ? 14 : 45;
   const ids = new Set(projects.map(p => p.id));
   const mAll = db.milestones.filter(m => ids.has(m.project));
-  const missed = mAll.filter(m => !m.done && D(m.date) < D(asOf) && days(m.date, asOf) <= lookBack * 3);
+  /* REQ-14 — a placeholder date (RT365 D-057: "no calendar date for gates
+     C–F") is a position, not a promise: it is never MISSED, and it is
+     announced as a placeholder when it comes into view. */
+  const missed = mAll.filter(m => !m.done && m.dateBasis !== "placeholder" && D(m.date) < D(asOf) && days(m.date, asOf) <= lookBack * 3);
   const soon = mAll.filter(m => !m.done && D(m.date) >= D(asOf) && days(asOf, m.date) <= lookOn);
   if (missed.length || soon.length) {
     sections.push({
@@ -203,9 +218,10 @@ export function buildAgenda(db, series, occurrence, openActions = [], extras = {
           entity: "milestone", entityId: m.id, urgent: true,
         })),
         ...soon.sort(by("date")).slice(0, monthly ? 12 : 6).map(m => ({
-          headline: m.name,
+          headline: (m.dateBasis === "placeholder" ? "PLACEHOLDER · " : "") + m.name,
           detail: (Engine.project(db, m.project) || {}).name + " — " + fmtDate(m.date) +
-                  " (in " + days(asOf, m.date) + " days)",
+                  " (in " + days(asOf, m.date) + " days)" +
+                  (m.dateBasis === "placeholder" ? " · not a commitment" + (m.condition ? " — after: " + m.condition : "") : ""),
           entity: "milestone", entityId: m.id, urgent: false,
         })),
       ],
@@ -249,6 +265,79 @@ export function buildAgenda(db, series, occurrence, openActions = [], extras = {
         entity: "raid_item", entityId: r.id,
         urgent: Engine.exposure(r) >= db.settings.escalateExposure,
       })),
+    });
+  }
+
+  /* 6b · I-8 — register items whose REVIEW DATE has come. The date was
+     stored since the first migration and read by nobody; a review that
+     no agenda asks for does not happen. Overdue first, then those due
+     before the next run; the escalations above are not repeated. */
+  /* What the agenda has ACTUALLY drawn so far — not `seen`, which also
+     holds items the decision cap deferred; a deferred item whose review
+     is overdue is exactly what this section exists to bring back. */
+  const shown = new Set(sections.flatMap(sec => sec.items.map(i => i.entityId)));
+  const reviews = db.raid
+    .filter(r => r.status === "Open" && r.review && (!r.project || ids.has(r.project)) && !shown.has(r.id))
+    .filter(r => days(asOf, r.review) <= lookOn)
+    .sort((a, b) => a.review.localeCompare(b.review))
+    .slice(0, monthly ? 12 : 6);
+  if (reviews.length) {
+    sections.push({
+      key: "reviews",
+      title: "Register items due for review",
+      weight: 2,
+      items: reviews.map(r => ({
+        headline: (D(r.review) < D(asOf) ? "OVERDUE · " : "") + r.id + " · " + r.title,
+        detail: "review was due " + fmtDate(r.review) +
+                (D(r.review) < D(asOf) ? " (" + days(r.review, asOf) + " days ago)" : " (in " + days(asOf, r.review) + " days)") +
+                " · owner " + Engine.personName(db, r.owner) +
+                (r.gate ? " · against gate " + r.gate : "") + (r.cr ? " · " + r.cr : ""),
+        entity: "raid_item", entityId: r.id,
+        urgent: D(r.review) < D(asOf),
+      })),
+    });
+  }
+
+  /* 6b · REQ-21 (V-2) — les bénéfices dont la date de réalisation est
+     passée sans que personne les ait mesurés.
+
+     RT365 : « Les bénéfices se réalisent APRÈS la clôture, quand l'équipe
+     s'est dispersée. Une date dans une table que rien ne relance est la
+     manière dont le compte rendu de valeur meurt dans toutes les
+     organisations. » Le produit portait `realise_on` depuis la 008 et ne
+     s'en servait pour rien : la date passait, et rien n'arrivait.
+
+     Un bénéfice « Forecast » dont la date est passée revient donc ici,
+     comme un point de registre en retard revient au-dessus — et il y
+     reste jusqu'à ce que quelqu'un le mesure ou le statue. */
+  const benefitsDue = (db.benefits ?? [])
+    .filter(b => ids.has(b.project))
+    .filter(b => b.status === "Forecast" && b.realiseOn)
+    .filter(b => days(asOf, b.realiseOn) <= lookOn)
+    .sort((a, b) => a.realiseOn.localeCompare(b.realiseOn))
+    .slice(0, monthly ? 12 : 6);
+  if (benefitsDue.length) {
+    sections.push({
+      key: "benefits",
+      title: "Benefits due to be measured",
+      weight: 2,
+      items: benefitsDue.map(b => {
+        const late = D(b.realiseOn) < D(asOf);
+        const unit = b.unit ? " " + b.unit : "";
+        return {
+          headline: (late ? "OVERDUE · " : "") + b.id + " · " + b.title,
+          detail: (late
+              ? "was due to realise " + fmtDate(b.realiseOn) + " (" + days(b.realiseOn, asOf) + " days ago)"
+              : "realises " + fmtDate(b.realiseOn) + " (in " + days(asOf, b.realiseOn) + " days)")
+            + " · owner " + Engine.personName(db, b.owner)
+            /* La cible dans SON unité — jamais convertie en argent : la
+               008 a raison, toute valeur n'a pas la forme d'une monnaie. */
+            + (b.target !== null && b.target !== undefined ? " · target " + b.target + unit : "")
+            + (b.baseline !== null && b.baseline !== undefined ? " (from " + b.baseline + unit + ")" : ""),
+          entity: "benefit", entityId: b.id,
+          urgent: late,
+        };
+      }),
     });
   }
 

@@ -193,6 +193,33 @@ describe("enforcement over HTTP (R1.4 — hiding a button is not enforcement)", 
     assert.equal(base.status, 403);
   });
 
+  /* REQ-46 — le registre RAID a deux portées, et une seule était dite
+     dans rbac.js : une ligne SANS projet n'avait aucun projet à vérifier,
+     tombait dans le défaut projet, et y était refusée à tout le monde. Les
+     routes s'en tiraient en écrivant le rôle à la main, trois fois. La
+     règle vit maintenant là où le produit décide de l'autorité, et une
+     revue de registre — un geste de plus sur ces lignes-là — n'a pas eu
+     besoin d'une quatrième copie. */
+  test("REQ-46 · une ligne de registre SANS projet est un geste de niveau groupe", () => {
+    const group = mk("group", ["CBP"]);
+    const site = mk("site", [], ["GRU"]);
+    assert.equal(can(group, "raid.write", {}).ok, true, "le portefeuille porte ses propres risques");
+    /* Sans habilitation de programme non plus : une ligne de portefeuille
+       n'appartient à aucun programme, exactement comme period.close. */
+    assert.equal(can(mk("group"), "raid.write", {}).ok, true);
+    const refused = can(site, "raid.write", {});
+    assert.equal(refused.ok, false);
+    assert.match(refused.why, /group level/);
+    assert.equal(can(mk("viewer", [], ["GRU"]), "raid.write", {}).ok, false);
+    assert.equal(can(mk("admin"), "raid.write", {}).ok, true);
+    /* Et la portée projet n'a pas bougé d'un pouce. */
+    assert.equal(can(site, "raid.write", { project: proj("DCH", "GRU", "site") }).ok, true);
+    assert.equal(can(site, "raid.write", { project: proj("CBP", "GRU", "group") }).ok, false);
+    assert.match(can(site, "raid.write", { project: proj("CBP", "GRU", "group") }).why, /group-governed/);
+    assert.equal(can(group, "raid.write", { project: proj("DCH", "GRU", "site") }).ok, false,
+      "un programme hors habilitation reste hors habilitation");
+  });
+
   test("R1.5 over HTTP · a viewer is refused every write it can reach", async () => {
     const v = await as("viewerLIS");
     const attempts = [
@@ -296,5 +323,114 @@ describe("S-17 · a group account does not chair every site's room", () => {
     const gru = list.find((s) => s.id === "MS-GRU-W");
     assert.ok(gru, "minutes are shared across the group by design");
     assert.equal(gru.canWrite, false, "and the control is not drawn (R7.3)");
+  });
+});
+
+/**
+ * REQ-27 (V-8) — déplacer un projet existant sur l'échelle de jalons de
+ * son programme. Même raisonnement qu'`exception.sweep`, appliqué là où
+ * l'échelle est DÉCLARÉE : une échelle est une donnée du PROGRAMME, donc
+ * le geste appartient au bureau de programme, borné par l'habilitation
+ * sur ce programme-là — et jamais au site, qui subit le processus que
+ * l'échelle encode sans le posséder.
+ */
+/**
+ * REQ-24 (V-5) — la PONDÉRATION du classement de portefeuille.
+ *
+ * Le raisonnement d'`exception.sweep` — « le niveau qui pose une marge
+ * est celui qui la vérifie » — d'un cran plus haut : le niveau qui pose
+ * une pondération est celui qui répond de la COUPE qu'elle trace. Cette
+ * coupe traverse tous les programmes et dit à un site que son projet
+ * passe sous la ligne ; un chef de site qui règle les poids de sa propre
+ * file n'arbitre pas, il énonce une préférence.
+ *
+ * Et ce n'est PAS `settings.write` : ce n'est pas un réglage de la
+ * machine, c'est la politique d'investissement du groupe. La confier à
+ * l'administrateur retirerait au bureau de programme la seule décision
+ * dont il répond devant le comité. Le garde-fou n'est pas le niveau,
+ * c'est la piste — voir prioritise.test.js pour l'image avant/après.
+ */
+describe("REQ-24 · priority.weighting", () => {
+  test("l'action existe, et elle est distincte de la notation d'une ligne", () => {
+    assert.ok(ACTIONS.includes("priority.weighting"));
+    assert.ok(ACTIONS.includes("priority.write"));
+  });
+
+  test("le bureau de programme la pose, l'administrateur aussi", () => {
+    /* Portefeuille-large : aucun projet à nommer. Sans son propre `case`
+       dans le switch, elle tomberait dans le défaut projet et serait
+       refusée à tout le monde — le piège que data.import et period.close
+       ont déjà payé dans ce fichier. */
+    assert.equal(can(mk("group"), "priority.weighting", {}).ok, true,
+      "sans habilitation de programme non plus : la pondération n'appartient à aucun programme");
+    assert.equal(can(mk("group", ["CBP"]), "priority.weighting", {}).ok, true);
+    assert.equal(can(mk("admin"), "priority.weighting", {}).ok, true);
+  });
+
+  test("le site ne la pose jamais, et le refus dit pourquoi et à qui s'adresser", () => {
+    const v = can(mk("site", [], ["GRU"]), "priority.weighting", {});
+    assert.equal(v.ok, false);
+    assert.match(v.why, /answers for the cut it draws/);
+    assert.match(v.why, /ask your programme office/);
+  });
+
+  test("un lecteur ne la pose pas — c'est une écriture comme une autre", () => {
+    assert.equal(can(mk("viewer", [], ["GRU"]), "priority.weighting", {}).ok, false);
+  });
+});
+
+describe("REQ-27 · ladder.migrate", () => {
+  const RBT = proj("RBT", "GRU", "group");
+
+  test("le niveau qui déclare l'échelle est le niveau qui y fait passer un projet", () => {
+    assert.equal(can(mk("group", ["RBT"]), "ladder.migrate", { project: RBT }).ok, true);
+    assert.equal(can(mk("admin"), "ladder.migrate", { project: RBT }).ok, true,
+      "l'administrateur passe par la sortie anticipée, comme partout");
+  });
+
+  test("un groupe sans habilitation sur CE programme est refusé, et on lui dit quoi faire", () => {
+    const v = can(mk("group", ["CBP"]), "ladder.migrate", { project: RBT });
+    assert.equal(v.ok, false);
+    assert.match(v.why, /outside your grant/);
+    assert.match(v.why, /ask an administrator to add it/);
+  });
+
+  test("le site ne le fait jamais — pas même sur un projet gouverné chez lui", () => {
+    const own = proj("RBT", "GRU", "site");
+    for (const p of [RBT, own]) {
+      const v = can(mk("site", [], ["GRU"]), "ladder.migrate", { project: p });
+      assert.equal(v.ok, false, "un chef de site ne change pas les barreaux");
+      assert.match(v.why, /declared on the programme/);
+      assert.match(v.why, /ask your programme office/);
+    }
+  });
+
+  test("le lecteur jamais, le rôle inconnu jamais, et sans projet le refus dit par où commencer", () => {
+    assert.equal(can(mk("viewer", ["RBT"]), "ladder.migrate", { project: RBT }).ok, false);
+    assert.equal(can({ role: "nonsense", active: true, id: "U" }, "ladder.migrate", { project: RBT }).ok, false);
+    const none = can(mk("group", ["RBT"]), "ladder.migrate", {});
+    assert.equal(none.ok, false);
+    assert.match(none.why, /open it from the portfolio first/);
+  });
+});
+
+/**
+ * Q-2 — demander le constat est un acte du niveau qui pose les marges,
+ * et il n'a pas de projet à nommer.
+ */
+describe("Q-2 · exception.sweep", () => {
+  test("le groupe peut le demander ; le site, le lecteur et l'inconnu non", () => {
+    const group = { role: "group", active: true, id: "U1", grants: { programmes: new Set(), sites: new Set() } };
+    const site = { role: "site", active: true, id: "U2", grants: { programmes: new Set(), sites: new Set() } };
+    const viewer = { role: "viewer", active: true, id: "U3", grants: { programmes: new Set(), sites: new Set() } };
+    const admin = { role: "admin", active: true, id: "U4", grants: { programmes: new Set(), sites: new Set() } };
+
+    assert.equal(can(group, "exception.sweep").ok, true, "sans ressource : c'est un acte de portefeuille");
+    assert.equal(can(admin, "exception.sweep").ok, true, "l'administrateur passe partout, par la sortie anticipée");
+    assert.equal(can(site, "exception.sweep").ok, false);
+    assert.match(can(site, "exception.sweep").why, /sets a margin is the level that checks it/);
+    assert.equal(can(viewer, "exception.sweep").ok, false);
+    assert.equal(can({ role: "nonsense", active: true, id: "U5" }, "exception.sweep").ok, false,
+      "un rôle que ce fichier ne nomme pas n'obtient rien");
   });
 });

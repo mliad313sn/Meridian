@@ -34,6 +34,8 @@ const DEFAULT_SETTINGS = {
   capexEnvelope: 0,
   cadence: "Weekly — Monday 09:00",
   orgName: "MERIDIAN",
+  /* SaaS-04 — the instance's own name in a fleet; empty on a single one. */
+  instanceId: "",
   /* R-01 — the hosts an evidence link may point at, comma-separated.
      EMPTY FAILS CLOSED: until somebody names the group's document estate,
      nothing can be approved as evidence — the same rule the change
@@ -105,7 +107,8 @@ export async function loadPortfolio(user) {
   const [
     activities, deps, milestones, ledger, raidRows, crRows, stepRows,
     allocations, docs, columns, items, crossDeps, narrativeRows, extLinks,
-    benefits, waves, commitments, timesheets, lessonRows, tolerances, exceptions, caseRows,
+    benefits, waves, commitments, timesheets, lessonRows, tolerances, exceptions, caseRows, criterionRows,
+    stakeholderRows, commsRows, reconfirmRows,
   ] = await Promise.all([
     inScope(`SELECT * FROM activity WHERE project_id = ANY($1) ORDER BY project_id, stage`),
     inScope(`SELECT d.* FROM activity_dep d JOIN activity a ON a.id = d.activity_id
@@ -162,7 +165,28 @@ export async function loadPortfolio(user) {
               WHERE project_id = ANY($1) ORDER BY raised_on DESC, id`),
     /* PM-03 — la promesse contre laquelle le réalisé se relira. */
     inScope(`SELECT * FROM business_case WHERE project_id = ANY($1)`),
+    /* I-4 — les critères de chaque jalon, et qui les a constatés. */
+    inScope(`SELECT * FROM gate_criterion WHERE project_id = ANY($1) ORDER BY project_id, gate, seq, id`),
+    /* PM-05 / PM-11 — qui compte, et qui on informe. */
+    inScope(`SELECT * FROM stakeholder WHERE project_id = ANY($1) ORDER BY project_id, influence DESC, interest DESC, name`),
+    inScope(`SELECT * FROM comms_plan WHERE project_id = ANY($1) ORDER BY project_id, next_on NULLS LAST, id`),
+    /* REQ-22 — la suite des reconfirmations : « le cas a-t-il été
+       reconfirmé À CE jalon » est une question par jalon, qu'une colonne
+       unique ne pouvait pas porter. */
+    inScope(`SELECT * FROM case_reconfirmation WHERE project_id = ANY($1) ORDER BY project_id, gate`),
   ]);
+
+  /* La longueur d'échelle déclarée par chaque programme, lue une fois :
+     cent projets ne doivent pas coûter cent lectures. */
+  const ladderByProgramme = new Map(programmes.map((pr) => {
+    let n = 4;
+    try {
+      const m = typeof pr.gate_model === "string" ? JSON.parse(pr.gate_model) : pr.gate_model;
+      if (Array.isArray(m) && m.length) n = m.length;
+    } catch { /* une échelle illisible se lit comme la défaut */ }
+    return [pr.id, n];
+  }));
+  const ladderOf = (programmeId) => ladderByProgramme.get(programmeId) ?? 4;
 
   const depsByActivity = new Map();
   for (const d of deps) {
@@ -227,6 +251,8 @@ export async function loadPortfolio(user) {
     })),
     programmes: programmes.map((p) => ({
       id: p.id, name: p.name, sponsor: p.sponsor, managerId: p.manager_id,
+      /* I-3 — the programme's own gate ladder, or null for the default. */
+      gateModel: p.gate_model ? jsonValue(p.gate_model) : null,
       origin: p.origin ?? "local", version: p.row_version,
     })),
     people: people.map((p) => ({
@@ -249,11 +275,25 @@ export async function loadPortfolio(user) {
       desc: p.description, phase: p.phase, gate: p.gate,
       healthOverride: p.health_override, healthOverrideWhy: p.health_override_why,
       closed: p.closed, origin: p.origin ?? "local",
+      /* E-1 — sous quelle échelle ce projet a été dressé, et si ce n'est
+         plus celle que son programme déclare. La 036 ne réécrit pas les
+         projets existants — c'est voulu — mais rien ne DISAIT que « quel
+         jalon vient ensuite » était devenu faux pour eux. `null` veut
+         dire « dressé avant que nous l'écrivions » : on ne l'invente
+         pas, on dit qu'on ne sait pas. */
+      scaffoldedGates: p.scaffolded_gates ?? null,
+      ladderDiffers: p.scaffolded_gates != null
+        && p.scaffolded_gates !== ladderOf(p.programme_id),
       // the post-implementation verdict, where one has been given (V-01)
       pirOn: p.pir_on ?? null, pirVerdict: p.pir_verdict ?? null, pirNote: p.pir_note ?? "",
       /* PM-08 — les trois signatures de la clôture. */
       opsAcceptedBy: p.ops_accepted_by ?? null, benefitsTo: p.benefits_owner_id ?? null,
       closureNote: p.closure_note ?? "", closedOn: p.closed_on ?? null,
+      /* REQ-19 (045) — ce sur quoi la date de fin repose, et ce qui
+         produira la vraie ; puis qui répond du cas d'affaire et ce que
+         « fini » voudra dire. Même forme que le jalon depuis la 040. */
+      dateBasis: p.date_basis ?? "committed", condition: p.condition ?? "",
+      sponsor: p.sponsor_id ?? null, acceptanceCriteria: p.acceptance_criteria ?? "",
       // what this reaches into, and whether it has been released (V-03)
       plantImpact: p.plant_impact ?? "none", mocRef: p.moc_ref ?? "",
       mocApprovedOn: p.moc_approved_on ?? null, mocApprovedBy: p.moc_approved_label ?? "",
@@ -261,6 +301,8 @@ export async function loadPortfolio(user) {
       fit: p.fit_score ?? null, value: p.value_score ?? null,
       risk: p.risk_score ?? null, effort: p.effort_score ?? null,
       rank: p.rank_seq ?? null,
+      /* I-2 — d'où vient cette ligne, quand un système branché l'a créée. */
+      externalSource: p.external_source ?? null, externalId: p.external_id ?? null,
       version: p.row_version,
     })),
 
@@ -274,7 +316,11 @@ export async function loadPortfolio(user) {
       target: b.target === null ? null : Number(b.target),
       actual: b.actual === null ? null : Number(b.actual),
       owner: b.owner_id, realiseOn: b.realise_on, measuredOn: b.measured_on,
-      status: b.status, version: b.row_version,
+      status: b.status,
+      /* REQ-20 — ce que l'adoption vient chercher : la ligne est-elle
+         déjà à quelqu'un, et sous quel nom. */
+      externalSource: b.external_source ?? null, externalId: b.external_id ?? null,
+      version: b.row_version,
     })),
 
     activities: activities.map((a) => ({
@@ -282,6 +328,9 @@ export async function loadPortfolio(user) {
       start: a.start_date, end: a.end_date, baseStart: a.base_start, baseEnd: a.base_end,
       weight: Number(a.weight), pct: a.pct, owner: a.owner_id,
       deps: depsByActivity.get(a.id) ?? [],
+      /* I-5 — qui a mesuré cet avancement, et quand ; vide = saisi ici. */
+      progressSource: a.progress_source ?? "", progressAt: a.progress_at ?? null,
+      externalSource: a.external_source ?? null, externalId: a.external_id ?? null,
       origin: a.origin ?? "local", version: a.row_version,
     })),
 
@@ -292,6 +341,15 @@ export async function loadPortfolio(user) {
       /* PM-04 — les critères posés d'avance, et qui a constaté. */
       acceptanceCriteria: m.acceptance_criteria ?? "",
       acceptedBy: m.accepted_by ?? null, acceptedOn: m.accepted_on ?? null,
+      /* REQ-14 — what the date is worth, and what will produce the real one. */
+      dateBasis: m.date_basis ?? "committed", condition: m.condition ?? "",
+      /* REQ-27 — the rung this milestone held before an explicit ladder
+         move took it off. It is an ordinary milestone now and keeps
+         everything it carried; this is the only thing that still SAYS
+         what it used to be, and without it a reader cannot tell a
+         retired gate from a milestone that was never one. */
+      retiredGate: m.retired_gate ?? null,
+      externalSource: m.external_source ?? null, externalId: m.external_id ?? null,
       origin: m.origin ?? "local", version: m.row_version,
     })),
 
@@ -343,6 +401,11 @@ export async function loadPortfolio(user) {
       id: c.id, project: c.project_id, summary: c.summary,
       expectedCost: c.expected_cost == null ? null : toM(c.expected_cost),
       expectedBenefit: c.expected_benefit == null ? null : toM(c.expected_benefit),
+      /* REQ-24 (046) — le bénéfice attendu dit COMBIEN ; il ne dit pas à
+         quel point on y croit. Nul veut dire « personne ne l'a dite » :
+         le classement refuse alors de placer la ligne plutôt que de
+         supposer une confiance moyenne (REQ-33). */
+      valueConfidence: c.value_confidence ?? null,
       basis: c.basis, writtenBy: c.written_by, writtenOn: c.written_on,
       updatedOn: c.updated_on,
       reconfirmedGate: c.reconfirmed_gate, reconfirmedOn: c.reconfirmed_on,
@@ -352,7 +415,20 @@ export async function loadPortfolio(user) {
          l'horloge : reconfirmer efface updated_on, réviser le repose —
          deux dates du même jour ne savent pas dire qui fut premier. */
       staleSinceReconfirm: !!(c.reconfirmed_on && c.updated_on),
+      externalSource: c.external_source ?? null, externalId: c.external_id ?? null,
       version: c.row_version,
+    })),
+
+    /* REQ-22 (V-3) — une reconfirmation par jalon, avec les deux chiffres
+       qu'elle a vus : c'est ce qui permet de dire l'écart depuis la
+       précédente sans relire un historique qui n'existe pas. */
+    caseReconfirmations: reconfirmRows.map((r) => ({
+      id: r.id, case: r.case_id, project: r.project_id, gate: r.gate,
+      expectedCost: r.expected_cost == null ? null : toM(r.expected_cost),
+      expectedBenefit: r.expected_benefit == null ? null : toM(r.expected_benefit),
+      verdict: r.verdict, note: r.note,
+      reconfirmedBy: r.reconfirmed_by, reconfirmedOn: r.reconfirmed_on,
+      version: r.row_version,
     })),
 
     /* PM-02 — ce qu'on a appris, et qui doit survivre au projet.
@@ -392,6 +468,17 @@ export async function loadPortfolio(user) {
            assurance. */
         tp: r.target_probability, ti: r.target_impact,
         owner: r.owner_id, opened: r.opened_on, review: r.review_on,
+        /* I-8 — contre quoi il se lève : le jalon de gouvernance menacé,
+           la modification qui le porte. */
+        gate: r.gate ?? null, cr: r.cr_id ?? null,
+        /* REQ-13 (045) — le mot du système qui tient ce registre, à côté
+           du nôtre : `type` reste le contrat du moteur. */
+        category: r.category ?? "",
+        /* REQ-18 (045) — quand, et sur la parole de qui, elle s'est
+           close. Nul sur une ligne close avant que nous sachions le
+           noter : on ne rétro-date pas. */
+        closedOn: r.closed_on ?? null, closedBy: r.closed_by ?? null,
+        externalSource: r.external_source ?? null, externalId: r.external_id ?? null,
         originSite: r.origin_site ?? null,   // a site concern names its raising site
         version: r.row_version,
       })),
@@ -429,12 +516,50 @@ export async function loadPortfolio(user) {
         version: d.row_version,
       })),
 
+    /* I-4 — the criteria posed for each gate, and who found them met. */
+    criteria: criterionRows.map((c) => ({
+      id: c.id, project: c.project_id, gate: c.gate, seq: c.seq, text: c.text,
+      document: c.document_id ?? null, met: c.met,
+      reviewedBy: c.reviewed_by ?? null, reviewedOn: c.reviewed_on ?? null, note: c.note ?? "",
+      externalSource: c.external_source ?? null, externalId: c.external_id ?? null,
+      version: c.row_version,
+    })),
+
+    /* REQ-22 (V-3) — une reconfirmation par jalon, avec les deux chiffres
+       qu'elle a vus : c'est ce qui permet de dire l'écart depuis la
+       précédente sans relire un historique qui n'existe pas. */
+    caseReconfirmations: reconfirmRows.map((r) => ({
+      id: r.id, case: r.case_id, project: r.project_id, gate: r.gate,
+      expectedCost: r.expected_cost == null ? null : toM(r.expected_cost),
+      expectedBenefit: r.expected_benefit == null ? null : toM(r.expected_benefit),
+      verdict: r.verdict, note: r.note,
+      reconfirmedBy: r.reconfirmed_by, reconfirmedOn: r.reconfirmed_on,
+      version: r.row_version,
+    })),
+
+    /* PM-05 — the stakeholder register: interest × influence, attitude,
+       how they are engaged, and who on the team owns the relationship. */
+    stakeholders: stakeholderRows.map((x) => ({
+      id: x.id, project: x.project_id, person: x.person_id ?? null, name: x.name,
+      organisation: x.organisation, role: x.role_label, interest: x.interest, influence: x.influence,
+      attitude: x.attitude, engagement: x.engagement, owner: x.owner_id ?? null, note: x.note,
+      version: x.row_version,
+    })),
+    /* PM-11 — the communication plan: who hears what, how often, from whom. */
+    comms: commsRows.map((x) => ({
+      id: x.id, project: x.project_id, audience: x.audience, purpose: x.purpose, channel: x.channel,
+      frequency: x.frequency, owner: x.owner_id ?? null, nextOn: x.next_on ?? null, note: x.note,
+      version: x.row_version,
+    })),
+
     columns: columns.map((c) => ({ id: c.id, name: c.name, wip: c.wip })),
 
     items: items.map((i) => ({
       id: i.id, project: i.project_id, column: i.column_id, title: i.title,
       assignee: i.assignee_id, points: i.points, priority: i.priority,
-      created: i.created_on, version: i.row_version,
+      created: i.created_on,
+      externalSource: i.external_source ?? null, externalId: i.external_id ?? null,
+      version: i.row_version,
     })),
 
     crossDeps: crossDeps.map((c) => ({
@@ -473,4 +598,24 @@ export async function requireVisibleProject(user, id) {
   if (!p) return { error: 404, message: "No such project" };
   if (!canSeeProject(user, p)) return { error: 404, message: "No such project" };
   return { project: p };
+}
+
+/**
+ * REQ-24 — la pondération du classement de portefeuille (046).
+ *
+ * Une seule ligne pour tout le groupe, et c'est la décision : une
+ * pondération par programme laisserait chaque programme régler les poids
+ * qui font remonter ses propres projets. `setOn` nul veut dire que
+ * personne ici n'a jamais regardé ces poids — l'écran le dit plutôt que
+ * de laisser croire à un arbitrage qui n'a pas eu lieu.
+ */
+export async function loadWeighting() {
+  const w = await one(`SELECT * FROM prioritisation_weighting WHERE id = 'default'`);
+  if (!w) return null;
+  return {
+    value: w.w_value, confidence: w.w_confidence,
+    exposure: w.w_exposure, capacity: w.w_capacity,
+    note: w.note ?? "", setBy: w.set_label ?? "", setOn: w.set_on ?? null,
+    version: w.row_version,
+  };
 }

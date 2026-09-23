@@ -2,9 +2,9 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Meridian IT-PMO",
-    "version": "5.3.0",
+    "version": "5.16.0",
     "summary": "Read a governed project portfolio, and the trail of how it got that way",
-    "description": "The surface other systems read. It is versioned in the path: the day the shape has to change it becomes /api/v2, so that nobody has to guess. Authentication is a key issued per connected system, carrying explicit scopes; the product never stores the key itself, only its fingerprint.\n\nThere is no write surface yet, and that is deliberate: a scope is only published once a route honours it. Declaring one earlier would advertise a door that does not exist and imply it is guarded.",
+    "description": "The surface other systems read. It is versioned in the path: the day the shape has to change it becomes /api/v2, so that nobody has to guess. Authentication is a key issued per connected system, carrying explicit scopes; the product never stores the key itself, only its fingerprint.\n\nWrites arrived with the first real integrator (RT365, docs/33): PUT by your own identifier on projects, milestones, register items, stage progress, work items, decisions and actions, under two write scopes, with an optional Idempotency-Key. A scope is only published once a route honours it: declaring one earlier would advertise a door that does not exist and imply it is guarded.",
     "license": {
       "name": "Apache-2.0",
       "identifier": "Apache-2.0"
@@ -27,7 +27,10 @@
     },
     "x-scopes": {
       "read:portfolio": "Read the portfolio — projects, schedule, money, risks, benefits",
-      "read:audit": "Read the audit trail — every recorded decision and change"
+      "read:audit": "Read the audit trail — every recorded decision and change",
+      "write:portfolio": "Write projects, milestones, register items, stage progress and work items, keyed by your own identifiers",
+      "write:meetings": "Record decisions and actions, keyed by your own identifiers",
+      "read:meetings": "Read the decision register and the actions — what was decided, by whom, and what remains to do"
     }
   },
   "security": [
@@ -36,6 +39,353 @@
     }
   ],
   "paths": {
+    "/api/v1/actions/{externalId}": {
+      "put": {
+        "summary": "Create or update an action, keyed by your own identifier",
+        "description": "Creates the an action when nothing carries this externalId for your integration, updates it otherwise. The identity is (integration, externalId): two connected systems may both say \"E01\" without colliding. `version` is optional — when sent it is asserted (409 if stale); when omitted your system is the master of this row and the last write wins. Optional `Idempotency-Key` header: the same key with the same body replays the recorded answer (Idempotent-Replayed: true); the same key with another body is refused (422) — one key names ONE request, not a run. `adopt: \"<Meridian id>\"` binds your externalId to a row that already exists (created on a screen, or scaffolded) instead of creating another. A field this collection does not declare is REFUSED (400) and nothing is written or audited: the properties below are the whole of what a body may carry (REQ-19). The same business rules as the screens apply. An action is raised in an OPEN meeting: send `occurrence` (an open occurrence id) or `series` (the series whose open occurrence takes it). The API never opens a meeting — a chair does.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scope": "write:meetings",
+        "parameters": [
+          {
+            "name": "externalId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "Your own identifier for this row — stable across runs, unique within your integration"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "One key names ONE request. The same key with the same body replays the recorded answer (response header Idempotent-Replayed: true); the same key with a different body is refused (422)."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "adopt": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "detail": {
+                    "type": "string"
+                  },
+                  "owner": {
+                    "type": "string"
+                  },
+                  "project": {
+                    "type": "string"
+                  },
+                  "dueDate": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "status": {
+                    "type": "string"
+                  },
+                  "occurrence": {
+                    "type": "string"
+                  },
+                  "series": {
+                    "type": "string"
+                  },
+                  "version": {
+                    "type": "integer"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The document described above",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "contract": {
+                      "type": "string"
+                    },
+                    "generatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "externalId": {
+                      "type": "string"
+                    },
+                    "created": {
+                      "type": "boolean"
+                    },
+                    "version": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created — the row did not exist for this externalId",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "contract": {
+                      "type": "string"
+                    },
+                    "generatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "externalId": {
+                      "type": "string"
+                    },
+                    "created": {
+                      "type": "boolean"
+                    },
+                    "version": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body breaks a rule the screens enforce too; the message says which"
+          },
+          "401": {
+            "description": "No key, an unknown key, or a revoked key — the three are indistinguishable on purpose"
+          },
+          "403": {
+            "description": "The key is live but does not carry the scope this route requires"
+          },
+          "409": {
+            "description": "A stale version, an immutable decision, or a meeting that is not open"
+          },
+          "422": {
+            "description": "Idempotency-Key reused with a different request"
+          }
+        }
+      }
+    },
+    "/api/v1/actions": {
+      "get": {
+        "summary": "The actions — what a room asked of someone, and whether it is done",
+        "description": "Read them before you write them: an action closed on a screen and rewritten `Open` by an unchanged re-run overwrites the minute of a meeting. `raisedInStatus` says whether the occurrence that raised it is still open. Filters: status, limit (default 200, max 500).",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scope": "read:meetings",
+        "responses": {
+          "200": {
+            "description": "The document described above",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "contract": {
+                      "type": "string"
+                    },
+                    "generatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "actions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No key, an unknown key, or a revoked key — the three are indistinguishable on purpose"
+          },
+          "403": {
+            "description": "The key is live but does not carry the scope this route requires"
+          }
+        }
+      }
+    },
+    "/api/v1/activities/{externalId}": {
+      "put": {
+        "summary": "Create or update the link to a schedule stage, and its measured progress, keyed by your own identifier",
+        "description": "Creates the the link to a schedule stage, and its measured progress when nothing carries this externalId for your integration, updates it otherwise. The identity is (integration, externalId): two connected systems may both say \"E01\" without colliding. `version` is optional — when sent it is asserted (409 if stale); when omitted your system is the master of this row and the last write wins. Optional `Idempotency-Key` header: the same key with the same body replays the recorded answer (Idempotent-Replayed: true); the same key with another body is refused (422) — one key names ONE request, not a run. `adopt: \"<Meridian id>\"` binds your externalId to a row that already exists (created on a screen, or scaffolded) instead of creating another. A field this collection does not declare is REFUSED (400) and nothing is written or audited: the properties below are the whole of what a body may carry (REQ-19). The same business rules as the screens apply. Stages are not created by integrations — the plan belongs to the project. The first call binds your id to an existing stage (`activity`); every call may carry `pct`, stamped with `source` and `measuredAt` so earned value reads measured, not typed, progress (I-5).",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scope": "write:portfolio",
+        "parameters": [
+          {
+            "name": "externalId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "Your own identifier for this row — stable across runs, unique within your integration"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "One key names ONE request. The same key with the same body replays the recorded answer (response header Idempotent-Replayed: true); the same key with a different body is refused (422)."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "activity": {
+                    "type": "string"
+                  },
+                  "pct": {
+                    "type": "integer"
+                  },
+                  "source": {
+                    "type": "string"
+                  },
+                  "measuredAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "version": {
+                    "type": "integer"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The document described above",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "contract": {
+                      "type": "string"
+                    },
+                    "generatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "externalId": {
+                      "type": "string"
+                    },
+                    "created": {
+                      "type": "boolean"
+                    },
+                    "version": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created — the row did not exist for this externalId",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "contract": {
+                      "type": "string"
+                    },
+                    "generatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "externalId": {
+                      "type": "string"
+                    },
+                    "created": {
+                      "type": "boolean"
+                    },
+                    "version": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body breaks a rule the screens enforce too; the message says which"
+          },
+          "401": {
+            "description": "No key, an unknown key, or a revoked key — the three are indistinguishable on purpose"
+          },
+          "403": {
+            "description": "The key is live but does not carry the scope this route requires"
+          },
+          "409": {
+            "description": "A stale version, an immutable decision, or a meeting that is not open"
+          },
+          "422": {
+            "description": "Idempotency-Key reused with a different request"
+          }
+        }
+      }
+    },
     "/api/v1/audit": {
       "get": {
         "summary": "The audit trail — every recorded decision and change",
@@ -77,6 +427,879 @@
           },
           "403": {
             "description": "The key is live but does not carry the scope this route requires"
+          }
+        }
+      }
+    },
+    "/api/v1/benefits/{externalId}": {
+      "put": {
+        "summary": "Create or update a benefit, keyed by your own identifier",
+        "description": "Creates the a benefit when nothing carries this externalId for your integration, updates it otherwise. The identity is (integration, externalId): two connected systems may both say \"E01\" without colliding. `version` is optional — when sent it is asserted (409 if stale); when omitted your system is the master of this row and the last write wins. Optional `Idempotency-Key` header: the same key with the same body replays the recorded answer (Idempotent-Replayed: true); the same key with another body is refused (422) — one key names ONE request, not a run. `adopt: \"<Meridian id>\"` binds your externalId to a row that already exists (created on a screen, or scaffolded) instead of creating another. A field this collection does not declare is REFUSED (400) and nothing is written or audited: the properties below are the whole of what a body may carry (REQ-19). The same business rules as the screens apply. A benefit keeps ITS unit — percent, hours, ounces, currency — and is never divided by a million: `baseline`, `target` and `actual` are passed through as sent. An `actual` needs `measuredOn`, because a figure with no measurement date cannot be situated a year later. `kind` is Production, Availability, Cost, Risk or Compliance; `status` is Forecast, Realised, Partially realised, Missed or Withdrawn.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scope": "write:portfolio",
+        "parameters": [
+          {
+            "name": "externalId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "Your own identifier for this row — stable across runs, unique within your integration"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "One key names ONE request. The same key with the same body replays the recorded answer (response header Idempotent-Replayed: true); the same key with a different body is refused (422)."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "adopt": {
+                    "type": "string"
+                  },
+                  "project": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "detail": {
+                    "type": "string"
+                  },
+                  "measure": {
+                    "type": "string"
+                  },
+                  "unit": {
+                    "type": "string"
+                  },
+                  "baseline": {
+                    "type": "number"
+                  },
+                  "target": {
+                    "type": "number"
+                  },
+                  "actual": {
+                    "type": "number"
+                  },
+                  "owner": {
+                    "type": "string"
+                  },
+                  "realiseOn": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "measuredOn": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "status": {
+                    "type": "string"
+                  },
+                  "version": {
+                    "type": "integer"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The document described above",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "contract": {
+                      "type": "string"
+                    },
+                    "generatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "externalId": {
+                      "type": "string"
+                    },
+                    "created": {
+                      "type": "boolean"
+                    },
+                    "version": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created — the row did not exist for this externalId",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "contract": {
+                      "type": "string"
+                    },
+                    "generatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "externalId": {
+                      "type": "string"
+                    },
+                    "created": {
+                      "type": "boolean"
+                    },
+                    "version": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body breaks a rule the screens enforce too; the message says which"
+          },
+          "401": {
+            "description": "No key, an unknown key, or a revoked key — the three are indistinguishable on purpose"
+          },
+          "403": {
+            "description": "The key is live but does not carry the scope this route requires"
+          },
+          "409": {
+            "description": "A stale version, an immutable decision, or a meeting that is not open"
+          },
+          "422": {
+            "description": "Idempotency-Key reused with a different request"
+          }
+        }
+      }
+    },
+    "/api/v1/business-case/{externalId}": {
+      "put": {
+        "summary": "Create or update the business case, keyed by your own identifier",
+        "description": "Creates the the business case when nothing carries this externalId for your integration, updates it otherwise. The identity is (integration, externalId): two connected systems may both say \"E01\" without colliding. `version` is optional — when sent it is asserted (409 if stale); when omitted your system is the master of this row and the last write wins. Optional `Idempotency-Key` header: the same key with the same body replays the recorded answer (Idempotent-Replayed: true); the same key with another body is refused (422) — one key names ONE request, not a run. `adopt: \"<Meridian id>\"` binds your externalId to a row that already exists (created on a screen, or scaffolded) instead of creating another. A field this collection does not declare is REFUSED (400) and nothing is written or audited: the properties below are the whole of what a body may carry (REQ-19). The same business rules as the screens apply. One case per project (a second is refused, naming the one to `adopt`). Money is in millions, as everywhere else. Revising the case does NOT erase a past reconfirmation — it happened, it is dated — but it does mean the reconfirmation no longer covers what is written, which the read says as `staleSinceReconfirm`.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scope": "write:portfolio",
+        "parameters": [
+          {
+            "name": "externalId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "Your own identifier for this row — stable across runs, unique within your integration"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "One key names ONE request. The same key with the same body replays the recorded answer (response header Idempotent-Replayed: true); the same key with a different body is refused (422)."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "adopt": {
+                    "type": "string"
+                  },
+                  "project": {
+                    "type": "string"
+                  },
+                  "summary": {
+                    "type": "string"
+                  },
+                  "basis": {
+                    "type": "string"
+                  },
+                  "expectedCost": {
+                    "type": "number"
+                  },
+                  "expectedBenefit": {
+                    "type": "number"
+                  },
+                  "version": {
+                    "type": "integer"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The document described above",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "contract": {
+                      "type": "string"
+                    },
+                    "generatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "externalId": {
+                      "type": "string"
+                    },
+                    "created": {
+                      "type": "boolean"
+                    },
+                    "version": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created — the row did not exist for this externalId",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "contract": {
+                      "type": "string"
+                    },
+                    "generatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "externalId": {
+                      "type": "string"
+                    },
+                    "created": {
+                      "type": "boolean"
+                    },
+                    "version": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body breaks a rule the screens enforce too; the message says which"
+          },
+          "401": {
+            "description": "No key, an unknown key, or a revoked key — the three are indistinguishable on purpose"
+          },
+          "403": {
+            "description": "The key is live but does not carry the scope this route requires"
+          },
+          "409": {
+            "description": "A stale version, an immutable decision, or a meeting that is not open"
+          },
+          "422": {
+            "description": "Idempotency-Key reused with a different request"
+          }
+        }
+      }
+    },
+    "/api/v1/criteria/{externalId}": {
+      "put": {
+        "summary": "Create or update a gate criterion, keyed by your own identifier",
+        "description": "Creates the a gate criterion when nothing carries this externalId for your integration, updates it otherwise. The identity is (integration, externalId): two connected systems may both say \"E01\" without colliding. `version` is optional — when sent it is asserted (409 if stale); when omitted your system is the master of this row and the last write wins. Optional `Idempotency-Key` header: the same key with the same body replays the recorded answer (Idempotent-Replayed: true); the same key with another body is refused (422) — one key names ONE request, not a run. `adopt: \"<Meridian id>\"` binds your externalId to a row that already exists (created on a screen, or scaffolded) instead of creating another. A field this collection does not declare is REFUSED (400) and nothing is written or audited: the properties below are the whole of what a body may carry (REQ-19). The same business rules as the screens apply. A sentence posed in advance on (project, gate — within the programme's ladder). `met: true` needs `reviewedBy`, a named person who does not own the `document` cited; the gate is ready only when every criterion is met. Adopt a scaffolded criterion with `adopt`.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scope": "write:portfolio",
+        "parameters": [
+          {
+            "name": "externalId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "Your own identifier for this row — stable across runs, unique within your integration"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "One key names ONE request. The same key with the same body replays the recorded answer (response header Idempotent-Replayed: true); the same key with a different body is refused (422)."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "adopt": {
+                    "type": "string"
+                  },
+                  "project": {
+                    "type": "string"
+                  },
+                  "gate": {
+                    "type": "integer"
+                  },
+                  "text": {
+                    "type": "string"
+                  },
+                  "document": {
+                    "type": "string"
+                  },
+                  "note": {
+                    "type": "string"
+                  },
+                  "met": {
+                    "type": "boolean"
+                  },
+                  "reviewedBy": {
+                    "type": "string"
+                  },
+                  "version": {
+                    "type": "integer"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The document described above",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "contract": {
+                      "type": "string"
+                    },
+                    "generatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "externalId": {
+                      "type": "string"
+                    },
+                    "created": {
+                      "type": "boolean"
+                    },
+                    "version": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created — the row did not exist for this externalId",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "contract": {
+                      "type": "string"
+                    },
+                    "generatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "externalId": {
+                      "type": "string"
+                    },
+                    "created": {
+                      "type": "boolean"
+                    },
+                    "version": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body breaks a rule the screens enforce too; the message says which"
+          },
+          "401": {
+            "description": "No key, an unknown key, or a revoked key — the three are indistinguishable on purpose"
+          },
+          "403": {
+            "description": "The key is live but does not carry the scope this route requires"
+          },
+          "409": {
+            "description": "A stale version, an immutable decision, or a meeting that is not open"
+          },
+          "422": {
+            "description": "Idempotency-Key reused with a different request"
+          }
+        }
+      }
+    },
+    "/api/v1/decisions/{externalId}": {
+      "put": {
+        "summary": "Create or update a decision outside a meeting, keyed by your own identifier",
+        "description": "Creates the a decision outside a meeting when nothing carries this externalId for your integration, updates it otherwise. The identity is (integration, externalId): two connected systems may both say \"E01\" without colliding. `version` is optional — when sent it is asserted (409 if stale); when omitted your system is the master of this row and the last write wins. Optional `Idempotency-Key` header: the same key with the same body replays the recorded answer (Idempotent-Replayed: true); the same key with another body is refused (422) — one key names ONE request, not a run. `adopt: \"<Meridian id>\"` binds your externalId to a row that already exists (created on a screen, or scaffolded) instead of creating another. A field this collection does not declare is REFUSED (400) and nothing is written or audited: the properties below are the whole of what a body may carry (REQ-19). The same business rules as the screens apply. Named by `decidedBy` (a person) or `council` (the deciding body). The substance — headline, rationale, alternatives, dissent — is immutable: a different substance answers 409 — record a new decision naming the old one in `supersedes` (I-7). The state — `status` Proposed|Ratified, `ratifiedBy`, `evidenceUri`, `provenance` — may change, and each change is audited with before/after. Becoming `Ratified` records the day it happened: send `ratifiedOn` when you know it, otherwise today is stamped; a decision created already `Ratified` is dated from the day it was decided, and going back to `Proposed` clears the date, because a decision that is not ratified was not ratified on a day (REQ-47). Decisions ratified before this existed read back with `ratifiedOn: null` — unknown, never back-dated.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scope": "write:meetings",
+        "parameters": [
+          {
+            "name": "externalId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "Your own identifier for this row — stable across runs, unique within your integration"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "One key names ONE request. The same key with the same body replays the recorded answer (response header Idempotent-Replayed: true); the same key with a different body is refused (422)."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "adopt": {
+                    "type": "string"
+                  },
+                  "headline": {
+                    "type": "string"
+                  },
+                  "rationale": {
+                    "type": "string"
+                  },
+                  "alternatives": {
+                    "type": "string"
+                  },
+                  "dissent": {
+                    "type": "string"
+                  },
+                  "decidedBy": {
+                    "type": "string"
+                  },
+                  "council": {
+                    "type": "string"
+                  },
+                  "decidedOn": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "project": {
+                    "type": "string"
+                  },
+                  "cr": {
+                    "type": "string"
+                  },
+                  "raid": {
+                    "type": "string"
+                  },
+                  "milestone": {
+                    "type": "string"
+                  },
+                  "supersedes": {
+                    "type": "string"
+                  },
+                  "evidenceUri": {
+                    "type": "string"
+                  },
+                  "provenance": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string"
+                  },
+                  "ratifiedBy": {
+                    "type": "string"
+                  },
+                  "ratifiedOn": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "version": {
+                    "type": "integer"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The document described above",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "contract": {
+                      "type": "string"
+                    },
+                    "generatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "externalId": {
+                      "type": "string"
+                    },
+                    "created": {
+                      "type": "boolean"
+                    },
+                    "version": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created — the row did not exist for this externalId",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "contract": {
+                      "type": "string"
+                    },
+                    "generatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "externalId": {
+                      "type": "string"
+                    },
+                    "created": {
+                      "type": "boolean"
+                    },
+                    "version": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body breaks a rule the screens enforce too; the message says which"
+          },
+          "401": {
+            "description": "No key, an unknown key, or a revoked key — the three are indistinguishable on purpose"
+          },
+          "403": {
+            "description": "The key is live but does not carry the scope this route requires"
+          },
+          "409": {
+            "description": "A stale version, an immutable decision, or a meeting that is not open"
+          },
+          "422": {
+            "description": "Idempotency-Key reused with a different request"
+          }
+        }
+      }
+    },
+    "/api/v1/decisions": {
+      "get": {
+        "summary": "The decision register — what was decided, by whom, and on what basis",
+        "description": "Every decision, whether it was minuted in a meeting or taken outside one by somebody who holds the authority (I-7). Each row carries its `externalId` when an integration owns it, which is how `adopt` finds a row it wrote before it had an external identity, and its `version`, which is what an update asserts. Its own scope, mirroring `write:meetings`: a warehouse feed carries figures, not governance. Filter: limit (default 200, max 500).",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scope": "read:meetings",
+        "responses": {
+          "200": {
+            "description": "The document described above",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "contract": {
+                      "type": "string"
+                    },
+                    "generatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "decisions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No key, an unknown key, or a revoked key — the three are indistinguishable on purpose"
+          },
+          "403": {
+            "description": "The key is live but does not carry the scope this route requires"
+          }
+        }
+      }
+    },
+    "/api/v1/milestones/{externalId}": {
+      "put": {
+        "summary": "Create or update a milestone, keyed by your own identifier",
+        "description": "Creates the a milestone when nothing carries this externalId for your integration, updates it otherwise. The identity is (integration, externalId): two connected systems may both say \"E01\" without colliding. `version` is optional — when sent it is asserted (409 if stale); when omitted your system is the master of this row and the last write wins. Optional `Idempotency-Key` header: the same key with the same body replays the recorded answer (Idempotent-Replayed: true); the same key with another body is refused (422) — one key names ONE request, not a run. `adopt: \"<Meridian id>\"` binds your externalId to a row that already exists (created on a screen, or scaffolded) instead of creating another. A field this collection does not declare is REFUSED (400) and nothing is written or audited: the properties below are the whole of what a body may carry (REQ-19). The same business rules as the screens apply. `project` is a Meridian id or an externalId you created. A milestone with acceptanceCriteria cannot be marked done without acceptedBy — the person who checked them (PM-04). `dateBasis: \"placeholder\"` with a `condition` says the date is a position on the timeline, not a commitment: it is never reported missed or overdue until you make it `committed` (REQ-14). Marking it `done` records the day and the person who marked it — send `doneOn` when your register knows the real day, otherwise today is stamped, and `doneBy` names the person; both are cleared if you un-mark it. They are weaker than `acceptedBy`/`acceptedOn`, which say a named person found acceptance criteria met: a ticked box is not an acceptance, and a gate with no criteria still has a date (REQ-45). Rows marked done before this existed keep a null date rather than a made-up one.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scope": "write:portfolio",
+        "parameters": [
+          {
+            "name": "externalId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "Your own identifier for this row — stable across runs, unique within your integration"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "One key names ONE request. The same key with the same body replays the recorded answer (response header Idempotent-Replayed: true); the same key with a different body is refused (422)."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "adopt": {
+                    "type": "string"
+                  },
+                  "project": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "date": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "dateBasis": {
+                    "type": "string"
+                  },
+                  "condition": {
+                    "type": "string"
+                  },
+                  "owner": {
+                    "type": "string"
+                  },
+                  "acceptanceCriteria": {
+                    "type": "string"
+                  },
+                  "done": {
+                    "type": "boolean"
+                  },
+                  "acceptedBy": {
+                    "type": "string"
+                  },
+                  "doneOn": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "doneBy": {
+                    "type": "string"
+                  },
+                  "intrusive": {
+                    "type": "boolean"
+                  },
+                  "version": {
+                    "type": "integer"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The document described above",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "contract": {
+                      "type": "string"
+                    },
+                    "generatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "externalId": {
+                      "type": "string"
+                    },
+                    "created": {
+                      "type": "boolean"
+                    },
+                    "version": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created — the row did not exist for this externalId",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "contract": {
+                      "type": "string"
+                    },
+                    "generatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "externalId": {
+                      "type": "string"
+                    },
+                    "created": {
+                      "type": "boolean"
+                    },
+                    "version": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body breaks a rule the screens enforce too; the message says which"
+          },
+          "401": {
+            "description": "No key, an unknown key, or a revoked key — the three are indistinguishable on purpose"
+          },
+          "403": {
+            "description": "The key is live but does not carry the scope this route requires"
+          },
+          "409": {
+            "description": "A stale version, an immutable decision, or a meeting that is not open"
+          },
+          "422": {
+            "description": "Idempotency-Key reused with a different request"
           }
         }
       }
@@ -173,6 +1396,578 @@
           },
           "403": {
             "description": "The key is live but does not carry the scope this route requires"
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{externalId}": {
+      "put": {
+        "summary": "Create or update a project, keyed by your own identifier",
+        "description": "Creates the a project when nothing carries this externalId for your integration, updates it otherwise. The identity is (integration, externalId): two connected systems may both say \"E01\" without colliding. `version` is optional — when sent it is asserted (409 if stale); when omitted your system is the master of this row and the last write wins. Optional `Idempotency-Key` header: the same key with the same body replays the recorded answer (Idempotent-Replayed: true); the same key with another body is refused (422) — one key names ONE request, not a run. `adopt: \"<Meridian id>\"` binds your externalId to a row that already exists (created on a screen, or scaffolded) instead of creating another. A field this collection does not declare is REFUSED (400) and nothing is written or audited: the properties below are the whole of what a body may carry (REQ-19). The same business rules as the screens apply. Creation needs programme, site, start and finish; the schedule, the gate milestones and the evidence documents are scaffolded as when a person creates one. Money is in millions. `dateBasis: \"placeholder\"` with a `condition` says the finish date is a position on the timeline and not a commitment: it is never drawn or reported as late until you make it `committed` (REQ-19, the same rule milestones carry since REQ-14). `sponsor` is the person who answers for the business case, `acceptanceCriteria` what \"finished\" will mean. `status: \"Closed\"` closes it under the same three signatures the screen asks for (PM-08): `opsAcceptedBy`, `benefitsTo` and an optional `closureNote`; the closure date is stamped and read back as `closedOn`. A closed project is not reopened by this route (409).",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scope": "write:portfolio",
+        "parameters": [
+          {
+            "name": "externalId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "Your own identifier for this row — stable across runs, unique within your integration"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "One key names ONE request. The same key with the same body replays the recorded answer (response header Idempotent-Replayed: true); the same key with a different body is refused (422)."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "adopt": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "programme": {
+                    "type": "string"
+                  },
+                  "site": {
+                    "type": "string"
+                  },
+                  "governanceLevel": {
+                    "type": "string"
+                  },
+                  "pm": {
+                    "type": "string"
+                  },
+                  "method": {
+                    "type": "string"
+                  },
+                  "start": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "finish": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "baselineFinish": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "budget": {
+                    "type": "number"
+                  },
+                  "contingency": {
+                    "type": "number"
+                  },
+                  "desc": {
+                    "type": "string"
+                  },
+                  "dateBasis": {
+                    "type": "string"
+                  },
+                  "condition": {
+                    "type": "string"
+                  },
+                  "sponsor": {
+                    "type": "string"
+                  },
+                  "acceptanceCriteria": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string"
+                  },
+                  "opsAcceptedBy": {
+                    "type": "string"
+                  },
+                  "benefitsTo": {
+                    "type": "string"
+                  },
+                  "closureNote": {
+                    "type": "string"
+                  },
+                  "version": {
+                    "type": "integer"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The document described above",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "contract": {
+                      "type": "string"
+                    },
+                    "generatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "externalId": {
+                      "type": "string"
+                    },
+                    "created": {
+                      "type": "boolean"
+                    },
+                    "version": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created — the row did not exist for this externalId",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "contract": {
+                      "type": "string"
+                    },
+                    "generatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "externalId": {
+                      "type": "string"
+                    },
+                    "created": {
+                      "type": "boolean"
+                    },
+                    "version": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body breaks a rule the screens enforce too; the message says which"
+          },
+          "401": {
+            "description": "No key, an unknown key, or a revoked key — the three are indistinguishable on purpose"
+          },
+          "403": {
+            "description": "The key is live but does not carry the scope this route requires"
+          },
+          "409": {
+            "description": "A stale version, an immutable decision, or a meeting that is not open"
+          },
+          "422": {
+            "description": "Idempotency-Key reused with a different request"
+          }
+        }
+      }
+    },
+    "/api/v1/raid/{externalId}": {
+      "put": {
+        "summary": "Create or update a register item (risk, issue, assumption, dependency), keyed by your own identifier",
+        "description": "Creates the a register item (risk, issue, assumption, dependency) when nothing carries this externalId for your integration, updates it otherwise. The identity is (integration, externalId): two connected systems may both say \"E01\" without colliding. `version` is optional — when sent it is asserted (409 if stale); when omitted your system is the master of this row and the last write wins. Optional `Idempotency-Key` header: the same key with the same body replays the recorded answer (Idempotent-Replayed: true); the same key with another body is refused (422) — one key names ONE request, not a run. `adopt: \"<Meridian id>\"` binds your externalId to a row that already exists (created on a screen, or scaffolded) instead of creating another. A field this collection does not declare is REFUSED (400) and nothing is written or audited: the properties below are the whole of what a body may carry (REQ-19). The same business rules as the screens apply. `gate` links it to a governance gate of the project, `cr` to a change request of the same project (I-8). Omit `project` for a portfolio-wide item. `category` is your own free classification label, kept beside `type` — which stays the RAID contract the engine reads (REQ-13). `status: \"Closed\"` records the closure with its date: send `closedOn` when your register knows it, otherwise today is stamped, and `closedBy` names the person on whose word it closed. Reopening clears both, because an open item has no closure (REQ-18).",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scope": "write:portfolio",
+        "parameters": [
+          {
+            "name": "externalId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "Your own identifier for this row — stable across runs, unique within your integration"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "One key names ONE request. The same key with the same body replays the recorded answer (response header Idempotent-Replayed: true); the same key with a different body is refused (422)."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "adopt": {
+                    "type": "string"
+                  },
+                  "project": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "detail": {
+                    "type": "string"
+                  },
+                  "p": {
+                    "type": "integer"
+                  },
+                  "i": {
+                    "type": "integer"
+                  },
+                  "tp": {
+                    "type": "integer"
+                  },
+                  "ti": {
+                    "type": "integer"
+                  },
+                  "response": {
+                    "type": "string"
+                  },
+                  "owner": {
+                    "type": "string"
+                  },
+                  "review": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "status": {
+                    "type": "string"
+                  },
+                  "gate": {
+                    "type": "integer"
+                  },
+                  "cr": {
+                    "type": "string"
+                  },
+                  "category": {
+                    "type": "string"
+                  },
+                  "closedOn": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "closedBy": {
+                    "type": "string"
+                  },
+                  "version": {
+                    "type": "integer"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The document described above",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "contract": {
+                      "type": "string"
+                    },
+                    "generatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "externalId": {
+                      "type": "string"
+                    },
+                    "created": {
+                      "type": "boolean"
+                    },
+                    "version": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created — the row did not exist for this externalId",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "contract": {
+                      "type": "string"
+                    },
+                    "generatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "externalId": {
+                      "type": "string"
+                    },
+                    "created": {
+                      "type": "boolean"
+                    },
+                    "version": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body breaks a rule the screens enforce too; the message says which"
+          },
+          "401": {
+            "description": "No key, an unknown key, or a revoked key — the three are indistinguishable on purpose"
+          },
+          "403": {
+            "description": "The key is live but does not carry the scope this route requires"
+          },
+          "409": {
+            "description": "A stale version, an immutable decision, or a meeting that is not open"
+          },
+          "422": {
+            "description": "Idempotency-Key reused with a different request"
+          }
+        }
+      }
+    },
+    "/api/v1/value": {
+      "get": {
+        "summary": "Forecast against realised — what was promised, what was measured, and what is not yet known",
+        "description": "One row per project: the business case's expected cost and benefit with its basis and reconfirmation state, and every benefit in ITS OWN unit with its attainment and how long its review has been outstanding. **No currency conversion appears anywhere**: the totals sum money-denominated benefits only and state how many others were excluded and in which units. A project with a case and no benefits, and one with benefits and no case, are each visible as such rather than absent. Filter: programme.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scope": "read:portfolio",
+        "responses": {
+          "200": {
+            "description": "The document described above",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "contract": {
+                      "type": "string"
+                    },
+                    "generatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "programme": {
+                      "type": "string"
+                    },
+                    "value": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No key, an unknown key, or a revoked key — the three are indistinguishable on purpose"
+          },
+          "403": {
+            "description": "The key is live but does not carry the scope this route requires"
+          }
+        }
+      }
+    },
+    "/api/v1/workitems/{externalId}": {
+      "put": {
+        "summary": "Create or update a work item on the board, keyed by your own identifier",
+        "description": "Creates the a work item on the board when nothing carries this externalId for your integration, updates it otherwise. The identity is (integration, externalId): two connected systems may both say \"E01\" without colliding. `version` is optional — when sent it is asserted (409 if stale); when omitted your system is the master of this row and the last write wins. Optional `Idempotency-Key` header: the same key with the same body replays the recorded answer (Idempotent-Replayed: true); the same key with another body is refused (422) — one key names ONE request, not a run. `adopt: \"<Meridian id>\"` binds your externalId to a row that already exists (created on a screen, or scaffolded) instead of creating another. A field this collection does not declare is REFUSED (400) and nothing is written or audited: the properties below are the whole of what a body may carry (REQ-19). The same business rules as the screens apply. `column` is a column id or name; `assignee` an id or exact name.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scope": "write:portfolio",
+        "parameters": [
+          {
+            "name": "externalId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "Your own identifier for this row — stable across runs, unique within your integration"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "One key names ONE request. The same key with the same body replays the recorded answer (response header Idempotent-Replayed: true); the same key with a different body is refused (422)."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "project": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "column": {
+                    "type": "string"
+                  },
+                  "assignee": {
+                    "type": "string"
+                  },
+                  "points": {
+                    "type": "integer"
+                  },
+                  "priority": {
+                    "type": "string"
+                  },
+                  "version": {
+                    "type": "integer"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The document described above",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "contract": {
+                      "type": "string"
+                    },
+                    "generatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "externalId": {
+                      "type": "string"
+                    },
+                    "created": {
+                      "type": "boolean"
+                    },
+                    "version": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created — the row did not exist for this externalId",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "contract": {
+                      "type": "string"
+                    },
+                    "generatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "externalId": {
+                      "type": "string"
+                    },
+                    "created": {
+                      "type": "boolean"
+                    },
+                    "version": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body breaks a rule the screens enforce too; the message says which"
+          },
+          "401": {
+            "description": "No key, an unknown key, or a revoked key — the three are indistinguishable on purpose"
+          },
+          "403": {
+            "description": "The key is live but does not carry the scope this route requires"
+          },
+          "409": {
+            "description": "A stale version, an immutable decision, or a meeting that is not open"
+          },
+          "422": {
+            "description": "Idempotency-Key reused with a different request"
           }
         }
       }

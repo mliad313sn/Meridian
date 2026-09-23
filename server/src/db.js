@@ -10,8 +10,10 @@
  */
 
 import { readdir, readFile } from "node:fs/promises";
+import { readFileSync, writeFileSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { loadEnv, resolveDataDir, pgliteDirFor, DEFAULT_PGLITE_DIR } from "./env.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 /* A packaged build ships the .sql files beside the executable rather than
@@ -24,6 +26,9 @@ export const migrationsDir = () =>
 
 let impl = null;
 let engineName = "none";
+/* Où le livre vit réellement — ce que /api/health et la ligne de démarrage
+   disent (I-1) : `null` en mémoire, sinon le répertoire résolu. */
+let dataDirUsed = null;
 
 /* ── date normalisation ───────────────────────────────────────────────
    Both drivers hand back JS `Date` objects for date and timestamp
@@ -129,13 +134,54 @@ async function openPg(url) {
 }
 
 /**
+ * Qui tient ce livre. PGlite écrit `postmaster.pid` DANS le bac à sable
+ * WASM : le numéro qu'on y lit n'est pas celui d'un processus de l'hôte,
+ * donc il ne dit pas si quelqu'un est vivant. Meridian pose donc sa
+ * propre marque, avec le PID de l'hôte, et la retire en s'arrêtant.
+ *
+ * C'est ce que la sauvegarde interroge. Elle demandait « est-ce qu'une
+ * santé répond sur PORT ? » — et sur un parc où chaque locataire a son
+ * port, elle interrogeait le 4173 d'un autre, ne trouvait personne,
+ * ouvrait un répertoire de données VIVANT, effaçait les verrous du
+ * serveur qui tournait dessus, puis annonçait « cette sauvegarde a été
+ * prise serveur arrêté ». C'est exactement la corruption que le garde
+ * existait pour empêcher. (Conseiller exploitation nº 1, docs/33 §5.)
+ */
+const HOLDER = "meridian.holder";
+
+export function bookHolder(dir) {
+  if (!dir) return null;
+  let pid;
+  try { pid = Number(readFileSync(join(dir, HOLDER), "utf8").trim()); } catch { return null; }
+  if (!Number.isInteger(pid) || pid <= 0) return null;
+  if (pid === process.pid) return null;
+  /* signal 0 ne tue rien : il demande « ce processus existe-t-il ? ». */
+  try { process.kill(pid, 0); return pid; } catch { return null; }
+}
+
+function claimBook(dir) {
+  if (!dir) return;
+  try { writeFileSync(join(dir, HOLDER), String(process.pid)); } catch { /* lecture seule : tant pis */ }
+  const drop = () => { try { unlinkSync(join(dir, HOLDER)); } catch { /* déjà parti */ } };
+  process.once("exit", drop);
+  for (const sig of ["SIGINT", "SIGTERM"]) process.once(sig, () => { drop(); process.exit(0); });
+}
+
+/**
  * PGlite is a single-process engine: nothing else can legitimately hold
- * its data directory. So a lock file present at startup is always stale —
- * left by a process that was killed rather than stopped — and refusing to
- * start over it just makes people delete the database by hand.
+ * its data directory. A lock file left by a process that was KILLED is
+ * stale and clearing it just saves someone deleting the database by
+ * hand — but a directory a live process still holds is not stale, and
+ * opening it anyway is the corruption this refusal exists to prevent.
  */
 async function clearStaleLocks(dataDir) {
   if (!dataDir) return;
+  const held = bookHolder(dataDir);
+  if (held) {
+    throw new Error(
+      `This book is already open: process ${held} holds ${dataDir}. PGlite is single-process — ` +
+      `stop that server first (bash scripts/restart.sh stops it gracefully), then run again.`);
+  }
   const { readdir, rm } = await import("node:fs/promises");
   let entries;
   try { entries = await readdir(dataDir); } catch { return; }
@@ -158,6 +204,7 @@ async function openPglite(dataDir) {
   await clearStaleLocks(dataDir);
   const pglite = dataDir ? new PGlite(dataDir) : new PGlite();
   await pglite.waitReady;
+  claimBook(dataDir);
 
   /* PGlite is single-connection, so a transaction has to serialise. The
      queue keeps concurrent requests from interleaving statements inside
@@ -222,37 +269,57 @@ async function openPglite(dataDir) {
       });
     },
     close: () => pglite.close(),
+    /* I-6 — la sauvegarde a besoin de l'instance PGlite elle-même
+       (dumpDataDir) ; rien d'autre ne doit y toucher. */
+    native: pglite,
   };
 }
 
 /* ── lifecycle ────────────────────────────────────────────────────── */
 
 /* Where PGlite keeps the book when nobody says otherwise: the directory
-   the README promises. The fallback used to be `null` — an in-memory
-   database — so on a fresh clone `npm run seed` built a book that died
-   with its process, and `npm run dev` then started on an empty one with
-   no accounts: the documented quick start could not sign anyone in.
-
-   `dataDir: null` still means in-memory, explicitly: that is how the test
-   harness and the audit scripts ask for a throwaway database, and it now
-   wins over PGLITE_DIR instead of silently falling through to it. */
-export const DEFAULT_PGLITE_DIR = join(HERE, "..", ".data", "pgdata");
-
+   the README promises, never memory by accident (5.9.1, M-01). `dataDir:
+   null` is an explicit in-memory request and wins over PGLITE_DIR. The rule
+   itself lives in env.js (D-36.01 bis); this is the name 5.9.1 exported. */
+export { DEFAULT_PGLITE_DIR };
 export function resolvePgliteDir(opts = {}, env = process.env) {
-  if (opts.dataDir === null) return null;
-  return opts.dataDir ?? env.PGLITE_DIR ?? DEFAULT_PGLITE_DIR;
+  return pgliteDirFor("dataDir" in opts ? opts.dataDir : undefined, env);
 }
 
 export async function connect(opts = {}) {
-  const url = opts.url ?? process.env.DATABASE_URL;
-  if (url) impl = await openPg(url);
-  else impl = await openPglite(resolvePgliteDir(opts));
+  /* I-1 — `.env` est lu ici, au seul endroit par lequel tout passe (le
+     serveur, la graine, les migrations, la remise à zéro, les scripts),
+     et jamais par-dessus ce que le shell a déjà posé. */
+  loadEnv();
+  /* Un `url: null` EXPLICITE veut dire « PGlite, sans repli » — c'est ce que
+     le harnais de test envoie. Avant, `null ?? process.env.DATABASE_URL`
+     retombait sur l'environnement : depuis que `.env` est lu, un
+     DATABASE_URL de production posé dans ce fichier aurait envoyé
+     `npm test` VIDER ce cluster (le conseiller code l'a tracé). */
+  const url = "url" in opts ? opts.url : process.env.DATABASE_URL;
+  if (url) { impl = await openPg(url); dataDirUsed = null; }
+  else {
+    /* `dataDir: null` veut dire « en mémoire, je sais ce que je fais »
+       (le harnais de test) ; `undefined` veut dire « décide pour moi »,
+       et la réponse n'est plus jamais la mémoire par accident (M-01). */
+    dataDirUsed = resolveDataDir("dataDir" in opts ? opts.dataDir : undefined);
+    impl = await openPglite(dataDirUsed);
+  }
   engineName = impl.name;
   return impl;
 }
 
 export function engine() {
   return engineName;
+}
+
+/** Le répertoire PGlite en service, ou null (PostgreSQL, ou en mémoire). */
+export function dataDir() {
+  return dataDirUsed;
+}
+/** L'instance PGlite sous-jacente (sauvegarde, I-6), ou null sur PostgreSQL. */
+export function native() {
+  return impl?.native ?? null;
 }
 
 function need() {

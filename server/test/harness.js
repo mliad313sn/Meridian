@@ -15,6 +15,10 @@ let server = null;
 let base = "";
 
 export async function boot({ today = "2026-08-28" } = {}) {
+  /* Deux ceintures : `url: null` est explicite (db.js n'y substitue plus
+     l'environnement), et le fichier .env du développeur n'est pas lu du
+     tout par les tests. */
+  process.env.MERIDIAN_ENV_FILE ??= "/nonexistent/.env";
   await connect({ dataDir: null, url: null });
   await migrate({ silent: true });
   await seed({ force: true, today });

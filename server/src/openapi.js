@@ -25,6 +25,7 @@
 
 import v1Router from "./routes/v1.js";
 import { SCOPES } from "./integrations.js";
+import { WRITE_BODIES } from "./v1write.js";
 
 export const CONTRACT = "v1";
 
@@ -89,7 +90,136 @@ const DOCS = {
     scope: "read:audit",
     returns: { contract: "string", generatedAt: "date-time", events: "object[]" },
   },
+  /* V-4 — ce que le cas a promis, contre ce que les bénéfices ont
+     mesuré, sans jamais convertir une unité en une autre. */
+  "GET /api/v1/value": {
+    summary: "Forecast against realised — what was promised, what was measured, and what is not yet known",
+    description:
+      "One row per project: the business case's expected cost and benefit with its basis and " +
+      "reconfirmation state, and every benefit in ITS OWN unit with its attainment and how long " +
+      "its review has been outstanding. **No currency conversion appears anywhere**: the totals " +
+      "sum money-denominated benefits only and state how many others were excluded and in which " +
+      "units. A project with a case and no benefits, and one with benefits and no case, are each " +
+      "visible as such rather than absent. Filter: programme.",
+    scope: "read:portfolio",
+    returns: { contract: "string", generatedAt: "date-time", programme: "string", value: "object" },
+  },
+  /* REQ-15 — écrire sans pouvoir relire n'est pas un contrat. */
+  "GET /api/v1/decisions": {
+    summary: "The decision register — what was decided, by whom, and on what basis",
+    description:
+      "Every decision, whether it was minuted in a meeting or taken outside one by " +
+      "somebody who holds the authority (I-7). Each row carries its `externalId` when " +
+      "an integration owns it, which is how `adopt` finds a row it wrote before it had " +
+      "an external identity, and its `version`, which is what an update asserts. " +
+      "Its own scope, mirroring `write:meetings`: a warehouse feed carries figures, " +
+      "not governance. Filter: limit (default 200, max 500).",
+    scope: "read:meetings",
+    returns: { contract: "string", generatedAt: "date-time", decisions: "object[]" },
+  },
+  "GET /api/v1/actions": {
+    summary: "The actions — what a room asked of someone, and whether it is done",
+    description:
+      "Read them before you write them: an action closed on a screen and rewritten " +
+      "`Open` by an unchanged re-run overwrites the minute of a meeting. " +
+      "`raisedInStatus` says whether the occurrence that raised it is still open. " +
+      "Filters: status, limit (default 200, max 500).",
+    scope: "read:meetings",
+    returns: { contract: "string", generatedAt: "date-time", actions: "object[]" },
+  },
 };
+
+/* I-2 — les sept écritures, décrites une fois chacune. Le corps est lu
+   dans v1write.js (WRITE_BODIES) : la description et la route ne peuvent
+   pas diverger sur ce qu'un PUT accepte. */
+const UPSERT_RETURNS = { contract: "string", generatedAt: "date-time", id: "string",
+  externalId: "string", created: "boolean", version: "integer" };
+const upsert = (what, scope, extra) => ({
+  summary: `Create or update ${what}, keyed by your own identifier`,
+  description:
+    `Creates the ${what} when nothing carries this externalId for your integration, updates it ` +
+    `otherwise. The identity is (integration, externalId): two connected systems may both say ` +
+    `"E01" without colliding. \`version\` is optional — when sent it is asserted (409 if stale); ` +
+    `when omitted your system is the master of this row and the last write wins. Optional ` +
+    `\`Idempotency-Key\` header: the same key with the same body replays the recorded answer ` +
+    `(Idempotent-Replayed: true); the same key with another body is refused (422) — one key names ONE ` +
+    `request, not a run. \`adopt: "<Meridian id>"\` binds your externalId to a row that already exists ` +
+    `(created on a screen, or scaffolded) instead of creating another. ` +
+    `A field this collection does not declare is REFUSED (400) and nothing is written or audited: ` +
+    `the properties below are the whole of what a body may carry (REQ-19). ` +
+    `The same business rules as the screens apply. ${extra}`,
+  scope, returns: UPSERT_RETURNS,
+});
+const WRITE_DOCS = {
+  "PUT /api/v1/projects/:externalId": upsert("a project", "write:portfolio",
+    "Creation needs programme, site, start and finish; the schedule, the gate milestones and the " +
+    "evidence documents are scaffolded as when a person creates one. Money is in millions. " +
+    "`dateBasis: \"placeholder\"` with a `condition` says the finish date is a position on the " +
+    "timeline and not a commitment: it is never drawn or reported as late until you make it " +
+    "`committed` (REQ-19, the same rule milestones carry since REQ-14). `sponsor` is the person " +
+    "who answers for the business case, `acceptanceCriteria` what \"finished\" will mean. " +
+    "`status: \"Closed\"` closes it under the same three signatures the screen asks for (PM-08): " +
+    "`opsAcceptedBy`, `benefitsTo` and an optional `closureNote`; the closure date is stamped and " +
+    "read back as `closedOn`. A closed project is not reopened by this route (409)."),
+  "PUT /api/v1/milestones/:externalId": upsert("a milestone", "write:portfolio",
+    "`project` is a Meridian id or an externalId you created. A milestone with acceptanceCriteria " +
+    "cannot be marked done without acceptedBy — the person who checked them (PM-04). `dateBasis: " +
+    "\"placeholder\"` with a `condition` says the date is a position on the timeline, not a commitment: " +
+    "it is never reported missed or overdue until you make it `committed` (REQ-14). " +
+    "Marking it `done` records the day and the person who marked it — send `doneOn` when your register " +
+    "knows the real day, otherwise today is stamped, and `doneBy` names the person; both are cleared if " +
+    "you un-mark it. They are weaker than `acceptedBy`/`acceptedOn`, which say a named person found " +
+    "acceptance criteria met: a ticked box is not an acceptance, and a gate with no criteria still has " +
+    "a date (REQ-45). Rows marked done before this existed keep a null date rather than a made-up one."),
+  "PUT /api/v1/raid/:externalId": upsert("a register item (risk, issue, assumption, dependency)", "write:portfolio",
+    "`gate` links it to a governance gate of the project, `cr` to a change request of the same project (I-8). " +
+    "Omit `project` for a portfolio-wide item. `category` is your own free classification label, kept " +
+    "beside `type` — which stays the RAID contract the engine reads (REQ-13). `status: \"Closed\"` " +
+    "records the closure with its date: send `closedOn` when your register knows it, otherwise today " +
+    "is stamped, and `closedBy` names the person on whose word it closed. Reopening clears both, " +
+    "because an open item has no closure (REQ-18)."),
+  "PUT /api/v1/activities/:externalId": upsert("the link to a schedule stage, and its measured progress", "write:portfolio",
+    "Stages are not created by integrations — the plan belongs to the project. The first call binds " +
+    "your id to an existing stage (`activity`); every call may carry `pct`, stamped with `source` and " +
+    "`measuredAt` so earned value reads measured, not typed, progress (I-5)."),
+  "PUT /api/v1/workitems/:externalId": upsert("a work item on the board", "write:portfolio",
+    "`column` is a column id or name; `assignee` an id or exact name."),
+  "PUT /api/v1/criteria/:externalId": upsert("a gate criterion", "write:portfolio",
+    "A sentence posed in advance on (project, gate — within the programme's ladder). `met: true` needs " +
+    "`reviewedBy`, a named person who does not own the `document` cited; the gate is ready only when every " +
+    "criterion is met. Adopt a scaffolded criterion with `adopt`."),
+  "PUT /api/v1/benefits/:externalId": upsert("a benefit", "write:portfolio",
+    "A benefit keeps ITS unit — percent, hours, ounces, currency — and is never divided by a " +
+    "million: `baseline`, `target` and `actual` are passed through as sent. An `actual` needs " +
+    "`measuredOn`, because a figure with no measurement date cannot be situated a year later. " +
+    "`kind` is Production, Availability, Cost, Risk or Compliance; `status` is Forecast, " +
+    "Realised, Partially realised, Missed or Withdrawn."),
+  "PUT /api/v1/business-case/:externalId": upsert("the business case", "write:portfolio",
+    "One case per project (a second is refused, naming the one to `adopt`). Money is in millions, " +
+    "as everywhere else. Revising the case does NOT erase a past reconfirmation — it happened, it " +
+    "is dated — but it does mean the reconfirmation no longer covers what is written, which the " +
+    "read says as `staleSinceReconfirm`."),
+  "PUT /api/v1/decisions/:externalId": upsert("a decision outside a meeting", "write:meetings",
+    "Named by `decidedBy` (a person) or `council` (the deciding body). The substance — headline, rationale, " +
+    "alternatives, dissent — is immutable: a different substance answers 409 — record a new decision naming " +
+    "the old one in `supersedes` (I-7). The state — `status` Proposed|Ratified, `ratifiedBy`, `evidenceUri`, " +
+    "`provenance` — may change, and each change is audited with before/after. Becoming `Ratified` records " +
+    "the day it happened: send `ratifiedOn` when you know it, otherwise today is stamped; a decision " +
+    "created already `Ratified` is dated from the day it was decided, and going back to `Proposed` clears " +
+    "the date, because a decision that is not ratified was not ratified on a day (REQ-47). Decisions " +
+    "ratified before this existed read back with `ratifiedOn: null` — unknown, never back-dated."),
+  "PUT /api/v1/actions/:externalId": upsert("an action", "write:meetings",
+    "An action is raised in an OPEN meeting: send `occurrence` (an open occurrence id) or `series` " +
+    "(the series whose open occurrence takes it). The API never opens a meeting — a chair does."),
+};
+Object.assign(DOCS, WRITE_DOCS);
+
+/** Les routes qui exigent une portée, pour la découverte. */
+export function scopedEndpoints() {
+  return Object.entries(DOCS)
+    .filter(([, d]) => d.scope)
+    .map(([k, d]) => { const [method, path] = k.split(" "); return { method, path, scope: d.scope }; });
+}
 
 /** Ce que dit la description, mais que le routeur ne peut pas dire. */
 export function documented() {
@@ -106,6 +236,7 @@ const jsonSchema = (shape) => ({
     if (kind === "date") return [k, { type: "string", format: "date" }];
     if (kind === "string[]") return [k, { type: "array", items: { type: "string" } }];
     if (kind === "object[]") return [k, { type: "array", items: { type: "object" } }];
+    if (kind === "date-time") return [k, { type: "string", format: "date-time" }];
     return [k, { type: kind }];
   })),
 });
@@ -123,17 +254,58 @@ export function openApiDocument({ version = "dev", servers = [] } = {}) {
   for (const { method, path } of mountedRoutes()) {
     const doc = DOCS[`${method} ${path}`];
     if (!doc) continue;   // la porte F9 le refuse ; ici on ne ment pas par défaut
-    paths[path] ??= {};
-    paths[path][method.toLowerCase()] = {
+    /* OpenAPI nomme un paramètre de chemin `{nom}`. Express l'écrit
+       `:nom`. Publier la forme d'Express faisait envoyer à tout client
+       engendré le littéral « :externalId » — la description décrivait une
+       route que personne ne pouvait appeler. (Intégrateur, docs/33 §5.) */
+    const openApiPath = path.replace(/:(\w+)/g, "{$1}");
+    paths[openApiPath] ??= {};
+    /* `\w+` ne prenait pas le trait d'union : « business-case » n'a
+       jamais eu ni corps décrit ni en-tête d'idempotence dans le
+       document publié, alors que la route les accepte depuis la V-1.
+       Trouvé par le test de REQ-19 qui compare la déclaration au contrat
+       — c'est précisément ce qu'il est là pour attraper. */
+    const collection = /^\/api\/v1\/([\w-]+)\/:externalId$/.exec(path)?.[1];
+    const body = collection && WRITE_BODIES[collection];
+    const pathParams = [...path.matchAll(/:(\w+)/g)].map(([, name]) => ({
+      name, in: "path", required: true, schema: { type: "string", maxLength: 200 },
+      description: name === "externalId"
+        ? "Your own identifier for this row — stable across runs, unique within your integration"
+        : "The Meridian identifier of the row",
+    }));
+    /* REQ-02 tient sur cet en-tête ; il n'était écrit qu'en prose, donc
+       aucun client engendré ne l'exposait. */
+    const idempotency = body ? [{
+      name: "Idempotency-Key", in: "header", required: false,
+      schema: { type: "string", maxLength: 200 },
+      description: "One key names ONE request. The same key with the same body replays the recorded " +
+        "answer (response header Idempotent-Replayed: true); the same key with a different body is refused (422).",
+    }] : [];
+    paths[openApiPath][method.toLowerCase()] = {
       summary: doc.summary,
       description: doc.description,
       security: [{ apiKey: [] }],
       "x-required-scope": doc.scope,
+      ...(pathParams.length || idempotency.length
+        ? { parameters: [...pathParams, ...idempotency] } : {}),
+      /* REQ-19 — le corps est CLOS : `assertKnownBody` refuse tout champ
+         que la collection ne déclare pas, et la description doit dire la
+         même chose que le serveur, sinon le client engendré envoie
+         tranquillement ce qui sera refusé. */
+      ...(body ? { requestBody: { required: true, content: { "application/json":
+        { schema: { ...jsonSchema(body), additionalProperties: false } } } } } : {}),
       responses: {
         200: {
           description: "The document described above",
           content: { "application/json": { schema: jsonSchema(doc.returns) } },
         },
+        ...(body ? {
+          201: { description: "Created — the row did not exist for this externalId",
+            content: { "application/json": { schema: jsonSchema(doc.returns) } } },
+          400: { description: "The body breaks a rule the screens enforce too; the message says which" },
+          409: { description: "A stale version, an immutable decision, or a meeting that is not open" },
+          422: { description: "Idempotency-Key reused with a different request" },
+        } : {}),
         401: { description: "No key, an unknown key, or a revoked key — the three are indistinguishable on purpose" },
         403: { description: "The key is live but does not carry the scope this route requires" },
       },
@@ -151,9 +323,11 @@ export function openApiDocument({ version = "dev", servers = [] } = {}) {
         "shape has to change it becomes /api/v2, so that nobody has to guess. " +
         "Authentication is a key issued per connected system, carrying explicit " +
         "scopes; the product never stores the key itself, only its fingerprint.\n\n" +
-        "There is no write surface yet, and that is deliberate: a scope is only " +
-        "published once a route honours it. Declaring one earlier would advertise " +
-        "a door that does not exist and imply it is guarded.",
+        "Writes arrived with the first real integrator (RT365, docs/33): PUT by your " +
+        "own identifier on projects, milestones, register items, stage progress, work " +
+        "items, decisions and actions, under two write scopes, with an optional " +
+        "Idempotency-Key. A scope is only published once a route honours it: declaring " +
+        "one earlier would advertise a door that does not exist and imply it is guarded.",
       license: { name: "Apache-2.0", identifier: "Apache-2.0" },
     },
     servers: servers.length ? servers : [{ url: "http://localhost:4173", description: "A local instance" }],

@@ -32,6 +32,26 @@ import { sha256hex, generateServiceKey } from "./federation.js";
 export const SCOPES = {
   "read:portfolio": "Read the portfolio — projects, schedule, money, risks, benefits",
   "read:audit": "Read the audit trail — every recorded decision and change",
+  /* I-2 (retour de terrain RT365) — les portées d'écriture arrivent AVEC
+     les routes qui les honorent, jamais avant : PUT /api/v1/{projects,
+     milestones,raid,activities,workitems} et PUT /api/v1/{decisions,
+     actions}. Deux portées, pas une : un système de suivi qui remonte de
+     l'avancement n'a aucune raison de pouvoir consigner une décision. */
+  "write:portfolio": "Write projects, milestones, register items, stage progress and work items, keyed by your own identifiers",
+  "write:meetings": "Record decisions and actions, keyed by your own identifiers",
+  /* REQ-15 — écrire sans pouvoir relire n'est pas un contrat. Sans cette
+     portée, `adopt` sur une décision ou une action existante n'avait
+     aucun chemin de découverte, aucune réconciliation de ce qu'une
+     séance a décidé n'était possible sans session, et un synchroniseur
+     ne pouvait pas voir qu'un humain avait clos une action avant de la
+     rouvrir — l'intégrateur l'a mesuré : H-01 marquée Done à l'écran,
+     rouverte en Open par une re-passe inchangée.
+
+     Portée SÉPARÉE de `read:portfolio`, et c'est le point : INT-02 a
+     distingué la piste d'audit pour qu'un entrepôt décisionnel n'emporte
+     pas la gouvernance avec les chiffres. Un registre de décisions est
+     de la même eau. Elle est le miroir exact de `write:meetings`. */
+  "read:meetings": "Read the decision register and the actions — what was decided, by whom, and what remains to do",
 };
 
 export const scopeList = () => Object.keys(SCOPES);

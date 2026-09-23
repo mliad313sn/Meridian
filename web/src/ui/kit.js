@@ -461,10 +461,13 @@ function sortableTable(opts) {
 }
 
 /* ── small pieces ─────────────────────────────────────────────────── */
-const RAG_LABEL = { G: "GREEN", A: "AMBER", R: "RED" };
+/* REQ-33 — la quatrième réponse. `N` n'est pas une couleur d'état : c'est
+   l'absence d'état, et elle se dessine en gris, avec son mot, comme tout
+   le reste du produit dit « pas de chiffre » par un tiret. */
+const RAG_LABEL = { G: "GREEN", A: "AMBER", R: "RED", N: "NOT MEASURED" };
 /* Status is drawn twice over: hue and word. Roughly one man in twelve
    cannot separate the first, so the label is not decoration. */
-const SIGNAL = { R: "var(--sig-red)", A: "var(--sig-amber)", G: "var(--sig-green)" };
+const SIGNAL = { R: "var(--sig-red)", A: "var(--sig-amber)", G: "var(--sig-green)", N: "var(--muted)" };
 function ragDot(rag, withLabel) {
   return h("span", {
     style: "display:inline-flex;align-items:center;gap:6px;font-family:var(--font-mono);" +
@@ -515,7 +518,7 @@ function chip(label, on, onClick) { return h("button", { class: "chip" + (on ? "
 function statusTag(status) {
   const map = { Approved: "tag-ink", Cleared: "tag-ink", Closed: "tag-ink", "In review": "tag-soft",
     "At risk": "tag-accent", Overdue: "tag-accent", Pending: "tag-accent", Rejected: "tag-out",
-    Draft: "tag-out", Planned: "tag-out", Ready: "tag-soft", Open: "tag-soft" };
+    Draft: "tag-out", Planned: "tag-out", Unscheduled: "tag-out", Ready: "tag-soft", Open: "tag-soft" };
   /* R-15 — the WORD is translated, the VALUE compared upstream stays
      English: display and comparison never share a string. */
   return tag(t(status), map[status] || "");

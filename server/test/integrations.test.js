@@ -112,7 +112,13 @@ describe("INT-02 · la portée décide, et elle décide seule", () => {
     assert.equal(disco.status, 200);
     assert.deepEqual(disco.body.scopesHeld, []);
     assert.equal(disco.body.integration, "Pas encore branchée");
-    assert.equal(disco.body.endpoints.length, Object.keys(SCOPES).length);
+    /* I-2 : la découverte liste chaque route à portée — lues dans la
+       description, pas recopiées. Chaque portée du vocabulaire est servie
+       par au moins une route, et aucune route ne cite une portée inconnue. */
+    const served = new Set(disco.body.endpoints.map((e) => e.scope));
+    assert.deepEqual([...served].sort(), Object.keys(SCOPES).sort());
+    assert.equal(disco.body.endpoints.length, mountedRoutes().length - 2,
+      "toutes les routes montées sauf les deux ouvertes (découverte, contrat)");
   });
 });
 
@@ -247,8 +253,12 @@ describe("INT-01 · le contrat publié", () => {
        F9 qui le tient à la construction, et ceci qui le tient à
        l'exécution — une description juste dans le dépôt et fausse en
        service n'aurait servi personne. */
+    /* OpenAPI nomme un paramètre `{nom}` là où Express écrit `:nom` — le
+       document publiait la forme d'Express, et tout client engendré
+       envoyait le littéral « :externalId ». La comparaison se fait donc
+       dans la notation du document, route pour route comme avant. */
     const decrites = Object.keys(doc.paths).sort();
-    assert.deepEqual(decrites, mountedRoutes().map((x) => x.path).sort()
+    assert.deepEqual(decrites, mountedRoutes().map((x) => x.path.replace(/:(\w+)/g, "{$1}")).sort()
       .filter((v, i, a) => a.indexOf(v) === i));
 
     /* Chaque route dit la portée qu'elle exige — c'est ce qu'un

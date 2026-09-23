@@ -15,6 +15,10 @@
  */
 
 export const ES = {
+  /* REQ-30 — los dos «no hay nada» de la página de valor. */
+  "No such reporting period": "Ese periodo de informe no existe",
+  "No value page was stored for that reporting period":
+    "No se depositó ninguna página de valor sobre ese periodo de informe",
   // authority
   "not authenticated — sign in again, your session may have ended":
     "no autenticado — vuelva a iniciar sesión, su sesión puede haber expirado",
@@ -50,6 +54,21 @@ export const ES = {
     "la pista de auditoría es visible desde el nivel grupo — pida a su oficina de programa lo que necesite de ella",
   "the portfolio is prioritised at group level — your programme office scores and ranks":
     "la cartera se prioriza a nivel grupo — su oficina de programa puntúa y clasifica",
+  /* REQ-24 (V-5) — la ponderación del ranking, y lo que rechaza. */
+  "the level that sets a weighting is the level that answers for the cut it draws — ask your programme office":
+    "el nivel que fija una ponderación es el que responde del corte que traza — consulte a su oficina de programa",
+  "A weight is a whole number from 0 to 100":
+    "un peso es un número entero de 0 a 100",
+  "Every weight cannot be zero — a weighting has to weigh something":
+    "los pesos no pueden ser todos cero — una ponderación tiene que pesar algo",
+  "Say why these weights — a ranking whose reason is not written is a verdict":
+    "diga por qué estos pesos — un ranking cuya razón no está escrita es un veredicto",
+  "Confidence is a whole number from 1 to 5, or nothing at all":
+    "la confianza es un número entero de 1 a 5, o nada en absoluto",
+  "The people this will take is a number of full-time equivalents, zero or more":
+    "las personas que esto costará son un número de equivalentes a tiempo completo, cero o más",
+  "Probability and impact are whole numbers from 1 to 5, or nothing at all":
+    "la probabilidad y el impacto son números enteros de 1 a 5, o nada en absoluto",
   "management of change is released at group level — ask your programme office to release it":
     "la gestión del cambio se libera a nivel grupo — pida la liberación a su oficina de programa",
 
@@ -110,10 +129,20 @@ const ES_NOTIFY = {
   " cannot pass its next gate while ": " no puede pasar su próxima puerta mientras ",
   " evidence document(s) remain unapproved.": " documento(s) de evidencia siguen sin aprobar.",
   "Open the project's document list in Meridian.": "Abra la lista de documentos del proyecto en Meridian.",
+  // REQ-19 (045) — la base de una fecha de proyecto.
+  "dateBasis is committed or placeholder":
+    "dateBasis es committed (un compromiso) o placeholder (una posición)",
+
 };
 Object.assign(ES, ES_NOTIFY);
 
 export const ES_PREFIX = [
+  /* REQ-30 — les deux refus de la page de valeur. Préfixe traduit,
+     données (la période, les deux dates) laissées telles quelles. */
+  ["A value page is already stored for this reporting period, and what was reported is a record rather than a working copy. To correct it, close a new period that restates this one and store the value page against that, so the restatement is itself on the record: ",
+   "Ya hay una página de valor depositada sobre este periodo, y lo informado es un registro, no una copia de trabajo. Para corregirlo, cierre un periodo nuevo que rectifique este y deposite ahí la página de valor, para que la rectificación conste también: "],
+  ["These figures are read from the book as it stands today, so they can only be stored against a period closed at the book's own status date. Storing them against a period closed on another day would file today's numbers under a date on which they were not true, and nobody reading them later could tell. Close a period at today's status date instead: ",
+   "Estas cifras se leen del libro tal como está hoy: solo pueden depositarse sobre un periodo cerrado a la fecha de estado del libro. Depositarlas sobre un periodo cerrado otro día archivaría las cifras de hoy bajo una fecha en la que no eran ciertas, y nadie podría advertirlo después. Cierre un periodo a la fecha de estado de hoy: "],
   ["Gate evidence needs its artefact",
     "La evidencia de puerta exige su artefacto"],
   ["No trusted document hosts are configured",

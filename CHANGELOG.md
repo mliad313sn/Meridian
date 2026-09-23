@@ -22,6 +22,737 @@ Nothing yet.
 
 ---
 
+## [5.16.0] — 2026-09-23
+
+**Convergence: the RT365 line reaches main.** Nothing in this release is
+new code. It is 5.10.0 through 5.15.0, built on
+`claude/meridian-rt365-feedback-d6vo3i` between 08/09 and 09/09 and never
+merged, joined onto 5.9.1. Their sections below keep the dates they were
+built and now say when they were first released. See `docs/36` line C-02.
+
+### Why this was wrong before
+
+On 23/09 the product anyone clones (main, 5.9.0) could not import its own
+export, while four unreleased lines carried the fix. Three field
+programmes had each rediscovered defects another had already fixed, and
+the register in `docs/requests/rt365.json` promised 66 files that main did
+not carry (gate F12).
+
+### Changed
+
+- **One MER-04 rule (D-36.01).** 5.9.1 and the RT365 line each fixed "an
+  unbudgeted project reports SPI/CPI 1.00 and green". 5.9.1 kept the
+  indices at 1 and the colour green with a "no cost baseline" note.
+  RT365's REQ-33 made the indices `null` and the health `N`. Main now
+  carries REQ-33's rule, because an index nobody measured is not 1, and
+  keeps 5.9.1's other half: percent complete falls back to the weighted
+  physical progress of the plan, which *is* a measurement. 5.9.1's test
+  now asserts `N` and `null`, which is stricter than `G`.
+- **One first-run implementation.** `server/src/env.js` keeps the only
+  resolution rule for the PGlite directory (`pgliteDirFor`).
+  `resolvePgliteDir` and `DEFAULT_PGLITE_DIR` stay exported from `db.js`
+  under 5.9.1's names and delegate to it. Semantics kept: `dataDir: null`
+  is in-memory and wins over `PGLITE_DIR`. RT365's production start
+  refusals are unchanged.
+- `scripts/restart.sh`: RT365's version, which already covered lsof, fuser, ss
+  and PowerShell. 5.9.1's version is a subset of it.
+- The importer keeps 5.9.1's fixes: `'\\D'`, evidence fields, the bare
+  book, and the named row on refusal.
+- `docs/requests/rt365.json`: REQ-45, REQ-46 and REQ-47 read `open` while
+  migrations 049 and 050 and their tests delivered them. They are
+  corrected from the code.
+
+---
+
+## [5.15.0] — 2026-09-09 · built, first released in 5.16.0
+
+Two waves in one release: the executive value page RT365 asked for, and
+the three instrument defects we filed against ourselves while building
+the governance signals of 5.14.0.
+
+### Added
+
+- **A value page for the executive** (REQ-30). Six figures — spend
+  against case, benefits by status, overdue reviews, top risks by
+  exposure, gates due, exceptions open — assembled from the book with
+  nothing typed, printable to A4 as a board pack, and stored per
+  reporting period so a claim made in March can be re-read in December.
+  **No figure carries a colour**: no threshold for "too little benefit"
+  has been agreed, and inventing one here is REQ-33 under a new name.
+  The figure to look at is *exceptions open*, because it is a trap — a
+  book with no tolerance set shows `—`, not "0 open". An empty exception
+  register on a portfolio that has declared no limits is not a clean bill
+  of health, and this is the only screen that says so.
+- **The database now refuses to store an unmeasured figure carrying a
+  zero.** `CHECK ((state = 'N' AND value IS NULL AND length(why) > 0) OR
+  (state = 'measured' AND value IS NOT NULL))` — REQ-33 written into the
+  schema rather than trusted to the code above it, with a test that
+  inserts the forbidden row to prove the refusal.
+- **A gate that was ticked without acceptance criteria records the day
+  and the person** (REQ-45): `milestone.done_on` / `done_by`, a *weaker*
+  pair beside 032's `accepted_on` / `accepted_by`, never a widened strong
+  one. A gate with no criteria has nothing to accept, and writing an
+  acceptance date where nobody accepted anything erases the distinction
+  032 exists to hold.
+- **A RAID review is an event with its own row** (REQ-46): `raid_review`,
+  one row per review performed. `raid_item.review_on` stays and becomes
+  the projection of the latest event, not a substitute for it. Two
+  columns holding the last review would answer "when was this last looked
+  at" and still not make last month readable.
+- **A decision records when it was ratified** (REQ-47):
+  `meeting_decision.ratified_on`, with a CHECK that un-ratifying clears
+  it — enforced by the table rather than trusted to four routes.
+
+### Changed
+
+- **Two of the five governance signals can now speak.** `gateCycleTime`
+  moved from `N` to a measured figure, and `raidReviewCompliance` gained
+  a replayed trend. On a book where none of it has happened, every `N` is
+  still an `N` with the right sentence: nothing lights up because a
+  standard was loosened.
+- `trendNoHistory` is **deleted**, not left unreachable. It said the
+  register could not record that a review happened; migration 050 made
+  that false, and a sentence that is no longer true must not be a state
+  the product can reach.
+- **A book that had stored a value page could not be reset at all.**
+  `reset-book` fails any table it neither clears nor declares kept, and
+  its guard fires only at reset time and only when the forgotten table
+  holds a row. Fixed, and closed as a class: a test now reads both lists
+  against the live schema and fires the moment a migration adds a table.
+  It found a second instance on its first run — `case_reconfirmation`,
+  from REQ-22's work, which meant a book with a reconfirmed business case
+  could not be reset either.
+- Gate maps taught `valuepage`, `ladder`, `raid_review`, `report_value`
+  and `report_value_figure`. Five hand-written lists in this repository
+  share one blind spot: a thing the list does not name is not reported
+  missing, it is simply not seen (REQ-52).
+
+### Not done, and said plainly
+
+- **REQ-49, high, open.** `POST /api/decisions` takes `ratifiedBy` as
+  free text with no directory lookup and no independence check, while the
+  contract door has enforced `canRatifyDecision` since the security
+  round. REQ-47 made that worse in this same release: the route now
+  writes `ratified_on`, so an unchecked ratification is dated and feeds a
+  governance metric. Closing it properly changes an authority rule and
+  the decision form; a hurried authority change is how a check ends up
+  weakened rather than applied.
+- REQ-50 (no human can ratify from a screen at all), REQ-51 (the contract
+  can move a review date but still cannot say a review happened) and
+  REQ-48 (the demonstration book carries no business case, so four of the
+  value page's six figures read as absences on a fresh install).
+- `v5.15.0` is **not on the remote**, and neither is any tag past
+  `v5.9.0`. Every `released: false` in the register is honest.
+
+---
+
+## [5.14.0] — 2026-09-08 · built, first released in 5.16.0
+
+RT365's integrator rewrote `meridian_sync.py` against our published
+contract and then **measured** what it still could not do. Everything in
+this release is one of those measurements, or the screen that was missing
+beside it.
+
+### Added
+
+- **A register item records when, and by whom, it closed** (REQ-18).
+  `status: Closed` answered 200 and read back closed while `closed_on`
+  stayed null — it stayed null because it did not exist. `raid_item` now
+  carries `closed_on` and `closed_by`, nullable, and **nothing is
+  back-dated**: a row closed before this migration is closed on a date
+  nobody knows, and writing the migration's own date would invent a
+  history no one lived. `closed_by` is a person from the directory, not
+  the account that pushed the button — the audit trail already carries
+  the second. Filed as an API defect; it was a product defect, because
+  the screen had the same hole.
+- **A project date says what it rests on** (REQ-19), as 040 did for a
+  milestone: `committed`, or a `placeholder` that is never reported late
+  until the condition producing the real date is measured. With it, the
+  two fields the same round measured as *accepted and lost*: the
+  **sponsor** who answers for the business case — a person, because a
+  name that does not resolve in the directory is a string, not a
+  responsibility — and the **acceptance criteria** that say in advance
+  what finished will mean. Milestones have had theirs since 032; a
+  project was closed on three signatures with no sentence saying what
+  they attested.
+- **A free category label on a register item** (REQ-13), implied by their
+  `RAID_KIND`. `kind` stays Risk/Issue/Assumption/Dependency — it is the
+  contract the engine reads and it does not open. `category` is their
+  word, beside ours.
+- **Five governance signals on the portfolio page** (REQ-28): decision
+  latency, action ageing, gate cycle time, RAID review compliance,
+  exception age — every one computed from timestamps the book already
+  keeps. **No new data entry**, which was the binding constraint and also
+  the test of the design: wanting a column means not having found the
+  timestamp that already answers the question.
+- **The field-return loop is adopted with a command** (REQ-31):
+  `npm run field:init` writes a register that passes the gates the moment
+  it lands. Step 1 of the pattern used to read *copy an existing
+  register*, and copying RT365's means inheriting forty-four requests
+  belonging to another programme and deleting them by hand.
+
+### Changed
+
+- **The write API refuses a body it does not understand**, naming the
+  unknown key, listing what is accepted, pointing at the contract, and
+  saying nothing was written. Their own D-10 is the argument: a 200 on a
+  body the route did not understand teaches the caller they wrote
+  something. This is only safe because the fields above were made real
+  first.
+- **The agenda no longer calls a placeholder finish late.** A project
+  that far behind still belongs on the agenda; what is withdrawn is the
+  verdict on a date nobody committed to. Saying *42d late* of a
+  placeholder sends a steering meeting after a slip that does not exist.
+- `route-match.mjs` (F1) reads the `signals` router. A router its map
+  does not name is invisible to the gate — the readouts were drawn, the
+  route answered, and F1 still called it a button that 404s. The gate was
+  lying in the safe direction, but lying.
+
+### Not done, and why
+
+- The **H-nn half of REQ-13** — standing human acts modelled as
+  dependencies with a review date — stays open. It is a modelling
+  decision, not a field.
+- `v5.14.0` is **not on the remote**, and neither is any earlier tag past
+  `v5.9.0`. Pushing a tag ref from this session is refused HTTP 403, and
+  the merge to the default branch was authorised by the owner and then
+  refused by the session's own permission classifier (`docs/33` D-33.50).
+  Every `released: false` in the register is honest.
+
+---
+
+## [5.13.0] — 2026-09-08 · built, first released in 5.16.0
+
+RT365 consolidated two rounds into one report and handed over the most
+exacting document this product has received. It measures what Meridian is
+worth, it corrects its own earlier findings in three places, and it names
+one defect that matters more than any feature request in it. A full
+committee was convened on it (D-33.43): a measurement counsellor who
+reproduced the headline finding and surveyed every surface it reaches, an
+adoption counsellor who cloned the default branch as a stranger would, and
+a contract counsellor on the two write requirements.
+
+### The finding that mattered most — unmeasured is no longer green
+
+On a book of budget-less projects with nothing reported, the executive
+page read **ON TRACK 100%, 16 green, SCHEDULE INDEX 1.00 "at or ahead of
+plan", COST INDEX 1.00 "inside the envelope"** — in a week when that
+programme's gate was not convened and two of its exit documents were
+refused. Nothing green was stored: `health`, `spi` and `cpi` were all
+null in the database. The colour was manufactured at read time, because a
+budget of zero satisfies `pv >= bac * 0.02 && ac >= bac * 0.005` twice —
+`0 >= 0` — so the project was classified **measurable**, its indices
+computed to exactly 1.00, and `health()` asserted they were "both inside
+tolerance". The honest branch existed, was unreachable for such a project,
+and was **also green**.
+
+- `measurable` now requires a budget. Both indices return **`null`**
+  rather than 1.00 — an index nobody measured is not one, and the product
+  says `—` for a number it does not have everywhere else.
+- A **fourth health state**, *not measured*, drawn grey and with its word.
+  It cost no schema change. "Too early to measure" and "nothing to
+  measure" are both absences, they stay distinct, and neither is green.
+- **Correcting the guard alone would not have fixed the tiles.** With
+  every project unmeasurable the live set is empty, and the roll-up's own
+  `: 1` fallbacks kept returning 1.00 — the page would have gone on lying.
+  They return `null` too, and the tile counts what is measured, saying how
+  many are not.
+- Three surfaces failed **green** on a value they did not recognise (the
+  roadmap bar, the report tiles, the copy-status export, which printed
+  "Red"); one crashed the health sort; and the meeting agenda's "projects
+  off track" filter was `rag !== "G"`, which would have swept every
+  unmeasured project in as AMBER. All corrected.
+- **The reason this could not wait**: the manufactured green was being
+  written into `report_snapshot` at period close, which is append-only at
+  the database. A wrong number was becoming permanent, unamendable
+  history — reproduced in one API call (D-33.45).
+
+### Added
+
+- **A write refuses a body it does not understand** (their REQ-19). Every
+  `PUT /api/v1/*` now rejects a field the collection does not declare, and
+  a body that names nothing to write, before it reserves an idempotency
+  key, opens a transaction or writes an audit row. The refusal names what
+  the collection *does* accept and points at the contract, and the
+  published OpenAPI now says `additionalProperties: false` — the document
+  states the rule the server enforces. Two latent faults fell out of
+  building it: `decisions` asserted `version` without declaring it, and
+  `business-case` had never had a described body because the collection
+  matcher did not match a hyphen.
+- **F12 · `register-reachable`** — a gate that fails when a request marked
+  `done` names files the default branch does not carry. It separates a
+  false claim (fails anywhere) from merge debt (reported and counted off
+  the default branch), always prints what it compared against, and exits 2
+  rather than passing when it cannot compare. A tag build is strict.
+- **The exception sweep can be asked for** (their Q-2), and runs once at
+  start rather than only on the hour. They set a tolerance, breached it,
+  and saw nothing all session because there was no way to make the sweep
+  run. A control nobody can watch work is a control nobody can believe.
+  It stays a constat: it opens only what the numbers already say, it is
+  audited under `system`, and asking twice does not stack.
+- **A decision may cite evidence that lives in a repository** (their D-8).
+  Nineteen of their decision records went in with an empty evidence link
+  because the true evidence — a versioned file at a revision — could not
+  be expressed. A repository path, a path at a commit, a bare commit and a
+  named locator now join http(s). Prose is still refused: a sentence with
+  no locator cannot be found again.
+
+### Fixed
+
+- **A rollout wave is one site, and the refusal now says so** (their
+  REQ-37). Declined as a defect — it is design, held by `rbac.js`, by
+  docs/14 V-06, by the screen, and by a test since V-06 — and their own
+  fallback clause was declined with it: `seq` orders the *sites*, and
+  removing it would delete the order of the rollout to fix a message. What
+  was wrong was the message, which now says what the design is and where
+  phases belong.
+- **The formatters no longer invent a number.** `money(undefined)`
+  rendered `$NaNM` and `idx(NaN)` rendered `NaN` — RT365 saw `# NaN` in
+  the pipeline and had the grace not to file it. They return `—`, which is
+  how the product says "no number" everywhere else.
+
+### Not done, and it is the one thing they ranked above everything
+
+Their REQ-32 — **the default branch carries what this register calls
+done** — is filed here as **REQ-39**, and it is `open`. Measured on a
+clean clone: `main` is 5.9.0 dated 1 September, there is no
+`docs/requests/` directory at all, `npm run seed` reports success and
+writes nothing to disk, `GET /` answers 404, and the published admin
+password answers 401. The three first-hour defects we fixed reproduce
+verbatim, because the fix was never merged. Twenty-three requests in the
+register read `done`, and forty-two of the files they name do not exist
+for anyone who clones.
+
+The merge is a fast-forward with no conflicts, and the 5.9.0 → 5.13.0
+upgrade was measured working against a real book with its data intact and
+re-running as a no-op. What is missing is a decision and a push, and
+neither is an agent's to make: the branch to develop on is designated, and
+a tag ref is refused 403 from a session. F12 now counts the debt on every
+`npm run audit` — but a gate that counts merge debt is not a substitute
+for paying it.
+
+---
+
+## [5.12.0] — 2026-09-08 · built, first released in 5.16.0
+
+RT365 consolidated its field work into two reports — one on **value**, one
+on **evidence** — and they are the most exacting thing this product has
+been handed. The value report's argument is a single sentence: *everything
+in the model is a noun, and value gets realised by verbs.* It names five
+missing verbs, each pointed at a file and a line, and it corrects its own
+earlier findings in three places where reading the code changed what was
+true.
+
+A team was composed for it rather than one engineer working the list in
+order (D-33.38): an interoperability engineer on the reusable loop, a
+verification engineer on the three claims RT365 had honestly tagged
+`[Open]` rather than asserted, and the delivery engineer on the two
+entangled groups. Settling the open claims first was the right call — one
+of the three turned out not to be a defect at all.
+
+### Added
+
+- **Forecast against realised, as one report** (V-4). `Engine.valueReport`,
+  `GET /api/v1/value`, and a block on the reporting page — the same object
+  in both. What the case promised sits on the same line as what the
+  benefits measured, for the first time. RT365's hardest clause is held
+  literally: **no derived currency conversion appears anywhere.** Each
+  benefit is reported in its own unit with its attainment and how many
+  days its review has been outstanding; the totals sum money-denominated
+  benefits only and say out loud how many were excluded and in which
+  units. A project with a case and no benefits, one with benefits and no
+  case, and one with neither are each visible as such rather than absent.
+- **The promise survives the conversion** (V-15). An approved demand
+  becoming a project now creates its business case, carrying the
+  requester's own `benefit_note` verbatim, its estimate, and a citation
+  back to the request. Migration 028's header describes the chain demand →
+  case → benefit → review; the conversion route was where it broke, at the
+  exact moment the money is committed and the justification is freshest. A
+  demand with no stated benefit still converts, and the case says so in as
+  many words — a draft that admits it, never a fabricated justification.
+- **Not measured is not within tolerance** (V-14). The benefit dimension
+  had two answers, *within margin* and *breached*; a project that never
+  measured anything produced no attainment, so no dimension, so no breach,
+  and read as compliant. It now has a third: *nothing measured*, with the
+  count. `breached` stays false, because it is not a breach and
+  `breaches()` must not invent one. The sweep raises one exception per
+  project naming how many benefits are past their date unmeasured, and
+  since when.
+- **The lesson and the case follow the ladder** (V-13, migration 043).
+  036 freed the gate ladder to twelve and two tables did not travel with
+  it. On RT365's six-gate ladder a lesson could not be tagged to gates 5
+  or 6 — and the client form was already offering them, so the server
+  refused what the screen invited. Their judgement was right: capping in
+  silence is worse than not having the ladder configurable at all, because
+  the failure is invisible until somebody tries.
+- **A project says which ladder it was built on** (E-1). Declaring a
+  ladder still does not rewrite existing projects — 036 is right, and
+  dated gates with filed evidence must not move under the people who filed
+  them — but a project now carries `scaffoldedGates`, and the screen says
+  plainly, where the question is actually asked, when that is no longer
+  what its programme declares. RT365 corrected its own V-8 in this report:
+  `scaffoldProject` reads one ladder, and the duplicate gates in their
+  book were their loader's.
+- **The field-return loop is a published pattern, not an anecdote**
+  (V-12). A JSON Schema for `meridian-request-register/1`, a gate that
+  validates every register in CI, a review script whose register path and
+  id vocabulary are configuration rather than one repository's
+  conventions, a fixture second field repository reviewed end to end in a
+  test, and one page of English documentation of the round.
+
+### Fixed
+
+- **The portfolio right rail ignored the programme filter.** Measured
+  against RT365's E-6, which asked whether the executive tiles rescope:
+  they do — all six, verified in a browser. The rail beside them did not,
+  and listed other programmes' decisions and dates under a filter naming
+  one. That is where their "Decisions owed 36" came from. Both helpers
+  already took the scoped list; this view simply never passed it.
+- **A milestone accepted by a named person read as PLANNED** (E-7). The
+  write was always correct. The page derived state from date-versus-status-date
+  and never read `done`, so it was wrong in both directions: an untouched
+  milestone whose date had passed read Cleared, and a formally accepted one
+  read Planned. The accepter's name had no read surface anywhere in the
+  product — only the form that writes it. PM-04's control was in the table
+  and not in the room.
+- **The same decision could be minuted twice** (E-8). Two identical posts
+  to the session route made two rows, and the minute carried the decision
+  twice. The `PUT /api/v1/…/:externalId` path has been idempotent since
+  I-2; the route the screen uses was not. The guard is scoped to the
+  occurrence, so the same headline stays legitimately recordable in a
+  later meeting — a revisited item, which is the normal case.
+- **`accepted: false` and "cannot answer yet" read identically** (E-9).
+  RT365 pointed out that their silence and their inability to confirm a
+  feature they have not adopted looked the same in the register. `accepted`
+  is now three-valued, and the schema makes the ambiguous combination
+  impossible in a future round.
+
+### Not taken, with a reason
+
+V-9 (governance quality signals) stays open at RT365's own priority. Their
+concern 6 asked us not to let their list crowd out our committees' backlog,
+and to decline with a reason rather than carry debt — this round already
+took four of their highest-priority items and three measured defects.
+V-5, V-6, V-7, V-10 and V-11 remain open in their sequence.
+
+---
+
+## [5.11.0] — 2026-09-08 · built, first released in 5.16.0
+
+RT365 re-tested 5.10.0 and filed a second list, V-1…V-12, under a heading
+that named the point: *requirements for Meridian as the tool that drives
+projects to business value*. Its argument was one sentence long and hard
+to answer — **REQ-02 made delivery facts syncable from the field
+repository; value facts still have to be typed in, so the one thing an
+executive reads is the one thing that goes stale.** Their loader pushes
+256 delivery writes and cannot push a single benefit.
+
+This release takes the three RT365 ranked highest, plus the one change
+the integrator ranked highest of its own three.
+
+### Added
+
+- **Value objects on the write API** (REQ-20 · V-1). `PUT
+  /api/v1/benefits/{externalId}` and `PUT
+  /api/v1/business-case/{externalId}` under `write:portfolio`, with the
+  same eight rules as the delivery collections: your own identifier,
+  `adopt` for a row born on a screen, `Idempotency-Key`, `version`
+  asserted when sent, and audit under the integration's name. A benefit
+  keeps ITS unit — percent, hours, ounces, currency — and is never
+  divided by a million; an `actual` without `measuredOn` is refused,
+  because a figure nobody can situate a year later is not a measurement.
+  One case per project: a second is refused, naming the one to adopt.
+- **The decision register and the actions are readable back** (REQ-15).
+  `GET /api/v1/decisions` and `GET /api/v1/actions`, under a new
+  `read:meetings` scope that mirrors `write:meetings` rather than riding
+  on `read:portfolio` — INT-02 separated the audit trail so that a
+  warehouse feed would not carry governance, and a decision register is
+  the same. Writing without being able to read was not a contract: `adopt`
+  had no discovery path for the two collections whose legacy rows exist,
+  no reconciliation of what a room decided was possible without a
+  session, and a sync could not see that a human had closed an action
+  before it reopened it. Actions carry `raisedInStatus`, so a caller
+  knows when it is about to write `Open` over the minute of a meeting.
+- **The business case is reconfirmed at every gate, and the gate cannot
+  pass without it** (REQ-22 · V-3). The fields have existed since
+  migration 028 and nothing forced them. A gate milestone on a project
+  that has a case is now refused unless the case was reconfirmed at THAT
+  gate, on both write paths — the screen and `PUT /api/v1/milestones` —
+  because a control on one of two paths is not a control. Reconfirming is
+  a decision rather than a checkbox: a verdict (Continue, Continue with
+  conditions, or **Stop**, which refuses the next gate), a named
+  reconfirmer from the directory, a note, and the two figures as they
+  stood, so the next gate reads the delta since the last one.
+- **A benefit past its realisation date is chased, not hoped for**
+  (REQ-21 · V-2). `realise_on` has been in the schema since migration 008
+  and drove nothing. An unmeasured benefit whose date has passed now
+  raises a portfolio exception like a tolerance breach, notifies the
+  person who owns it, and appears on the next agenda of a board that sees
+  the project, marked OVERDUE with its target in its own unit. Closed
+  projects count — that is the normal case, and exactly why nothing ever
+  chased the date.
+
+### Fixed
+
+- **A re-run that changes nothing now writes nothing.** Every upsert built
+  its patch from the fields that were SENT rather than the fields that
+  CHANGED, so an unchanged reload wrote an audit event and bumped
+  `row_version` on every row it touched — the integrator measured 285 of
+  each for a load that changed nothing. A trail that fills with
+  non-events cannot be read, and a version that moves under a reader who
+  did nothing is worse than useless. The decision path already filtered
+  this way; it is now the rule for all ten collections, with a comparison
+  tolerant of the shapes a driver returns (a `numeric` comes back as a
+  string, a `date` as a Date).
+- **Reconfirming the case updated the header and not the list.** The
+  screen said "reconfirmed at gate 1" two lines above "not reconfirmed at
+  any gate yet": the write touches two collections and the refresh named
+  only one. Found by walking it in a browser, not by a test — both writes
+  were correct on their own.
+- **Migration 028 capped case reconfirmation at gate 4**, the four
+  hard-wired gates of the day. Since 036 a ladder can carry twelve, so a
+  programme that declared six gates could not reconfirm its case at gates
+  5 and 6: the constraint refused the row without explaining itself. The
+  bound now follows the project's own ladder.
+- **Two gates were looking the wrong way.** `business_case` was declared
+  nowhere in the CRUD gate, so neither its verbs nor its columns were ever
+  checked — on a table shipped in migration 028. And the field-help gate
+  read a field only as far as its first `}`, so any field whose options
+  are written out in full ended before its own `hint` and was reported as
+  having none; it now reads a whole field with balanced braces, which
+  makes it stricter, not kinder.
+
+---
+
+## [5.10.0] — 2026-09-08 · built, first released in 5.16.0
+
+The RT365 field return (docs/33). For the first time a programme that is
+not this product's own demo ran its whole lifecycle in Meridian — sixteen
+projects, six gates, 86 register items, fourteen decisions, twenty-one
+actions, loaded by API on 5.9.0 — and wrote down what it found: twelve
+findings, twelve improvements in value order, four RAID rows against
+Meridian. This release takes all twelve, under a Product Owner appointed
+the same day with full authority to decide, a duty to review the field
+repository on every round, and a register that answers each request
+where the programme can read it (`docs/33`, `docs/requests/rt365.json`,
+`/product-owner`).
+
+### Added
+
+- **Write API v1** (I-2 · M-05 · INT-13): `PUT /api/v1/{projects,
+  milestones,raid,activities,workitems}` under `write:portfolio` and
+  `PUT /api/v1/{decisions,actions}` under `write:meetings`, keyed by the
+  integration's **own identifier** (`external_source`, `external_id`,
+  migration 035), with an optional **`Idempotency-Key`** (same key + same
+  body replays; same key + other body 422). The same rules as the screens:
+  scaffolded projects, PM-04 acceptance, immutable decisions, actions only
+  in an open room. OpenAPI describes every body; discovery lists every
+  scoped route. Why it was wrong before: the only public surface read, so
+  the first integrator wrote through 144 undocumented session routes and
+  encoded its identity in titles.
+- **Gate ladder per programme** (I-3 · M-04): `programme.gate_model`
+  (036); a project is born with its programme's gates, evidence documents
+  and criteria; the default four are unchanged for programmes that
+  declare nothing. Why: six real gates had to live beside four fixed ones.
+- **Gate criteria** (I-4 · M-06): `gate_criterion` (037) — posed in
+  advance, found met by a named reviewer who does not own the evidence
+  cited; a gate is ready only when evidence is approved **and** criteria
+  are met. Why: "evidence 0/1" was a count of documents, not an answer to
+  "what does this prove".
+- **Decisions outside meetings** (I-7): `meeting_decision` anchored to a
+  room or to a named decider and date (034), with alternatives, dissent
+  and supersession; `POST /api/decisions`; one register for both. Why: a
+  decision taken between two meetings had to be smuggled into an
+  artificial occurrence.
+- **RAID against gates and changes, reviews on the agenda** (I-8):
+  `raid_item.gate`, `raid_item.cr_id`; the agenda asks for register
+  items whose review date has come. Why: `review_on` had been stored since
+  migration 002 and read by nobody.
+- **Progress with provenance** (I-5, first slice): a source system binds
+  its id to a stage and reports `pct` stamped with `progress_source` and
+  `progress_at`. Why: earned value read typed percentages.
+- **Stakeholder register and communication plan** (I-10 · PM-05 · PM-11,
+  038): interest × influence, attitude, engagement, owner; audience,
+  message, channel, frequency, next date.
+- **Operate-for-real kit** (I-6 · M-08 · G-01 · SaaS-03/04/05):
+  `npm run backup`, `npm run restore-drill` (restores elsewhere, recounts,
+  times, records), `/api/health` with instance identity and the last
+  proven restore, `docs/34-exploitation.md`, `docs/security-policy-template.md`.
+- **Day-one posture** (I-12 · M-10): the seeded demo passwords are
+  measured at boot; production refuses to start while one still opens an
+  account; Administration shows the banner; break-glass signatures are
+  marked in the audit trail. `GET /api/admin/posture`.
+- **Release discipline** (I-9 · M-09): gate **F10** (`release-audit`):
+  package.json, package-lock.json, docs/openapi.v1.json and CHANGELOG.md
+  must agree; `release.yml` publishes a GitHub Release on a tag.
+- **English committee record** (I-11 · M-11): `docs/en/16…32`.
+- The **Product Owner** role: `.claude/commands/product-owner.md`,
+  `scripts/rt365-review.mjs`, `docs/33` §1 and §5.
+
+### Second round, the same day — what two counsellors found
+
+A code reviewer and a PMO practitioner were convened on the diff and the
+register before the push (docs/33 §5, D-33.8). What survived their
+verification is fixed here, not filed:
+
+- `npm test` could have wiped a cluster named by `DATABASE_URL` in a
+  developer's `.env`, because the harness's explicit `url: null` fell
+  through to the environment once `.env` was read. An explicit null is
+  now PGlite with no fallback, and the tests never read `.env`.
+- `cr` on `PUT /api/v1/raid` and `/decisions` threw (change requests
+  carry no external id); resolves by Meridian id.
+- The default four gates seeded criteria on every new project, which
+  would have required group-level reviewers to clear gate 1 on a site
+  project (D-33.13): only a declared ladder poses criteria.
+- `PUT /api/v1/milestones` skipped the site-freeze refusal (V-03);
+  `assertPlantWindow` moved to `server/src/plant.js` and both paths ask it.
+- `adopt: "<Meridian id>"` on every write collection, and
+  `PUT /api/v1/criteria/:externalId` — without them RT365's existing book
+  could not migrate and REQ-04 was a screen-only control (D-33.12).
+- Decisions carry `council`, `evidenceUri`, `provenance`, `status`
+  Proposed/Ratified and `ratifiedBy` (migration 039, D-33.11); substance
+  immutable, state audited; headlines no longer cut at 300 characters.
+- `version` omitted on a write is true last-writer-wins (no phantom 409);
+  the `Idempotency-Key` is reserved before the handler runs, the body is
+  canonicalised, a refused request frees its key.
+- Invalid `gate` numbers (non-integers, beyond the ladder) and
+  `measuredAt` values are 400s; the review probe passes third-party
+  branch and file names as arguments, never through a shell; `pg_dump`
+  and friends get the password through `PGPASSWORD`, not `ps`; the PGlite
+  backup refuses to run while the server answers.
+- Two tests asserted less than the code claimed (a `[200, 400]` and an
+  agenda check that passed for the wrong reason); tightened, and six
+  cases added for the paths the suite did not exercise.
+- Runbook (docs/34): `createuser --createdb`, first administrator via
+  `admin:handover` before `npm start`, tenant `.env` named in cron,
+  restore-to-live and upgrade rollback, PGlite scripts refuse while the
+  server runs.
+
+### Third re-read of RT365, the same day
+
+- **A milestone date says what it rests on** (REQ-14, from RT365's
+  decision D-057 "no calendar date for gates C–F"): `date_basis`
+  committed | placeholder and `condition` (migration 040). A placeholder
+  is a position, never a promise — the agenda never marks it MISSED, the
+  gate state reads `Unscheduled` instead of Overdue. Existing rows are
+  committed and unchanged. Found by the review probe's "files changed
+  since the last review" list, which is why that list exists.
+
+### Third round — the full committee, on the release as built
+
+Three counsellors reviewed 5.10.0 as a finished thing rather than as a
+diff: a security and code reviewer over the whole surface, an operator
+who built an instance from nothing on real PostgreSQL 16 and ran the
+runbook line by line, and an integrator who rewrote RT365's
+`meridian_sync.py` against the published contract and loaded the whole
+programme through it. Five findings blocked the tag; every one of them
+was in code the earlier diff reviews had already passed.
+
+- **An integration's webhook signing secret no longer reaches the audit
+  trail.** Deleting an integration wrote `webhook_secret` in clear into
+  `audit_event` — append-only, served by `/api/audit` and
+  `/api/v1/audit`, readable by every group account and every `read:audit`
+  key, and impossible to redact afterwards. Anyone who read it could forge
+  `x-meridian-signature` on delivered events. The before-image on a table
+  that holds a credential is now built by allow-list.
+- **A refused request no longer seizes a row.** `adopt` opened its own
+  transaction and committed the binding before the request had finished
+  validating, so a `PUT` that then answered 400 permanently bound a
+  project the integration had never successfully written to — with no way
+  back, since a bound row refuses every other adoption. The binding now
+  joins the caller's own write and commits or rolls back with it.
+- **Ratifying a decision is a segregated act.** One `write:meetings` key
+  could propose a decision and then ratify it, naming any free-text
+  ratifier, on the only path that reaches that state. `canRatifyDecision`
+  in `shared/rbac.js` now requires a named person of the directory who is
+  neither the decider nor the recording account, and `can()` closes by
+  default on an unrecognised role.
+- **The decision register is a versioned row** (migration 041). Its state
+  has been mutable since 040 while the table carried no `row_version`:
+  two integrations overwrote each other in silence, the caller was handed
+  a literal `version: 1` that was never true, and the documented `adopt`
+  answered 500. The F2 exemption text now says what is true — the
+  substance is immutable, the state is not.
+- **The backup and the drill ask the book who holds it.** Both probed
+  `/api/health` on a guessed port; on a fleet each tenant has its own, so
+  the probe found nobody, opened a *live* PGlite data directory, deleted
+  the running server's lock files and reported "this backup was taken
+  with the server stopped". A marker carrying the host pid, written at
+  open and removed at stop, answers the question that was actually being
+  asked.
+
+### Fixed before the tag, from the same round
+
+- `.env` is read before anything is read from the environment.
+  `loadEnv()` ran inside `connect()`, so `DATABASE_URL`, `PORT` and
+  `MERIDIAN_BACKUP_DIR` were all invisible to the module-scope code that
+  needed them: on PostgreSQL the nightly backup refused every night
+  claiming "this book is PGlite"; the drill could not find the backup it
+  had just written; and `PORT` in a tenant's `.env` was ignored, so every
+  instance bound 4173 and the fleet of §8 could not work.
+- `scripts/restart.sh` works on Linux. It found the listening process
+  through `powershell.exe`; where the fleet actually runs, the expression
+  was empty, nothing was stopped, and the script launched a *second*
+  server over the same book — the corruption it exists to prevent.
+- The restore drill counts every table the book holds, discovered at run
+  time, instead of a list of nineteen written once. A backup that had
+  lost every allocation, timesheet, commitment, business case or
+  stakeholder used to exit 0.
+- `/api/health` reports the last **proven** restore (`lastDrillAt`)
+  separately from the last attempt (`lastAttemptAt`). A drill failing
+  every month looked recent and therefore healthy.
+- `MERIDIAN_INSTANCE_ID` names an instance from its `.env`, as §8 of the
+  runbook already promised; the screen setting still overrides it.
+- The published contract speaks OpenAPI: `{externalId}`, not Express's
+  `:externalId`, so a generated client no longer sends the literal
+  parameter name — and `Idempotency-Key`, which REQ-02 rests on, is
+  declared as a header parameter rather than only described in prose.
+- A decision's substance comparison trims what the create path trims. Any
+  rationale, alternatives or dissent ending in a space or a newline — a
+  markdown cell, a heredoc, a multi-line rationale — was permanently
+  non-idempotent: the byte-identical re-`PUT` answered 409.
+- Posing and finding a criterion met in one `PUT` reports `created: true`.
+  It fell through to the update path and reported a creation as an update.
+- `writeRow`'s no-version branch asserts its identifiers again, restoring
+  the tripwire `db.js` exists to be.
+- The runbook (docs/34) no longer tells an operator things that are not
+  true: `createuser`/`createdb` run as the postgres superuser, `npm start`
+  does not return, §3b drops the database before restoring, the migration
+  count is 41, the rollback point for an upgrade from before 5.10.0 is
+  taken with `pg_dump` because that binary has no `backup` script,
+  `/api/admin/posture` needs a session, and nothing marks a restore in the
+  trail — the sentence that said it did is gone.
+
+Five gaps the integrator found that are not defects — no `decisions` or
+`actions` in the v1 read, no public write for structure, no way to raise
+an action into the next occurrence, no closure date on a register item,
+no basis on a project date — are recorded as REQ-15…REQ-19 rather than
+added to a release being tagged (D-33.27).
+
+### Fixed
+
+- **The first hour** (I-1 · M-01..M-03): `.env` is loaded; `PGLITE_DIR`
+  defaults to `server/.data/pgdata` and is created; a book in memory must
+  be asked for (`MERIDIAN_EPHEMERAL=1`) and is announced; `npm run dev`
+  builds the client when missing; `/` without a built client explains
+  instead of `Cannot GET /`. Why: the README's one-minute start lost the
+  seed on exit and cost a newcomer forty minutes.
+- `/api/health` and `/api/v1/openapi.json` report the package version
+  (`build: sources|packaged`) instead of `dev` and a five-releases-old
+  number.
+- The agenda's exclusion set for register reviews was built from items the
+  decision cap had deferred, not from items actually drawn (found by the
+  first I-8 test).
+
+### Changed
+
+- `NODE_ENV=production` refuses PGlite unless `MERIDIAN_ALLOW_PGLITE=1`.
+- `npm run dev` is `scripts/dev.mjs`; the bare server is `npm run dev:server`.
+- Discovery (`GET /api/v1`) lists every scoped route, read from the
+  contract; the test that pinned "one endpoint per scope" now asserts
+  "every scope served, every scoped route listed".
+
+Tests: 449 → 515; gates 9 → 10; migrations 033 → 040.
 ## [5.9.1] — 2026-09-23
 
 What running a real programme (FitAdapt) on a clean clone of `main`

@@ -54,23 +54,35 @@ export const sum = (arr, f) => arr.reduce((a, x) => a + (f ? f(x) : x), 0);
 export const uniq = (arr) => [...new Set(arr)];
 export const by = (k) => (a, b) => (a[k] > b[k] ? 1 : a[k] < b[k] ? -1 : 0);
 
+/* Q-8 / REQ-33 — un formateur n'invente pas le nombre qu'on ne lui a pas
+   donné. `money(undefined)` rendait « $NaNM » et `idx(NaN)` rendait
+   « NaN » : le premier programme réel a vu « # NaN » dans sa file de
+   priorisation et a eu l'élégance de ne pas le déposer comme défaut.
+   C'est la même règle que celle du reste de ce tour — ne rien affirmer
+   qu'on ne sache — et le tiret est déjà la façon dont le produit dit
+   « pas de chiffre » partout ailleurs. */
+const noNumber = (v) => v === null || v === undefined || !Number.isFinite(Number(v));
+
 export function money(v, dp) {
+  if (noNumber(v)) return "—";
   const d = dp === undefined ? (Math.abs(v) >= 10 ? 1 : 2) : dp;
   return "$" + v.toFixed(d) + "M";
 }
 export function signedMoney(v) {
+  if (noNumber(v)) return "—";
   const sign = v >= 0 ? "+" : "−";
   const abs = Math.abs(v);
   if (abs < 0.005) return "$0";
   return sign + (abs < 1 ? "$" + Math.round(abs * 1000) + "K" : "$" + abs.toFixed(2) + "M");
 }
 export function cash(v) {
+  if (noNumber(v)) return "—";
   const abs = Math.abs(v);
   const str = abs < 1 ? "$" + Math.round(abs * 1000) + "K" : "$" + abs.toFixed(2).replace(/0$/, "") + "M";
   return (v < 0 ? "−" : "") + str;
 }
-export const pct = (v, dp = 0) => (v * 100).toFixed(dp) + "%";
-export const idx = (v) => v.toFixed(2);
+export const pct = (v, dp = 0) => (noNumber(v) ? "—" : (v * 100).toFixed(dp) + "%");
+export const idx = (v) => (noNumber(v) ? "—" : Number(v).toFixed(2));
 
 /* ── reference data ───────────────────────────────────────────────── */
 export const GATES = [
@@ -80,6 +92,44 @@ export const GATES = [
   { n: 4, name: "Gate 4 — Benefits",         at: .88, owner: "PMO",                 evidence: "Realisation report, lessons learned" },
 ];
 export const PHASES = ["Initiation", "Design", "Execution", "Transition", "Closure", "Closed"];
+
+/* I-3 (retour de terrain RT365, M-04) — the gate ladder is a property of
+   the PROGRAMME. Nothing in the frozen arithmetic changes: what changes is
+   the list it walks. `normaliseGateModel` is the one validator, shared by
+   the server (which refuses) and the browser (which explains). */
+export const MAX_GATES = 12;
+export function normaliseGateModel(input) {
+  if (input === null || input === undefined || input === "") return null;
+  if (!Array.isArray(input)) throw new Error("A gate ladder is a list of gates");
+  if (!input.length) return null;
+  if (input.length > MAX_GATES) throw new Error(`A gate ladder has at most ${MAX_GATES} gates`);
+  let last = 0;
+  const out = input.map((g, i) => {
+    const name = String(g?.name ?? "").trim();
+    if (!name) throw new Error(`Gate ${i + 1} needs a name`);
+    const at = Number(g?.at);
+    if (!Number.isFinite(at) || at <= 0 || at >= 1) throw new Error(`Gate ${i + 1} (${name}): "at" is where it sits in the project window, between 0 and 1 exclusive`);
+    if (at <= last) throw new Error(`Gate ${i + 1} (${name}) must come after the previous gate`);
+    last = at;
+    return { n: i + 1, name, at: Math.round(at * 1000) / 1000,
+      owner: String(g?.owner ?? "").trim() || "Sponsor",
+      evidence: String(g?.evidence ?? "").trim() };
+  });
+  return out;
+}
+/* "Name | Owner | Evidence, comma separated | at%" — one gate per line.
+   The textual form an administrator types; the JSON form is what is stored. */
+export function parseGateLadder(text) {
+  const lines = String(text ?? "").split("\n").map((l) => l.trim()).filter(Boolean);
+  if (!lines.length) return null;
+  return normaliseGateModel(lines.map((l) => {
+    const [name, owner, evidence, at] = l.split("|").map((x) => (x ?? "").trim());
+    const pct = Number(String(at ?? "").replace("%", ""));
+    return { name, owner, evidence, at: Number.isFinite(pct) ? pct / 100 : NaN };
+  }));
+}
+export const formatGateLadder = (model) => (model ?? []).map((g) =>
+  `${g.name} | ${g.owner} | ${g.evidence} | ${Math.round(g.at * 100)}%`).join("\n");
 export const RAID_TYPES = ["Risk", "Issue", "Assumption", "Dependency"];
 export const RESPONSES = ["Mitigate", "Avoid", "Transfer", "Accept", "Monitor", "Fix"];
 /* PM-02 — où l'on ira CHERCHER un enseignement plus tard. Les onze
@@ -88,7 +138,7 @@ export const RESPONSES = ["Mitigate", "Avoid", "Transfer", "Accept", "Monitor", 
 export const LESSON_CATEGORIES = ["Scope", "Schedule", "Cost", "Risk", "Quality",
   "Resources", "Stakeholders", "Procurement", "Governance", "Technical", "Transition"];
 export const DOC_TYPES = ["Charter","Business case","Design","Assurance","Quality","Operations","Compliance","Closure","Finance"];
-export const RAG_LABEL = { G: "Green", A: "Amber", R: "Red" };
+export const RAG_LABEL = { G: "Green", A: "Amber", R: "Red", N: "Not measured" };
 
 /* ═══════════════════════════════════════════════════════════════════
    The engine proper. `db` is the in-memory portfolio the API serves:
@@ -124,12 +174,29 @@ export const Engine = {
     const ac = sum(db.ledger.filter(l => l.project === projectId), l => l.amount);
 
     /* Below a couple of per cent elapsed the indices are arithmetic noise.
-       Real PMOs don't report an index that early, so neither does this. */
+       Real PMOs don't report an index that early, so neither does this.
+
+       REQ-33 — et un budget de ZÉRO satisfaisait ce test deux fois :
+       `0 >= 0` est vrai, donc un projet sans budget était classé
+       MESURABLE, ses indices valaient exactement 1.00, et `health()`
+       affirmait qu'ils étaient « tous deux dans la tolérance ». Le
+       premier programme réel a lu, sur la page que lit un commanditaire,
+       « ON TRACK 100 %, SPI 1.00, COST INDEX 1.00 » la semaine où sa
+       porte B n'a pas été convoquée et deux de ses documents de sortie
+       ont été refusés. Rien de vert n'était stocké : la couleur, les deux
+       indices et la phrase qui les justifie étaient fabriqués à la
+       lecture, à partir de rien.
+
+       Sans budget il n'y a pas d'échelle, donc pas d'indice. Et un indice
+       qu'on n'a pas ne vaut pas 1 : il vaut RIEN, et se dit `null`. */
     const measurable = bac > 0 && pv >= bac * 0.02 && ac >= bac * 0.005;
-    const spi = !measurable ? 1 : pv > 0.0001 ? ev / pv : 1;
-    const cpi = !measurable ? 1 : ac > 0.0001 ? ev / ac : 1;
+    const spi = !measurable ? null : pv > 0.0001 ? ev / pv : 1;
+    const cpi = !measurable ? null : ac > 0.0001 ? ev / ac : 1;
     const sv = ev - pv, cv = ev - ac;
-    const eac = cpi > 0.01 ? bac / cpi : bac;
+    /* Un indice absent laisse l'estimation à l'enveloppe : `null > 0.01`
+       est faux, ce qui donne déjà le bon résultat — on l'écrit pour que
+       ce soit une décision et non une chance. */
+    const eac = cpi != null && cpi > 0.01 ? bac / cpi : bac;
     const vac = bac - eac;
     const tcpi = (bac - ac) > 0.0001 ? (bac - ev) / (bac - ac) : 1;
     const physical = sum(acts, a => a.weight * (a.pct / 100));
@@ -143,9 +210,12 @@ export const Engine = {
     const totalSpan = days(p.start, p.finish);
     const elapsed = clamp(days(p.start, today), 0, totalSpan);
     const remaining = Math.max(0, totalSpan - elapsed);
-    const forecastFinish = iso(addDays(today, spi > 0.05 ? Math.round(remaining / spi) : remaining));
+    const forecastFinish = iso(addDays(today, spi != null && spi > 0.05 ? Math.round(remaining / spi) : remaining));
     const slipDays = days(p.finish, forecastFinish);
 
+    /* `bac` voyage avec les indices : `health()` doit pouvoir distinguer
+       « trop tôt pour mesurer » (il y a une échelle, on n'a pas assez
+       avancé) de « rien à mesurer » (il n'y a pas d'échelle du tout). */
     const health = Engine.health(db, p, { spi, cpi, measurable, bac });
     return {
       project: p, bac, pv, ev, ac, spi, cpi, sv, cv, eac, vac, tcpi, measurable,
@@ -159,8 +229,18 @@ export const Engine = {
     if (p.healthOverride) return { rag: p.healthOverride, derived: false, why: p.healthOverrideWhy || "Set by the project manager" };
     const st = db.settings;
     if (!st.autoRag) return { rag: "G", derived: false, why: "Automatic status is off — PM judgement applies" };
-    if (m.bac <= 0) return { rag: "G", derived: true, why: "No cost baseline — schedule progress only, earned value is not computed" };
-    if (m.measurable === false) return { rag: "G", derived: true, why: "Too early to measure — less than 2% of the plan has been spent" };
+    /* REQ-33 — la branche honnête existait déjà et rendait VERT. « Trop
+       tôt pour mesurer » et « rien n'est mesuré » ne sont pas des états
+       sains : ce sont des absences, et une absence n'a pas de couleur.
+       L'état `N` est la quatrième réponse — celle que le produit donne
+       déjà partout ailleurs (« 0 % reported », « SPI — », « ils trient
+       en dernier plutôt qu'au pire ») et qu'il refusait ici seul. */
+    if (m.measurable === false) {
+      return { rag: "N", derived: true,
+        why: (m.bac > 0)
+          ? "Too early to measure — less than 2% of the plan has been spent"
+          : "Nothing measured — no budget, so there is no scale to measure against" };
+    }
     const s = m.spi, c = m.cpi;
     if (s < st.redSpi || c < st.redCpi)
       return { rag: "R", derived: true, why: "SPI " + idx(s) + " / CPI " + idx(c) + " — below the red threshold of " + idx(st.redSpi) };
@@ -174,7 +254,12 @@ export const Engine = {
     const bac = sum(ms, m => m.bac), pv = sum(ms, m => m.pv), ev = sum(ms, m => m.ev), ac = sum(ms, m => m.ac);
     const live = ms.filter(m => m.measurable);
     const lpv = sum(live, m => m.pv), lev = sum(live, m => m.ev), lac = sum(live, m => m.ac);
-    const spi = lpv > 0.0001 ? lev / lpv : 1, cpi = lac > 0.0001 ? lev / lac : 1;
+    /* REQ-33 — corriger le garde ne suffit pas : quand AUCUN projet n'est
+       mesurable, l'ensemble « live » est vide, `lpv` vaut 0, et ces deux
+       replis rendaient encore 1.00 — les tuiles auraient continué de
+       mentir. Un portefeuille dont rien n'est mesuré n'a pas d'indice. */
+    const spi = live.length === 0 ? null : lpv > 0.0001 ? lev / lpv : 1;
+    const cpi = live.length === 0 ? null : lac > 0.0001 ? lev / lac : 1;
     const eac = sum(ms, m => m.eac);
     return {
       count: ms.length, bac, pv, ev, ac, spi, cpi, eac, vac: bac - eac, cv: ev - ac, sv: ev - pv,
@@ -182,6 +267,7 @@ export const Engine = {
       green: ms.filter(m => m.health.rag === "G").length,
       amber: ms.filter(m => m.health.rag === "A").length,
       red: ms.filter(m => m.health.rag === "R").length,
+      notMeasured: ms.filter(m => m.health.rag === "N").length,
       metrics: ms,
     };
   },
@@ -256,34 +342,72 @@ export const Engine = {
     const approved = docs.filter(d => Engine.isEvidence(d)).length;
     const ms = db.milestones.find(m => m.project === projectId && m.gate === gateN);
     const date = ms ? ms.date : null;
-    const passed = date ? D(date) <= D(db.statusDate) : false;
+    /* REQ-14 — a placeholder date is a position on the timeline, not a
+       commitment: it never makes a gate "Overdue" or "Cleared" by the
+       calendar alone. Existing rows are committed; nothing changes for them. */
+    const placeholder = !!ms && ms.dateBasis === "placeholder";
+    const passed = date && !placeholder ? D(date) <= D(db.statusDate) : false;
+    /* I-8 — the open register items raised AGAINST this gate. Informative,
+       never blocking: a risk is a reason to look, not a lock (the lock is
+       the evidence). The frozen arithmetic below is untouched. */
+    const risks = (db.raid || []).filter(r => r.project === projectId && r.gate === gateN && r.status === "Open");
+    /* I-4 — the criteria posed in advance for this gate, and whether a
+       named reviewer has found each one met. With no criteria the
+       arithmetic is exactly what it was; with criteria, evidence alone
+       does not clear the gate. */
+    const criteria = (db.criteria || []).filter(c => c.project === projectId && c.gate === gateN);
+    const criteriaMet = criteria.filter(c => c.met).length;
+    const allMet = criteriaMet === criteria.length;
+    const complete = approved === docs.length && allMet;
     return {
-      gate: gateN, date, docs, approved, total: docs.length,
-      ready: docs.length > 0 && approved === docs.length,
+      gate: gateN, date, docs, approved, total: docs.length, risks,
+      criteria, criteriaMet,
+      ready: docs.length > 0 && complete,
       outstanding: docs.filter(d => !Engine.isEvidence(d)),
-      state: passed && approved === docs.length ? "Cleared"
+      unmet: criteria.filter(c => !c.met),
+      placeholder, condition: ms?.condition ?? "",
+      state: passed && complete ? "Cleared"
            : passed ? "Overdue"
-           : date && days(db.statusDate, date) <= 45 ? (approved === docs.length ? "Ready" : "At risk")
+           : date && !placeholder && days(db.statusDate, date) <= 45 ? (complete ? "Ready" : "At risk")
+           : placeholder ? "Unscheduled"
            : "Planned",
     };
   },
 
+  /* I-3 — the ladder this project walks: its programme's, or the default. */
+  gates(db, projectId) {
+    const p = projectId ? Engine.project(db, projectId) : null;
+    const pr = p ? Engine.programme(db, p.programme) : null;
+    const model = pr && Array.isArray(pr.gateModel) && pr.gateModel.length ? pr.gateModel : null;
+    return model ?? GATES;
+  },
+  /* The longest ladder in the book — for filters that span every programme. */
+  maxGates(db) {
+    return Math.max(GATES.length, ...(db.programmes || []).map((pr) => (pr.gateModel || []).length));
+  },
   currentGate(db, projectId) {
-    for (const g of GATES) {
+    const ladder = Engine.gates(db, projectId);
+    for (const g of ladder) {
       const st = Engine.gateStatus(db, projectId, g.n);
       if (st.state !== "Cleared") return { ...g, ...st };
     }
-    return { ...GATES[3], ...Engine.gateStatus(db, projectId, 4) };
+    const last = ladder[ladder.length - 1];
+    return { ...last, ...Engine.gateStatus(db, projectId, last.n) };
   },
 
   canAdvance(db, projectId) {
     if (!db.settings.gateLock) return { ok: true, reason: "Gate locking is off" };
     const g = Engine.currentGate(db, projectId);
     if (g.state === "Cleared" || g.ready) return { ok: true, reason: "Evidence complete for " + g.name };
+    const parts = [];
+    if (g.outstanding.length) parts.push(g.outstanding.length + " evidence item" + (g.outstanding.length === 1 ? "" : "s") + " outstanding");
+    if (g.unmet && g.unmet.length) parts.push(g.unmet.length + " criterion" + (g.unmet.length === 1 ? "" : "s") + " not yet found met");
+    if (!parts.length) parts.push("no evidence item filed");
     return {
       ok: false,
-      reason: g.outstanding.length + " evidence item" + (g.outstanding.length === 1 ? "" : "s") + " outstanding for " + g.name,
+      reason: parts.join(" · ") + " for " + g.name,
       items: g.outstanding,
+      unmet: g.unmet ?? [],
     };
   },
 
@@ -548,17 +672,33 @@ export const Engine = {
       /* L'atteinte la plus BASSE du projet : une tolérance de bénéfice
          qui se contenterait de la moyenne laisserait un bénéfice manqué
          se cacher derrière un bénéfice dépassé. */
-      const scores = (db.benefits ?? [])
-        .filter((b) => b.project === p.id)
-        .map((b) => Engine.attainment(b))
-        .filter((x) => x != null);
+      const mine = (db.benefits ?? []).filter((b) => b.project === p.id);
+      const scores = mine.map((b) => Engine.attainment(b)).filter((x) => x != null);
       if (scores.length) {
         const worst = Math.min(...scores);
         const shortfall = Math.round((1 - worst) * 100 * 100) / 100;
         out.benefit = {
           measured: shortfall, allowed: Number(tol.benefitPct),
           breached: shortfall > Number(tol.benefitPct),
+          state: "measured",
           unit: "points below target", what: "the weakest benefit on the project",
+        };
+      } else if (mine.length) {
+        /* V-14 — la troisième réponse. Sans elle il n'y en avait que
+           deux : « dans la marge » et « dépassée ». Un projet qui n'a
+           JAMAIS rien mesuré ne produisait aucune atteinte, donc aucune
+           dimension, donc aucun dépassement — et se lisait comme un
+           projet dans sa marge. C'est exactement inversé pour la valeur :
+           mesurer et manquer était visible, ne jamais mesurer ne l'était
+           pas. Le principe du produit — « un bénéfice non mesuré n'est
+           pas un zéro » — s'étend ici : il n'est pas non plus une
+           conformité. `breached` reste faux : ce n'est pas un
+           dépassement, et `breaches()` ne doit pas en inventer un. */
+        out.benefit = {
+          measured: null, allowed: Number(tol.benefitPct),
+          breached: false, state: "nothing measured",
+          unmeasured: mine.length,
+          unit: "points below target", what: "nothing on this project has been measured yet",
         };
       }
     }
@@ -608,6 +748,103 @@ export const Engine = {
       hitRate: decided ? states.Realised / decided : null,
       attainment: scored.length ? sum(scored, x => x) / scored.length : null,
     };
+  },
+
+  /**
+   * V-4 — la promesse contre le réalisé, sur la même ligne.
+   *
+   * Rapport de terrain RT365 : « Le produit sait dire combien de
+   * bénéfices ont été promis, mesurés et statués, il sait dire ce que le
+   * cas attendait, et il ne met jamais les deux sur la même ligne. Cette
+   * confrontation est le rapport que réclame un commanditaire et le seul
+   * qui change les comportements. »
+   *
+   * Une règle domine tout le reste, et elle est la leur : **on ne
+   * convertit rien**. La 008 a raison — la valeur n'a pas toujours la
+   * forme d'une monnaie — et un facteur de conversion des tonnes ou des
+   * points de disponibilité vers une devise est un nombre que quelqu'un
+   * invente et que tout le monde cite ensuite. On additionne donc les
+   * seuls bénéfices libellés en argent, et on DIT combien d'autres ont
+   * été laissés de côté, et dans quelles unités.
+   */
+  valueReport(db, projects, asOf) {
+    const on = asOf ?? db.statusDate;
+    const list = projects ?? db.projects ?? [];
+    const caseOf = new Map((db.businessCases ?? []).map((c) => [c.project, c]));
+    const byProject = new Map();
+    for (const b of (db.benefits ?? [])) {
+      if (!byProject.has(b.project)) byProject.set(b.project, []);
+      byProject.get(b.project).push(b);
+    }
+
+    const rows = list.map((p) => {
+      const c = caseOf.get(p.id) ?? null;
+      const benefits = (byProject.get(p.id) ?? []).map((b) => ({
+        id: b.id, title: b.title, kind: b.kind, unit: b.unit, measure: b.measure,
+        baseline: b.baseline, target: b.target, actual: b.actual,
+        status: b.status, realiseOn: b.realiseOn, measuredOn: b.measuredOn,
+        attainment: Engine.attainment(b),
+        money: Engine.isMoneyUnit(b.unit),
+        /* Depuis combien de jours cette promesse attend d'être mesurée.
+           `null` quand elle n'a pas de date : non datée n'est pas en
+           retard, et le rapport la liste à part plutôt que de l'omettre. */
+        reviewAgeDays: b.realiseOn && b.actual == null ? days(b.realiseOn, on) : null,
+      }));
+      return {
+        project: p.id, name: p.name, programme: p.programme, closed: !!p.closed,
+        case: c ? {
+          id: c.id, expectedCost: c.expectedCost, expectedBenefit: c.expectedBenefit,
+          basis: c.basis, reconfirmedGate: c.reconfirmedGate,
+          staleSinceReconfirm: !!c.staleSinceReconfirm,
+        } : null,
+        benefits,
+        /* Les deux silences qu'un lecteur doit voir plutôt que de les
+           déduire d'une absence de ligne. */
+        caseWithoutBenefits: !!c && benefits.length === 0,
+        benefitsWithoutCase: !c && benefits.length > 0,
+        neither: !c && benefits.length === 0,
+        undated: benefits.filter((b) => !b.realiseOn).length,
+        overdue: benefits.filter((b) => b.reviewAgeDays != null && b.reviewAgeDays > 0).length,
+      };
+    });
+
+    const all = rows.flatMap((r) => r.benefits);
+    const money = all.filter((b) => b.money);
+    const other = all.filter((b) => !b.money);
+    const excludedUnits = [...new Set(other.map((b) => b.unit || "(no unit)"))].sort();
+    return {
+      asAt: on,
+      rows,
+      totals: {
+        /* Le cas est en millions comme partout ailleurs ; on somme ce qui
+           est déjà comparable, et rien d'autre. */
+        expectedCost: sum(rows.filter((r) => r.case), (r) => r.case.expectedCost ?? 0),
+        expectedBenefit: sum(rows.filter((r) => r.case), (r) => r.case.expectedBenefit ?? 0),
+        moneyBenefitsCounted: money.length,
+        moneyActual: money.some((b) => b.actual != null)
+          ? sum(money.filter((b) => b.actual != null), (b) => Number(b.actual)) : null,
+        /* Ce qui n'est PAS dans le total, dit explicitement. */
+        excludedBenefits: other.length,
+        excludedUnits,
+        withoutCase: rows.filter((r) => r.benefitsWithoutCase).length,
+        withoutBenefits: rows.filter((r) => r.caseWithoutBenefits).length,
+        neither: rows.filter((r) => r.neither).length,
+        undated: rows.reduce((n, r) => n + r.undated, 0),
+        overdue: rows.reduce((n, r) => n + r.overdue, 0),
+      },
+    };
+  },
+
+  /**
+   * Une unité est-elle de l'argent ? La question est posée EXPLICITEMENT
+   * plutôt que devinée au cas par cas, parce que la réponse décide de ce
+   * qui entre dans un total — et un total dont la règle d'entrée est
+   * implicite est un total que personne ne peut vérifier.
+   */
+  isMoneyUnit(unit) {
+    const u = String(unit ?? "").trim();
+    if (!u) return false;
+    return /^(\$|€|£|¥)/.test(u) || /^(usd|eur|gbp|chf|cad|aud|jpy|xof|xaf|m\$|\$m|k\$|\$k)$/i.test(u);
   },
 
   overlapHours(a, b) {

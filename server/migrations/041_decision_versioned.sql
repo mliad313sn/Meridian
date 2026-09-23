@@ -1,0 +1,21 @@
+-- 041 · La décision porte enfin une version de ligne.
+--
+-- La 039 a rendu l'ÉTAT d'une décision vivant : `status` passe de
+-- Proposed à Ratified, `ratified_by`, `evidence_uri` et `provenance`
+-- changent. La table, elle, était restée celle de la 003 — sans
+-- `row_version`, parce qu'à l'époque une décision était immuable une
+-- fois la séance close.
+--
+-- Deux conséquences, toutes deux constatées :
+--   · le chemin de mise à jour de /api/v1 écrivait SANS prédicat de
+--     version — deux intégrations en concurrence sur la même décision
+--     s'écrasaient en silence, ce que la règle 3 du CONTRIBUTING existe
+--     précisément pour empêcher — et rendait à l'appelant un `version: 1`
+--     littéral, jamais vrai, jamais vérifié ;
+--   · `adopt`, publié au contrat, partait en 500 (42703) parce que
+--     l'adoption incrémente `row_version` sur toutes les autres tables.
+--
+-- La SUBSTANCE reste immuable (D-33.3) : ce n'est pas la version qui la
+-- garde, c'est le refus 409 sur tout changement de fond. La version garde
+-- l'état.
+ALTER TABLE meeting_decision ADD COLUMN row_version integer NOT NULL DEFAULT 1;

@@ -41,6 +41,13 @@ const USERS = [
   { id: "U-MBEKI", email: "q.mbeki@meridian.example",     name: "Q. Mbeki",        role: "viewer", person: "PE-28", pw: "viewer-gru-2026",     grants: [["site","GRU"]] },
 ];
 
+/* I-12 (retour de terrain RT365, M-10) — les couples e-mail/mot de passe
+   publiés dans le README, pour que la posture du jour 1 puisse vérifier
+   qu'aucun d'eux n'ouvre encore un compte actif. Le mot de passe en clair
+   est déjà public ; l'exporter n'ajoute rien à ce qu'un lecteur du dépôt
+   sait, et permet de MESURER. */
+export const DEMO_ACCOUNTS = USERS.map((u) => ({ email: u.email, password: u.pw }));
+
 const MEETING_SERIES = [
   { id: "MS-GRP-W", name: "Group delivery call",            cadence: "weekly",  scope: "group",     target: null,  chair: "PE-14", weekday: 1, time: "09:00", box: 25 },
   { id: "MS-GRP-M", name: "Group steering committee",       cadence: "monthly", scope: "group",     target: null,  chair: "PE-14", weekday: 3, time: "14:00", box: 90 },

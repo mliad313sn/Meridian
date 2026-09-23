@@ -397,12 +397,21 @@ r.get("/occurrences/:id", async (req, res, next) => {
         crId: d.cr_id, decidedBy: d.decided_by, decidedByName: d.decided_by_name,
         recordedBy: d.recorded_by, recordedAt: d.recorded_at,
         referredTo: d.referred_to_scope ?? null, answeredBy: d.answered_by ?? null,
+        alternatives: d.alternatives ?? "", dissent: d.dissent ?? "",
+        raidId: d.raid_id ?? null, milestoneId: d.milestone_id ?? null,
+        externalSource: d.external_source ?? null, externalId: d.external_id ?? null,
+        council: d.council ?? "", evidenceUri: d.evidence_uri ?? "", provenance: d.provenance ?? "",
+        status: d.status ?? "Ratified", ratifiedBy: d.ratified_by ?? "",
+        /* REQ-47 (049) — le jour où elle est entrée en vigueur. Une
+           décision prise en salle l'est le jour où la salle a siégé. */
+        ratifiedOn: d.ratified_on ?? null,
       })),
       openActions: actions,
       actionsRaisedHere: raisedHere.map((a) => ({
         id: a.id, title: a.title, ownerId: a.owner_id, ownerName: a.owner_name,
         dueDate: a.due_date, status: a.status, projectId: a.project_id,
         closedIn: a.closed_in, version: a.row_version,
+        externalSource: a.external_source ?? null, externalId: a.external_id ?? null,
       })),
       people: people.map((p) => ({ id: p.id, name: p.name, role: p.job_role, site: p.site_id })),
     });
@@ -524,6 +533,23 @@ r.post("/occurrences/:id/decisions", async (req, res, next) => {
     const b = req.body ?? {};
     if (!b.headline) throw new HttpError(400, "A decision needs a headline");
 
+    /* E-8 — la même décision, consignée deux fois dans la MÊME séance,
+       créait deux lignes. Le chemin par identifiant externe est gardé
+       depuis I-2 (`idempotent()` sur PUT /v1/decisions/:externalId) ; la
+       route de session, celle que l'écran emploie, ne l'était pas — un
+       double clic, une reprise de chargeur, et le procès-verbal porte la
+       décision deux fois. La portée du contrôle est L'OCCURRENCE : la
+       même phrase reste légitimement consignable dans une séance
+       ULTÉRIEURE, ce qui est le cas normal d'un point revu. */
+    const twice = await one(
+      `SELECT id FROM meeting_decision WHERE occurrence_id = $1 AND headline = $2`,
+      [o.id, String(b.headline)]);
+    if (twice) {
+      throw new HttpError(409,
+        `That decision is already recorded in this meeting (${twice.id}). ` +
+        `Record a different one, or amend the minute rather than repeating it.`);
+    }
+
     /* Referral (governance committee, rhythm-1): a room may record
        "this is beyond us — refer up" instead of a decision. Only a
        narrower room refers upward; the group room decides or nothing. */
@@ -557,10 +583,24 @@ r.post("/occurrences/:id/decisions", async (req, res, next) => {
         id = await allocateId(t, "DEC", { pad: 3 });
         await t.query(
         `INSERT INTO meeting_decision
-           (id, occurrence_id, headline, rationale, project_id, cr_id, decided_by, recorded_by, referred_to_scope)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+           (id, occurrence_id, headline, rationale, project_id, cr_id, decided_by, recorded_by, referred_to_scope,
+            alternatives, dissent, raid_id, milestone_id, ratified_on)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
         [id, o.id, String(b.headline).slice(0, 300), String(b.rationale ?? "").slice(0, 4000),
-         b.projectId ?? null, b.crId ?? null, b.decidedBy ?? s.chair_id, req.user.id, referredTo]);
+         b.projectId ?? null, b.crId ?? null, b.decidedBy ?? s.chair_id, req.user.id, referredTo,
+         /* I-7 — les alternatives écartées et la dissension, en salle
+            aussi : un procès-verbal qui ne dit pas ce qu'on a refusé ne
+            dit pas ce qu'on a décidé. */
+         String(b.alternatives ?? "").slice(0, 4000), String(b.dissent ?? "").slice(0, 2000),
+         b.raidId ?? null, b.milestoneId ?? null,
+         /* REQ-47 (049) — une décision de salle naît « Ratified » (la
+            valeur par défaut de la 039) : la salle qui la prend la met en
+            vigueur, et elle l'est le jour où cette salle a siégé. Pas le
+            jour de la saisie — un président qui rédige son procès-verbal
+            le lendemain n'a pas ratifié le lendemain. Un renvoi vers le
+            haut n'est pas une décision et n'entre pas en vigueur : sa
+            date reste nulle, comme son statut le dit. */
+         referredTo ? null : o.meets_on]);
         if (answers) {
           /* Still-unanswered is re-checked here: the lookup above runs
              outside this transaction (PGlite serialises one connection,
@@ -584,6 +624,18 @@ r.post("/occurrences/:id/actions", async (req, res, next) => {
     if (o.status === "closed") throw new HttpError(409, "This meeting is closed");
     const b = req.body ?? {};
     if (!b.title) throw new HttpError(400, "An action needs a title");
+
+    /* E-8 — même garde que pour la décision, même portée : la salle qui
+       a soulevé l'action. La même action revient légitimement dans une
+       séance suivante ; deux fois dans la même est une répétition. */
+    const twice = await one(
+      `SELECT id FROM meeting_action WHERE raised_in = $1 AND title = $2`,
+      [o.id, String(b.title)]);
+    if (twice) {
+      throw new HttpError(409,
+        `That action is already raised in this meeting (${twice.id}). ` +
+        `Update it, or raise a different one.`);
+    }
 
     let id = null;
     await audited(req.user,

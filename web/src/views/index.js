@@ -25,6 +25,25 @@ import {
   RAG_LABEL, MONTHS, DAY,
 } from "../../../shared/engine.js";
 
+import {
+  SIGNAL_TEXT, SIGNAL_ORDER, formatSignal, formatTrend,
+} from "../../../shared/govsignals.js";
+
+/* REQ-30 — the value page's arithmetic, shared with the server so that
+   the page an executive prints and the page that is stored per period are
+   one computation. The same reason govsignals gives. */
+import {
+  VALUE_TEXT, FIGURE_ORDER, valuePage, formatValue, formatPopulation,
+} from "../../../shared/valuepage.js";
+
+/* REQ-24 — the ranking's arithmetic is shared with the server, for the
+   reason govsignals gives: two projections of the same number diverge at
+   the first change, and then the room argues about which screen is right
+   instead of about which project to stop. */
+import {
+  PRIORITY_TEXT, INPUTS, formatScore, formatFte, formatInput, formatShare,
+} from "../../../shared/prioritise.js";
+
 import { meetingsView, invalidateMeetings } from "./meetings.js";
 import { accessPanel, directoryPanel, referencePanel, federationPanel, notificationsPanel, importPanel, continuityPanel, integrationsPanel, invalidateAdmin } from "./administration.js";
 
@@ -200,9 +219,26 @@ Views.portfolio = (db) => {
     { label: t("Portfolio value"), value: money(roll.bac),
       note: funded + " funded project" + (funded === 1 ? "" : "s") +
             (unfunded ? " · " + unfunded + " strategy (no budget)" : "") },
-    { label: t("On track"), value: roll.count ? Math.round(roll.green / roll.count * 100) + "%" : "—", note: roll.green + " green · " + roll.amber + " amber · " + roll.red + " red" },
-    { label: t("Schedule index"), value: idx(roll.spi), note: roll.spi < 1 ? "behind the plan" : "at or ahead of plan", accent: roll.spi < db.settings.amberSpi },
-    { label: t("Cost index"), value: idx(roll.cpi), note: roll.cpi < 1 ? "spending faster than earning" : "inside the envelope", accent: roll.cpi < db.settings.amberCpi },
+    /* REQ-33 — « sur la bonne voie » se compte sur ce qui est MESURÉ. Le
+       dénominateur était le nombre total de projets, si bien que seize
+       projets sans budget donnaient 100 %, seize verts, zéro ambre, zéro
+       rouge — sur la page que lit un commanditaire, la semaine où la
+       porte n'avait pas été convoquée. Ce qui n'est pas mesuré se compte
+       à part et se dit. */
+    { label: t("On track"),
+      value: roll.measured ? Math.round(roll.green / roll.measured * 100) + "%" : "—",
+      note: roll.measured
+        ? roll.green + " green · " + roll.amber + " amber · " + roll.red + " red"
+          + (roll.notMeasured ? " · " + roll.notMeasured + t(" not measured") : "")
+        : roll.count + t(" project(s), none of them measured yet") },
+    { label: t("Schedule index"), value: idx(roll.spi),
+      note: roll.spi == null ? t("nothing measured to index")
+        : roll.spi < 1 ? "behind the plan" : "at or ahead of plan",
+      accent: roll.spi != null && roll.spi < db.settings.amberSpi },
+    { label: t("Cost index"), value: idx(roll.cpi),
+      note: roll.cpi == null ? t("nothing measured to index")
+        : roll.cpi < 1 ? "spending faster than earning" : "inside the envelope",
+      accent: roll.cpi != null && roll.cpi < db.settings.amberCpi },
     { label: t("Forecast variance"), value: signedMoney(roll.vac), note: "against " + money(roll.bac) + " approved", accent: roll.vac < 0 },
     { label: t("Open risks"), value: String(openRisks.length), note: escalated.length + " above the escalation threshold", accent: escalated.length > 0 },
   ]);
@@ -213,7 +249,7 @@ Views.portfolio = (db) => {
         h("div", { class: "xs muted" }, r.p.id + " · " + (Engine.programme(db, r.p.programme) || {}).name + " · " + Engine.personName(db, r.p.pm))) },
     { key: "site", label: "Site", sort: r => r.p.site, get: r => h("span", { class: "small" }, (Engine.site(db, r.p.site) || {}).city) },
     { key: "phase", label: "Phase", sort: r => r.p.phase, get: r => h("span", { class: "small" }, r.p.phase) },
-    { key: "health", label: "Health", sort: r => ({ R: 0, A: 1, G: 2 })[r.m.health.rag],
+    { key: "health", label: "Health", sort: r => ({ R: 0, A: 1, N: 2, G: 3 })[r.m.health.rag] ?? 9,
       get: r => h("span", { title: r.m.health.why }, ragDot(r.m.health.rag)) },
     { key: "pct", label: "Progress", sort: r => r.pctShown, width: "128px", get: r => h("div", null,
         h("div", { class: "bar-lbl mono" }, h("span", null, pct(r.pctShown)),
@@ -223,9 +259,16 @@ Views.portfolio = (db) => {
        would read as "on plan", which nothing measured. */
     { key: "spi", label: "SPI", align: "r", sort: r => r.m.spi, get: r => r.p.budget > 0 ? indexCell(r.m, "spi", db.settings.amberSpi) : h("span", { class: "mono muted", title: "No budget — outside EVM" }, "—") },
     { key: "cpi", label: "CPI", align: "r", sort: r => r.m.cpi, get: r => r.p.budget > 0 ? indexCell(r.m, "cpi", db.settings.amberCpi) : h("span", { class: "mono muted", title: "No budget — outside EVM" }, "—") },
+    /* REQ-19 — une date de fin qui n'est qu'une POSITION ne se lit pas
+       comme un engagement : elle se dit placeholder et ne porte jamais
+       « en retard de N jours », qui compare à aujourd'hui une promesse
+       que personne n'a faite. Même règle que le jalon depuis REQ-14. */
     { key: "finish", label: "Finish", align: "r", sort: r => r.p.finish, get: r => h("div", null,
-        h("div", { class: "mono small" }, fmtDate(r.p.finish)),
-        r.m.slipDays > 7 ? h("div", { class: "xs bad strong" }, "forecast +" + r.m.slipDays + "d") : null) },
+        h("div", { class: "mono small", style: r.p.dateBasis === "placeholder" ? "opacity:.6" : null },
+          fmtDate(r.p.finish)),
+        r.p.dateBasis === "placeholder"
+          ? h("div", { class: "xs muted", title: r.p.condition || t("No condition recorded") }, t("placeholder"))
+          : r.m.slipDays > 7 ? h("div", { class: "xs bad strong" }, "forecast +" + r.m.slipDays + "d") : null) },
   ];
   const rows = list.map(p => {
     const m = Engine.metrics(db, p.id);
@@ -245,8 +288,15 @@ Views.portfolio = (db) => {
     sortableTable({ cols, rows, onRow: r => go("#/project/" + r.p.id),
       empty: { title: t("No projects match this scope"), body: t("Widen the programme, site or health filter in the header.") } }));
 
-  /* right rail */
-  const decisions = Engine.decisions(db);
+  /* right rail — E-6.
+     Les six tuiles se re-cadrent bien sur le programme choisi ; le rail,
+     lui, restait à l'échelle du livre et listait des lignes d'autres
+     programmes sous un filtre qui en nommait un seul. Un directeur de
+     programme ne pouvait donc pas lire SES décisions dues. Les deux
+     aides prennent déjà la liste cadrée en second argument — le tableau
+     de bord de programme les appelle correctement depuis toujours ;
+     cette vue-ci ne la passait simplement pas. */
+  const decisions = Engine.decisions(db, list);
   const rail = h("aside", { class: "sec" },
     sectionHead(t("Decisions owed"), decisions.length + " open"),
     h("div", { style: "margin-bottom:22px" }, decisions.length ? decisions.slice(0, 6).map(d =>
@@ -256,7 +306,7 @@ Views.portfolio = (db) => {
           h("div", { class: "kicker" }, d.kind),
           h("div", { class: "strong small", style: "margin:2px 0 1px" }, d.title),
           h("div", { class: "xs muted" }, d.meta)))) :
-      h("div", { class: "small muted" }, "Nothing is waiting on a decision. The next gate is " + fmtDate((Engine.horizon(db, 1)[0] || {}).date) + ".")),
+      h("div", { class: "small muted" }, "Nothing is waiting on a decision. The next gate is " + fmtDate((Engine.horizon(db, 1, list)[0] || {}).date) + ".")),
 
     /* Your action debt follows you out of the Meetings screen (UX
        committee, value I-4) — an owner who never opens Meetings still
@@ -297,7 +347,7 @@ Views.portfolio = (db) => {
     h("hr", { class: "hr" }),
     h("div", { style: "height:18px" }),
     sectionHead(t("Next on the calendar")),
-    h("div", { style: "margin-bottom:22px" }, Engine.horizon(db, 6).map(m =>
+    h("div", { style: "margin-bottom:22px" }, Engine.horizon(db, 6, list).map(m =>
       h("div", { class: "list-row", style: "gap:12px;cursor:pointer", onClick: () => go("#/project/" + m.project) },
         h("div", { class: "num", style: "width:52px;flex:none;font-size:12px;letter-spacing:.04em" },
           fmtDate(m.date).slice(0, 6).toUpperCase()),
@@ -325,7 +375,14 @@ Views.portfolio = (db) => {
         h("div", { class: "xs muted" }, ps.length + " projects · SPI " + idx(r.spi) + " · CPI " + idx(r.cpi)));
     })));
 
-  return h("div", null, kpis, h("div", { class: "split" }, register, rail));
+  return h("div", null, kpis, h("div", { class: "split" }, register, rail),
+
+    /* REQ-28 (RT365's V-9) — this page answers "is it on time and on
+       budget". Under it, the question no screen in Meridian answered:
+       is this office getting slower? They asked for it HERE, and here
+       is where a PMO already comes to look. */
+    h("div", { style: "height:20px" }), h("hr", { class: "hr" }), h("div", { style: "height:14px" }),
+    governanceSignalsBlock(db));
 };
 
 /* ── My week — the personal landing (UX committee, daily-1) ────────────
@@ -377,7 +434,7 @@ function lessonFields(db, l) {
     { key: "gate", label: t("Raised at gate"), type: "select", value: l && l.gate ? String(l.gate) : "",
       hint: t("Leave empty if it came up outside a gate, or at closure."),
       options: [{ value: "", label: t("Not at a gate") },
-                ...GATES.map((g) => ({ value: String(g.n), label: g.name }))] },
+                ...Engine.gates(db, l?.project ?? projects[0]?.id).map((g) => ({ value: String(g.n), label: g.name }))] },
     { key: "title", label: t("In one sentence"), span: 2, required: true, value: l ? l.title : "",
       hint: t("What someone scanning the register needs to recognise it by."),
       placeholder: t("The local supplier delivers in eight weeks, not four") },
@@ -955,8 +1012,28 @@ function projectFields(db, p) {
     { key: "start", label: "Start", type: "date", required: true, value: p ? p.start : iso(db.statusDate) },
     { key: "finish", label: "Planned finish", type: "date", required: true, value: p ? p.finish : iso(addMonths(db.statusDate, 12)),
       validate: (v, st) => D(v) <= D(st.start) ? "Finish must fall after the start" : "" },
+    /* REQ-19 (RT365, 3e tour) — ce que la date de fin VAUT, exactement
+       comme un jalon depuis REQ-14 : « nos dates de fin de projet sont
+       des remplissages pour la même raison que nos dates de porte ». */
+    { key: "dateBasis", label: t("The date is"), type: "select", value: p?.dateBasis ?? "committed",
+      options: [{ value: "committed", label: t("a commitment") },
+                { value: "placeholder", label: t("a placeholder — no calendar date yet") }],
+      hint: t("A placeholder is drawn where it sits but is never reported missed or overdue; make it a commitment once the condition below has been measured.") },
+    { key: "condition", label: t("Dated after"), value: p?.condition ?? "",
+      placeholder: t("the capacity model at gate C…"),
+      hint: t("What has to happen, or be measured, before this date can be promised.") },
     { key: "budget", label: "Budget ($M)", type: "number", step: 0.1, min: 0.1, required: true, value: p ? p.budget : 1 },
     { key: "contingency", label: "Contingency ($M)", type: "number", step: 0.05, min: 0, value: p ? p.contingency : 0.1 },
+    /* REQ-19 — le sponsor répond du CAS D'AFFAIRE, le chef de projet de
+       la livraison ; et ce que « fini » voudra dire, posé d'avance comme
+       un jalon le fait depuis PM-04. */
+    { key: "sponsor", label: t("Sponsor"), type: "select", value: p?.sponsor ?? "", advanced: true,
+      options: [{ value: "", label: t("Not named") }]
+        .concat(db.people.map(x => ({ value: x.id, label: x.name + " — " + x.role }))),
+      hint: t("The person who answers for the business case, not for the delivery.") },
+    { key: "acceptanceCriteria", label: t("Acceptance criteria"), type: "textarea", span: 2, rows: 2,
+      value: p?.acceptanceCriteria ?? "", advanced: true,
+      hint: t("What has to be true for this project to be finished. Written before it is, or it is an opinion afterwards.") },
     { key: "desc", label: "What this delivers", type: "textarea", span: 2, rows: 3, value: p ? p.desc : "" },
   ];
 }
@@ -973,6 +1050,8 @@ function newProject(db) {
           governanceLevel: v.governanceLevel, pm: v.pm, method: v.method,
           start: v.start, finish: v.finish, budget: +v.budget,
           contingency: +v.contingency || 0, desc: v.desc,
+          dateBasis: v.dateBasis, condition: v.condition,
+          sponsor: v.sponsor || null, acceptanceCriteria: v.acceptanceCriteria,
         });
         return r.id;
       }, { detail: v.name });
@@ -989,7 +1068,10 @@ function editProject(db, p) {
       name: v.name, programme: v.programme, site: v.site,
       governanceLevel: v.governanceLevel, pm: v.pm, method: v.method,
       start: v.start, finish: v.finish, budget: +v.budget,
-      contingency: +v.contingency || 0, desc: v.desc, version: p.version,
+      contingency: +v.contingency || 0, desc: v.desc,
+      dateBasis: v.dateBasis, condition: v.condition,
+      sponsor: v.sponsor || null, acceptanceCriteria: v.acceptanceCriteria,
+      version: p.version,
     }), { detail: p.id + " · " + v.name }),
   });
 }
@@ -1038,8 +1120,16 @@ Views.project = (db) => {
         h("div", { class: "xs muted", style: "display:flex;justify-content:space-between;margin-top:6px" },
           h("span", null, "Start " + fmtDate(p.start)),
           h("span", null, "Finish " + fmtDate(p.finish))),
-        m.slipDays > 3 ? h("div", { class: "xs bad strong", style: "margin-top:4px" },
-          "Forecast " + fmtDate(m.forecastFinish) + " — " + m.slipDays + " days late at the current rate") : null)),
+        /* REQ-19 — sur une date qui n'est qu'une position, « N jours de
+           retard » compare aujourd'hui à une promesse que personne n'a
+           faite. On dit ce que la date vaut, et ce qui produira la
+           vraie, au lieu d'annoncer un manquement. */
+        p.dateBasis === "placeholder"
+          ? h("div", { class: "xs muted", style: "margin-top:4px" },
+              t("The finish date is a placeholder — not a commitment."),
+              p.condition ? " " + t("Dated after") + " : " + p.condition : "")
+          : m.slipDays > 3 ? h("div", { class: "xs bad strong", style: "margin-top:4px" },
+              "Forecast " + fmtDate(m.forecastFinish) + " — " + m.slipDays + " days late at the current rate") : null)),
     h("div", { class: "btn-row", style: "margin-top:16px" },
       mayWrite(p) && !fromSdp(p)
         ? h("button", { class: "btn btn-sm", onClick: () => editProject(db, p) }, icon("pencil", 12), "Edit project")
@@ -1104,15 +1194,35 @@ Views.project = (db) => {
   const canPlan = may("schedule.write", p);
   const milestones = Engine.milestones(db, p.id).map(ms => {
     const g = ms.gate ? Engine.gateStatus(db, p.id, ms.gate) : null;
-    const late = D(ms.date) < D(db.statusDate);
-    const state = g ? g.state : (late ? "Cleared" : "Planned");
+    const late = ms.dateBasis !== "placeholder" && D(ms.date) < D(db.statusDate);
+    /* E-7 — un jalon ACCEPTÉ se lit accepté.
+       L'état d'un jalon hors échelle se déduisait d'une seule chose : sa
+       date comparée à celle du livre. Le résultat était faux dans les
+       deux sens — un jalon que personne n'avait touché se lisait
+       « Cleared » parce que sa date était passée, et un jalon
+       formellement accepté par une personne nommée se lisait « Planned »
+       parce que la sienne ne l'était pas. `done` n'était jamais lu.
+       PM-04 tient sur le fait que l'acceptation nomme quelqu'un ; le
+       contrôle existait dans la table et pas dans la salle. */
+    const state = g ? g.state
+      : ms.done ? "Cleared"
+      : ms.dateBasis === "placeholder" ? "Unscheduled"
+      : (late ? "Overdue" : "Planned");
     return h("div", { class: "step" },
       h("span", { class: "step-i " + (state === "Cleared" ? "ok" : state === "At risk" || state === "Overdue" ? "no" : "wait") },
         ms.gate ? "G" + ms.gate : "◇"),
       h("div", { style: "flex:1;min-width:0" },
         h("div", { class: "strong small" }, ms.name),
         h("div", { class: "xs muted" }, Engine.personName(db, ms.owner) + " · " + fmtDate(ms.date) +
-          (g ? " · evidence " + g.approved + "/" + g.total : ""))),
+          (ms.dateBasis === "placeholder" ? " · " + t("placeholder") + (ms.condition ? " — " + t("after: ") + ms.condition : "") : "") +
+          (g ? " · evidence " + g.approved + "/" + g.total : "") +
+          (g && g.criteria.length ? " · " + t("criteria") + " " + g.criteriaMet + "/" + g.criteria.length : "") +
+          (g && g.risks.length ? " · " + g.risks.length + " " + t("open register item(s) against it") : "") +
+          /* Et QUI l'a accepté, et quand : le nom n'apparaissait sur
+             aucune surface de lecture du produit, seulement dans le
+             formulaire qui l'écrit. */
+          (ms.acceptedBy ? " · " + t("accepted by ") + Engine.personName(db, ms.acceptedBy)
+            + (ms.acceptedOn ? " " + fmtDate(ms.acceptedOn) : "") : ""))),
       h("div", { style: "text-align:right" }, statusTag(state),
         ms.gate && g && g.outstanding.length
           ? h("div", { class: "xs linkish muted", style: "margin-top:4px", onClick: () => go("#/documents") }, "see evidence")
@@ -1142,7 +1252,28 @@ Views.project = (db) => {
       may("schedule.write", p)
         ? h("button", { class: "btn btn-sm", onClick: () => addMilestone(db, p) }, icon("plus", 12), "Milestone")
         : null),
+    /* E-1 — ce projet suit-il encore l'échelle que son programme
+       déclare ? La 036 ne réécrit pas les projets existants, et c'est
+       juste ; mais alors « quel jalon vient ensuite » devient faux en
+       silence pour tout adoptant précoce. On le DIT, à l'endroit exact
+       où la question se pose. */
+    p.ladderDiffers
+      ? h("div", { class: "drop-hint", style: "margin-bottom:10px" },
+          h("div", { class: "small strong" }, t("This project is on a ladder its programme no longer declares.")),
+          h("div", { class: "xs muted", style: "margin-top:3px" },
+            t("It was set up with ") + p.scaffoldedGates + t(" gates; the programme now declares ")
+            + Engine.gates(db, p.id).length + t(". Its dated gates and their filed evidence were deliberately left alone — but read “what is next” with that in mind.")),
+          /* REQ-27 — the notice said the problem for two releases and
+             offered nothing. The act that fixes it belongs here, where
+             the question is already being asked. */
+          may("ladder.migrate", p)
+            ? h("div", { style: "margin-top:8px" },
+                h("button", { class: "btn btn-xs", onClick: () => moveOntoLadder(db, p) },
+                  t("See what this would do")))
+            : null)
+      : null,
     h("div", { style: "margin-bottom:8px" }, milestones),
+    criteriaBlock(db, p, gate),
     !advance.ok ? h("div", { class: "drop-hint", style: "margin-top:12px" },
       h("span", { class: "strong" }, t("Phase advance is blocked. ")), tData(advance.reason),
       h("div", { style: "margin-top:8px" }, h("button", { class: "btn btn-xs", onClick: () => go("#/documents") }, t("Open the evidence list")))) : null,
@@ -1185,6 +1316,22 @@ Views.project = (db) => {
           ? open.length + t(" past the margin — waiting on an answer")
           : tol ? t("inside the margin set for it") : t("no margin set"),
         open.length > 0, toleranceBlock(db, p));
+    })(),
+    /* PM-05 / PM-11 (I-10) — who counts, and who is told. Folded, with a
+       one-line reading that says whether either register is still empty. */
+    (() => {
+      const sk = (db.stakeholders ?? []).filter((x) => x.project === p.id);
+      const opp = sk.filter((x) => x.attitude === "Opponent" || x.attitude === "Sceptic").length;
+      return fold(t("Stakeholders"),
+        sk.length ? sk.length + t(" named") + (opp ? " · " + opp + t(" sceptical or opposed") : "") : t("none named"),
+        false, stakeholderBlock(db, p, sk));
+    })(),
+    (() => {
+      const cm = (db.comms ?? []).filter((x) => x.project === p.id);
+      const due = cm.filter((x) => x.nextOn && D(x.nextOn) < D(db.statusDate)).length;
+      return fold(t("Communication plan"),
+        cm.length ? cm.length + t(" audience(s)") + (due ? " · " + due + t(" overdue") : "") : t("no plan"),
+        due > 0, commsBlock(db, p, cm));
     })(),
     fold(t("Plant & rollout"),
       (p.plantImpact ?? "none") === "none" ? t("business systems only") : t(IMPACT_LABEL[p.plantImpact]),
@@ -1262,7 +1409,13 @@ Views.project = (db) => {
       h("div", { style: "display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--rule-1)" },
         h("span", { class: "muted" }, "Schedule variance"), h("span", { class: "mono strong", style: m.sv < 0 ? "color:var(--sig-red)" : null }, signedMoney(m.sv))),
       h("div", { style: "display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--rule-1)" },
-        h("span", { class: "muted" }, "To-complete index"), h("span", { class: "mono strong" }, idx(m.tcpi)))),
+        /* REQ-33 — l'indice à terminer se calculait à 1.00 sur un projet
+           sans budget et s'affichait sans garde : c'est le dernier
+           endroit où « rien » se lisait comme « exactement dans les
+           clous ». L'arithmétique de la 172 est gelée (D-05) ; c'est
+           l'AFFICHAGE qui doit se taire. */
+        h("span", { class: "muted" }, "To-complete index"),
+        h("span", { class: "mono strong" }, m.measurable ? idx(m.tcpi) : "—"))),
     h("div", { style: "height:26px" }), h("hr", { class: "hr" }), h("div", { style: "height:18px" }),
     sdpPanel(db, p));
 
@@ -1444,14 +1597,21 @@ function copyStatus(db, p, m) {
   const L = [];
   L.push(`**${p.name}** (${p.id}) — status as at ${db.statusDate}`);
   L.push("");
-  L.push(`- Health: **${m.health.rag === "G" ? "Green" : m.health.rag === "A" ? "Amber" : "Red"}** — ${m.health.why}`);
+  /* REQ-33 — la ternaire n'avait pas de quatrième branche et rendait
+     « Red » pour tout ce qu'elle ne connaissait pas : un état inconnu
+     n'est pas rouge non plus. Le libellé partagé sait les quatre. */
+  L.push(`- Health: **${RAG_LABEL[m.health.rag] ?? "Not measured"}** — ${m.health.why}`);
   L.push(`- Progress: ${funded ? pct(m.pctComplete) + " complete vs " + pct(m.plannedComplete) + " planned" : pct((() => {
       const acts = db.activities.filter(a => a.project === p.id);
       const w = sum(acts, a => Number(a.weight));
       return w ? sum(acts, a => Number(a.weight) * a.pct) / w / 100 : 0;
     })()) + " reported (no budget — outside EVM)"}`);
   if (funded) L.push(`- SPI ${m.measurable ? idx(m.spi) : "—"} · CPI ${m.measurable ? idx(m.cpi) : "—"}${m.measurable ? "" : " (too early to measure)"}`);
-  L.push(`- Finish: planned ${fmtDate(p.finish)}${m.slipDays > 3 ? `, forecast ${fmtDate(m.forecastFinish)} (+${m.slipDays}d)` : " — on forecast"}`);
+  /* REQ-19 — le même refus dans l'extrait qu'on colle dans un courriel :
+     une position ne se rapporte pas « en avance » ni « en retard ». */
+  L.push(p.dateBasis === "placeholder"
+    ? `- Finish: ${fmtDate(p.finish)} — PLACEHOLDER, not a commitment${p.condition ? ` (after: ${p.condition})` : ""}`
+    : `- Finish: planned ${fmtDate(p.finish)}${m.slipDays > 3 ? `, forecast ${fmtDate(m.forecastFinish)} (+${m.slipDays}d)` : " — on forecast"}`);
   if (raid.length) {
     L.push(`- Top register items:`);
     raid.slice(0, 3).forEach(r => L.push(`  - ${r.id} ${r.title} (exposure ${Engine.exposure(r)})`));
@@ -1534,6 +1694,7 @@ function addMilestone(db, p) {
       { key: "name", label: "Milestone", required: true, span: 2 },
       { key: "date", label: "Date", type: "date", required: true, value: iso(addMonths(db.statusDate, 1)) },
       { key: "owner", label: "Owner", type: "select", value: p.pm, options: db.people.map(x => ({ value: x.id, label: x.name })) },
+      ...basisFields(null),
       /* V-03 — the flag that makes the site's freeze calendar apply. */
       { key: "intrusive", label: t("Touches the plant"), type: "checkbox", span: 2, value: false,
         hint: t("A cutover, a switch-over, anything a change freeze is about") },
@@ -1541,6 +1702,7 @@ function addMilestone(db, p) {
     saveLabel: "Add milestone",
     onSave: (v) => App.write("Milestone added", (a) => a.post("/milestones", {
       project: p.id, name: v.name, date: v.date, owner: v.owner, intrusive: !!v.intrusive,
+      dateBasis: v.dateBasis, condition: v.condition,
     }), { detail: v.name + " · " + fmtDate(v.date) }),
   });
 }
@@ -1650,6 +1812,7 @@ function editMilestone(db, ms) {
       { key: "date", label: "Date", type: "date", required: true, value: ms.date },
       { key: "owner", label: "Owner", type: "select", value: ms.owner ?? "",
         options: db.people.map((x) => ({ value: x.id, label: x.name })) },
+      ...basisFields(ms),
       /* PM-04 — les critères se posent d'AVANT ; sans eux, « terminé »
          est une opinion. Avec eux, cocher exige de nommer qui a constaté. */
       { key: "acceptanceCriteria", label: t("Acceptance criteria"), type: "textarea",
@@ -1668,9 +1831,22 @@ function editMilestone(db, ms) {
     onSave: (v) => App.write("Milestone updated", (a) => a.patch("/milestones/" + ms.id, {
       name: v.name, date: v.date, owner: v.owner || null, done: !!v.done,
       acceptanceCriteria: v.acceptanceCriteria, acceptedBy: v.acceptedBy || undefined,
-      intrusive: !!v.intrusive, version: ms.version,
+      intrusive: !!v.intrusive, dateBasis: v.dateBasis, condition: v.condition, version: ms.version,
     }), { detail: v.name }),
   });
+}
+
+/* REQ-14 (RT365 D-057) — what the date is worth. A placeholder is a
+   position on the timeline until the condition that produces the real
+   date has been measured; it is never read as missed. */
+function basisFields(ms) {
+  return [
+    { key: "dateBasis", label: t("The date is"), type: "select", value: ms?.dateBasis ?? "committed",
+      options: [{ value: "committed", label: t("a commitment") }, { value: "placeholder", label: t("a placeholder — no calendar date yet") }],
+      hint: t("A placeholder is drawn where it sits but is never reported missed or overdue; make it a commitment once the condition below has been measured.") },
+    { key: "condition", label: t("Dated after"), value: ms?.condition ?? "", placeholder: t("the capacity model at gate C…"),
+      hint: t("The predecessor or the measurement that will produce the real date — read by whoever re-baselines.") },
+  ];
 }
 
 function removeMilestone(db, ms) {
@@ -2370,7 +2546,22 @@ function raidDetail(db, r) {
           h("div", { class: "kpi-v", style: "font-size:19px" }, e.level), h("div", { class: "kpi-n" }, e.why))),
       h("hr", { class: "hr" }),
       h("p", { style: "margin:14px 0" }, r.detail || "No detail recorded."),
-      h("div", { class: "small muted" }, "Next review " + fmtDateLong(r.review))),
+      /* REQ-18 — « quand, et sur la parole de qui ». Une ligne close
+         avant la 045 le dit franchement plutôt que d'inventer un jour. */
+      r.status === "Closed"
+        ? h("div", { class: "small" },
+            r.closedOn
+              ? t("Closed ") + fmtDateLong(r.closedOn) +
+                (r.closedBy ? " · " + t("Closed by") + " " + Engine.personName(db, r.closedBy) : "")
+              : t("Closed — the date was not recorded"))
+        : null,
+      r.category ? h("div", { class: "small muted" }, t("Category") + " · " + r.category) : null,
+      h("div", { class: "small muted" }, "Next review " + fmtDateLong(r.review)),
+      r.gate || r.cr
+        ? h("div", { class: "xs muted", style: "margin-top:6px" },
+            r.gate ? t("Against gate ") + r.gate + " " : "",
+            r.cr ? "· " + t("Change request") + " " + r.cr : "")
+        : null),
     actions: (close) => [
       h("button", { class: "btn btn-sm btn-danger", onClick: () => {
         confirmDialog({ title: "Delete " + r.id + "?", message: r.title, confirmLabel: "Delete", danger: true })
@@ -2385,6 +2576,124 @@ function raidDetail(db, r) {
             App.write("Item reopened", (a) => a.patch("/raid/" + r.id, { status: "Open", version: r.version }), { detail: r.id });
             close(); } }, "Reopen"),
     ],
+  });
+}
+
+/* ── REQ-27 · a project moves onto its programme's ladder ──────────────
+   D-33.2 forbids a declared ladder from rewriting projects that already
+   exist — dated gates and filed evidence would move under people's feet.
+   So this is a rehearsal and then an explicit act, and the rehearsal is
+   the point: the operator reads what leaves the ladder BEFORE anything
+   moves, and a rung carrying an acceptance or a filed citation cannot
+   leave until they say they have read it.
+
+   Nothing is ever deleted. A retired gate becomes an ordinary milestone
+   and keeps its date, its acceptance and its evidence; what it loses is
+   its place. The dialog says that in as many words, because "retire"
+   read alone sounds like a deletion. */
+
+/** The five things a retiring rung may carry, named rather than dumped. */
+function carriedLabel(c) {
+  if (c.what === "accepted") return t("accepted by a named person");
+  if (c.what === "evidence") return c.count + " " + t("filed evidence citation(s)");
+  if (c.what === "criteriaMet") return c.count + " " + t("criterion(s) found met by a named reviewer");
+  if (c.what === "acceptanceCriteria") return t("acceptance criteria posed");
+  return t("marked done");
+}
+
+async function moveOntoLadder(db, p) {
+  let plan;
+  try { plan = await api.get("/projects/" + p.id + "/ladder"); }
+  catch (e) { return reportError(e); }
+
+  /* The server's own sentence names the next step; ours would only be a
+     worse copy of it. */
+  if (plan.refusal) {
+    return dialog({
+      title: t("Gate ladder"), kicker: p.id,
+      body: h("p", { class: "small" }, tData(plan.refusal)),
+      actions: (c) => [h("button", { class: "btn", onClick: c }, t("Close"))],
+    });
+  }
+  if (plan.onLadder) {
+    return dialog({
+      title: t("Gate ladder"), kicker: p.id,
+      body: h("p", { class: "small" },
+        t("This project is already on its programme's ladder — there is nothing to move.")),
+      actions: (c) => [h("button", { class: "btn", onClick: c }, t("Close"))],
+    });
+  }
+
+  const group = (title, note, rows, render) => rows.length
+    ? h("div", { style: "margin-bottom:12px" },
+        h("div", { class: "kicker" }, title + " · " + rows.length),
+        h("div", { class: "xs muted", style: "margin:2px 0 5px" }, note),
+        ...rows.map(render))
+    : null;
+
+  const needsAck = (plan.acknowledgeRequired || []).length > 0;
+  let acked = !needsAck;
+  const confirmBtn = h("button", { class: "btn btn-primary", disabled: !acked },
+    t("Move this project onto the ladder"));
+
+  const body = h("div", null,
+    h("div", { class: "small", style: "margin-bottom:10px" },
+      h("span", { class: "strong" }, plan.programmeName || plan.programme),
+      " · " + t("Declared by the programme") + " " + plan.ladder.gates,
+      " · " + t("Scaffolded on this many gates") + " " + (plan.scaffoldedGates ?? "—")),
+
+    group(t("Adopted — kept with its date, its acceptance and its evidence"),
+      t("These milestones already exist and simply take their place on the ladder."),
+      plan.adopt, (a) => h("div", { class: "small", style: "padding:2px 0" },
+        h("span", { class: "mono xs muted" }, String(a.rung).padStart(2, " ") + "  "), a.name,
+        a.was && a.was.name !== a.name
+          ? h("span", { class: "xs muted" }, "  ← " + a.was.name) : null)),
+
+    group(t("Created — this rung is not on the project yet"),
+      t("Scaffolded exactly as it would have been at birth: its draft evidence and the criteria the ladder declares."),
+      plan.create, (c) => h("div", { class: "small", style: "padding:2px 0" },
+        h("span", { class: "mono xs muted" }, String(c.rung).padStart(2, " ") + "  "), c.name,
+        c.date ? h("span", { class: "xs muted" }, "  " + fmtDate(c.date)) : null)),
+
+    group(t("Retired — it leaves the ladder and keeps everything it carries"),
+      t("Nothing is deleted. A retired gate becomes an ordinary milestone and keeps its date, its acceptance and its filed evidence."),
+      plan.retire, (r) => h("div", { class: "small", style: "padding:2px 0" },
+        h("span", { class: "mono xs muted" }, (r.gate != null ? String(r.gate).padStart(2, " ") : " —") + "  "),
+        r.name,
+        (r.carries || []).length
+          ? h("div", { class: "xs", style: "margin-left:26px;color:var(--sig-amber)" },
+              (r.carries || []).map(carriedLabel).join(" · "))
+          : null)),
+
+    needsAck
+      ? h("label", { class: "small", style: "display:flex;gap:8px;align-items:flex-start;margin-top:10px;cursor:pointer" },
+          h("input", { type: "checkbox",
+            onChange: (e) => { acked = e.target.checked; confirmBtn.disabled = !acked; } }),
+          h("span", null, t("I have read what leaves the ladder")))
+      : null);
+
+  dialog({
+    title: t("Move onto the programme's ladder"), kicker: p.id, body, wide: true,
+    actions: (close) => {
+      confirmBtn.onclick = async () => {
+        if (!acked) return;
+        const ok = await App.write("Project moved onto its programme's ladder",
+          (a) => a.post("/projects/" + p.id + "/ladder", {
+            version: plan.version, acknowledge: plan.acknowledgeRequired || [],
+          }));
+        /* The toast reports what the ACT did, never what the plan
+           proposed: the server recomputes the plan inside its own
+           transaction, so the two can differ and the truth is the one
+           that was written. */
+        if (ok !== false && ok && ok.applied) {
+          toast(ok.applied.adopted + " " + t("adopted") + " · " +
+                ok.applied.created + " " + t("created") + " · " +
+                ok.applied.retired + " " + t("retired"));
+        }
+        close();
+      };
+      return [h("button", { class: "btn", onClick: close }, t("Cancel")), confirmBtn];
+    },
   });
 }
 
@@ -2411,7 +2720,37 @@ function raidFields(db, r, projectId) {
       value: r && r.ti != null ? r.ti : "", advanced: true,
       hint: t("Without a target, whether the mitigation worked is a matter of memory.") },
     { key: "owner", label: "Owner", type: "select", value: r ? r.owner : db.currentUser, options: db.people.map(p => ({ value: p.id, label: p.name })), advanced: true },
-    { key: "review", label: "Next review", type: "date", value: r ? r.review : iso(addDays(db.statusDate, 14)), span: 2, advanced: true },
+    { key: "review", label: "Next review", type: "date", value: r ? r.review : iso(addDays(db.statusDate, 14)), span: 2, advanced: true,
+      hint: t("The agenda of the next meeting in scope asks for this item once the date has come.") },
+    /* I-8 — against what this item stands: the governance gate it
+       threatens, the change request that raised or treats it. */
+    { key: "gate", label: t("Against gate"), type: "select", advanced: true,
+      value: r && r.gate ? String(r.gate) : "",
+      options: [{ value: "", label: t("Not linked to a gate") }]
+        .concat(Engine.gates(db, r ? r.project : projectId).map(g => ({ value: String(g.n), label: g.name }))),
+      hint: t("The gate whose passage this item puts at risk. The gate line shows how many open items stand against it.") },
+    { key: "cr", label: t("Change request"), type: "select", advanced: true,
+      value: r && r.cr ? r.cr : "",
+      options: [{ value: "", label: t("Not linked to a change") }]
+        .concat(db.crs.filter(c => !projectId && !r ? true : c.project === (r ? r.project : projectId))
+          .map(c => ({ value: c.id, label: c.id + " · " + c.title }))) },
+    /* REQ-13 (RT365, implied by meridian_sync.py#RAID_KIND) — leur mot
+       de classement, à côté du nôtre. `type` reste Risk/Issue/Assumption/
+       Dependency : c'est le contrat que le moteur lit. */
+    { key: "category", label: t("Category"), value: r ? (r.category ?? "") : "", advanced: true,
+      placeholder: t("safety, supply, regulatory…"),
+      hint: t("Your own classification, kept beside the RAID type the engine reads.") },
+    /* REQ-18 — une clôture a une date et un nom. Renseignés tout seuls
+       au moment où l'on clôt ; ici pour les CORRIGER, parce qu'une ligne
+       close hier sur un registre repris n'a pas été close aujourd'hui. */
+    ...(r && r.status === "Closed" ? [
+      { key: "closedOn", label: t("Closed on"), type: "date", value: r.closedOn ?? "", advanced: true,
+        hint: t("The day this item actually closed — stamped when it was closed here, corrected when it was closed elsewhere.") },
+      { key: "closedBy", label: t("Closed by"), type: "select", value: r.closedBy ?? "", advanced: true,
+        options: [{ value: "", label: t("Not named") }]
+          .concat(db.people.map(x => ({ value: x.id, label: x.name }))),
+        hint: t("The person on whose word it closed.") },
+    ] : []),
   ];
 }
 
@@ -2603,7 +2942,11 @@ Views.roadmap = (db) => {
         h("div", { title: p.name + " · " + fmtDate(p.start) + " → " + fmtDate(p.finish),
           style: "position:absolute;top:7px;height:12px;border-radius:3px;left:" + left + "%;width:" + width +
             "%;background:" + (m?.health.rag === "R" ? "var(--sig-red)"
-              : m?.health.rag === "A" ? "var(--sig-amber)" : "var(--sig-green)") }),
+              : m?.health.rag === "A" ? "var(--sig-amber)"
+              /* REQ-33 — ce qui n'est pas mesuré n'est pas vert : l'inconnu
+                 se peignait en vert par défaut, ce qui est la faute même
+                 que ce tour corrige. */
+              : m?.health.rag === "G" ? "var(--sig-green)" : "var(--muted)") }),
         ...gates.map(g => h("div", { title: "G" + g.gate + " · " + g.name + " · " + fmtDate(g.date),
           style: "position:absolute;top:4px;width:9px;height:18px;border-left:2px solid var(--color-text);left:" +
             (days(span.from, g.date) / total * 100) + "%" })),
@@ -2707,6 +3050,10 @@ Views.pipeline = (db) => {
         note: pri.over ? money(pri.over) + t(" over the envelope") : t("everything fits"), accent: pri.unfunded > 0 },
     ]),
 
+    /* REQ-24 (V-5) — the ranking proper: every input on the row, the
+       weighting stated, and the line where the capacity runs out. */
+    prioritisationBlock(db),
+
     h("section", { class: "sec", style: "margin-top:16px" },
       sectionHead(t("Requests"), open.length + t(" awaiting a decision"),
         App.can("demand.raise")
@@ -2743,13 +3090,15 @@ Views.pipeline = (db) => {
               : t("Nothing has been asked for yet. A request records what somebody wants and why, before anyone plans it — and a decline keeps its reason where the person who asked can read it."))),
 
     h("section", { class: "sec", style: "margin-top:16px" },
-      sectionHead(t("The queue"),
+      sectionHead(t("The capital queue"),
         pri.envelope
           ? money(pri.demanded) + t(" demanded against ") + money(pri.envelope)
           : t("no capital envelope agreed"),
         App.can("priority.write")
           ? h("button", { class: "btn btn-sm", onClick: () => setEnvelope(db) }, t("Set the envelope"))
           : null),
+      h("div", { class: "xs muted", style: "margin-bottom:8px;max-width:78ch" },
+        t("The older V-04 queue: four hand notes from 1 to 5, live projects only, against the money alone. It is kept because the notes and the hand-placed rank are still recorded here; the ranking above is the one that reads value, confidence, exposure and capacity.")),
       pri.unscored
         ? h("div", { class: "drop-hint", style: "margin-bottom:10px;max-width:64ch" },
             pri.unscored + t(" project(s) carry no score, so the queue cannot rank them. They sort last rather than worst."))
@@ -2776,6 +3125,353 @@ Views.pipeline = (db) => {
         empty: t("Nothing in flight to rank."),
       })));
 };
+
+/* ═══════════════════════════════════════════════════════════════════
+   REQ-24 (RT365 V-5) · WHAT WE CHOOSE NOT TO DO
+   ───────────────────────────────────────────────────────────────────
+   « Choosing what not to do is where a portfolio creates most of its
+   value. Meridian ranks nothing today; demand carries no score. »
+
+   Three things this block refuses to do, and they are the design:
+
+   · it does not hide an input. Every number that moves a row is ON the
+     row — the raw figure, the points it earns, the weight's share, and
+     the contribution those two make. A ranking whose inputs a reader
+     cannot see is a number they must either believe or ignore, and both
+     are worse than no ranking;
+   · it does not rank a row it cannot rank. A project with no business
+     case has no claimed value; it does not have a value of zero, it does
+     not sort last "for now", and it is not in the order at all. It is
+     listed underneath, with the sentence that says what is missing and
+     where that thing is filled in;
+   · it does not invent the line. With no people in the book there is no
+     capacity and no line is drawn — rather than every row being marked
+     "below" a limit of zero.
+   ═══════════════════════════════════════════════════════════════════ */
+
+function prioritisationBlock(db) {
+  const [data] = liveFetch("prioritisation", () => api.get("/prioritisation"), (r) => [r]);
+  if (!data || !data.weighting) {
+    return h("section", { class: "sec", style: "margin-top:16px" },
+      sectionHead(t(PRIORITY_TEXT.block), t("Reading the book, the register and the allocations…")));
+  }
+  const w = data.weighting, cap = data.capacity, cut = data.cut;
+
+  /* `why` on an input is already the SENTENCE (PRIORITY_TEXT.noCase), not
+     the key. Translating it means passing the sentence through the
+     dictionary, and every one of them has an FR and an ES entry — the
+     i18n gate cannot see these, because they arrive through a variable
+     rather than a literal t("…"), so a missing one would show as a
+     half-French row and nothing would fail. */
+  const say = (sentence) => (sentence ? t(sentence) : null);
+
+  /* One input cell: the number in its own unit, then the arithmetic that
+     turns it into a score. A reader must be able to rebuild the score by
+     looking at the row, so nothing here is a tooltip. */
+  const inputCell = (row, key) => {
+    const inp = row.inputs[key];
+    if (!inp || inp.state !== "measured") {
+      return h("div", null,
+        h("span", { class: "mono small muted" }, "—"),
+        h("div", { class: "xs muted", style: "max-width:28ch" }, say(inp && inp.why)));
+    }
+    const extra = key === "exposure" && inp.open !== undefined
+      ? t(" · ") + inp.open + t(" open of ") + inp.items
+      : key === "capacity" && inp.allocations !== undefined
+        ? t(" · ") + inp.allocations + t(" allocations") : "";
+    return h("div", null,
+      h("span", { class: "mono small strong" }, formatInput(key, inp, money)),
+      h("span", { class: "xs muted" }, extra),
+      row.state === "ranked"
+        ? h("div", { class: "xs muted" },
+            Math.round(inp.points) + t(" pts × ") + formatShare(w.shares[key])
+            + t(" = ") + inp.contribution)
+        : null);
+  };
+
+  /* The line, drawn INSIDE the list rather than described beside it.
+     `table()` has no divider, so the row is put into the tbody once the
+     table is built — which is also the only place that knows how many
+     rows of THIS list sit above the cut. */
+  const withCutLine = (node, rows, cols) => {
+    if (cut.state !== "measured") return node;
+    const body = node.querySelector("tbody");
+    if (!body) return node;
+    const above = rows.filter((r) => r.funded).length;
+    if (above >= rows.length && !cap.exhausted) return node;   // nothing runs out here
+    const line = h("tr", { class: "cut-line" },
+      h("td", { colspan: cols, style: "padding:0" },
+        h("div", { style: "border-top:2px solid var(--sig-red);display:flex;gap:10px;"
+                        + "align-items:baseline;padding:6px 0 5px;flex-wrap:wrap" },
+          h("span", { class: "tag tag-accent" }, t(PRIORITY_TEXT.line)),
+          h("span", { class: "xs" }, say(cut.why)),
+          cap.state === "measured"
+            ? h("span", { class: "mono xs muted" },
+                formatFte(cap.available) + t(" available"))
+            : null)));
+    if (above >= body.children.length) body.appendChild(line);
+    else body.insertBefore(line, body.children[above]);
+    return node;
+  };
+
+  const rankedCols = [
+    { key: "n", label: "#", align: "r", width: "38px",
+      get: (r) => h("span", { class: "mono small muted" }, String(r.rank)) },
+    { key: "row", label: t("Row"), get: (r) => h("div", null,
+        h("span", { class: "strong small" + (r.kind === "project" ? " linkish" : "") },
+          r.kind === "project" ? h("span", { onClick: () => go("#/project/" + r.id) }, r.name) : r.name),
+        /* A project's phase is rendered raw here as it is everywhere else
+           in this product; a request's status has a dictionary entry. */
+        h("div", { class: "xs muted" }, r.id + " · "
+          + (r.kind === "project" ? t("live project") + " · " + r.status
+             : t("request") + " · " + t(r.status)))) },
+    ...INPUTS.map((key) => ({
+      key, label: t(PRIORITY_TEXT[key]), align: "r", get: (r) => inputCell(r, key),
+    })),
+    { key: "score", label: t("Score"), align: "r", get: (r) => h("div", null,
+        h("span", { class: "mono strong" }, formatScore(r)),
+        h("div", { class: "xs muted" }, t("of 100"))) },
+    { key: "cum", label: t("Running capacity"), align: "r", get: (r) => h("div", null,
+        h("span", { class: "mono small" + (r.funded === false ? " bad" : "") },
+          formatFte(r.cumulativeFte)),
+        r.cumulativeCost !== null
+          ? h("div", { class: "mono xs muted" }, money(r.cumulativeCost)) : null) },
+    { key: "line", label: t("Line"), get: (r) => r.funded === null
+        ? h("span", { class: "xs muted" }, "—")
+        : r.funded
+          ? h("span", { class: "tag tag-out" }, t("above"))
+          : h("span", { class: "tag tag-accent" }, t("below")) },
+    { key: "e", label: "", align: "r", get: (r) => canEditInputs(db, r)
+        ? h("button", { class: "btn btn-xs", onClick: () => editRankingInputs(db, r) }, t("Inputs"))
+        : null },
+  ];
+
+  const notPlacedCols = [
+    { key: "row", label: t("Row"), get: (r) => h("div", null,
+        h("span", { class: "strong small" + (r.kind === "project" ? " linkish" : "") },
+          r.kind === "project" ? h("span", { onClick: () => go("#/project/" + r.id) }, r.name) : r.name),
+        h("div", { class: "xs muted" }, r.id + " · "
+          + (r.kind === "project" ? t("live project") : t("request")))) },
+    { key: "missing", label: t("What is missing"), get: (r) => h("div", null,
+        r.missing.map((k) => h("div", { class: "xs", style: "margin-bottom:2px" },
+          h("span", { class: "strong" }, t(PRIORITY_TEXT[k])), " — ",
+          h("span", { class: "muted" }, say(r.inputs[k].why))))) },
+    { key: "fte", label: t("Capacity consumed"), align: "r", get: (r) => h("span",
+        { class: "mono small" }, formatFte(r.fte)) },
+    { key: "e", label: "", align: "r", get: (r) => canEditInputs(db, r)
+        ? h("button", { class: "btn btn-xs", onClick: () => editRankingInputs(db, r) }, t("Inputs"))
+        : null },
+  ];
+
+  /* One list per programme, and the same order in every one of them: a
+     programme's list is a FILTER of the group's ranking, never a second
+     ranking with a line of its own. People are shared across programmes,
+     so a per-programme pool would be a number nobody in this book has
+     agreed — and inventing one is exactly how a supplier's opinion gets
+     presented as arithmetic. */
+  const groups = [...(data.programmes ?? []), data.unassigned]
+    .filter((g) => g.ranked.length || g.notPlaced.length)
+    .map((g) => h("div", { style: "margin-top:18px" },
+      h("div", { class: "kicker" },
+        (g.name || t("No programme")) + " · " + g.ranked.length + t(" ranked, ")
+        + g.notPlaced.length + t(" not placed")),
+      g.ranked.length
+        ? withCutLine(table({ cols: rankedCols, rows: g.ranked,
+            rowClass: (r) => (r.funded === false ? "muted-row" : "") }),
+            g.ranked, rankedCols.length)
+        : h("div", { class: "small muted", style: "padding:6px 0" },
+            t("Nothing in this programme carries all four inputs yet.")),
+      g.notPlaced.length
+        ? h("div", { style: "margin-top:8px" },
+            h("div", { class: "xs muted", style: "margin-bottom:4px;max-width:74ch" },
+              t("Not placed. These are not ranked last and they are not ranked first — they are not in the order at all, because a rank built on an input nobody has recorded is a confident-looking guess.")),
+            table({ cols: notPlacedCols, rows: g.notPlaced }))
+        : null));
+
+  return h("section", { class: "sec", style: "margin-top:16px" },
+    sectionHead(t(PRIORITY_TEXT.block),
+      data.counts.ranked + t(" ranked and ") + data.counts.notPlaced
+        + t(" not placed, as at ") + data.asAt,
+      App.can("priority.weighting")
+        ? h("button", { class: "btn btn-sm", onClick: () => setWeighting(db, w) },
+            t("Set the weighting"))
+        : null),
+
+    /* THE WEIGHTING, STATED. Not a tooltip, not a constant in a file. */
+    h("div", { class: "drop-hint", style: "margin-bottom:12px;max-width:96ch" },
+      h("div", { style: "display:flex;gap:14px;flex-wrap:wrap;align-items:baseline" },
+        h("span", { class: "kicker" }, t(PRIORITY_TEXT.weighting)),
+        ...INPUTS.map((k) => h("span", { class: "small" },
+          h("span", { class: "strong" }, t(PRIORITY_TEXT[k])), " ",
+          h("span", { class: "mono" }, String(w[k])),
+          h("span", { class: "xs muted" }, " (" + formatShare(w.shares[k]) + ")")))),
+      h("div", { class: "xs muted", style: "margin-top:6px;max-width:88ch" },
+        w.state !== "measured"
+          ? say(w.why)
+          : w.reviewed
+            ? t(PRIORITY_TEXT.weightsSet) + " " + w.setBy + " · " + fmtDate(w.setOn)
+              + (w.note ? " · " + w.note : "")
+            : say(PRIORITY_TEXT.weightsShipped)),
+      h("div", { class: "xs muted", style: "margin-top:6px;max-width:88ch" },
+        t("Value and confidence pull a row up; exposure and the people it takes push it down. Each input is put on a 0–100 scale against the largest in the set being ranked, then weighted — so points move when the set changes, and the order of any two rows against each other does not."))),
+
+    /* THE CAPACITY LINE, AND WHERE ITS NUMBER COMES FROM. */
+    h("div", { style: "display:flex;gap:26px;flex-wrap:wrap;margin-bottom:14px" },
+      h("div", null, h("div", { class: "kicker" }, t("Capacity pool")),
+        h("div", { class: "mono strong" }, cap.state === "measured" ? formatFte(cap.pool) : "—"),
+        h("div", { class: "xs muted", style: "max-width:30ch" }, cap.state === "measured"
+          ? cap.people + t(" people at their availability, up to the ") + cap.ceiling + t("% ceiling")
+          : say(cap.why))),
+      h("div", null, h("div", { class: "kicker" }, t("Held outside this ranking")),
+        h("div", { class: "mono strong" }, cap.state === "measured" ? formatFte(cap.held) : "—"),
+        h("div", { class: "xs muted", style: "max-width:30ch" },
+          t("Allocated to work that is closed or could not be placed — those people are busy whether or not their project has been scored."))),
+      h("div", null, h("div", { class: "kicker" }, t("Available to this ranking")),
+        h("div", { class: "mono strong" }, cap.state === "measured" ? formatFte(cap.available) : "—"),
+        h("div", { class: "xs muted", style: "max-width:30ch" },
+          t("Over the next ") + cap.horizonDays + t(" days, from ") + fmtDate(cap.from)
+          + t(" to ") + fmtDate(cap.to))),
+      h("div", null, h("div", { class: "kicker" }, t("Capital envelope")),
+        h("div", { class: "mono strong" }, data.money.state === "measured"
+          ? money(data.money.envelope) : "—"),
+        h("div", { class: "xs muted", style: "max-width:30ch" },
+          data.money.state === "measured"
+            ? t("The second line: the running cost crosses it, or the people run out first.")
+            : say(data.money.why))),
+      h("div", null, h("div", { class: "kicker" }, t(PRIORITY_TEXT.line)),
+        h("div", { class: "mono strong" }, cut.state === "measured"
+          ? (cut.lastAbove ? "#" + cut.lastAbove : t("before the first row")) : "—"),
+        h("div", { class: "xs muted", style: "max-width:30ch" }, say(cut.why)))),
+
+    groups.length
+      ? h("div", null, groups)
+      : h("div", { class: "small muted", style: "max-width:64ch" },
+          t("Nothing is competing for capacity: no live project and no open request.")));
+}
+
+/** Whose call it is to change a row's inputs — the same question the
+    server will ask, asked here so a control nobody may use is absent. */
+function canEditInputs(db, row) {
+  if (row.kind === "demand") return App.can("demand.decide");
+  const p = Engine.project(db, row.id);
+  return p ? may("case.write", p) : false;
+}
+
+/**
+ * The inputs of one row, where they are actually recorded.
+ *
+ * A request carries its own four figures. A project's value and
+ * confidence live on its business case — the payer's word, written at
+ * group level — so this dialog writes the case; its exposure and the
+ * people it takes are not opinions to be typed here at all, they are the
+ * RAID register and the allocations, and the row says so rather than
+ * offering a second place to state them.
+ */
+function editRankingInputs(db, row) {
+  if (row.kind === "demand") {
+    const d = (liveFetch("demand", () => api.get("/demand"), (r) => r.demand) || [])
+      .find((x) => x.id === row.id);
+    if (!d) { toast(t("That request is still loading — try again in a moment.")); return; }
+    return formDialog({
+      title: t("Inputs: ") + d.title, kicker: d.id, wide: true,
+      fields: [
+        { key: "expectedBenefit", label: t("Expected benefit a year (M)"), type: "number", step: "any",
+          value: d.expectedBenefit ?? "",
+          hint: t("The number, not the words. Leave it empty rather than guessing — an empty claim keeps the request out of the order; a guessed one moves it up it.") },
+        { key: "valueConfidence", label: t("Confidence in that figure 1–5"), type: "select",
+          value: String(d.valueConfidence ?? ""),
+          options: [{ value: "", label: "—" }, "1", "2", "3", "4", "5"],
+          hint: t("How far the sponsor would stand behind it. Nobody can compute this, so nothing here computes it.") },
+        { key: "estFte", label: t("People it will take (FTE)"), type: "number", step: "any", min: 0,
+          value: d.estFte ?? "",
+          hint: t("Averaged over the ranking horizon, in the same unit as the allocations a project carries.") },
+        { key: "raidProbability", label: t("Worst case — probability 1–5"), type: "select",
+          value: String(d.raidProbability ?? ""),
+          options: [{ value: "", label: "—" }, "1", "2", "3", "4", "5"] },
+        { key: "raidImpact", label: t("Worst case — impact 1–5"), type: "select",
+          value: String(d.raidImpact ?? ""),
+          options: [{ value: "", label: "—" }, "1", "2", "3", "4", "5"],
+          hint: t("The same 1–5 scale the RAID register uses, so a request and a live project are exposed on one scale.") },
+      ],
+      saveLabel: "Save the inputs",
+      onSave: async (v) => {
+        const ok = await App.write(t("Ranking inputs saved"), (a) => a.patch("/demand/" + d.id, {
+          expectedBenefit: v.expectedBenefit, valueConfidence: v.valueConfidence,
+          estFte: v.estFte, raidProbability: v.raidProbability, raidImpact: v.raidImpact,
+          version: d.version,
+        }), { detail: d.title, refresh: false });
+        if (ok !== false) { delete live.data.demand; delete live.data.prioritisation; App.emit(); }
+        return ok;
+      },
+    });
+  }
+
+  const p = Engine.project(db, row.id);
+  const bc = (db.businessCases ?? []).find((c) => c.project === row.id) ?? null;
+  formDialog({
+    title: t("Inputs: ") + (p ? p.name : row.name), kicker: row.id, wide: true,
+    extra: h("div", { class: "small muted", style: "max-width:62ch" },
+      t("Exposure comes from this project's RAID register and the capacity from its allocations — both are edited on the project, not here, because a second place to state them is a second answer.")),
+    fields: [
+      { key: "summary", label: t("Why this deserves its budget"), type: "textarea", rows: 3, span: 2,
+        required: true, value: bc ? bc.summary : "",
+        hint: t("The payer's justification, read back at every gate.") },
+      { key: "expectedCost", label: t("Expected cost (M)"), type: "number", step: "any",
+        value: bc && bc.expectedCost != null ? bc.expectedCost : "" },
+      { key: "expectedBenefit", label: t("Expected benefit a year (M)"), type: "number", step: "any",
+        value: bc && bc.expectedBenefit != null ? bc.expectedBenefit : "",
+        hint: t("The claimed value the ranking reads. Empty keeps this project out of the order rather than placing it at the bottom of it.") },
+      { key: "valueConfidence", label: t("Confidence in that figure 1–5"), type: "select",
+        value: String(bc && bc.valueConfidence != null ? bc.valueConfidence : ""),
+        options: [{ value: "", label: "—" }, "1", "2", "3", "4", "5"],
+        hint: t("How far the payer would stand behind it. Nobody can compute this, so nothing here computes it.") },
+    ],
+    saveLabel: "Save the inputs",
+    onSave: async (v) => {
+      const ok = await App.write(t("Ranking inputs saved"), (a) => a.put("/projects/" + row.id + "/case", {
+        summary: v.summary, expectedCost: v.expectedCost, expectedBenefit: v.expectedBenefit,
+        valueConfidence: v.valueConfidence, version: bc ? bc.version : undefined,
+      }), { detail: row.name });
+      if (ok !== false) { delete live.data.prioritisation; App.emit(); }
+      return ok;
+    },
+  });
+}
+
+/**
+ * The weighting. Changing one of these four numbers re-orders the whole
+ * portfolio, in every programme at once — so it asks for the reason, it
+ * asserts the row version, and the audit trail keeps what each weight
+ * was and what it became.
+ */
+function setWeighting(db, w) {
+  const field = (k, label, hint) => ({
+    key: k, label, type: "number", min: 0, max: 100, step: 1, value: w[k], hint,
+  });
+  formDialog({
+    title: t("The weighting"), kicker: t("Prioritisation"), wide: true,
+    extra: h("div", { class: "small muted", style: "max-width:62ch" },
+      t("Weights are shares of their own total, so 40/20/20/20 and 4/2/2/2 are the same weighting. Saving re-ranks every programme immediately.")),
+    fields: [
+      field("value", t("Claimed value"), t("What the business case, or the request, says it is worth a year.")),
+      field("confidence", t("Confidence"), t("How far the person who claimed that figure would stand behind it.")),
+      field("exposure", t("RAID exposure"), t("The worst open item, probability × impact. Pushes a row down.")),
+      field("capacity", t("Capacity consumed"), t("The people it takes over the horizon. Pushes a row down.")),
+      { key: "note", label: t("Why these weights"), type: "textarea", rows: 2, span: 2,
+        required: true, value: w.note ?? "",
+        hint: t("Read months later by somebody who disagrees with a rank. A weighting whose reason is not written is a verdict.") },
+    ],
+    saveLabel: "Set the weighting",
+    onSave: async (v) => {
+      const ok = await App.write(t("Weighting set"), (a) => a.patch("/prioritisation/weighting", {
+        value: v.value, confidence: v.confidence, exposure: v.exposure,
+        capacity: v.capacity, note: v.note, version: w.version,
+      }), { detail: INPUTS.map((k) => k + " " + v[k]).join(" · "), refresh: false });
+      if (ok !== false) { delete live.data.prioritisation; App.emit(); }
+      return ok;
+    },
+  });
+}
 
 function demandFields(db, d, deciding) {
   const base = [
@@ -2814,7 +3510,13 @@ function raiseDemand(db) {
         title: v.title, sponsor: v.sponsor, estCost: v.estCost, programme: v.programme,
         site: v.site, benefitNote: v.benefitNote, detail: v.detail,
       }), { detail: v.title, refresh: false });
-      if (ok !== false) { delete live.data.demand; App.emit(); }
+      /* REQ-24 — a new request is a new candidate for the group's people,
+         so the ranking on this same screen is stale the moment it exists.
+         Found in the browser: the request appeared in the funnel above and
+         NOT in the ranking below, and nothing failed. These two writes are
+         the pair that does not refresh the book (`refresh: false`), so the
+         cache they leave behind has to be dropped by hand. */
+      if (ok !== false) { delete live.data.demand; delete live.data.prioritisation; App.emit(); }
       return ok;
     },
   });
@@ -2829,7 +3531,9 @@ function decideDemand(db, d) {
         status: v.status, decisionNote: v.decisionNote,
         fit: v.fit, value: v.value, risk: v.risk, effort: v.effort, version: d.version,
       }), { detail: v.status, refresh: false });
-      if (ok !== false) { delete live.data.demand; App.emit(); }
+      /* Declining a request takes it OUT of the ranking; approving keeps it
+         in. Either way the list below is wrong until it is re-read. */
+      if (ok !== false) { delete live.data.demand; delete live.data.prioritisation; App.emit(); }
       return ok;
     },
   });
@@ -3305,17 +4009,52 @@ function caseDialog(db, p, bc) {
   });
 }
 
-async function reconfirmCase(db, p, bc) {
-  const ok = await confirmDialog({
-    title: t("Still worth doing?"),
-    message: t("This records that the justification holds, at the current gate, under your name."),
-    detail: t("If the case no longer holds, do not reconfirm it — revise it, or take the project to the steering committee."),
-    confirmLabel: t("It still holds"),
+/**
+ * REQ-22 (V-3) — reconfirmer est une décision, pas une case à cocher.
+ *
+ * C'était un « oui » sans verdict, sans jalon choisi et sans nom : on
+ * enregistrait que quelqu'un avait cliqué. Ce que RT365 demande — et ce
+ * que la porte du jalon lit maintenant — est la décision de continuer à
+ * dépenser, prise À UN JALON, par une personne, avec la possibilité de
+ * dire non.
+ */
+function reconfirmCase(db, p, bc) {
+  const gates = Engine.gates(db, p);
+  const current = Math.max(1, Math.min(gates.length || 1, p.gate || 1));
+  const done = (db.caseReconfirmations ?? []).filter((r) => r.project === p.id);
+  const at = (n) => done.find((r) => r.gate === n);
+  formDialog({
+    title: t("Is it still worth doing?"), kicker: p.id, wide: true,
+    extra: h("div", { class: "drop-hint" },
+      h("div", { class: "xs muted" },
+        t("A gate cannot be passed until the case has been reconfirmed at that gate: passing a gate is the decision to carry on spending."))),
+    fields: [
+      { key: "gate", label: t("At which gate"), type: "select", value: String(current),
+        options: (gates.length ? gates : [{ name: "Gate 1" }]).map((g, i) => ({
+          value: String(i + 1),
+          label: (g.name || t("Gate ") + (i + 1)) + (at(i + 1) ? t(" — already reconfirmed") : ""),
+        })) },
+      { key: "verdict", label: t("The verdict"), type: "select", value: "Continue",
+        options: [
+          { value: "Continue", label: t("Continue — it still holds") },
+          { value: "Continue with conditions", label: t("Continue, with conditions") },
+          { value: "Stop", label: t("Stop — it is no longer worth doing") },
+        ],
+        hint: t("Stop is not decoration: the next gate is refused until somebody says otherwise.") },
+      { key: "reconfirmedBy", label: t("Who reconfirmed it"), type: "select", value: db.currentUser ?? "",
+        options: [{ value: "", label: "—" }].concat(db.people.map((q) => ({ value: q.id, label: q.name }))),
+        hint: t("The case is reconfirmed by whoever pays for it, named — not by whoever typed.") },
+      { key: "note", label: t("What changed since the last one"), type: "textarea", rows: 2, span: 2,
+        value: "", advanced: true,
+        hint: t("Read at the next gate beside the two figures: this is what makes the act useful rather than ritual.") },
+    ],
+    saveLabel: t("Record the reconfirmation"),
+    onSave: (v) => App.write("Business case reconfirmed",
+      (a) => a.post("/projects/" + p.id + "/case/reconfirm",
+        { gate: +v.gate, verdict: v.verdict, note: v.note,
+          reconfirmedBy: v.reconfirmedBy || null, version: bc.version }),
+      { detail: v.verdict + t(" at gate ") + v.gate }),
   });
-  if (!ok) return;
-  await App.write("Business case reconfirmed",
-    (a) => a.post("/projects/" + p.id + "/case/reconfirm",
-      { gate: Math.max(1, p.gate || 1), version: bc.version }));
 }
 
 function businessCaseBlock(db, p, bc) {
@@ -3354,7 +4093,48 @@ function businessCaseBlock(db, p, bc) {
           ? t("gate ") + bc.reconfirmedGate + " · " + fmtDate(bc.reconfirmedOn)
           : h("span", { class: "muted" }, t("never"))))),
     bc.basis ? h("p", { class: "xs muted", style: "max-width:64ch" },
-      t("Basis: ") + bc.basis) : null);
+      t("Basis: ") + bc.basis) : null,
+    /* REQ-22 — la SUITE des reconfirmations, pas seulement la dernière :
+       « le cas a-t-il été reconfirmé à CE jalon » est une question par
+       jalon, et l'écart entre deux est ce qui se lit. */
+    (() => {
+      const rows = (db.caseReconfirmations ?? [])
+        .filter((r) => r.project === p.id).sort((a, b) => a.gate - b.gate);
+      if (!rows.length) {
+        return h("p", { class: "xs muted", style: "margin-top:10px" },
+          t("Not reconfirmed at any gate yet — the next gate will ask for it."));
+      }
+      const names = Engine.gates(db, p);
+      return h("div", { style: "margin-top:14px" },
+        h("div", { class: "kicker" }, t("Reconfirmed at")),
+        h("div", null, rows.map((r, i) => {
+          const prev = rows[i - 1];
+          const move = (now, was) => (now == null || was == null) ? null : now - was;
+          const dc = move(r.expectedCost, prev?.expectedCost);
+          const dbn = move(r.expectedBenefit, prev?.expectedBenefit);
+          return h("div", { class: "list-row", style: "align-items:center;gap:10px;padding:5px 0" },
+            h("span", { class: "mono small muted", style: "width:96px;flex:none" },
+              (names[r.gate - 1]?.name) || t("Gate ") + r.gate),
+            h("div", { style: "flex:1;min-width:0" },
+              h("div", { class: "small" },
+                statusTag(r.verdict === "Stop" ? "Rejected"
+                  : r.verdict === "Continue" ? "Approved" : "In review"),
+                h("span", { class: "small", style: "margin-left:8px" }, t(r.verdict))),
+              r.note ? h("div", { class: "xs muted truncate" }, r.note) : null),
+            h("div", { class: "xs muted", style: "text-align:right" },
+              h("div", null, fmtDate(r.reconfirmedOn)
+                + (r.reconfirmedBy ? " · " + Engine.personName(db, r.reconfirmedBy) : "")),
+              /* L'écart depuis la reconfirmation précédente : sans lui,
+                 « reconfirmé » ne dit pas si la promesse a bougé d'un
+                 dixième ou de moitié entre deux jalons. */
+              prev && (dc || dbn)
+                ? h("div", { class: "mono xs" },
+                    (dc ? t("cost ") + signedMoney(dc) : "")
+                    + (dc && dbn ? " · " : "")
+                    + (dbn ? t("benefit ") + signedMoney(dbn) : ""))
+                : null));
+        })));
+    })());
 }
 
 /* ── PM-01 · la marge, et les dépassements ────────────────────────────
@@ -3446,7 +4226,18 @@ function toleranceBlock(db, p) {
           t("Without a margin, authority is delegated without a bound: this project can drift and nothing will say so on its own. Only the programme office can set one.")),
 
     sectionHead(t("Exceptions"),
-      open.length ? open.length + t(" waiting on an answer") : t("none open")),
+      open.length ? open.length + t(" waiting on an answer") : t("none open"),
+      /* Q-2 — le balayage tourne à l'heure, sans première passe ni moyen
+         de le demander : le premier programme réel a posé une marge,
+         l'a dépassée, et n'a rien pu OBSERVER dans sa session. Un
+         contrôle qu'on ne peut pas voir fonctionner est un contrôle que
+         personne ne peut croire. Le geste reste un constat du système —
+         il n'ouvre que ce que les chiffres disent déjà. */
+      App.can("exception.sweep")
+        ? h("button", { class: "btn btn-xs", title: t("The sweep runs hourly on its own; this asks for it now."),
+            onClick: () => App.write("Exceptions swept", (a) => a.post("/exceptions/sweep", {})) },
+            t("Check now"))
+        : null),
 
     excs.length
       ? table({
@@ -3636,6 +4427,7 @@ function newRaid(db, projectId) {
       const ok = await App.write("RAID item raised", (a) => a.post("/raid", {
         type: v.type, project: v.project || null, title: v.title, detail: v.detail,
         p: +v.p, i: +v.i, response: v.response, owner: v.owner, review: v.review,
+        tp: v.tp, ti: v.ti, gate: v.gate || null, cr: v.cr || null, category: v.category,
       }), { detail: v.title });
       if (ok !== false) {
         const exposure = v.p * v.i;
@@ -3654,6 +4446,11 @@ function editRaid(db, r) {
     onSave: (v) => App.write("RAID item updated", (a) => a.patch("/raid/" + r.id, {
       title: v.title, detail: v.detail, p: +v.p, i: +v.i, response: v.response,
       owner: v.owner, review: v.review, status: v.status, version: r.version,
+      tp: v.tp, ti: v.ti, gate: v.gate || null, cr: v.cr || null, category: v.category,
+      /* REQ-18 — n'envoyer la clôture que sur une ligne close : sur une
+         ligne ouverte les champs n'existent pas, et envoyer `undefined`
+         effacerait ce qu'on n'a pas montré. */
+      ...(r.status === "Closed" ? { closedOn: v.closedOn || null, closedBy: v.closedBy || null } : {}),
     }), { detail: r.id }),
   });
 }
@@ -3925,6 +4722,15 @@ function crDetail(db, c) {
       h("div", { class: "xs muted" }, route.why)),
 
     sectionHead("Approval path"),
+    /* S-13 / I-12 — l'exemption est dite là où elle s'exerce : un
+       administrateur qui regarde sa propre demande lit qu'il PEUT la
+       signer, que c'est l'exception, et qu'elle sera écrite. */
+    App.isAdmin && c.status === "Pending" &&
+      (c.raisedByUser === App.me.id || (App.me.personId && c.raisedBy === App.me.personId))
+      ? h("div", { class: "drop-hint xs", style: "margin-bottom:10px" },
+          h("span", { class: "strong" }, t("Break-glass: ")),
+          t("you raised this request. As an administrator you may still sign it — the exemption exists for emergencies, and the audit trail will mark the signature as break-glass. Prefer having a colleague with group authority decide it."))
+      : null,
     h("div", { style: "margin-bottom:14px" }, c.steps.map((st, i) =>
       h("div", { class: "step" },
         h("span", { class: "step-i " + (st.state === "done" ? "ok" : st.state === "rejected" ? "no" : st.state === "current" ? "" : "wait") },
@@ -4310,7 +5116,7 @@ Views.documents = (db) => {
   ];
 
   const gateBoard = App.scopedProjects().map(p => {
-    const gs = GATES.map(g => Engine.gateStatus(db, p.id, g.n));
+    const gs = Engine.gates(db, p.id).map(g => Engine.gateStatus(db, p.id, g.n));
     const cur = Engine.currentGate(db, p.id);
     return h("div", { style: "padding:11px 0;border-bottom:1px solid var(--rule-1);cursor:pointer", onClick: () => go("#/project/" + p.id) },
       h("div", { style: "display:flex;gap:8px;align-items:baseline" },
@@ -4330,7 +5136,8 @@ Views.documents = (db) => {
     h("section", { class: "l sec" },
       h("div", { class: "sec-hd" },
         searchBox(App.ui.docQ, "Search documents", v => App.set({ docQ: v })),
-        selectField("Gate", App.ui.docGate, [{ value: "all", label: "All gates" }, ...GATES.map(g => ({ value: String(g.n), label: "Gate " + g.n }))], v => App.set({ docGate: v }), "130px"),
+        selectField("Gate", App.ui.docGate, [{ value: "all", label: "All gates" },
+          ...Array.from({ length: Engine.maxGates(db) }, (_, i) => ({ value: String(i + 1), label: "Gate " + (i + 1) }))], v => App.set({ docGate: v }), "130px"),
         selectField(t("Status"), App.ui.docStatus,
           [{ value: "all", label: t("All statuses") },
            { value: "Draft", label: t("Draft") }, { value: "In review", label: t("In review") },
@@ -4346,13 +5153,18 @@ Views.documents = (db) => {
       sectionHead("Gate evidence", "by project"),
       h("div", { style: "margin-bottom:18px" }, gateBoard),
       h("hr", { class: "hr" }), h("div", { style: "height:18px" }),
-      sectionHead("The gate model"),
-      h("div", null, GATES.map(g => h("div", { class: "list-row" },
-        h("span", { class: "step-i", style: "flex:none" }, String(g.n)),
-        h("div", null,
-          h("div", { class: "strong small" }, g.name),
-          h("div", { class: "xs muted" }, g.evidence),
-          h("div", { class: "xs muted" }, "Owned by " + g.owner))))),
+      sectionHead("The gate model", ladderNote(db)),
+      /* I-3 — one ladder per programme that declares its own; the default
+         four for every other. Drawn per programme so the reader sees
+         which ladder their project actually walks. */
+      h("div", null, laddersOf(db).map(({ label, ladder }) => h("div", { style: "margin-bottom:10px" },
+        h("div", { class: "kicker", style: "margin:6px 0 2px" }, label),
+        ladder.map(g => h("div", { class: "list-row" },
+          h("span", { class: "step-i", style: "flex:none" }, String(g.n)),
+          h("div", null,
+            h("div", { class: "strong small" }, g.name),
+            h("div", { class: "xs muted" }, g.evidence),
+            h("div", { class: "xs muted" }, "Owned by " + g.owner))))))),
       h("div", { class: "card", style: "margin-top:16px" },
         h("div", { class: "card-kicker" }, "Gate locking"),
         h("div", { class: "small", style: "margin-top:4px" },
@@ -4381,7 +5193,8 @@ function docFields(db, d) {
     { key: "project", label: "Project", type: "select", value: d ? (d.project || "") : "",
       options: [{ value: "", label: "Portfolio-wide" }].concat(db.projects.map(p => ({ value: p.id, label: p.id + " · " + p.name }))) },
     { key: "type", label: "Type", type: "select", value: d ? d.type : "Design", options: DOC_TYPES },
-    { key: "gate", label: "Gate", type: "select", value: d ? String(d.gate) : "1", options: GATES.map(g => ({ value: String(g.n), label: g.name })) },
+    { key: "gate", label: "Gate", type: "select", value: d ? String(d.gate) : "1",
+      options: Engine.gates(db, d?.project ?? App.ui.project).map(g => ({ value: String(g.n), label: g.name })) },
     { key: "owner", label: "Owner", type: "select", value: d ? d.owner : db.currentUser, options: db.people.map(p => ({ value: p.id, label: p.name })) },
     { key: "rev", label: "Revision", value: d ? d.rev : "0.1" },
     { key: "status", label: "Status", type: "select", value: d ? d.status : "Draft", options: ["Draft", "In review", "Approved"] },
@@ -4412,6 +5225,585 @@ function editDoc(db, d) {
 }
 
 /* ── Status reporting ─────────────────────────────────────────────── */
+/**
+ * V-4 — ce que le cas a promis, contre ce que les bénéfices ont mesuré.
+ *
+ * La règle qui gouverne ce bloc est celle du rapport de terrain, et elle
+ * est plus importante que ce qu'il montre : **on ne convertit rien**.
+ * Un facteur qui ramènerait des tonnes ou des points de disponibilité à
+ * une devise est un nombre que quelqu'un invente et que tout le monde
+ * cite ensuite. On additionne l'argent, on LISTE le reste, et on dit
+ * combien on a laissé de côté et dans quelles unités.
+ */
+/* ── REQ-28 (RT365's V-9) · the PMO's own throughput ───────────────────
+   Five signals, every one of them computed from timestamps the book
+   already carries — no new data entry, which was RT365's binding
+   constraint and also the test of the design: wanting a column here means
+   not having found the timestamp that already answers the question.
+
+   The portfolio row is drawn as tiles because a tile can carry its own
+   note, and the note is where an unmeasured signal says WHY. That is not
+   decoration. REQ-33 was this product shipping ON TRACK 100 % for a book
+   with no budget, and the same mistake is available here in five new
+   places: a programme that has closed no gates does not have a cycle time
+   of zero and is not doing well. So `formatSignal` returns the em dash and
+   the tile says the reason out loud, in the reader's language.
+
+   The per-programme table below carries the same rule: `—` with the reason
+   on the cell, never a zero, never a colour. Comparability is respected
+   too — a cycle time drawn from ladders of different lengths says so
+   rather than averaging four-gate and six-gate programmes together. */
+function governanceSignalsBlock(db) {
+  const [data] = liveFetch("signals", () => api.get("/signals"), (r) => [r]);
+  if (!data || !data.portfolio) {
+    return h("div", null,
+      sectionHead(t(SIGNAL_TEXT.block), t("Reading the clocks the book already keeps…")));
+  }
+
+  /* `why` on a signal is already the SENTENCE (SIGNAL_TEXT.noGateClosed),
+     not the key. Translating it means passing the sentence through the
+     dictionary, and every one of them has an FR and an ES entry — the
+     i18n gate cannot see these, because they arrive through a variable
+     rather than a literal `t("…")`, so a missing one would show up as a
+     half-French tile and nothing would fail. */
+  const why = (m) => (m && m.state !== "measured" && m.why ? t(m.why) : null);
+
+  /* One cell: the number in its own unit, its movement beside it, and —
+     when there is no number — the reason, never a stand-in for one. */
+  const cell = (m) => {
+    const head = formatSignal(m);
+    const reason = why(m);
+    return h("span", { class: "mono small", title: reason ?? null },
+      h("span", { style: head === "\u2014" ? "color:var(--muted)" : null }, head),
+      head === "\u2014" ? null : h("span", { class: "xs muted" }, "  " + formatTrend(m)));
+  };
+
+  const tiles = SIGNAL_ORDER.map((key) => {
+    const m = data.portfolio.signals[key];
+    const reason = why(m);
+    return {
+      label: t(SIGNAL_TEXT[key]),
+      value: formatSignal(m),
+      note: reason
+        ? reason
+        : (m?.trend?.state === "measured"
+            ? t("since the previous period: ") + formatTrend(m)
+            /* "one period only" and "no period at all" are different
+               statements and the module now distinguishes them; reaching
+               for a default here would print the wrong one. */
+            : t(m?.trend?.why ?? SIGNAL_TEXT.trendOnePeriod)),
+    };
+  });
+
+  const programmes = (data.programmes ?? []).filter((p) =>
+    SIGNAL_ORDER.some((k) => p.signals[k]?.state === "measured"));
+
+  return h("div", null,
+    sectionHead(t(SIGNAL_TEXT.block),
+      t("Five clocks the book already keeps, as at ") + data.asAt + t(", over ") +
+      data.months + t(" months. Nothing here asks anyone to type anything.")),
+    kpiStrip(tiles),
+    programmes.length
+      ? h("div", { style: "overflow-x:auto" },
+          table({
+            cols: [
+              { key: "name", label: t("Programme"), get: (p) => p.name },
+              ...SIGNAL_ORDER.map((key) => ({
+                key, label: t(SIGNAL_TEXT[key]), align: "c",
+                get: (p) => cell(p.signals[key]),
+              })),
+            ],
+            rows: programmes,
+          }))
+      : h("div", { class: "small muted", style: "padding:8px 0" },
+          t("No programme has measured any of the five yet — the reasons are on the tiles above.")));
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   REQ-30 (RT365 V-11) · THE VALUE PAGE — one printable page, and the
+   record of what it said.
+   ───────────────────────────────────────────────────────────────────
+   « The portfolio view answers "is it on time and on budget"; nobody can
+     answer "is it worth it". »
+
+   The arithmetic is `shared/valuepage.js`, shared with the server so that
+   the page an executive prints and the page the server stores are one
+   computation rather than two that will diverge (the govsignals idiom).
+   It is computed HERE, from the book the browser already holds, so this
+   screen draws without waiting for a fetch — 5.14.0 shipped a block whose
+   whole view failed to draw while the render gate stayed green, because
+   the gate never reaches a fetch. The only thing fetched is the LIST of
+   periods that already carry a stored page, and its absence costs a line
+   of text rather than the page.
+
+   Two rules govern every cell below, and both come from REQ-33:
+
+     · a figure that is not measured shows `—` and SAYS WHY. Never a
+       zero, never a 100 %, never a colour;
+     · a figure that IS zero shows 0 and says what it was counted over,
+       because "no benefit was measured" and "the measured benefit was
+       nil" are different sentences and the reader in December has only
+       this page to tell them apart.
+
+   Nothing here carries a RAG colour. Nobody has agreed what "too little
+   benefit" is for this group, and a threshold chosen in our file would be
+   the fabrication REQ-33 ended. What the page does carry, everywhere, is
+   the WORD — status, band, gate state — because a printed board pack is
+   greyscale and a dot is not information there.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/** The value figures of a stored period, or null while none is chosen. */
+function storedValuePage() {
+  const id = App.ui.valuePeriod;
+  if (!id) return null;
+  const got = liveFetch("valuepage:" + id, () => api.get("/valuepage/" + id), (r) => [r]);
+  return got.length ? got[0] : (got.failed ? { failed: true } : null);
+}
+
+/** The pages already on the record. Empty for an account that may not read them. */
+const storedValuePages = () =>
+  liveFetch("valuepages", () => api.get("/valuepage"), (r) => r.stored ?? []);
+
+/** One figure: its number, or the reason there is not one. */
+function valueFigureTile(f) {
+  const measured = f.state === "measured";
+  return {
+    label: t(f.label),
+    value: formatValue(f),
+    /* The note is the whole point of the tile. Measured: the population,
+       so a zero reads as a zero. Not measured: the reason, so an absence
+       never reads as a nil. */
+    note: measured
+      /* A note can carry two sentences joined by a middot; each is a
+         dictionary key of its own, so they are translated one by one —
+         joining first and translating after is exactly how a tile ends
+         up half-French. The population sentence carries live numbers and
+         goes through tData(), which translates the fragments. */
+      ? [...(f.note ? String(f.note).split(" · ").map((x) => t(x)) : []),
+         ...(formatPopulation(f) ? [tData(formatPopulation(f))] : [])].join(" · ")
+      : t(f.why || VALUE_TEXT.notMeasured),
+  };
+}
+
+/** A row of small facts under a figure — never a chart, this page prints. */
+const vpFacts = (pairs) => h("div", { class: "vp-facts" },
+  ...pairs.filter(Boolean).map(([k, v]) => h("div", null,
+    h("span", { class: "kicker" }, k), h("span", { class: "mono small" }, v))));
+
+/**
+ * The body of one figure: the breakdown a board reads under the number.
+ * A figure that is not measured has no breakdown — it has a sentence, and
+ * printing an empty table beside it would suggest the data is merely
+ * missing from the view rather than from the book.
+ */
+function valueFigureDetail(key, f) {
+  if (f.state !== "measured") {
+    return h("div", { class: "vp-why small" }, t(f.why || VALUE_TEXT.notMeasured));
+  }
+  const e = f.extra ?? {};
+  const dash = (v, fmt) => (v === null || v === undefined ? "—" : fmt ? fmt(v) : String(v));
+
+  if (key === "spendAgainstCase") {
+    return h("div", null,
+      vpFacts([
+        [t("Case cost"), money(e.expectedCost)],
+        [t("Booked"), money(f.value)],
+        [t("Left against the case"), money(e.variance)],
+        [t("Case benefit / yr"), money(e.expectedBenefit)],
+        e.uncased ? [t("Spent outside any case"), money(e.uncasedSpend)] : null,
+      ]),
+      (e.lines ?? []).length
+        ? table({
+            cols: [
+              { key: "p", label: t("Project"), get: (r) => h("div", null,
+                  h("div", { class: "small strong truncate" }, r.name),
+                  h("div", { class: "xs muted mono" }, r.project)) },
+              { key: "c", label: t("Case cost"), align: "r", get: (r) => h("span", { class: "mono small" }, money(r.expectedCost)) },
+              { key: "s", label: t("Booked"), align: "r", get: (r) => h("span", { class: "mono small" }, money(r.spend)) },
+              { key: "v", label: t("Variance"), align: "r", get: (r) => h("span", { class: "mono small" }, signedMoney(r.variance)) },
+              { key: "r", label: t("Case standing"), get: (r) => h("span", { class: "xs muted" },
+                  (r.reconfirmedGate ? t("reconfirmed at gate ") + r.reconfirmedGate : t("never reconfirmed")) +
+                  (r.staleSinceReconfirm ? t(" · revised since") : "")) },
+            ],
+            rows: e.lines,
+          })
+        : null);
+  }
+
+  if (key === "benefitsByStatus") {
+    const s = e.states ?? {};
+    return h("div", null,
+      vpFacts([
+        [t("Forecast"), String(s.Forecast ?? 0)],
+        [t("Realised"), String(s.Realised ?? 0)],
+        [t("Partly"), String(s["Partially realised"] ?? 0)],
+        [t("Missed"), String(s.Missed ?? 0)],
+        [t("Withdrawn"), String(s.Withdrawn ?? 0)],
+      ]),
+      vpFacts([
+        [t("Measured"), dash(e.measured)],
+        [t("Ruled on"), e.decided ? e.met + " / " + e.decided : "—"],
+        [t("Attainment"), e.attainment == null ? "—" : pct(e.attainment)],
+        [t("Promising nothing"), String(e.uncased ?? 0) + " " + t("project(s)")],
+      ]));
+  }
+
+  if (key === "overdueReviews") {
+    return h("div", null,
+      vpFacts([
+        [t("Dated reviews"), String(e.dated ?? 0)],
+        [t("Undated promises"), String(e.undated ?? 0)],
+        [t("Longest overdue"), e.worstDays == null ? "—" : e.worstDays + t("d")],
+      ]),
+      (e.list ?? []).length
+        ? table({
+            cols: [
+              { key: "b", label: t("Benefit"), get: (r) => h("div", null,
+                  h("div", { class: "small strong truncate" }, r.title),
+                  h("div", { class: "xs muted" }, r.projectName)) },
+              { key: "d", label: t("Was due"), get: (r) => h("span", { class: "mono small" }, fmtDate(r.realiseOn)) },
+              { key: "o", label: t("Overdue"), align: "r", get: (r) => h("span", { class: "mono small" }, r.overdueDays + t("d")) },
+              { key: "s", label: t("Status"), get: (r) => h("span", { class: "xs" }, t(r.status)) },
+            ],
+            rows: e.list,
+          })
+        : null);
+  }
+
+  if (key === "topRisks") {
+    const b = e.bands ?? {};
+    return h("div", null,
+      vpFacts([
+        [t("Open risks"), String(e.open ?? 0)],
+        [t("Critical"), String(b.Critical ?? 0)],
+        [t("High"), String(b.High ?? 0)],
+        [t("At steering level"), String(e.steering ?? 0)],
+        [t("Open issues"), String(e.issues ?? 0)],
+      ]),
+      (e.top ?? []).length
+        ? table({
+            cols: [
+              { key: "r", label: t("Risk"), get: (r) => h("div", null,
+                  h("div", { class: "small strong truncate" }, r.title),
+                  h("div", { class: "xs muted mono" }, r.id + (r.projectName ? " · " + r.projectName : " · " + t("portfolio-wide")))) },
+              { key: "e", label: t("Exposure"), align: "r", get: (r) => h("span", { class: "mono small" }, String(r.exposure)) },
+              /* The band as a WORD: this page is printed, and one man in
+                 twelve cannot read the colour anyway. */
+              { key: "b", label: t("Band"), get: (r) => h("span", { class: "xs" }, t(r.band)) },
+              { key: "l", label: t("Escalates to"), get: (r) => h("span", { class: "xs" }, t(r.level)) },
+            ],
+            rows: e.top,
+          })
+        : null);
+  }
+
+  if (key === "gatesDue") {
+    return h("div", null,
+      vpFacts([
+        [t("Inside the horizon"), String(f.value) + " " + t("of") + " " + String(e.committed ?? 0)],
+        [t("Already past"), String(e.overdue ?? 0)],
+        [t("Dated with a placeholder"), String(e.placeholders ?? 0)],
+      ]),
+      (e.list ?? []).length
+        ? table({
+            cols: [
+              { key: "g", label: t("Gate"), get: (r) => h("div", null,
+                  h("div", { class: "small strong truncate" }, r.name),
+                  h("div", { class: "xs muted" }, r.projectName)) },
+              { key: "d", label: t("Due"), get: (r) => h("span", { class: "mono small" }, fmtDate(r.date)) },
+              { key: "i", label: t("In"), align: "r", get: (r) => h("span", { class: "mono small" },
+                  r.inDays < 0 ? Math.abs(r.inDays) + t("d late") : r.inDays + t("d")) },
+              { key: "s", label: t("State"), get: (r) => h("span", { class: "xs" }, t(r.state)) },
+              { key: "o", label: t("Outstanding"), align: "r", get: (r) => h("span", { class: "xs" },
+                  (r.outstanding || r.unmet) ? (r.outstanding + t(" evidence") + (r.unmet ? " · " + r.unmet + t(" criteria") : "")) : "—") },
+            ],
+            rows: e.list,
+          })
+        : null);
+  }
+
+  if (key === "exceptionsOpen") {
+    const d = e.byDimension ?? {};
+    return h("div", null,
+      vpFacts([
+        [t("Projects with a tolerance"), String(e.projectsBounded ?? 0)],
+        [t("Answered"), String(e.answered ?? 0)],
+        [t("Oldest open"), e.oldestDays == null ? "—" : e.oldestDays + t("d")],
+        /* The dimensions that are actually open, named one by one: the
+           book has four of them since migration 042, and a fixed
+           "schedule / cost / benefit" line would drop the fourth. */
+        ...Object.keys(d).sort().map((k) => [t(k), String(d[k])]),
+      ]),
+      (e.list ?? []).length
+        ? table({
+            cols: [
+              { key: "p", label: t("Project"), get: (r) => h("span", { class: "small strong" }, r.projectName) },
+              { key: "d", label: t("Dimension"), get: (r) => h("span", { class: "xs" }, t(r.dimension)) },
+              { key: "m", label: t("Measured / allowed"), align: "r", get: (r) => h("span", { class: "mono small" },
+                  String(r.measured) + " / " + String(r.allowed)) },
+              { key: "a", label: t("Open for"), align: "r", get: (r) => h("span", { class: "mono small" },
+                  r.ageDays == null ? "—" : r.ageDays + t("d")) },
+            ],
+            rows: e.list,
+          })
+        : null);
+  }
+  return null;
+}
+
+/** Close the books first, then put the value page on the record. */
+function storeValuePageDialog(db) {
+  const periods = liveFetch("periods", () => api.get("/periods"), (r) => r.periods);
+  const stored = new Set(storedValuePages().map((s) => s.period));
+  /* Only a period closed at the book's own status date can receive these
+     figures: they are read from the book as it stands now, and filing
+     them under an older period would put numbers on the record under a
+     date on which they were not true. The server refuses it too — this
+     is the same rule said before the click rather than after it. */
+  const eligible = periods.filter((p) =>
+    String(p.statusDate).slice(0, 10) === String(db.statusDate) && !stored.has(p.id));
+
+  /* With nothing to store against, a form whose only field refuses to be
+     filled is a dead end: say the sentence instead. The server refuses
+     the same thing for the same reason; this is that refusal said before
+     the click rather than after it. */
+  if (!eligible.length) {
+    return dialog({
+      title: t("Store this value page"), kicker: t("Record of record"),
+      body: h("p", { class: "small", style: "max-width:64ch" },
+        t("No period is closed at today's status date, so there is nothing to store this page against. Close the reporting period first — these figures are read from the book as it stands today, and a period closed on another day would carry them under a date on which they were not true.")),
+      actions: (c) => [h("button", { class: "btn", onClick: c }, t("Close"))],
+    });
+  }
+
+  formDialog({
+    title: t("Store this value page"), kicker: t("Record of record"), wide: true,
+    fields: [
+      { key: "period", label: t("Reporting period"), type: "select", required: true,
+        value: eligible[0]?.id ?? "",
+        options: eligible.map((p) => ({ value: p.id, label: p.label + " · " + p.statusDate })),
+        hint: t("Close the period first (the button above), then store the page against it.") },
+      { key: "note", label: t("Note for the record"), type: "textarea", rows: 2, span: 2, value: "",
+        hint: t("Why this page reads as it does — read back months later by people who were not there") },
+    ],
+    saveLabel: "Store the page",
+    extra: h("div", { class: "small muted", style: "max-width:64ch" },
+      t("The six figures are written down exactly as they read now — including the ones that are not measured, which are stored as absences with their reason and never as zeros. A stored page cannot be edited or deleted: a correction is a new period that restates this one, with its own page.")),
+    onSave: async (v) => {
+      const ok = await App.write(t("Value page stored"), (a) => a.post("/valuepage/" + v.period, {
+        note: v.note,
+      }), { detail: v.period });
+      if (ok !== false) { delete live.data.valuepages; App.set({ valuePeriod: null }); }
+      return ok;
+    },
+  });
+}
+
+/**
+ * Print THIS page and nothing else. `@media print` in styles.css hides
+ * every other section while the body carries the class; the class is
+ * dropped as soon as the dialog closes so the screen is not left in a
+ * print state.
+ */
+function printValuePage() {
+  const body = document.body;
+  body.classList.add("printing-value");
+  const done = () => {
+    body.classList.remove("printing-value");
+    window.removeEventListener("afterprint", done);
+  };
+  window.addEventListener("afterprint", done);
+  if (typeof window.print === "function") {
+    try { window.print(); } catch { /* a browser that refuses to print is not a broken page */ }
+  }
+  /* Some browsers never fire afterprint. The class must not survive the
+     dialog either way, or the screen silently loses half its sections. */
+  setTimeout(done, 2000);
+}
+
+function valuePageSection(db) {
+  const pages = App.can("period.close") ? storedValuePages() : [];
+  /* A selection left in the session by whoever was signed in before does
+     not survive into an account that may not read a stored page, nor a
+     page that is not on this book: the reader would get a failure banner
+     for a page they never asked for. */
+  const chosen = pages.some((p) => p.period === App.ui.valuePeriod)
+    ? App.ui.valuePeriod : null;
+  const record = chosen ? storedValuePage() : null;
+  const now = valuePage(db, db.projects, db.statusDate);
+  const failed = !!(record && record.failed);
+  /* A stored page is read, never recomputed — that is the whole point of
+     storing it. While it is in flight the live page stays on screen, and
+     the banner says which of the two is being read. */
+  const showing = record && !failed && record.figures ? record : null;
+  const figures = showing ? showing.figures : now.figures;
+  const order = showing ? (showing.order ?? FIGURE_ORDER) : now.order;
+  const asAt = showing ? showing.period.statusDate : now.asAt;
+
+  const options = [{ value: "", label: t("Live — as the book stands now") },
+    ...pages.map((p) => ({ value: p.period, label: p.label + " · " + p.statusDate }))];
+
+  return h("section", { class: "sec value-page" },
+    h("div", { class: "vp-masthead" },
+      h("div", { style: "flex:1;min-width:260px" },
+        h("div", { class: "kicker" },
+          db.orgName + t(" · Value report · as at ") + fmtDateLong(asAt)),
+        h("h3", { style: "margin:6px 0 0" }, t(VALUE_TEXT.block)),
+        h("div", { class: "small muted", style: "margin-top:5px;max-width:78ch" },
+          t(VALUE_TEXT.strap))),
+      h("div", { class: "btn-row no-print" },
+        h("button", { class: "btn btn-sm", onClick: () => printValuePage() },
+          icon("printer", 12), t("Print this page")),
+        App.can("period.close")
+          ? h("button", { class: "btn btn-sm btn-primary", onClick: () => storeValuePageDialog(db) },
+              icon("check", 12), t("Store this page"))
+          : null)),
+
+    /* Which page is on the screen — live, or one that was stored. Drawn
+       before the figures, because a reader who mistakes one for the other
+       has been told something false about the date of every number. */
+    pages.length
+      ? h("div", { class: "no-print", style: "display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-top:14px" },
+          selectField(t("Which page"), chosen ?? "", options,
+            (v) => { App.set({ valuePeriod: v || null }); }))
+      : null,
+    showing
+      ? h("div", { class: "vp-banner small" },
+          t("Stored figures — written down when the page was stored, not recalculated. ") +
+          t("Stored ") + fmtDate(String(showing.stored.at).slice(0, 10)) + t(" by ") + showing.stored.by +
+          t(" · scope: ") + showing.stored.scope + t(" · ") + showing.stored.projects + t(" project(s)") +
+          (showing.stored.note ? " · " + showing.stored.note : ""))
+      : null,
+    failed
+      ? h("div", { class: "small muted", style: "margin-top:10px" },
+          t("That stored page could not be loaded — refresh to try again."))
+      : null,
+
+    h("div", { class: "vp-scope small muted" },
+      showing
+        ? t("As at ") + fmtDateLong(asAt) + t(" · ") + showing.stored.projects + t(" project(s)")
+        : t("As at ") + fmtDateLong(asAt) + t(" · every project you can see: ") +
+          now.scope.projects + t(" project(s), of which ") + now.scope.closed + t(" closed") +
+          t(" · this page ignores the scope filter above, because the page that is stored is this one.")),
+
+    kpiStrip(order.map((k) => valueFigureTile(figures[k]))),
+
+    /* Six sections, in the order the request named them. Each carries its
+       own breakdown, or the sentence that says why there is none. */
+    ...order.map((k) => {
+      const f = figures[k];
+      return h("div", { class: "vp-block" },
+        h("div", { class: "vp-block-hd" },
+          h("h5", null, t(f.label)),
+          h("span", { class: "sp", style: "flex:1" }),
+          h("span", { class: "mono small" }, formatValue(f)),
+          h("span", { class: "xs muted" },
+            f.state === "measured" ? t("measured") : t(VALUE_TEXT.notMeasured))),
+        valueFigureDetail(k, f));
+    }),
+
+    /* The promise against the measurement, project by project (V-4). It
+       is LIVE arithmetic over the book in front of the reader, so it is
+       not drawn beside stored figures — a live table under a stored
+       headline is exactly the kind of mixed page this feature exists to
+       stop. */
+    showing
+      ? h("div", { class: "small muted", style: "margin-top:18px;max-width:70ch" },
+          t("The project-by-project table is computed from the book as it stands and is not part of what was stored, so it is not shown beside stored figures. Switch to the live page to read it."))
+      : h("div", { class: "vp-block" },
+          h("div", { class: "vp-block-hd" }, h("h5", null, t("Project by project"))),
+          table({
+            cols: [
+              { key: "p", label: t("Project"), get: (r) => h("div", null,
+                  h("div", { class: "small strong truncate" }, r.name),
+                  h("div", { class: "xs muted mono" }, r.project + (r.closed ? " · " + t("closed") : ""))) },
+              { key: "c", label: t("The case"), get: (r) => !r.case
+                  ? h("span", { class: "xs muted" }, r.benefits.length ? t("benefits, but no case") : t("nothing promised"))
+                  : h("span", { class: "mono small" }, money(r.case.expectedCost) + " → " + money(r.case.expectedBenefit)) },
+              { key: "s", label: t("Booked"), align: "r", get: (r) => h("span", { class: "mono small" },
+                  r.spend == null ? "—" : money(r.spend)) },
+              { key: "b", label: t("Benefits"), align: "r", get: (r) => h("span", { class: "mono small" },
+                  r.benefits.length ? (r.benefits.filter((x) => x.actual != null).length + " / " + r.benefits.length) : "—") },
+              { key: "o", label: t("Overdue"), align: "r", get: (r) => h("span", { class: "mono small" },
+                  r.overdue ? String(r.overdue) : (r.benefits.some((x) => x.realiseOn) ? "0" : "—")) },
+              { key: "x", label: t("Top exposure"), align: "r", get: (r) => h("span", { class: "mono small" },
+                  r.topExposure == null ? "—" : String(r.topExposure)) },
+              { key: "g", label: t("Next gate"), get: (r) => h("span", { class: "xs" },
+                  r.nextGate ? fmtDate(r.nextGate.date) + " · " + r.nextGate.name : "—") },
+              { key: "e", label: t("Exceptions"), align: "r", get: (r) => h("span", { class: "mono small" },
+                  r.exceptionsOpen ? String(r.exceptionsOpen) : "—") },
+            ],
+            rows: now.rows,
+            empty: { title: t("No project in scope"), body: t("Nothing is in your scope to report on.") },
+          })),
+
+    h("div", { class: "vp-foot xs muted" },
+      t("Generated from the book — no figure on this page was typed. ") +
+      (showing
+        ? t("Stored against ") + showing.period.label + t(" and readable unchanged for as long as the record lasts.")
+        : t("Nothing here is on the record until this page is stored against a closed reporting period."))));
+}
+
+function valueReportBlock(db, list) {
+  const v = Engine.valueReport(db, list);
+  const tot = v.totals;
+  const num = (x, unit) => x == null ? "—" : x + (unit ? " " + unit : "");
+
+  return h("div", null,
+    h("div", { style: "height:20px" }), h("hr", { class: "hr" }), h("div", { style: "height:20px" }),
+    sectionHead(t("Promised, and measured"),
+      t("what the case said it was for, against what the benefits have actually shown")),
+
+    h("div", { style: "display:flex;gap:26px;flex-wrap:wrap;margin-bottom:14px" },
+      h("div", null, h("div", { class: "kicker" }, t("Expected cost")),
+        h("div", { class: "mono strong" }, money(tot.expectedCost))),
+      h("div", null, h("div", { class: "kicker" }, t("Expected benefit / yr")),
+        h("div", { class: "mono strong" }, money(tot.expectedBenefit))),
+      h("div", null, h("div", { class: "kicker" }, t("No case written")),
+        h("div", { class: "mono strong" }, String(tot.withoutCase + tot.neither))),
+      h("div", null, h("div", { class: "kicker" }, t("Reviews overdue")),
+        h("div", { class: "mono strong" + (tot.overdue ? " bad" : "") }, String(tot.overdue)))),
+
+    /* Ce qui n'est PAS dans le total, dit à voix haute plutôt que
+       silencieusement absent. */
+    tot.excludedBenefits
+      ? h("div", { class: "xs muted", style: "margin-bottom:12px;max-width:70ch" },
+          t("The totals above sum money only. ") + tot.excludedBenefits
+          + t(" benefit(s) are counted in their own units and deliberately left out of any total: ")
+          + tot.excludedUnits.join(", ")
+          + t(". Converting them to a currency would invent a number."))
+      : null,
+
+    v.rows.length ? table({
+      cols: [
+        { key: "p", label: t("Project"), get: (r) => h("div", null,
+            h("div", { class: "small strong truncate" }, r.name),
+            h("div", { class: "xs muted mono" }, r.project + (r.closed ? " · " + t("closed") : ""))) },
+        { key: "c", label: t("The case"), get: (r) => !r.case
+            ? h("span", { class: "xs muted" }, r.benefits.length ? t("benefits, but no case") : t("nothing promised"))
+            : h("div", null,
+                h("div", { class: "mono small" }, money(r.case.expectedCost) + " → " + money(r.case.expectedBenefit)),
+                h("div", { class: "xs muted" },
+                  r.case.reconfirmedGate ? t("reconfirmed at gate ") + r.case.reconfirmedGate : t("never reconfirmed"),
+                  r.case.staleSinceReconfirm ? h("span", { class: "bad" }, t(" · revised since")) : null)) },
+        { key: "b", label: t("What was measured"), get: (r) => !r.benefits.length
+            ? h("span", { class: "xs muted" }, r.case ? t("no benefit named yet") : "—")
+            : h("div", null, r.benefits.map((b) => h("div", { class: "xs", style: "margin-bottom:2px" },
+                h("span", { class: "strong" }, b.title),
+                h("span", { class: "muted" },
+                  " · " + num(b.baseline, b.unit) + " → " + num(b.target, b.unit)
+                  + " · " + (b.actual == null ? t("not measured") : t("now ") + num(b.actual, b.unit))
+                  + (b.attainment != null ? " · " + Math.round(b.attainment * 100) + "%" : "")),
+                b.reviewAgeDays != null && b.reviewAgeDays > 0
+                  ? h("span", { class: "bad" }, " · " + t("review ") + b.reviewAgeDays + t(" days overdue"))
+                  : !b.realiseOn ? h("span", { class: "muted" }, " · " + t("undated")) : null))) },
+      ],
+      rows: v.rows,
+      empty: t("No project in scope."),
+    }) : null);
+}
+
 Views.reports = (db) => {
   const list = App.scopedProjects();
   const roll = Engine.roll(db, list);
@@ -4425,15 +5817,22 @@ Views.reports = (db) => {
   const ms = list.map(p => Engine.metrics(db, p.id)).filter(m => m.measurable);
   const redSched = ms.filter(m => m.spi < st.redSpi).length;
   const redCost = ms.filter(m => m.cpi < st.redCpi).length;
+  /* REQ-33 — un indice ABSENT n'est ni rouge, ni ambre, ni vert. Sans
+     cette branche, `null < 0.9` est faux et la ligne repartait en vert
+     sur un portefeuille dont rien n'est mesuré. */
   const band = (v, red, amber, nRed) =>
-    v < red || nRed >= 2 ? "R" : v < amber || nRed >= 1 ? "A" : "G";
+    v == null ? "N" : v < red || nRed >= 2 ? "R" : v < amber || nRed >= 1 ? "A" : "G";
   const spread = (n, what) => n ? " · " + n + " project" + (n === 1 ? "" : "s") + " below the red " + what + " line" : "";
 
   const rag = [
     { dim: "Schedule", rag: band(roll.spi, st.redSpi, st.amberSpi, redSched),
-      note: "Portfolio SPI " + idx(roll.spi) + spread(redSched, "SPI") },
+      note: roll.spi == null
+        ? "Nothing is measured — " + roll.count + " project(s) carry no budget or no reported progress"
+        : "Portfolio SPI " + idx(roll.spi) + spread(redSched, "SPI") },
     { dim: "Cost", rag: band(roll.cpi, st.redCpi, st.amberCpi, redCost),
-      note: "CPI " + idx(roll.cpi) + " · forecast " + signedMoney(roll.vac) + " against budget" + spread(redCost, "CPI") },
+      note: roll.cpi == null
+        ? "Nothing is measured — no cost index can be stated"
+        : "CPI " + idx(roll.cpi) + " · forecast " + signedMoney(roll.vac) + " against budget" + spread(redCost, "CPI") },
     { dim: "Scope", rag: pendingCRs.length > 2 ? "A" : "G",
       note: pendingCRs.length + " change requests awaiting a decision" },
     { dim: "Risk", rag: worst >= st.escalateExposure ? "R" : worst >= st.pmoExposure ? "A" : "G",
@@ -4488,6 +5887,11 @@ Views.reports = (db) => {
        here rather than recomputed. */
     periodBlock(db),
 
+    /* V-4 — la promesse contre le réalisé, sur la même page que l'état.
+       Les deux moitiés vivaient dans deux tables que le produit ne
+       mettait jamais sur une même ligne. */
+    valueReportBlock(db, list),
+
     h("div", { style: "height:20px" }), h("hr", { class: "hr" }), h("div", { style: "height:20px" }),
 
     h("div", { style: "display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--rule-1)" },
@@ -4495,7 +5899,8 @@ Views.reports = (db) => {
         h("div", { class: "kicker" }, r.dim),
         h("div", { style: "display:flex;align-items:center;gap:8px;margin:7px 0 5px" },
           h("span", { class: "dot", style: { width: "14px", height: "14px",
-            background: r.rag === "R" ? "var(--sig-red)" : r.rag === "A" ? "var(--sig-amber)" : "var(--sig-green)" } }),
+            background: r.rag === "R" ? "var(--sig-red)" : r.rag === "A" ? "var(--sig-amber)"
+              : r.rag === "G" ? "var(--sig-green)" : "var(--muted)" } }),
           h("span", { class: "num", style: "font-size:16px" }, RAG_LABEL[r.rag])),
         h("div", { class: "xs muted" }, tData(r.note))))),
 
@@ -4583,7 +5988,13 @@ Views.reports = (db) => {
        Group level and above, like the audit trail it reads. */
     ...(["admin", "group"].includes(App.me.role) ? [
       h("div", { style: "height:26px" }),
-      sectionHead("Decision register", "consequential decisions, newest first"),
+      sectionHead("Decision register", "consequential decisions, newest first",
+        /* I-7 — a decision taken by whoever holds the authority, between
+           two meetings, is a decision. It is recorded here, not smuggled
+           into an artificial occurrence. */
+        App.can("project.write", { project: firstWritable(db) }) || App.me.role === "group" || App.isAdmin
+          ? h("button", { class: "btn btn-sm", onClick: () => recordDecision(db) }, icon("plus", 12), t("Record a decision"))
+          : null),
       (() => {
         const reg = liveFetch("register", () => api.get("/decisions/log"), (r) => {
           const controls = (r.register || []).map(x => ({
@@ -4592,8 +6003,13 @@ Views.reports = (db) => {
           }));
           const minuted = (r.minuted || []).map(x => ({
             on: String(x.on).slice(0, 10),
-            what: (x.referred ? "REFERRED to " + x.referred + " · " : "Decision · ") + x.headline,
-            detail: x.series + (x.rationale ? " — " + x.rationale : ""), by: x.by || "—", scope: x.scope,
+            what: (x.referred ? "REFERRED to " + x.referred + " · " : x.kind === "standalone" ? x.id + " · " : "Decision · ") + x.headline,
+            detail: (x.series || t("outside a meeting")) + (x.project ? " · " + x.project : "") +
+              (x.rationale ? " — " + x.rationale : "") +
+              (x.alternatives ? " · " + t("alternatives: ") + x.alternatives : "") +
+              (x.dissent ? " · " + t("dissent: ") + x.dissent : "") +
+              (x.supersedes ? " · " + t("supersedes ") + x.supersedes : ""),
+            by: (x.byName || x.council || x.by || "—") + (x.status === "Proposed" ? " · " + t("proposed") : ""), scope: x.scope,
           }));
           return controls.concat(minuted).sort((a, b) => b.on.localeCompare(a.on)).slice(0, 30);
         });
@@ -4614,7 +6030,13 @@ Views.reports = (db) => {
       })(),
     ] : []));
 
-  return report;
+  /* REQ-30 — the executive's page leads: the request's own sentence is
+     that the portfolio view answers "is it on time and on budget" and
+     nobody can answer "is it worth it". It is its own <section> because
+     it is its own PAGE: the print rules hide everything else when it is
+     printed, and a section that lived inside the status report could not
+     be printed alone. */
+  return h("div", null, valuePageSection(db), report);
 };
 
 function editBlock(db, b) {
@@ -4856,6 +6278,11 @@ Views.admin = (db) => {
       h("div", { style: "height:22px" }), h("hr", { class: "hr" }), h("div", { style: "height:18px" }),
       sectionHead("Reporting"),
       h("div", { class: "form-grid" },
+        h("div", { class: "field" }, h("label", null, "Instance identifier"),
+          h("input", { class: "input input-sm", value: db.settings.instanceId ?? "", placeholder: "prod-eu-1",
+            title: "What /api/health reports as instance.id — for a fleet that supervises several instances",
+            onChange: (e) => App.write("Instance identifier changed",
+              (a) => a.patch("/admin/settings", { instanceId: e.target.value.trim() }), { quiet: true }) })),
         h("div", { class: "field" }, h("label", null, "Organisation name"),
           h("input", { class: "input input-sm", value: db.orgName,
             onChange: e => App.write("Organisation renamed",
@@ -4939,15 +6366,19 @@ Views.admin = (db) => {
         federationPanel()) : null,
 
       h("div", { style: "height:22px" }), h("hr", { class: "hr" }), h("div", { style: "height:18px" }),
-      sectionHead("The gate model", "evidence required at each gate"),
-      table({
-        cols: [
-          { key: "n", label: "Gate", align: "c", width: "46px", get: g => h("span", { class: "num" }, String(g.n)) },
-          { key: "name", label: "Gate", get: g => h("span", { class: "strong small" }, g.name.split("—")[1].trim()) },
-          { key: "e", label: "Evidence", get: g => h("span", { class: "xs muted" }, g.evidence) },
-          { key: "o", label: "Owner", align: "r", get: g => h("span", { class: "small" }, g.owner) },
-        ], rows: GATES,
-      }),
+      sectionHead("The gate model", ladderNote(db)),
+      ...laddersOf(db).map(({ label, ladder }) => h("div", { style: "margin-bottom:12px" },
+        h("div", { class: "kicker", style: "margin:6px 0 4px" }, label),
+        table({
+          cols: [
+            { key: "n", label: "Gate", align: "c", width: "46px", get: g => h("span", { class: "num" }, String(g.n)) },
+            { key: "name", label: "Gate", get: g => h("span", { class: "strong small" }, (g.name.split("—")[1] ?? g.name).trim()) },
+            { key: "e", label: "Evidence", get: g => h("span", { class: "xs muted" }, g.evidence) },
+            { key: "o", label: "Owner", align: "r", get: g => h("span", { class: "small" }, g.owner) },
+          ], rows: ladder,
+        }))),
+      h("div", { class: "xs muted", style: "margin:-4px 0 14px;max-width:66ch" },
+        t("A programme declares its own ladder from Reference data → programme. Projects take their programme's ladder when they are created; changing a ladder later leaves existing projects as they are.")),
 
       h("div", { style: "height:22px" }), h("hr", { class: "hr" }), h("div", { style: "height:18px" }),
       sectionHead("Data", "held in PostgreSQL · every change attributed and audited"),
@@ -5024,6 +6455,266 @@ Views.meetings = (db) => meetingsView(db);
    R7.3 — a control the account has no authority for is absent, not
    greyed out. Each entry returns null when the account cannot do it, and
    the shell simply does not draw a button. */
+
+/* ── PM-05 · the stakeholder register (I-10) ───────────────────────── */
+const ATTITUDES = ["Champion", "Supporter", "Neutral", "Sceptic", "Opponent"];
+const ENGAGEMENTS = ["Inform", "Consult", "Involve", "Partner"];
+function stakeholderBlock(db, p, rows) {
+  const canEdit = mayWrite(p) && !fromSdp(p);
+  return h("div", null,
+    sectionHead("Stakeholders", t("interest × influence, attitude, and who owns the relationship"),
+      canEdit ? h("button", { class: "btn btn-sm", onClick: () => stakeholderDialog(db, p, null) }, icon("plus", 12), t("Stakeholder")) : null),
+    rows.length ? table({
+      cols: [
+        { key: "n", label: t("Who"), get: x => h("div", null,
+            h("div", { class: "strong small" }, x.name),
+            h("div", { class: "xs muted" }, [x.role, x.organisation].filter(Boolean).join(" · "))) },
+        { key: "g", label: t("Interest / influence"), align: "c", width: "120px",
+          get: x => h("span", { class: "mono small" }, x.interest + " / " + x.influence) },
+        { key: "a", label: t("Attitude"), width: "110px", get: x => tag(t(x.attitude),
+            x.attitude === "Opponent" || x.attitude === "Sceptic" ? "tag-acc" : x.attitude === "Champion" ? "tag-soft" : "tag-out") },
+        { key: "e", label: t("Engagement"), width: "100px", get: x => h("span", { class: "small" }, t(x.engagement)) },
+        { key: "o", label: t("Owner"), get: x => h("span", { class: "small muted" }, x.owner ? Engine.personName(db, x.owner) : "—") },
+        { key: "x", label: "", align: "r", width: "80px", get: x => !canEdit ? null
+          : h("div", { class: "btn-row", style: "justify-content:flex-end" },
+              h("button", { class: "btn btn-xs btn-ghost", onClick: () => stakeholderDialog(db, p, x) }, icon("pencil", 11)),
+              h("button", { class: "btn btn-xs btn-ghost", onClick: () => App.write("Stakeholder removed", (a) => a.del("/stakeholders/" + x.id), { detail: x.name }) }, icon("trash", 11))) },
+      ], rows,
+      empty: t("No stakeholder named yet."),
+    }) : h("div", { class: "small muted" },
+      t("No stakeholder named. The most frequent cause of failure on a multi-site project leaves no trace here until somebody writes a name.")));
+}
+function stakeholderDialog(db, p, x) {
+  formDialog({
+    title: x ? t("Edit stakeholder") : t("Name a stakeholder"), kicker: p.id, wide: true,
+    fields: [
+      { key: "name", label: t("Name"), required: true, span: 2, value: x ? x.name : "",
+        hint: t("A person or an organisation — a regulator, a supplier, a works council count.") },
+      { key: "person", label: t("In the directory"), type: "select", value: x?.person ?? "",
+        options: [{ value: "", label: t("Not in the directory") }].concat(db.people.map(q => ({ value: q.id, label: q.name }))) },
+      { key: "organisation", label: t("Organisation"), value: x?.organisation ?? "" },
+      { key: "role", label: t("Role"), value: x?.role ?? "" },
+      { key: "interest", label: t("Interest (1–5)"), type: "number", min: 1, max: 5, value: x?.interest ?? 3,
+        hint: t("How much the outcome matters to them.") },
+      { key: "influence", label: t("Influence (1–5)"), type: "number", min: 1, max: 5, value: x?.influence ?? 3,
+        hint: t("How much they can change the outcome.") },
+      { key: "attitude", label: t("Attitude"), type: "select", value: x?.attitude ?? "Neutral",
+        options: ATTITUDES.map(a => ({ value: a, label: t(a) })) },
+      { key: "engagement", label: t("Engagement"), type: "select", value: x?.engagement ?? "Inform",
+        options: ENGAGEMENTS.map(a => ({ value: a, label: t(a) })),
+        hint: t("Inform: they hear. Consult: they are asked. Involve: they shape it. Partner: they decide with you.") },
+      { key: "owner", label: t("Relationship owner"), type: "select", value: x?.owner ?? db.currentUser ?? "",
+        options: [{ value: "", label: "—" }].concat(db.people.map(q => ({ value: q.id, label: q.name }))) },
+      { key: "note", label: t("Note"), type: "textarea", rows: 2, span: 2, value: x?.note ?? "",
+        hint: t("What they want, what they fear, what was agreed with them — read by whoever takes over.") },
+    ],
+    saveLabel: x ? t("Save") : t("Add stakeholder"),
+    onSave: (v) => App.write(x ? "Stakeholder updated" : "Stakeholder added", (a) => {
+      const body = { name: v.name, person: v.person || null, organisation: v.organisation, role: v.role,
+        interest: +v.interest, influence: +v.influence, attitude: v.attitude, engagement: v.engagement,
+        owner: v.owner || null, note: v.note };
+      return x ? a.patch("/stakeholders/" + x.id, { ...body, version: x.version })
+               : a.post("/stakeholders", { ...body, project: p.id });
+    }, { detail: v.name }),
+  });
+}
+
+/* ── PM-11 · the communication plan (I-10) ─────────────────────────── */
+function commsBlock(db, p, rows) {
+  const canEdit = mayWrite(p) && !fromSdp(p);
+  return h("div", null,
+    sectionHead("Communication plan", t("who hears what, how often, from whom"),
+      canEdit ? h("button", { class: "btn btn-sm", onClick: () => commsDialog(db, p, null) }, icon("plus", 12), t("Audience")) : null),
+    rows.length ? table({
+      cols: [
+        { key: "a", label: t("Audience"), get: x => h("div", null,
+            h("div", { class: "strong small" }, x.audience),
+            x.purpose ? h("div", { class: "xs muted" }, x.purpose) : null) },
+        { key: "c", label: t("Channel"), get: x => h("span", { class: "small" }, x.channel || "—") },
+        { key: "f", label: t("Frequency"), get: x => h("span", { class: "small" }, x.frequency || "—") },
+        { key: "o", label: t("Owner"), get: x => h("span", { class: "small muted" }, x.owner ? Engine.personName(db, x.owner) : "—") },
+        { key: "n", label: t("Next"), align: "r", get: x => h("span", { class: "mono small" + (x.nextOn && D(x.nextOn) < D(db.statusDate) ? " bad strong" : "") }, x.nextOn ? fmtDate(x.nextOn) : "—") },
+        { key: "x", label: "", align: "r", width: "80px", get: x => !canEdit ? null
+          : h("div", { class: "btn-row", style: "justify-content:flex-end" },
+              h("button", { class: "btn btn-xs btn-ghost", onClick: () => commsDialog(db, p, x) }, icon("pencil", 11)),
+              h("button", { class: "btn btn-xs btn-ghost", onClick: () => App.write("Communication removed", (a) => a.del("/comms/" + x.id), { detail: x.audience }) }, icon("trash", 11))) },
+      ], rows,
+      empty: t("No audience planned yet."),
+    }) : h("div", { class: "small muted" },
+      t("No communication planned. The meetings and the digest carry most of it in practice; the plan says who else must hear, and when.")));
+}
+function commsDialog(db, p, x) {
+  formDialog({
+    title: x ? t("Edit communication") : t("Plan a communication"), kicker: p.id, wide: true,
+    fields: [
+      { key: "audience", label: t("Audience"), required: true, span: 2, value: x?.audience ?? "",
+        hint: t("Who must hear: a committee, a site, a supplier, the users of a branch.") },
+      { key: "purpose", label: t("What they need to know"), span: 2, value: x?.purpose ?? "",
+        hint: t("The message, in one line — status, a decision owed, a date that moves.") },
+      { key: "channel", label: t("Channel"), value: x?.channel ?? "", placeholder: t("weekly call, e-mail, town hall…") },
+      { key: "frequency", label: t("Frequency"), value: x?.frequency ?? "", placeholder: t("weekly, at each gate, once…") },
+      { key: "owner", label: t("Owner"), type: "select", value: x?.owner ?? db.currentUser ?? "",
+        options: [{ value: "", label: "—" }].concat(db.people.map(q => ({ value: q.id, label: q.name }))) },
+      { key: "nextOn", label: t("Next"), type: "date", value: x?.nextOn ?? "" },
+      { key: "note", label: t("Note"), type: "textarea", rows: 2, span: 2, value: x?.note ?? "",
+        hint: t("What was said last time, or what must not be said yet — read by whoever sends the next one.") },
+    ],
+    saveLabel: x ? t("Save") : t("Plan it"),
+    onSave: (v) => App.write(x ? "Communication updated" : "Communication planned", (a) => {
+      const body = { audience: v.audience, purpose: v.purpose, channel: v.channel, frequency: v.frequency,
+        owner: v.owner || null, nextOn: v.nextOn || null, note: v.note };
+      return x ? a.patch("/comms/" + x.id, { ...body, version: x.version })
+               : a.post("/comms", { ...body, project: p.id });
+    }, { detail: v.audience }),
+  });
+}
+
+/* I-3 — the ladders in the book: the default, then every programme that
+   declares its own. Shown by name so nobody has to guess which ladder a
+   project walks. */
+function laddersOf(db) {
+  const custom = (db.programmes || []).filter(pr => Array.isArray(pr.gateModel) && pr.gateModel.length);
+  const out = [{ label: custom.length ? t("Default ladder") : t("Every programme"), ladder: GATES }];
+  for (const pr of custom) out.push({ label: pr.name + " (" + pr.id + ")", ladder: pr.gateModel });
+  return out;
+}
+const ladderNote = (db) => {
+  const n = (db.programmes || []).filter(pr => Array.isArray(pr.gateModel) && pr.gateModel.length).length;
+  return n ? n + " " + t("programme(s) with their own ladder") : t("evidence required at each gate");
+};
+
+/* I-4 — the criteria of a gate, and the named reviewer who found each met.
+   Drawn under "Milestones & gates" for the gate that is next. */
+function criteriaBlock(db, p, current) {
+  /* The current gate first, then every later gate that already carries
+     criteria (a declared ladder poses them all at birth — the code
+     counsellor found eight of them invisible until their gate came). */
+  const ladder = Engine.gates(db, p.id);
+  const gates = ladder.filter(g => g.n === current.n || (db.criteria || []).some(c => c.project === p.id && c.gate === g.n && g.n > current.n))
+    .map(g => g.n === current.n ? current : { ...g, ...Engine.gateStatus(db, p.id, g.n) });
+  return h("div", null, gates.map(g => criteriaGate(db, p, g)));
+}
+function criteriaGate(db, p, gate) {
+  const rows = gate.criteria || [];
+  const canPose = may("document.write", p) && !fromSdp(p);
+  const canFind = may("document.approve", p);
+  const head = h("div", { style: "display:flex;justify-content:space-between;align-items:baseline;margin:14px 0 6px" },
+    h("div", { class: "kicker" }, t("Criteria for ") + gate.name + " · " + (gate.criteriaMet ?? 0) + "/" + rows.length + " " + t("found met")),
+    canPose ? h("button", { class: "btn btn-xs", onClick: () => poseCriterion(db, p, gate.n) }, icon("plus", 11), t("Criterion")) : null);
+  if (!rows.length) {
+    return h("div", null, head, h("div", { class: "xs muted" },
+      t("No criterion posed for this gate. Evidence alone clears it; a criterion says what the evidence must prove.")));
+  }
+  return h("div", null, head, rows.map(c => h("div", { class: "list-row", style: "align-items:flex-start" },
+    h("span", { class: "step-i " + (c.met ? "ok" : "wait"), style: "flex:none" }, c.met ? "✓" : String(c.seq + 1)),
+    h("div", { style: "flex:1;min-width:0" },
+      h("div", { class: "small" }, c.text),
+      h("div", { class: "xs muted" },
+        c.met ? t("found met by ") + Engine.personName(db, c.reviewedBy) + " · " + fmtDate(c.reviewedOn) : t("not yet found met"),
+        c.document ? " · " + ((db.docs.find(d => d.id === c.document) || {}).name || c.document) : "",
+        c.note ? " · " + c.note : "")),
+    h("div", { class: "btn-row", style: "justify-content:flex-end" },
+      canFind && !c.met ? h("button", { class: "btn btn-xs btn-primary", onClick: () => findCriterionMet(db, p, c) }, t("Found met")) : null,
+      canFind && c.met ? h("button", { class: "btn btn-xs btn-ghost", title: t("Reopen"), onClick: () => App.write("Gate criterion reopened",
+        (a) => a.patch("/criteria/" + c.id, { met: false, version: c.version }), { detail: c.text }) }, "↺") : null,
+      canPose ? h("button", { class: "btn btn-xs btn-ghost", title: t("Edit criterion"), onClick: () => editCriterion(db, p, c) }, icon("pencil", 11)) : null,
+      canPose && !c.met ? h("button", { class: "btn btn-xs btn-ghost", title: t("Remove criterion"),
+        onClick: () => App.write("Gate criterion removed", (a) => a.del("/criteria/" + c.id), { detail: c.text }) }, icon("trash", 11)) : null))));
+}
+function poseCriterion(db, p, gateN) {
+  formDialog({
+    title: t("Pose a criterion"), kicker: p.id + " · " + t("gate") + " " + gateN,
+    fields: [
+      { key: "text", label: t("What must be true"), required: true, span: 2, value: "",
+        hint: t("One testable sentence, written before the evidence. A reviewer will say whether it holds.") },
+    ],
+    saveLabel: t("Pose"),
+    onSave: (v) => App.write("Gate criterion posed", (a) => a.post("/criteria", { project: p.id, gate: gateN, text: v.text }), { detail: v.text }),
+  });
+}
+function editCriterion(db, p, c) {
+  formDialog({
+    title: t("Edit criterion"), kicker: c.id,
+    fields: [
+      { key: "text", label: t("What must be true"), required: true, span: 2, value: c.text,
+        hint: t("One testable sentence, written before the evidence. A reviewer will say whether it holds.") },
+      { key: "document", label: t("Evidence document"), type: "select", span: 2, value: c.document ?? "",
+        options: [{ value: "", label: "—" }].concat(db.docs.filter(d => d.project === p.id).map(d => ({ value: d.id, label: d.name + " · G" + d.gate }))) },
+      { key: "note", label: t("Note"), span: 2, value: c.note ?? "",
+        hint: t("Where to look, or why it was reformulated — read by the reviewer, months later.") },
+    ],
+    saveLabel: t("Save criterion"),
+    onSave: (v) => App.write("Gate criterion updated", (a) => a.patch("/criteria/" + c.id,
+      { text: v.text, document: v.document || null, note: v.note, version: c.version }), { detail: v.text }),
+  });
+}
+function findCriterionMet(db, p, c) {
+  const doc = c.document ? db.docs.find(d => d.id === c.document) : null;
+  formDialog({
+    title: t("Found met"), kicker: c.text,
+    message: doc ? t("The evidence cited is ") + doc.name + t(", owned by ") + Engine.personName(db, doc.owner) + ". " : "",
+    fields: [
+      { key: "reviewedBy", label: t("Reviewed by"), type: "select", required: true, value: db.currentUser ?? "",
+        hint: t("The named person who checked it — not the owner of the evidence it cites. The name stays."),
+        options: db.people.filter(x => !doc || x.id !== doc.owner).map(x => ({ value: x.id, label: x.name })) },
+    ],
+    saveLabel: t("Found met"),
+    onSave: (v) => App.write("Gate criterion met", (a) => a.patch("/criteria/" + c.id,
+      { met: true, reviewedBy: v.reviewedBy, version: c.version }), { detail: c.text }),
+  });
+}
+
+/* I-7 — the decision outside a meeting (retour de terrain RT365). Alternatives
+   and dissent are what a register loses first and what an auditor asks
+   for last; a decision that changes is a NEW decision naming the one it
+   supersedes — nothing here is edited or deleted. */
+function recordDecision(db) {
+  const writable = db.projects.filter((p) => mayWrite(p));
+  const groupLevel = App.isAdmin || App.me.role === "group";
+  formDialog({
+    title: t("Record a decision"), kicker: t("Decision register"), wide: true,
+    fields: [
+      { key: "headline", label: t("Decision"), required: true, span: 2, value: "",
+        hint: t("One sentence, in the past tense, that someone will read in a year without the context.") },
+      { key: "project", label: t("Project"), type: "select", span: 2, value: writable[0]?.id ?? "",
+        options: (groupLevel ? [{ value: "", label: t("Portfolio-wide (group level)") }] : [])
+          .concat(writable.map((p) => ({ value: p.id, label: p.id + " · " + p.name }))) },
+      { key: "decidedBy", label: t("Decided by"), type: "select", value: db.currentUser ?? "",
+        options: [{ value: "", label: t("A body, not a person (name it below)") }].concat(db.people.map((p) => ({ value: p.id, label: p.name }))) },
+      { key: "decidedOn", label: t("Decided on"), type: "date", value: db.statusDate },
+      { key: "council", label: t("Deciding body"), value: "",
+        hint: t("When a committee decided rather than one person: its name, as the minutes call it. Either a person or a body is required.") },
+      { key: "status", label: t("Status"), type: "select", value: "Ratified",
+        options: [{ value: "Ratified", label: t("Ratified") }, { value: "Proposed", label: t("Proposed — awaiting ratification") }] },
+      { key: "evidenceUri", label: t("Record of the decision"), span: 2, value: "", placeholder: "https://…", advanced: true,
+        hint: t("The minutes, the gate report, the page where the decision is written down — a link a reader can open.") },
+      { key: "provenance", label: t("Provenance"), value: "", advanced: true, placeholder: "[Committee] · [Owner instruction] · [Verified]",
+        hint: t("Where the authority for it comes from, in your organisation's own tags.") },
+      { key: "rationale", label: t("Why"), type: "textarea", rows: 3, span: 2, value: "",
+        hint: t("The reasoning, so the committee can read it back without the person who wrote it.") },
+      { key: "alternatives", label: t("Alternatives considered"), type: "textarea", rows: 2, span: 2, value: "", advanced: true,
+        hint: t("What was refused, and why. A register that keeps only the winner cannot explain the choice.") },
+      { key: "dissent", label: t("Dissent"), type: "textarea", rows: 2, span: 2, value: "", advanced: true,
+        hint: t("Who disagreed, and on what. Recorded dissent protects the dissenter and the decision alike.") },
+      { key: "raidId", label: t("Register item"), type: "select", value: "", advanced: true,
+        options: [{ value: "", label: "—" }].concat(db.raid.filter((r) => r.status === "Open").map((r) => ({ value: r.id, label: r.id + " · " + r.title }))) },
+      { key: "milestoneId", label: t("Milestone or gate"), type: "select", value: "", advanced: true,
+        options: [{ value: "", label: "—" }].concat(db.milestones.map((m) => ({ value: m.id, label: m.id + " · " + m.name }))) },
+      { key: "crId", label: t("Change request"), type: "select", value: "", advanced: true,
+        options: [{ value: "", label: "—" }].concat(db.crs.map((c) => ({ value: c.id, label: c.id + " · " + c.title }))) },
+      { key: "supersedes", label: t("Supersedes decision"), value: "", advanced: true,
+        hint: t("The identifier of the decision this one replaces, e.g. DEC-012. That one stays on the record.") },
+    ],
+    saveLabel: t("Record"),
+    onSave: (v) => App.write("Decision recorded", (a) => a.post("/decisions", {
+      headline: v.headline, projectId: v.project || null, decidedBy: v.decidedBy || null, decidedOn: v.decidedOn,
+      council: v.council, status: v.status, evidenceUri: v.evidenceUri, provenance: v.provenance,
+      rationale: v.rationale, alternatives: v.alternatives, dissent: v.dissent,
+      raidId: v.raidId || null, milestoneId: v.milestoneId || null, crId: v.crId || null,
+      supersedes: v.supersedes || null,
+    }), { detail: v.headline }).then((ok) => { if (ok !== false) { delete live.data.register; App.emit(); } return ok; }),
+  });
+}
 
 const firstWritable = (db) => db.projects.find((p) => mayWrite(p)) ?? null;
 

@@ -11,11 +11,43 @@ import assert from "node:assert/strict";
 import { boot, shutdown, as, GROUP_PROJECT, SITE_PROJECT_GRU } from "./harness.js";
 import { many, one, query, tx, migrate, engine } from "../src/db.js";
 import { fromM, M } from "../src/portfolio.js";
+import { RESET_LISTS } from "../src/reset-book.js";
 
 before(async () => { await boot(); });
 after(async () => { await shutdown(); });
 
 describe("schema and migrations (R2.2, R2.7)", () => {
+  /* This repository now keeps FIVE hand-written lists of things the
+     product owns — F1's router map, F2's entity map, and reset-book's
+     keep/clear pair — and every one of them has the same blind spot: a
+     thing the list does not name is not reported as missing, it is
+     simply not seen. That has cost a release four times.
+
+     reset-book's guard is the worst of the four, because it fires only
+     at reset time AND only when the forgotten table happens to hold a
+     row. A book that had stored a value page could not be reset at all,
+     and no suite noticed, because no suite stores a page and resets the
+     same book. This test does not check that instance; it checks the
+     class, and it fires the moment a migration adds a table. */
+  test("every table the migrations create is either cleared or declared kept (reset-book)", async () => {
+    const live = (await many(
+      `SELECT table_name AS tbl FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_type = 'BASE TABLE'`
+    )).map((r) => r.tbl).sort();
+
+    const named = new Set([...RESET_LISTS.keep, ...RESET_LISTS.clear]);
+    const unseen = live.filter((t) => !named.has(t));
+    assert.deepEqual(unseen, [],
+      "a migration created a table that reset-book neither clears nor keeps — " +
+      "add it to one of the two lists WITH the reason, as every other line there has");
+
+    /* And the reverse: a list that names a table nobody has created any
+       more is a line whose reason has quietly stopped applying. */
+    const gone = [...named].filter((t) => !live.includes(t) && t !== "schema_migration");
+    assert.deepEqual(gone.sort(), [],
+      "reset-book names a table that no longer exists");
+  });
+
   test("the engine really is PostgreSQL", async () => {
     const v = await one(`SELECT version() AS v`);
     assert.match(v.v, /PostgreSQL/);
@@ -32,7 +64,28 @@ describe("schema and migrations (R2.2, R2.7)", () => {
        "016_timesheet.sql", "017_absence_minimisation.sql",
        "018_notification_centre.sql", "019_notification_subscription.sql",
        "020_evidence_probe.sql", "021_usage_counters.sql",
-       "022_site_champion.sql", "023_session_digest.sql", "024_lessons.sql", "025_integrations.sql", "026_tolerance.sql", "027_international.sql", "028_business_case.sql", "029_reporting_views.sql", "030_residual_risk.sql", "031_outbound_events.sql", "032_closure_quality.sql", "033_change_raiser_account.sql"]);
+       "022_site_champion.sql", "023_session_digest.sql", "024_lessons.sql", "025_integrations.sql", "026_tolerance.sql", "027_international.sql", "028_business_case.sql", "029_reporting_views.sql", "030_residual_risk.sql", "031_outbound_events.sql", "032_closure_quality.sql", "033_change_raiser_account.sql",
+       "034_decision_register.sql", "035_write_api.sql", "036_gate_ladder.sql", "037_gate_criteria.sql",
+       "038_stakeholders_comms.sql", "039_decision_record.sql", "040_milestone_basis.sql",
+       "041_decision_versioned.sql", "042_value_on_the_contract.sql",
+       "043_ladder_reaches_everything.sql", "044_wave_is_a_site.sql",
+       "045_what_a_row_rests_on.sql",
+       /* 046 - REQ-24, the weighting of the portfolio ranking;
+          047 - REQ-27, a project moves onto its programme ladder. */
+       "046_what_we_choose_not_to_do.sql",
+       "047_a_project_moves_onto_its_ladder.sql",
+       /* 048 - REQ-30, the value page and its snapshot per reporting
+          period: report_value and report_value_figure hang off
+          report_period, so there is one period concept and not two. */
+       "048_what_it_was_worth.sql",
+       /* 049 - REQ-45 and REQ-47, the two clocks the product asked for
+          and never wrote down: the day a gate was marked done (with or
+          without acceptance criteria) and the day a decision became
+          ratified. 050 - REQ-46, a RAID review is an event with a date
+          and a reviewer; the next-due date is derived from the last one
+          rather than replacing it. */
+       "049_when_it_was_passed.sql",
+       "050_a_review_is_an_event.sql"]);
     const again = await migrate({ silent: true });
     assert.deepEqual(again, [], "a second run applies nothing");
   });

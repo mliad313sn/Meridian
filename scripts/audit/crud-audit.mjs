@@ -101,10 +101,63 @@ const ENTITIES = {
     d: /grants\/revoke/ },
   session: { c: /post\("\/login"/, u: NA("Sessions are not edited"), d: /post\("\/logout"/ },
   app_setting: { c: /patch\("\/settings"/, u: /patch\("\/settings"/, d: NA("Settings have defaults, not absence") },
+  /* REQ-24 — the weighting the portfolio ranks by. Its single row is
+     posed by migration 046, which is why it has no create route and why
+     reset-book keeps it: a book with no weighting has no order at all.
+     It is here because a table this map does not name is INVISIBLE to
+     this gate — the same blind spot F1 had for a router it did not
+     name, found twice in two waves. */
+  /* REQ-46 (050) — a review HAPPENED: it is recorded, read back,
+     corrected, and withdrawn when it was written in error (on the wrong
+     row, or twice). Withdrawing is not deletion-because-it-is-awkward:
+     the whole event is the audit row's before-image, and the due date
+     that comes back is the one that review found in place. */
+  /* REQ-30 (048) — la page de valeur déposée pour une période. Le
+     dépôt est le create ; il n'y a ni update ni delete parce que ce
+     qu'on a dit au conseil est un RECORD, corrigé par une période qui
+     restate, jamais réécrit. */
+  report_value: { c: /post\("\/valuepage\/:periodId"/,
+    u: NA("Append-only (REQ-30) — corrected by a new period that restates this one, with its own value page"),
+    d: NA("Append-only (REQ-30) — what the board was told it was worth is a record") },
+  report_value_figure: { c: /post\("\/valuepage\/:periodId"/,
+    u: NA("Append-only (REQ-30) — frozen with the page it belongs to"),
+    d: NA("Append-only (REQ-30) — frozen with the page it belongs to") },
+  raid_review: { c: /post\("\/raid\/:id\/reviews"/, u: /patch\("\/raid\/reviews\/:id"/,
+    d: /delete\("\/raid\/reviews\/:id"/ },
+  prioritisation_weighting: {
+    c: NA("One row, posed by migration 046 — a portfolio has one weighting, never a second"),
+    u: /patch\("\/prioritisation\/weighting"/,
+    d: NA("Removing it would leave the portfolio with no order; the way back is to restore the shipped weights") },
   audit_event: { c: NA("Written by audited(), never by a route"), u: NA("Append-only (R6.2)"),
     d: NA("Append-only (R6.2)") },
 
   ext_link: { c: /post\("\/links"/, u: /patch\("\/links\/:id"/, d: /delete\("\/links\/:id"/ },
+  /* I-2 — la mémoire d'idempotence d'une intégration : écrite par le
+     garde, rejouée telle quelle, purgée à trente jours. Rien à corriger
+     à la main — corriger une réponse enregistrée serait mentir au tiers. */
+  idempotency_key: { c: /put\("\/(projects|raid)\/:externalId"/,
+    u: NA("A recorded answer is replayed as it was — editing it would lie to the caller"),
+    d: NA("Purged after thirty days by the hourly sweep") },
+
+  /* I-4 — un critère se pose, se reformule, se tient (réviseur nommé) et,
+     tant qu'il n'est pas tenu, se retire. */
+  gate_criterion: { c: /post\("\/criteria"/, u: /patch\("\/criteria\/:id"/, d: /delete\("\/criteria\/:id"/ },
+  /* PM-05 / PM-11 (I-10) — two registers of the project, corrected in place. */
+  stakeholder: { c: /post\("\/stakeholders"/, u: /patch\("\/stakeholders\/:id"/, d: /delete\("\/stakeholders\/:id"/ },
+  comms_plan: { c: /post\("\/comms"/, u: /patch\("\/comms\/:id"/, d: /delete\("\/comms\/:id"/ },
+
+  /* PM-03 — la promesse contre laquelle le réalisé se relira. Un seul cas
+     par projet : le PUT écrit ou révise, selon qu'il existe. Cette table
+     n'était déclarée NULLE PART ici — donc ni ses verbes ni ses colonnes
+     n'étaient regardés par cette porte, sur une table vieille de la 028.
+     C'est exactement la classe de défaut que F2 existe pour prendre. */
+  business_case: { c: /put\("\/projects\/:id\/case"/, u: /put\("\/projects\/:id\/case"/,
+    d: NA("A case is revised, never deleted — the promise it made has to stay readable against the outturn") },
+  /* REQ-22 (V-3) — une reconfirmation par jalon. Reconfirmer deux fois le
+     même jalon corrige la ligne (ON CONFLICT), ne l'empile pas. */
+  case_reconfirmation: { c: /post\("\/projects\/:id\/case\/reconfirm"/,
+    u: /post\("\/projects\/:id\/case\/reconfirm"/,
+    d: NA("A reconfirmation happened, at a date, with a verdict — like a decision it is superseded by the next, never removed") },
 
   meeting_series: { c: /post\("\/series"/, u: /patch\("\/series\/:id"/,
     d: NA("Retired via active=false — its history must remain readable") },
@@ -113,8 +166,14 @@ const ENTITIES = {
   agenda_item: { c: /occurrences\/:id\/close/, u: NA("Frozen at close (R5.8)"), d: NA("Frozen at close (R5.8)") },
   meeting_attendance: { c: /occurrences\/:id\/attendance/, u: /occurrences\/:id\/attendance/,
     d: /occurrences\/:id\/attendance/ },
-  meeting_decision: { c: /occurrences\/:id\/decisions/, u: NA("Immutable once the meeting closes (R5.5)"),
-    d: NA("Immutable once the meeting closes (R5.5)") },
+  /* La 039 a fait vivre l'ÉTAT d'une décision (Proposed → Ratified, le
+     ratifieur, le lien de preuve) : « immuable une fois la séance close »
+     n'était plus vrai, et la ligne d'exemption cachait un chemin de mise à
+     jour que ni cette porte ni la F3 ne regardaient. C'est la SUBSTANCE
+     qui est immuable — le fond répond 409 — et l'état s'écrit par
+     PUT /api/v1/decisions/:externalId, sous `row_version` depuis la 041. */
+  meeting_decision: { c: /occurrences\/:id\/decisions/, u: /put\("\/decisions\/:externalId"/,
+    d: NA("A decision is superseded by a new one, never deleted (I-7)") },
   meeting_action: { c: /occurrences\/:id\/actions/, u: /patch\("\/actions\/:id"/,
     d: NA("Cancelled via status, so it stays in the minutes that raised it") },
 };
@@ -132,6 +191,9 @@ const SERVER_ONLY = new Set([
      avertir ; les afficher demanderait au lecteur d'interpréter un 502 à
      la place de l'outil. */
   "probe_status", "probe_fails",
+  /* I-2 — la mécanique d'idempotence : une empreinte de requête et la
+     réponse enregistrée, rejouée à l'appelant, jamais dessinée. */
+  "request_hash", "response_json",
 ]);
 
 const verb = (spec) => {

@@ -24,6 +24,15 @@
 import { ES, ES_PREFIX } from "./i18n-es.js";
 
 const FR = {
+  /* REQ-30 — les deux « rien ici » de la page de valeur. */
+  "No such reporting period": "Cette période de rapport n'existe pas",
+  "No value page was stored for that reporting period":
+    "Aucune page de valeur n'a été déposée sur cette période de rapport",
+  /* REQ-19 (045) — la base d'une date de projet, refusée à l'écran comme
+     à l'API : ce que la 040 a donné au jalon, la 045 le donne au projet. */
+  "dateBasis is committed or placeholder":
+    "dateBasis vaut committed (un engagement) ou placeholder (une position)",
+
   // authority
   "not authenticated — sign in again, your session may have ended":
     "non authentifié — reconnectez-vous, votre session a peut-être expiré",
@@ -59,6 +68,21 @@ const FR = {
     "la piste d'audit est visible à partir du niveau groupe — demandez à votre bureau de programme ce qu'il vous en faut",
   "the portfolio is prioritised at group level — your programme office scores and ranks":
     "le portefeuille est priorisé au niveau groupe — votre bureau de programme note et classe",
+  /* REQ-24 (V-5) — la pondération du classement, et ce qu'elle refuse. */
+  "the level that sets a weighting is the level that answers for the cut it draws — ask your programme office":
+    "le niveau qui pose une pondération est celui qui répond de la coupe qu'elle trace — voyez votre bureau de programme",
+  "A weight is a whole number from 0 to 100":
+    "un poids est un nombre entier de 0 à 100",
+  "Every weight cannot be zero — a weighting has to weigh something":
+    "les poids ne peuvent pas être tous nuls — une pondération doit peser quelque chose",
+  "Say why these weights — a ranking whose reason is not written is a verdict":
+    "dites pourquoi ces poids — un classement dont la raison n'est pas écrite est un verdict",
+  "Confidence is a whole number from 1 to 5, or nothing at all":
+    "la confiance est un nombre entier de 1 à 5, ou rien du tout",
+  "The people this will take is a number of full-time equivalents, zero or more":
+    "les gens que cela prendra sont un nombre d'équivalents temps plein, zéro ou plus",
+  "Probability and impact are whole numbers from 1 to 5, or nothing at all":
+    "la probabilité et l'impact sont des nombres entiers de 1 à 5, ou rien du tout",
   "management of change is released at group level — ask your programme office to release it":
     "la maîtrise des modifications est levée au niveau groupe — demandez la levée à votre bureau de programme",
 
@@ -123,6 +147,12 @@ const FR_NOTIFY = {
 Object.assign(FR, FR_NOTIFY);
 
 const FR_PREFIX = [
+  /* REQ-30 — les deux refus de la page de valeur. Préfixe traduit,
+     données (la période, les deux dates) laissées telles quelles. */
+  ["A value page is already stored for this reporting period, and what was reported is a record rather than a working copy. To correct it, close a new period that restates this one and store the value page against that, so the restatement is itself on the record: ",
+   "Une page de valeur est déjà déposée sur cette période, et ce qui a été rapporté est un enregistrement, non une copie de travail. Pour la corriger, closez une nouvelle période qui reprend celle-ci et déposez-y la page de valeur, pour que la reprise soit elle-même au dossier : "],
+  ["These figures are read from the book as it stands today, so they can only be stored against a period closed at the book's own status date. Storing them against a period closed on another day would file today's numbers under a date on which they were not true, and nobody reading them later could tell. Close a period at today's status date instead: ",
+   "Ces chiffres sont lus dans le livre tel qu'il est aujourd'hui : ils ne peuvent être déposés que sur une période close à la date d'état du livre. Les déposer sur une période close un autre jour rangerait les chiffres du jour sous une date à laquelle ils n'étaient pas vrais, et personne ne pourrait le voir plus tard. Closez plutôt une période à la date d'état du jour : "],
   ["Gate evidence needs its artefact",
     "La preuve de jalon exige son artefact"],
   ["No trusted document hosts are configured",

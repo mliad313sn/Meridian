@@ -20,6 +20,14 @@ const CONSTRAINT_MESSAGES = {
   cost_period_shape: "A reporting period must be written as YYYY-MM",
   app_user_email_lower_idx: "That email address is already in use",
   access_grant_uniq: "That grant is already held",
+  /* REQ-37 — le refus qui ne disait rien. « That record already exists »
+     laissait croire à un doublon accidentel ; ce qui est refusé est une
+     seconde vague sur le même site, et la phrase doit dire ce qu'est une
+     vague et où consigner des phases. Voir la migration 044. */
+  rollout_wave_one_per_site:
+    "This project already has a rollout wave at that site — a wave IS a site in this rollout, "
+    + "and seq is the order the sites go live in, not a phase number within one site. "
+    + "Record phases at a single site as milestones on the project.",
 };
 
 /** Which table a foreign key points at, in words. */

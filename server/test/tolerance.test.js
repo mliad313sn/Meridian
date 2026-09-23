@@ -263,3 +263,205 @@ describe("PM-01 · la réponse", () => {
     assert.ok(answered[0].n >= 1, "ce qui a été répondu le reste");
   });
 });
+
+/**
+ * REQ-21 (V-2) — un bénéfice promis pour une date qui est passée.
+ *
+ * RT365, après son second passage : « Les bénéfices se réalisent APRÈS la
+ * clôture, quand l'équipe s'est dispersée. Une date dans une table que
+ * rien ne relance est la manière dont le compte rendu de valeur meurt
+ * dans toutes les organisations. » Le produit portait `realise_on` depuis
+ * la 008 et ne s'en servait pour rien.
+ */
+describe("REQ-21 · un bénéfice non mesuré à sa date est chassé, pas espéré", () => {
+  test("le balayage l'ouvre comme une exception de portefeuille", async () => {
+    const group = await as("groupDCH");
+    const admin = await as("admin");
+    const db = (await admin.get("/api/bootstrap")).body.db;
+    const owner = db.people[0].id;
+
+    const made = await group.post("/api/benefits", {
+      project: SITE_PROJECT_GRU, kind: "Cost", title: "Fewer emergency callouts",
+      measure: "callouts per quarter", unit: "callouts", baseline: 20, target: 6,
+      owner, realiseOn: "2026-01-31",
+    });
+    assert.equal(made.status, 201, made.text);
+    await query(`DELETE FROM project_exception WHERE project_id = $1 AND dimension = 'benefit-review'`,
+      [SITE_PROJECT_GRU]);
+
+    await sweepExceptions();
+    const exc = await one(
+      `SELECT * FROM project_exception
+        WHERE project_id = $1 AND dimension = 'benefit-review' AND status = 'Open'`,
+      [SITE_PROJECT_GRU]);
+    assert.ok(exc, "la date est passée et personne n'a rien constaté — c'est une exception");
+    assert.match(exc.detail, /Fewer emergency callouts/);
+    /* V-14 — le constat dit COMBIEN de bénéfices ne sont pas mesurés, et
+       depuis quand : « où en est ce projet » est la question du comité,
+       pas « ce bénéfice-ci est en retard ». */
+    assert.match(exc.detail, /benefit\(s\) on this project are past their realisation date and unmeasured/);
+    assert.match(exc.detail, /^1 benefit/);
+    assert.ok(Number(exc.measured) > 0, "et elle porte depuis combien de jours");
+
+    const trail = await one(
+      `SELECT action, user_label FROM audit_event
+        WHERE entity = 'project_exception' AND entity_id = $1`, [exc.id]);
+    assert.equal(trail.action, "Exception raised");
+    assert.equal(trail.user_label, "system", "personne ne l'a décidé");
+
+    /* Repasser n'empile pas : toutes les heures, cent fois la même ligne
+       rendrait l'écran illisible. */
+    await sweepExceptions();
+    const again = await many(
+      `SELECT id FROM project_exception WHERE project_id = $1 AND dimension = 'benefit-review'`,
+      [SITE_PROJECT_GRU]);
+    assert.equal(again.length, 1);
+
+    /* Mesuré, il sort du constat : c'est la sortie que V-2 demande. */
+    const bens = (await admin.get("/api/bootstrap")).body.db.benefits
+      .find((b) => b.id === made.body.id);
+    const measured = await group.patch(`/api/benefits/${made.body.id}`,
+      { actual: 7, measuredOn: "2026-02-15", status: "Partially realised", version: bens.version });
+    assert.equal(measured.status, 200, measured.text);
+    await query(`DELETE FROM project_exception WHERE project_id = $1 AND dimension = 'benefit-review'`,
+      [SITE_PROJECT_GRU]);
+    await sweepExceptions();
+    const cleared = await one(
+      `SELECT id FROM project_exception WHERE project_id = $1 AND dimension = 'benefit-review'`,
+      [SITE_PROJECT_GRU]);
+    assert.equal(cleared, null, "mesuré, il ne revient plus");
+  });
+
+  test("et il arrive sur l'ordre du jour de la prochaine séance", async () => {
+    const group = await as("groupDCH");
+    const admin = await as("admin");
+    const db = await loadPortfolio({ id: "T", role: "admin", active: true,
+      grants: { programmes: new Set(), sites: new Set() } });
+    const still = db.benefits.find((b) => b.project === SITE_PROJECT_GRU && b.status === "Forecast" && b.realiseOn);
+    if (!still) {
+      const owner = (await admin.get("/api/bootstrap")).body.db.people[0].id;
+      const r = await group.post("/api/benefits", {
+        project: SITE_PROJECT_GRU, kind: "Cost", title: "Overdue on the agenda",
+        owner, realiseOn: "2026-01-31", target: 3, unit: "days",
+      });
+      assert.equal(r.status, 201, r.text);
+    }
+    const fresh = await loadPortfolio({ id: "T", role: "admin", active: true,
+      grants: { programmes: new Set(), sites: new Set() } });
+    const due = fresh.benefits.filter((b) => b.status === "Forecast" && b.realiseOn
+      && b.realiseOn < fresh.statusDate);
+    assert.ok(due.length, "il y a bien un bénéfice en retard de mesure");
+
+    /* Une série qui voit RÉELLEMENT ce projet : une série de site qui
+       regarde ailleurs n'a aucune raison d'annoncer ce bénéfice, et
+       l'assertion serait vide. Les séries ne sont pas dans le
+       portefeuille — elles se lisent où l'écran les lit. */
+    const { buildAgenda, seriesProjects } = await import("../../shared/meetings.js");
+    const rows = await many(`SELECT * FROM meeting_series WHERE active`);
+    const shaped = rows.map((x) => ({
+      id: x.id, name: x.name, cadence: x.cadence, scopeKind: x.scope_kind,
+      programmeId: x.programme_id, siteId: x.site_id, decisionCap: x.decision_cap,
+      timeboxMin: x.timebox_min,
+    }));
+    const series = shaped.find((x) =>
+      seriesProjects(fresh, x).some((p) => p.id === SITE_PROJECT_GRU));
+    assert.ok(series, "au moins une série regarde ce projet");
+
+    const agenda = buildAgenda(fresh, series, { meetsOn: fresh.statusDate });
+    const section = agenda.sections.find((s) => s.key === "benefits");
+    assert.ok(section, "la promesse en retard arrive sur l'ordre du jour toute seule");
+    assert.match(section.title, /Benefits due to be measured/);
+    assert.ok(section.items.some((i) => /OVERDUE/.test(i.headline)),
+      "une promesse dont la date est passée s'annonce comme telle");
+    /* Sa cible dans SON unité, jamais convertie en argent (008). */
+    assert.ok(section.items.every((i) => i.entity === "benefit"));
+    const late = section.items.find((i) => /OVERDUE/.test(i.headline));
+    assert.match(late.detail, /was due to realise/);
+    assert.match(late.detail, /owner /);
+  });
+});
+
+/**
+ * Q-2 — un contrôle qu'on ne peut pas observer.
+ *
+ * RT365 : « Nous avons posé une tolérance d'un jour, enregistré une fin
+ * de référence, glissé de quatre mois, et vu `exceptions: []` tout du
+ * long. Le balayage tourne sur un setInterval horaire, sans première
+ * passe immédiate et sans route pour le déclencher, donc rien ne pouvait
+ * être observé dans une session. »
+ */
+describe("Q-2 · le constat peut être demandé, pas seulement attendu", () => {
+  test("le niveau qui pose les marges peut demander le balayage ; les autres non", async () => {
+    const group = await as("groupDCH");
+    const site = await as("siteGRU");
+    const viewer = await as("viewerGRU");
+
+    const refusedSite = await site.post("/api/exceptions/sweep", {});
+    assert.equal(refusedSite.status, 403, "un site ne constate pas ses propres dépassements");
+    const refusedViewer = await viewer.post("/api/exceptions/sweep", {});
+    assert.equal(refusedViewer.status, 403);
+
+    const r = await group.post("/api/exceptions/sweep", {});
+    assert.equal(r.status, 200, r.text);
+    assert.equal(typeof r.body.considered, "number");
+    assert.equal(typeof r.body.opened, "number");
+
+    /* Il reste un CONSTAT : rien ne s'ouvre que les chiffres ne disent
+       déjà, et le redemander n'empile pas. */
+    const before = (await many(`SELECT count(*)::int AS n FROM project_exception`))[0].n;
+    await group.post("/api/exceptions/sweep", {});
+    const after = (await many(`SELECT count(*)::int AS n FROM project_exception`))[0].n;
+    assert.equal(after, before, "demander deux fois ne crée pas deux lignes");
+
+    /* Et il s'inscrit sous « system » : personne ne l'a décidé. */
+    const trail = await one(
+      `SELECT user_label FROM audit_event WHERE entity = 'project_exception' ORDER BY id DESC LIMIT 1`);
+    if (trail) assert.equal(trail.user_label, "system");
+  });
+});
+
+/**
+ * D-8 — ce qu'une décision a le droit de citer.
+ *
+ * RT365 : « Dix-neuf enregistrements de décision sont entrés avec un
+ * evidenceUri VIDE parce que la vraie preuve ne pouvait pas être
+ * exprimée. » Leur preuve est un fichier versionné dans un dépôt.
+ */
+describe("D-8 · une preuve versionnée dans un dépôt en est une", () => {
+  test("un chemin de dépôt et une révision sont acceptés ; la prose est refusée", async () => {
+    const group = await as("groupDCH");
+    const admin = await as("admin");
+    const db = (await admin.get("/api/bootstrap")).body.db;
+
+    const ok = await group.post("/api/decisions", {
+      headline: "D-8 · the evidence is a file in a repository",
+      council: "ARB", evidenceUri: "docs/PRODUCT_OWNER.md v2.0",
+    });
+    assert.equal(ok.status, 201, ok.text);
+    const row = await one(`SELECT evidence_uri FROM meeting_decision WHERE id = $1`, [ok.body.id]);
+    assert.equal(row.evidence_uri, "docs/PRODUCT_OWNER.md v2.0");
+
+    const atCommit = await group.post("/api/decisions", {
+      headline: "D-8 · the evidence is a path at a commit",
+      council: "ARB", evidenceUri: "docs/DECISION_LOG.md@a1b2c3d",
+    });
+    assert.equal(atCommit.status, 201, atCommit.text);
+
+    const web = await group.post("/api/decisions", {
+      headline: "D-8 · an address still works", council: "ARB",
+      evidenceUri: "https://github.com/x/y/blob/main/docs/a.md",
+    });
+    assert.equal(web.status, 201, web.text);
+
+    /* Ce qui reste refusé, et c'est le point : une phrase ne se retrouve
+       pas. La leçon D-10 du même rapport est qu'un 200 sur un corps
+       incompris enseigne au demandeur qu'il a écrit quelque chose. */
+    const prose = await group.post("/api/decisions", {
+      headline: "D-8 · prose is not evidence", council: "ARB",
+      evidenceUri: "we all agreed in the meeting",
+    });
+    assert.equal(prose.status, 400, prose.text);
+    assert.match(prose.body.error, /cannot be found again/);
+    void db;
+  });
+});

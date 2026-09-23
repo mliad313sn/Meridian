@@ -1,0 +1,26 @@
+-- ═══════════════════════════════════════════════════════════════════
+-- 036 · L'ÉCHELLE DE JALONS DU PROGRAMME  (I-3 · retour de terrain RT365, M-04)
+--
+-- Le modèle de processus était FIXE : quatre jalons de gouvernance
+-- (Mandate, Design authority, Readiness, Benefits) et six phases,
+-- échafaudés sur chaque projet et impossibles à remplacer. Le premier
+-- programme réel avait six portes (A–F : dev → sim → shadow → paper →
+-- pilote → GA) et a dû les poser comme jalons ordinaires À CÔTÉ des
+-- quatre de Meridian — deux modèles en parallèle, et les preuves, les
+-- risques et l'avancement de phase reliés au mauvais.
+--
+-- L'échelle devient une donnée du PROGRAMME : un tableau ordonné de
+-- jalons (numéro, nom, propriétaire, preuves attendues, position dans la
+-- fenêtre du projet). NULL = l'échelle par défaut, inchangée — les quatre
+-- jalons qui ont servi jusqu'ici restent exactement ce qu'ils étaient
+-- pour tout programme qui n'en déclare pas d'autre (D-05 : l'arithmétique
+-- du moteur est gelée ; ce qui change, c'est la LISTE qu'elle parcourt).
+--
+-- Un projet naît avec l'échelle de son programme au moment de sa
+-- création (jalons `kind='gate'`, un document de preuve par jalon). Une
+-- échelle modifiée ensuite ne réécrit pas les projets existants : leurs
+-- jalons sont déjà datés, leurs preuves déjà déposées ; changer l'échelle
+-- d'un programme en cours est une décision, pas un réglage.
+-- ═══════════════════════════════════════════════════════════════════
+
+ALTER TABLE programme ADD COLUMN gate_model jsonb;

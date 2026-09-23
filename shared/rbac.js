@@ -44,6 +44,11 @@ export const ACTIONS = [
   /* V-13/V-04: anyone who can write may ASK for something; deciding what
      the group will and will not do, and in what order, is group work. */
   "demand.raise", "demand.decide", "priority.write",
+  /* REQ-24 (V-5) : la PONDÉRATION du classement de portefeuille. Elle
+     n'est pas `priority.write` — celle-là note UNE ligne, celle-ci décide
+     comment TOUTES les lignes se comparent, dans tous les programmes à la
+     fois. Voir le `case` plus bas pour le niveau et sa raison. */
+  "priority.weighting",
   /* R-02 : déclarer une absence et son suppléant est un fait du site,
      comme le calendrier des arrêts. */
   "absence.write",
@@ -57,6 +62,17 @@ export const ACTIONS = [
      qui a délégué — un chef de site qui fixe sa propre tolérance ne fixe
      pas une tolérance, il énonce une intention. */
   "tolerance.set", "exception.answer",
+  /* Q-2 : DEMANDER le constat. Le balayage tourne de lui-même à l'heure ;
+     ceci l'appelle tout de suite, à l'échelle du portefeuille et donc
+     sans projet. C'est un acte du niveau qui pose les marges — lui seul
+     a une raison de vérifier qu'elles mordent — et il ne DÉCIDE rien :
+     il n'ouvre que ce que les chiffres disent déjà. */
+  "exception.sweep",
+  /* REQ-27 (V-8) : DÉPLACER un projet déjà né sur l'échelle de jalons de
+     son programme. Ce n'est pas `project.gate` — celui-là franchit un
+     barreau ; celui-ci change les barreaux. Voir le `case` plus bas pour
+     le niveau et sa raison. */
+  "ladder.migrate",
   /* PM-02 : relever un enseignement est le travail de qui l'a vécu ;
      décider qu'il vaut pour les huit sites ne l'est pas. L'adoption est
      ce qui rend l'enseignement visible AILLEURS — sans elle, un registre
@@ -251,6 +267,14 @@ export function can(user, action, resource = {}) {
   if (!user) return deny("not authenticated — sign in again, your session may have ended");
   if (!user.active) return deny("account is disabled — an administrator can reactivate it from Administration");
   if (!ACTIONS.includes(action)) return deny(`unknown action "${action}"`);
+  /* Fermé par défaut sur le RÔLE, comme sur l'action. Un rôle non reconnu
+     tombait à travers le garde `viewer` plus bas et ramassait
+     `demand.raise`, `portfolio.read` et `data.export` au passage. Rien
+     n'y mène aujourd'hui — un principal de service n'ouvre pas de session
+     — mais c'est le SEUL fichier que le produit traite comme faisant
+     autorité, et une ouverture par défaut n'y a pas sa place.
+     (Conseiller sécurité M-4, docs/33 §5.) */
+  if (!ROLES.includes(user.role)) return deny(`unknown role "${user.role}" — no authority is granted to a role this file does not name`);
 
   if (ADMIN_ONLY.has(action)) {
     return user.role === "admin" ? allow() : deny("administrator only — ask an account marked ADMIN on the sign-in directory");
@@ -361,6 +385,35 @@ export function can(user, action, resource = {}) {
         : deny("this programme does not land on a site granted to you — concerns follow the work that reaches your site");
     }
 
+    /* REQ-27 (V-8) — déplacer un projet existant sur l'échelle de son
+       programme. Le raisonnement d'`exception.sweep`, appliqué à
+       l'endroit où l'échelle est DÉCLARÉE : le niveau qui pose l'échelle
+       est le niveau qui y fait passer un projet. Une échelle de jalons
+       est une donnée du PROGRAMME (036), donc c'est un geste du bureau de
+       programme, borné par l'habilitation sur ce programme-là — et jamais
+       un geste de site : un site ne possède pas le processus que
+       l'échelle encode, il le subit. Le viewer est déjà refusé plus haut.
+
+       Ce cas ne peut pas tomber dans le défaut projet plus bas : celui-ci
+       accorderait le geste à un chef de site sur ses propres projets. */
+    case "ladder.migrate": {
+      const p = resource.project;
+      if (!p) return deny("no project in scope — a ladder move is made on one named project; open it from the portfolio first");
+      if (user.role !== "group") {
+        return deny("a gate ladder is declared on the programme, and the level that declares it is the level that moves a project onto it — ask your programme office");
+      }
+      const { programmes } = grantsOf(user);
+      return programmes.has(p.programme_id)
+        ? allow()
+        : deny("that programme is outside your grant — ask an administrator to add it, or ask the programme office that holds it");
+    }
+
+    /* Q-2 — à l'échelle du portefeuille, donc sans projet à nommer. */
+    case "exception.sweep":
+      return user.role === "group"
+        ? allow()
+        : deny("the level that sets a margin is the level that checks it — ask your programme office");
+
     case "demand.raise":
       /* Asking is open to anyone who may write at all — a site lead who
          cannot raise a request has to phone someone, and the request then
@@ -373,6 +426,31 @@ export function can(user, action, resource = {}) {
       return user.role === "group"
         ? allow()
         : deny("the portfolio is prioritised at group level — your programme office scores and ranks");
+
+    /* REQ-24 — LA PONDÉRATION. Portefeuille-large, donc sans projet à
+       nommer : sans ce `case` elle tomberait dans le défaut projet plus
+       bas et serait refusée à tout le monde pour n'avoir pas de projet
+       en portée — le piège que `data.import`, `period.close` et
+       `lesson.adopt` ont déjà payé dans ce fichier.
+
+       Pourquoi GROUPE, et pas site : le raisonnement d'`exception.sweep`,
+       appliqué à un cran de plus haut. Le niveau qui pose une marge est
+       celui qui la vérifie ; le niveau qui pose une PONDÉRATION est celui
+       qui répond de la coupe qu'elle trace. Cette coupe traverse tous les
+       programmes — elle dit à un site que son projet passe sous la
+       ligne — et un chef de site qui règle les poids de sa propre file ne
+       pose pas un arbitrage, il énonce une préférence.
+
+       Pourquoi pas ADMINISTRATEUR non plus : ce n'est pas un réglage de
+       la machine, c'est la politique d'investissement du groupe, et la
+       confier à l'informatique serait retirer au bureau de programme la
+       seule décision dont il répond devant le comité. Le contrôle contre
+       l'abus n'est pas le niveau, c'est la piste : chaque changement dit
+       ce que le poids valait et ce qu'il est devenu, sous un nom. */
+    case "priority.weighting":
+      return user.role === "group"
+        ? allow()
+        : deny("the level that sets a weighting is the level that answers for the cut it draws — ask your programme office");
 
     case "absence.write":
       /* Same shape as the shutdown calendar: the site keeps its own
@@ -449,26 +527,91 @@ export function can(user, action, resource = {}) {
         : deny("project is outside your authority — you can read it, and raise a concern on it if it lands on your site");
     }
 
+    /* REQ-46 — le registre RAID a DEUX portées, et une seule était dite
+       ici. Une ligne rattachée à un projet est une écriture de projet
+       ordinaire, et tombe dans le défaut ci-dessous ; une ligne SANS
+       projet — les risques que le portefeuille porte lui-même, ceux que
+       le registre hérité tient depuis toujours — n'a aucun projet à
+       vérifier, tombait donc dans ce même défaut, et y était refusée à
+       TOUT LE MONDE pour n'avoir rien en portée. Le piège que
+       `data.import`, `period.close` et `lesson.adopt` ont déjà payé dans
+       ce fichier.
+
+       Les routes s'en tiraient en écrivant `["admin","group"].includes(
+       req.user.role)` à la main, trois fois, dans portfolio.js. C'est la
+       même règle : elle est simplement écrite ici, à l'endroit que le
+       produit traite comme faisant autorité, plutôt que recopiée à côté
+       de chaque geste. Enregistrer une REVUE est un geste de plus sur ce
+       registre-là, et il ne méritait pas une quatrième copie.
+
+       Pourquoi groupe : un risque de portefeuille est le risque du
+       groupe. Un chef de site qui l'édite ne tient pas son registre, il
+       écrit dans celui d'un autre — et il a `concern.raise` pour se
+       faire entendre sur ce qui atterrit chez lui. L'administrateur est
+       déjà sorti plus haut. */
+    case "raid.write":
+      if (!resource.project) {
+        return user.role === "group"
+          ? allow()
+          : deny("portfolio-wide register items are kept at group level — raise it on the project it lands on, or ask your programme office");
+      }
+      return canWriteProject(user, resource.project) ? allow() : outsideProject(user, resource.project);
+
     default:
       // Every remaining write is project-scoped.
       return canWriteProject(user, resource.project)
         ? allow()
-        : deny(
-            resource.project
-              ? resource.project.governance_level === "group" && user.role === "site"
-                ? "this is a group-governed project — site level is read-only here; raise a concern on it and your programme office will see it"
-                /* A-07 — les deux refus les plus fréquents du produit
-                   étaient les deux derniers à ne dire que l'état. */
-                : "project is outside your authority — you can read it, and raise a concern on it if it lands on your site"
-              : "no project in scope — this act belongs to a project; open it from the portfolio first"
-          );
+        : outsideProject(user, resource.project);
   }
 }
 
 const allow = () => ({ ok: true, why: "" });
 const deny = (why) => ({ ok: false, why });
 
+/* A-07 — les deux refus les plus fréquents du produit étaient les deux
+   derniers à ne dire que l'état. Écrit une fois : deux `case` le disent
+   maintenant, et la phrase qu'un utilisateur lit ne doit pas dépendre de
+   celui des deux par lequel il est passé. */
+const outsideProject = (user, project) => deny(
+  project
+    ? project.governance_level === "group" && user.role === "site"
+      ? "this is a group-governed project — site level is read-only here; raise a concern on it and your programme office will see it"
+      : "project is outside your authority — you can read it, and raise a concern on it if it lands on your site"
+    : "no project in scope — this act belongs to a project; open it from the portfolio first");
+
 /** Express guard. Resource is resolved by an earlier middleware. */
+/**
+ * Qui peut ratifier une décision (H-3).
+ *
+ * La 039 a fait vivre l'état d'une décision : Proposed → Ratified. Rien
+ * ne disait qui pouvait franchir ce pas, et /api/v1 en était le SEUL
+ * chemin — donc une clé `write:meetings` proposait une décision puis la
+ * ratifiait elle-même, sous un ratifieur en texte libre jamais confronté
+ * à l'annuaire. C'est exactement la ségrégation des tâches que
+ * `change.approve` défend depuis I1, et SECURITY.md la nomme dans le
+ * périmètre : « bypass segregation of duties on approvals, gates or
+ * change decisions ».
+ *
+ * La règle vit ici, pas dans la route, parce que c'est ici qu'on lit qui
+ * peut quoi — et parce que l'écran qui portera ce geste devra lire la
+ * même règle que le contrat.
+ */
+export function canRatifyDecision({ ratifier, decidedBy, recordedBy } = {}) {
+  if (!ratifier) {
+    return { ok: false, why: "Ratifying a decision names the person who ratified it: ratifiedBy, an active person" };
+  }
+  if (decidedBy && ratifier === decidedBy) {
+    return { ok: false, why: "the person who decided does not also ratify — a second pair of eyes ratifies, as for a change request" };
+  }
+  /* Le COMPTE qui a consigné compte autant que la personne : une clé
+     d'intégration consigne sous son propre compte, et « la personne est
+     différente » ne suffit pas quand c'est la même main qui écrit. */
+  if (recordedBy && ratifier === recordedBy) {
+    return { ok: false, why: "the account that recorded this decision does not also ratify it" };
+  }
+  return { ok: true };
+}
+
 export function require$(action, resolve) {
   return async (req, res, next) => {
     try {
