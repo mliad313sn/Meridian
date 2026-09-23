@@ -54,7 +54,7 @@
     },
     "counterpart": "FitAdapt delivery lead & Meridian champion (PE-14), docs/governance/05-dogfooding-loop.md"
   },
-  "registerVersion": 4,
+  "registerVersion": 5,
   "requests": [
     {
       "id": "DF-01",
@@ -322,16 +322,14 @@
       "version": null,
       "decidedOn": "2026-09-23",
       "delivered": [
-        "PR #14 merged (5.9.1 on main)"
+        "PR #14 merged (5.9.1 on main)",
+        "docs/36 C-02, C-03, C-04: every line is on main (5.16.0–5.28.1), one PR each (#19–#38)"
       ],
       "measure": null,
       "remaining": [
-        "C-02: the RT365 line (5.10.0–5.15.0, incl. the gate ladder of issue #3) is merged on a working branch, not on main",
-        "C-03: the KODO line (claude/dynamic-gates-and-requirements) is open",
-        "C-04: claude/project-analysis-db-schema-yph5ho not salvaged",
-        "issues #1–4, #6–9, #11–13 closed while their fixes were on a branch (docs/36 §3)"
+        "No version tag carries any of it: the newest tag on the remote is v5.9.0 (docs/36 §5 lists the 20 owed)."
       ],
-      "answerToSource": "Keep the workaround 'Phase exit gates sit on Meridian's Gate 3' until the gate ladder is on main.",
+      "answerToSource": "Everything this line names is on main since 23/09; only the tags are missing. Two things your bootstrap needs now: (1) since 5.17.0 an import is refused without \"currencyUnit\" in the book header (D-36.04) — your book's budgets are all 0, so add \"currencyUnit\": \"units\" to build-book.mjs; (2) DF-10, DF-11 and DF-12 are built (5.26.0, 5.25.0, 5.28.0): the 'Distributed team' site and the PO approving on a member's behalf can be retired.",
       "issue": 15,
       "accepted": null,
       "released": false,
@@ -343,6 +341,12 @@
           "registerVersion": 1,
           "status": "partial",
           "note": "one of three unmerged lines has reached main"
+        },
+        {
+          "at": "2026-09-23",
+          "registerVersion": 5,
+          "status": "partial",
+          "note": "Field re-run of 5.28.0: bootstrap refused on currencyUnit, never told to FitAdapt until now; remaining narrowed to the tags."
         }
       ]
     },

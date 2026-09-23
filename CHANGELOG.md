@@ -22,6 +22,40 @@ Nothing yet.
 
 ---
 
+## [5.28.1] — 2026-09-23
+
+**A row that names no project survives the round trip** (NEW-24; found by
+re-running the field repositories against 5.28.0, docs/36).
+
+### Fixed
+
+- **NEW-24 · Portfolio-wide requirements, evidence and findings were lost
+  by the export.** KODO's generator emits requirements for modules it has
+  no project for yet (FR-M20-01…06, FR-M21-01…06). The import stored all
+  148 with no reject; the export returned 136, because it read only the
+  rows of the projects the account can see; a replace of that export then
+  erased the 12 — and `erased` did not count them, since the file carried
+  a requirements list. Requirements, evidence and findings with no project
+  are now exported as portfolio-wide rows, exactly as portfolio RAID items
+  and documents already were.
+- F13 now carries a portfolio-wide requirement, evidence and finding, and
+  fails on 5.28.0 (`NEW-24 · … travels and comes back`).
+
+### Field re-run (5.28.0, 23/09)
+
+- **FitAdapt** (66c7f34): its bootstrap is refused on `currencyUnit`
+  (D-36.04, by design, since 5.17.0); with the header it imports
+  7 projects and round-trips with 0 rejects. Its own suite: 706/706 on
+  5544f44; two property-test time budgets exceeded on this container on
+  66c7f34 (field-side).
+- **KODO** (8ad1d15): same `currencyUnit` refusal; with the header every
+  committed book merges with 0 rejects and round-trips — except NEW-24.
+- **RT365** (670bfbd): `test_meridian_sync.py` 4/4; the sync writes 367
+  rows, all 2xx, and a second run writes none it would create. Its suites:
+  251/251 and 151/151.
+
+---
+
 ## [5.28.0] — 2026-09-23
 
 **A site is a place or a team** (D-36.13; FitAdapt #18 · DF-12; docs/36
