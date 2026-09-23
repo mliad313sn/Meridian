@@ -32,9 +32,15 @@ const PORTFOLIO_TABLES = [
   "case_reconfirmation", "business_case", "project_exception", "project_tolerance",
   "gate_criterion", "ext_link", "benefit", "rollout_wave", "commitment", "timesheet",
   "lesson", "stakeholder", "comms_plan", "person_absence", "site_window",
+  /* NEW-14 — the meeting register is book data now: an objection before
+     the decision it objects to, and a review before the RAID item it
+     looked at (the cascade would take it; naming it is what makes
+     "replace" mean replace). */
+  "decision_objection",
   "meeting_action", "meeting_decision", "meeting_attendance", "agenda_item",
   "meeting_occurrence", "meeting_series",
-  "decision_objection", "seat_conflict", "seat",
+  "raid_review",
+  "seat_conflict", "seat",
   "finding", "evidence",
   "report_narrative", "work_item", "document", "allocation",
   "change_step", "change_request", "raid_item", "cost_line", "milestone",
@@ -107,7 +113,30 @@ class DryRunComplete extends Error {
    en déclare un est laissée intacte. */
 const INSERT_HEAD = /^\s*INSERT INTO\s+(\w+)\s*\(([^)]*)\)/i;
 
-export function upsertHandle(t) {
+/* NEW-16 (docs/36) — a merge rewrote rows without moving `row_version`, so
+   a screen still holding the version it read before the import could
+   write straight over what the import brought in: the concurrency check
+   (CONTRIBUTING rule 3) held for every writer except the biggest one.
+
+   For a table that carries `row_version`, the upsert now bumps it — but
+   only when the row actually changes. A merge of a book onto itself
+   rewrites every row with what it already holds; bumping those would
+   send every open screen a false "someone else changed this" and would
+   make two exports of an unchanged book differ (NEW-07). `versioned` is
+   read from the schema at import time (`versionedTables`), never kept by
+   hand: a table that gains the column is covered the day it does. */
+export const bumpIfChanged = (table, cols, next) =>
+  `row_version = ${table}.row_version + CASE WHEN ROW(${cols.map((c) => `${table}.${c}`).join(", ")})
+     IS DISTINCT FROM ROW(${next.join(", ")}) THEN 1 ELSE 0 END`;
+
+export async function versionedTables(t) {
+  const r = await t.query(
+    `SELECT table_name FROM information_schema.columns
+      WHERE column_name = 'row_version' AND table_schema = current_schema()`);
+  return new Set((r.rows ?? []).map((x) => x.table_name));
+}
+
+export function upsertHandle(t, versioned = new Set()) {
   return {
     ...t,
     query(sql, params) {
@@ -115,8 +144,11 @@ export function upsertHandle(t) {
       if (!m || /ON CONFLICT/i.test(sql)) return t.query(sql, params);
       const cols = m[2].split(",").map((c) => c.trim()).filter(Boolean);
       if (!cols.includes("id")) return t.query(sql, params);
-      const sets = cols.filter((c) => c !== "id").map((c) => `${c} = EXCLUDED.${c}`);
+      const data = cols.filter((c) => c !== "id" && c !== "row_version");
+      const sets = data.map((c) => `${c} = EXCLUDED.${c}`);
       if (!sets.length) return t.query(`${sql} ON CONFLICT (id) DO NOTHING`, params);
+      const table = m[1];
+      if (versioned.has(table)) sets.push(bumpIfChanged(table, data, data.map((c) => `EXCLUDED.${c}`)));
       return t.query(`${sql} ON CONFLICT (id) DO UPDATE SET ${sets.join(", ")}`, params);
     },
   };
@@ -176,7 +208,13 @@ export async function importBook(book, user, opts = {}) {
        en `… ON CONFLICT (id) DO UPDATE SET …`. Deux jeux d'insertions
        divergeraient au troisième correctif ; un seul, plus une règle
        déclarée en un seul endroit, ne le peuvent pas. */
-    const t = mode === "merge" ? upsertHandle(raw) : raw;
+    const t = mode === "merge" ? upsertHandle(raw, await versionedTables(raw)) : raw;
+    /* NEW-16 — the in-place UPDATEs below (a site's champion, a
+       document's supersession, a decision's links) rewrite a row the
+       merge handle never sees, so they say their own bump. In replace
+       mode the row was inserted a moment ago at version 1 and stays
+       there, as every other imported row does. */
+    const bump = (table, cols, next) => (mode === "merge" ? ", " + bumpIfChanged(table, cols, next) : "");
 
     /* ── reference ────────────────────────────────────────────────── */
     for (const s of book.sites ?? []) {
@@ -205,7 +243,8 @@ export async function importBook(book, user, opts = {}) {
     // the site champion second, so the person exists (A-12)
     for (const s of book.sites ?? []) {
       if (s.champion) {
-        await t.query(`UPDATE site SET champion_id = $2 WHERE id = $1`, [s.id, s.champion]);
+        await t.query(`UPDATE site SET champion_id = $2${bump("site", ["champion_id"], ["$2::text"])}
+                        WHERE id = $1`, [s.id, s.champion]);
       }
     }
     for (const g of book.programmes ?? []) {
@@ -526,7 +565,8 @@ export async function importBook(book, user, opts = {}) {
     // supersession second, so both ends exist
     for (const d of book.docs ?? []) {
       if (d.supersedes) {
-        await t.query(`UPDATE document SET supersedes = $2 WHERE id = $1`, [d.id, d.supersedes]);
+        await t.query(`UPDATE document SET supersedes = $2${bump("document", ["supersedes"], ["$2::text"])}
+                        WHERE id = $1`, [d.id, d.supersedes]);
       }
     }
     for (const i of book.items ?? []) {
@@ -634,16 +674,263 @@ export async function importBook(book, user, opts = {}) {
         "held by the person who designed it.");
     }
 
+    /* ── NEW-14 · the meeting register and the RAID reviews ───────────
+       The export wrote none of them and a replace import deletes every
+       meeting table, so an export → import erased the governance record:
+       every series, meeting, frozen agenda, attendance, decision, action
+       and review. They come in here, after everything they point at
+       (programmes, sites, people, projects, changes, RAID, milestones,
+       evidence) and before the objections, which cite a decision.
+
+       Importing is a RESTORE, not an edit — but it does not make a state
+       the product forbids:
+         · an agenda is frozen when its meeting closes and computed live
+           before (R5.2/R5.8): a meeting that is not closed takes no
+           agenda rows, and the file's are refused by name;
+         · in a merge, a meeting this database already holds CLOSED is
+           final (R5.5): it is not reopened, its frozen agenda and
+           attendance are not rewritten, and no decision or action is
+           added to its record. Where the file's copy differs from what
+           is held, `rejects` says so; where it is the same, nothing is
+           said, because nothing was refused;
+         · in a merge, a decision already on the record keeps its
+           substance (D-33.3 — the contract refuses the same change with
+           a 409): the file may move its state — status, ratification,
+           evidence, links — but a different headline, rationale,
+           decider, day or room is a new decision, refused by name.
+       Accounts and integrations are pointers the file cannot vouch for
+       (USER / INTEGRATION above). */
+    const OCC_STATUS = ["scheduled", "open", "closed"];
+    const ATTENDANCE = ["present", "apologies", "absent", "deputy", "observer"];
+    const today = new Date().toISOString().slice(0, 10);
+    const heldClosed = new Set();
+    const heldDecisions = new Map();
+    const heldActions = new Set();
+    if (mode === "merge") {
+      for (const r of (await t.query(`SELECT id FROM meeting_occurrence WHERE status = 'closed'`)).rows ?? []) {
+        heldClosed.add(r.id);
+      }
+      const dIds = (book.decisions ?? []).map((d) => d.id).filter(Boolean);
+      if (dIds.length) {
+        for (const r of (await t.query(`SELECT * FROM meeting_decision WHERE id = ANY($1)`, [dIds])).rows ?? []) {
+          heldDecisions.set(r.id, r);
+        }
+      }
+      const aIds = (book.actions ?? []).map((a) => a.id).filter(Boolean);
+      if (aIds.length) {
+        for (const r of (await t.query(`SELECT id FROM meeting_action WHERE id = ANY($1)`, [aIds])).rows ?? []) {
+          heldActions.add(r.id);
+        }
+      }
+    }
+
+    for (const s of book.meetingSeries ?? []) {
+      const kind = ["group", "programme", "site"].includes(s.scopeKind) ? s.scopeKind : "group";
+      await t.query(
+        `INSERT INTO meeting_series (id, name, cadence, scope_kind, programme_id, site_id, chair_id,
+                                     gate_n, weekday, start_time, timebox_min, active, created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,COALESCE($13::timestamptz, now()))`,
+        [s.id, s.name ?? s.id,
+         ["weekly", "monthly", "per_gate", "ad_hoc"].includes(s.cadence) ? s.cadence : "weekly", kind,
+         kind === "programme" ? clean(s.programme) : null, kind === "site" ? clean(s.site) : null,
+         clean(s.chair), intOrNull(s.gate), Math.max(0, Math.min(6, int(s.weekday, 1))),
+         s.startTime ?? "09:00", int(s.timeboxMin, 30), s.active !== false, clean(s.createdAt)]);
+    }
+
+    const agendaIn = (a, i) => ({
+      seq: int(a.seq, i), section: a.section ?? "", sectionKey: clean(a.sectionKey),
+      headline: a.headline ?? "", detail: a.detail ?? "", entity: a.entity ?? "",
+      entityId: a.entityId ?? "", timeboxMin: int(a.timeboxMin), urgent: a.urgent === true,
+    });
+    const attendanceIn = (a) => ({
+      person: a.person, state: ATTENDANCE.includes(a.state) ? a.state : "present",
+      deputyFor: clean(a.deputyFor),
+    });
+    const byPerson = (a, b) => (a.person < b.person ? -1 : a.person > b.person ? 1 : 0);
+    /* What a held, closed meeting's record says, in the book's shape —
+       so a file's copy of it can be compared rather than written. */
+    const heldRecord = async (id) => {
+      const o = (await t.query(`SELECT status, notes FROM meeting_occurrence WHERE id = $1`, [id])).rows[0];
+      const agenda = ((await t.query(
+        `SELECT * FROM agenda_item WHERE occurrence_id = $1 ORDER BY seq`, [id])).rows ?? [])
+        .map((a) => agendaIn({ seq: a.seq, section: a.section, sectionKey: a.section_key,
+          headline: a.headline, detail: a.detail, entity: a.entity, entityId: a.entity_id,
+          timeboxMin: a.timebox_min, urgent: a.urgent }, a.seq));
+      const attendance = ((await t.query(
+        `SELECT * FROM meeting_attendance WHERE occurrence_id = $1`, [id])).rows ?? [])
+        .map((a) => attendanceIn({ person: a.person_id, state: a.state, deputyFor: a.deputy_for }))
+        .sort(byPerson);
+      return { status: o.status, notes: o.notes, agenda, attendance };
+    };
+
+    const finalMeetings = new Set();
+    for (const m of book.meetings ?? []) {
+      const status = OCC_STATUS.includes(m.status) ? m.status : "scheduled";
+      if (heldClosed.has(m.id)) {
+        finalMeetings.add(m.id);
+        const held = await heldRecord(m.id);
+        const differs = [];
+        if (status !== "closed") differs.push("status " + status);
+        if ((m.notes ?? "") !== held.notes) differs.push("notes");
+        if (Array.isArray(m.agenda) &&
+            JSON.stringify(m.agenda.map(agendaIn)) !== JSON.stringify(held.agenda)) differs.push("agenda");
+        if (Array.isArray(m.attendance) &&
+            JSON.stringify(m.attendance.map(attendanceIn).sort(byPerson)) !== JSON.stringify(held.attendance)) {
+          differs.push("attendance");
+        }
+        if (differs.length) {
+          rejects.push({ table: "meeting_occurrence", id: m.id,
+            reason: `this database holds that meeting closed and its record is final — ` +
+                    `the file's ${differs.join(", ")} not written` });
+        }
+        continue;
+      }
+      await t.query(
+        `INSERT INTO meeting_occurrence (id, series_id, meets_on, period_label, status,
+                                         opened_at, opened_by, closed_at, closed_by, notes)
+         VALUES ($1,$2,$3,$4,$5,$6,${USER(7)},$8,${USER(9)},$10)`,
+        [m.id, m.series, m.meetsOn, m.periodLabel ?? "", status,
+         clean(m.openedAt), clean(m.openedBy), clean(m.closedAt), clean(m.closedBy), m.notes ?? ""]);
+      /* The file states the whole of a meeting's agenda and roll, as it
+         states the whole of a change's route: on a merge, what the
+         database holds for this meeting is replaced by the file's. */
+      if (Array.isArray(m.agenda)) {
+        if (mode === "merge") await t.query(`DELETE FROM agenda_item WHERE occurrence_id = $1`, [m.id]);
+        if (m.agenda.length && status !== "closed") {
+          rejects.push({ table: "agenda_item", id: m.id,
+            reason: `an agenda is frozen when its meeting closes; this one is ${status}, so its ` +
+                    `agenda is computed live and the file's ${m.agenda.length} item(s) were not written` });
+        } else {
+          for (const [i, raw] of m.agenda.entries()) {
+            const a = agendaIn(raw, i);
+            await t.query(
+              `INSERT INTO agenda_item (occurrence_id, seq, section, section_key, headline, detail,
+                                        entity, entity_id, timebox_min, urgent)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+               ON CONFLICT (occurrence_id, seq) DO UPDATE
+                 SET section = EXCLUDED.section, section_key = EXCLUDED.section_key,
+                     headline = EXCLUDED.headline, detail = EXCLUDED.detail, entity = EXCLUDED.entity,
+                     entity_id = EXCLUDED.entity_id, timebox_min = EXCLUDED.timebox_min,
+                     urgent = EXCLUDED.urgent`,
+              [m.id, a.seq, a.section, a.sectionKey, a.headline, a.detail, a.entity, a.entityId,
+               a.timeboxMin, a.urgent]);
+          }
+        }
+      }
+      if (Array.isArray(m.attendance)) {
+        if (mode === "merge") await t.query(`DELETE FROM meeting_attendance WHERE occurrence_id = $1`, [m.id]);
+        for (const raw of m.attendance) {
+          const a = attendanceIn(raw);
+          await t.query(
+            `INSERT INTO meeting_attendance (occurrence_id, person_id, state, deputy_for)
+             VALUES ($1,$2,$3,$4)
+             ON CONFLICT (occurrence_id, person_id) DO UPDATE
+               SET state = EXCLUDED.state, deputy_for = EXCLUDED.deputy_for`,
+            [m.id, a.person, a.state, a.deputyFor]);
+        }
+      }
+    }
+
+    const written = new Set();
+    for (const d of book.decisions ?? []) {
+      const status = ["Proposed", "Ratified"].includes(d.status) ? d.status : "Ratified";
+      const row = {
+        occurrence_id: clean(d.meeting), headline: d.headline ?? "", rationale: d.rationale ?? "",
+        alternatives: d.alternatives ?? "", dissent: d.dissent ?? "", project_id: clean(d.project),
+        decided_by: clean(d.decidedBy), decided_on: clean(d.decidedOn), council: d.council ?? "",
+      };
+      const held = heldDecisions.get(d.id);
+      if (held) {
+        const changed = Object.keys(row).filter((k) => (held[k] ?? null) !== row[k]);
+        if (changed.length) {
+          rejects.push({ table: "meeting_decision", id: d.id,
+            reason: `a decision on the record keeps its substance — the file changes its ` +
+                    `${changed.join(", ")}; record a new decision that supersedes it (D-33.3)` });
+          continue;
+        }
+      } else if (row.occurrence_id && finalMeetings.has(row.occurrence_id)) {
+        rejects.push({ table: "meeting_decision", id: d.id,
+          reason: `meeting ${row.occurrence_id} is closed here and its record is final — ` +
+                  `a decision is not added to it by an import` });
+        continue;
+      }
+      await t.query(
+        `INSERT INTO meeting_decision
+           (id, occurrence_id, headline, rationale, alternatives, dissent, project_id, cr_id, raid_id,
+            milestone_id, decided_by, decided_on, council, recorded_by, recorded_at, referred_to_scope,
+            reversal_cost, source_evidence_id, evidence_uri, provenance, status, ratified_by,
+            ratified_on, external_source, external_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,${USER(14)},COALESCE($15::timestamptz, now()),
+                 $16,$17,(SELECT id FROM evidence WHERE id = $18),$19,$20,$21,$22,$23,
+                 ${INTEGRATION(24)},$25)`,
+        [d.id, row.occurrence_id, row.headline, row.rationale, row.alternatives, row.dissent,
+         row.project_id, clean(d.cr), clean(d.raid), clean(d.milestone), row.decided_by,
+         row.decided_on, row.council, clean(d.recordedBy), clean(d.recordedAt),
+         ["group", "programme"].includes(d.referredTo) ? d.referredTo : null,
+         ["low", "medium", "high"].includes(d.reversalCost) ? d.reversalCost : null,
+         clean(d.sourceEvidence), d.evidenceUri ?? "", d.provenance ?? "", status, d.ratifiedBy ?? "",
+         // a proposed decision has not been ratified on any day (049's CHECK)
+         status === "Ratified" ? clean(d.ratifiedOn) : null,
+         clean(d.externalSource), clean(d.externalId)]);
+      written.add(d.id);
+    }
+    /* A decision's links to other decisions second, so both ends exist.
+       Each is kept only if the decision it names is here. */
+    for (const d of book.decisions ?? []) {
+      if (!written.has(d.id)) continue;
+      const links = [clean(d.supersedes), clean(d.supersedesId), clean(d.answeredBy)];
+      if (mode === "replace" && links.every((v) => v === null)) continue;
+      const next = [2, 3, 4].map((n) => `(SELECT id FROM meeting_decision WHERE id = $${n})`);
+      await t.query(
+        `UPDATE meeting_decision
+            SET supersedes = ${next[0]}, supersedes_id = ${next[1]}, answered_by = ${next[2]}
+                ${bump("meeting_decision", ["supersedes", "supersedes_id", "answered_by"], next)}
+          WHERE id = $1`,
+        [d.id, ...links]);
+    }
+
+    for (const a of book.actions ?? []) {
+      if (!heldActions.has(a.id) && finalMeetings.has(a.raisedIn)) {
+        rejects.push({ table: "meeting_action", id: a.id,
+          reason: `meeting ${a.raisedIn} is closed here and its record is final — ` +
+                  `an action is not added to it by an import` });
+        continue;
+      }
+      const status = ["Open", "In progress", "Done", "Cancelled"].includes(a.status) ? a.status : "Open";
+      await t.query(
+        `INSERT INTO meeting_action (id, series_id, raised_in, closed_in, title, detail, owner_id,
+                                     project_id, due_date, status, created_at, closed_at,
+                                     external_source, external_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,COALESCE($11::timestamptz, now()),$12,
+                 ${INTEGRATION(13)},$14)`,
+        [a.id, a.series, a.raisedIn, clean(a.closedIn), a.title ?? a.id, a.detail ?? "",
+         clean(a.owner), clean(a.project), clean(a.dueDate), status, clean(a.createdAt),
+         clean(a.closedAt), clean(a.externalSource), clean(a.externalId)]);
+    }
+
+    /* REQ-46 — a review is an event, and the item's `review` date (already
+       imported with it) is its projection: it is NOT re-derived here, so
+       the item says what the file says. */
+    for (const v of book.raidReviews ?? []) {
+      await t.query(
+        `INSERT INTO raid_review (id, raid_id, reviewed_on, reviewed_by, note, due_on, next_review_on,
+                                  recorded_by, recorded_at, external_source, external_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,${USER(8)},COALESCE($9::timestamptz, now()),${INTEGRATION(10)},$11)`,
+        [v.id, v.item, v.reviewedOn ?? today, clean(v.reviewedBy), v.note ?? "", clean(v.dueOn),
+         clean(v.nextReviewOn), clean(v.recordedBy), clean(v.recordedAt),
+         clean(v.externalSource), clean(v.externalId)]);
+    }
+
     for (const o of book.objections ?? []) {
       if (!String(o.reason ?? "").trim()) {
         rejects.push({ table: "objection", id: o.id,
           reason: "an objection without a reason is not an objection, it is a vote" });
         continue;
       }
-      /* Les réunions ne font pas partie du livre importé — l'identité et
-         la tenue de séance appartiennent au système qui les a
-         enregistrées. Une objection qui désigne une décision absente est
-         donc refusée en le DISANT, plutôt que de faire échouer le
+      /* NEW-14 — les décisions sont dans le livre depuis cette ligne et
+         arrivent juste au-dessus. Une objection qui désigne une décision
+         absente (un livre d'ailleurs, ou une décision refusée plus haut)
+         reste refusée en le DISANT, plutôt que de faire échouer le
          fichier entier sur une violation de clé étrangère. */
       const parent = await t.query(`SELECT 1 FROM meeting_decision WHERE id = $1`, [o.decision]);
       if (!(parent.rows ?? []).length) {
@@ -733,6 +1020,11 @@ export async function importBook(book, user, opts = {}) {
        project, one week (the unique key), so that is its conflict rule:
        a merge updates the week's days rather than refusing the file on
        a second row for the same week. */
+    /* NEW-16 — this conflict rule is the timesheet's own, so the handle
+       leaves it alone and the bump is said here. In replace mode the
+       table is empty and the rule never fires. */
+    const TIMESHEET_BUMP = bumpIfChanged("timesheet", ["days", "entered_by"],
+      ["EXCLUDED.days", "EXCLUDED.entered_by"]);
     for (const x of book.timesheets ?? []) {
       const hasId = !(x.id === undefined || x.id === null || x.id === "");
       const row = [x.person, x.project, x.week, Math.max(0, Math.min(7, Number(x.days ?? 0))),
@@ -742,11 +1034,11 @@ export async function importBook(book, user, opts = {}) {
           ? `INSERT INTO timesheet (id, person_id, project_id, week_start, days, entered_by)
              VALUES ($1,$2,$3,$4,$5,${USER(6)})
              ON CONFLICT (person_id, project_id, week_start) DO UPDATE
-               SET days = EXCLUDED.days, entered_by = EXCLUDED.entered_by`
+               SET days = EXCLUDED.days, entered_by = EXCLUDED.entered_by, ${TIMESHEET_BUMP}`
           : `INSERT INTO timesheet (person_id, project_id, week_start, days, entered_by)
              VALUES ($1,$2,$3,$4,${USER(5)})
              ON CONFLICT (person_id, project_id, week_start) DO UPDATE
-               SET days = EXCLUDED.days, entered_by = EXCLUDED.entered_by`,
+               SET days = EXCLUDED.days, entered_by = EXCLUDED.entered_by, ${TIMESHEET_BUMP}`,
         hasId ? [int(x.id), ...row] : row);
     }
     /* Only the ACTIVE tolerance is exported (the serialiser says why), so
@@ -904,7 +1196,9 @@ export async function importBook(book, user, opts = {}) {
                      // NEW-05 — the fifteen registers the import now reads
                      "windows", "absences", "benefits", "waves", "commitments", "timesheets",
                      "tolerances", "exceptions", "businessCases", "caseReconfirmations",
-                     "lessons", "criteria", "stakeholders", "comms", "extLinks"]) {
+                     "lessons", "criteria", "stakeholders", "comms", "extLinks",
+                     // NEW-14 — the meeting register and the RAID reviews
+                     "meetingSeries", "meetings", "decisions", "actions", "raidReviews"]) {
       counts[k] = (book[k] ?? []).length;
     }
 
@@ -927,6 +1221,12 @@ export async function importBook(book, user, opts = {}) {
       ["CRC","case_reconfirmation","id ~ '^CRC-[0-9]+$'"],["LSN","lesson","id ~ '^LSN-[0-9]+$'"],
       ["GC","gate_criterion","id ~ '^GC-[0-9]+$'"],["STK","stakeholder","id ~ '^STK-[0-9]+$'"],
       ["COM","comms_plan","id ~ '^COM-[0-9]+$'"],["XL","ext_link","id ~ '^XL-[0-9]+$'"],
+      /* NEW-14 — a decision, an action and a review mint their ids from
+         these (`allocateId`). A series and a meeting do not: a series is
+         named `MS-<time>` and a meeting `<series>-<date>`, so there is no
+         counter for either to fall behind. */
+      ["DEC","meeting_decision","id ~ '^DEC-[0-9]+$'"],["ACT","meeting_action","id ~ '^ACT-[0-9]+$'"],
+      ["RVW","raid_review","id ~ '^RVW-[0-9]+$'"],
     ]) {
       await t.query(
         `INSERT INTO id_counter (prefix, next_value)
@@ -964,10 +1264,21 @@ export async function importBook(book, user, opts = {}) {
        ON CONFLICT (prefix) DO UPDATE
          SET next_value = GREATEST(id_counter.next_value, EXCLUDED.next_value)`);
 
+    /* NEW-15 (docs/36) — a real import dropped the rows it refused by
+       name and said so only on a dry run: the operator who went straight
+       to "import" was told 200 and nothing else, and the trail recorded
+       counts that included rows which never came in. The refusals now
+       travel with the answer AND with the audit event, so "what did that
+       import leave out" is readable after the fact, by someone who was
+       not at the keyboard. */
     await record(t, user, {
       action: dryRun ? "Book import validated (dry run)" : "Book imported",
       entity: "system",
-      detail: Object.entries(counts).map(([k, n]) => `${n} ${k}`).join(", "),
+      detail: Object.entries(counts).map(([k, n]) => `${n} ${k}`).join(", ") +
+        (rejects.length
+          ? `; ${rejects.length} row(s) refused: ` + rejects.map((x) => `${x.table} ${x.id}`).join(", ")
+          : ""),
+      after: rejects.length ? { mode, rejects } : undefined,
     });
 
     /* La simulation s'arrête ICI, après avoir tout écrit et donc après
@@ -982,5 +1293,5 @@ export async function importBook(book, user, opts = {}) {
     if (e instanceof DryRunComplete) return e.payload;
     located(e);
   }
-  return counts;
+  return { ok: true, dryRun: false, mode, counts, rejects };
 }

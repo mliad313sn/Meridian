@@ -246,9 +246,12 @@ contradicts `docs/25` (reversibility).
 
 | Id | Defect | Wave |
 |---|---|---|
-| NEW-14 | **The meeting register and RAID reviews are not in the book.** The export writes no meeting series, occurrence, decision, action or review, and a replace import erases them. FitAdapt's `bootstrap.mjs` says so ("the import REPLACES the whole book, meetings included"), and an imported objection cannot find its decision. | 1 |
+| NEW-14 | **BUILT (5.21.0) with NEW-15 and NEW-16.** **The meeting register and RAID reviews are not in the book.** The export writes no meeting series, occurrence, decision, action or review, and a replace import erases them. FitAdapt's `bootstrap.mjs` says so ("the import REPLACES the whole book, meetings included"), and an imported objection cannot find its decision. | 1 |
 | NEW-15 | A real (non-dry-run) import drops the rows it refuses by name without returning `rejects`. Only a dry run says so. | 1 |
 | NEW-16 | A merge import rewrites rows without bumping `row_version`, so a screen holding the old version can still write over them. | 1 |
+| NEW-18 | The book writes only ACTIVE sites, programmes and people, so a row that points at an inactive one (a closed project's old site, a leaver who owned a risk) is refused by the import. The refusal names it, but the row does not come back. Found with NEW-14. | 1 |
+| NEW-19 | A replace import resets every `row_version` to 1. A screen holding version 1 of a row that was at 7 can then write over it. | 3 |
+| NEW-20 | The import screen does not warn that a replace erases everything the file does not carry (a KODO book, or any export older than 5.21.0, has no meeting lists). Such a book should be merged. | 3 |
 | NEW-17 | A merge can leave two active tolerances on one project when the file's active tolerance has a different id. | 3 |
 | NEW-06 | The forced password change never opens: `/api/bootstrap` `me` carries no `mustChangePassword`, so an account an administrator created cannot change its password from any screen, and every write is refused. **BUILT (5.20.2)**: seen in the browser. | 1 |
 | NEW-07 | A merge-mode dry run of the product's own export answers 400 on a duplicate `change_step` key (MER-08). **BUILT with NEW-05 (5.20.1).** | 1 |

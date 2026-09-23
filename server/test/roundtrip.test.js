@@ -54,13 +54,11 @@ const KNOWN_LOST_FIELDS = new Set([]);
 
 /* Collections the import reads that the probed book cannot hold a row of,
    each with its reason. Shrink-only, like the two lists above.
-   · objections — an objection cites a meeting decision, and the meeting
-     register is not in the book: the export does not write it and a
-     replace import deletes it, so the decision is never there to be cited
-     and the import refuses the objection by name (`rejects`). Found by
-     NEW-05's enrichment; closing it means exporting the meeting register,
-     which is a line of its own, not a field of this one. */
-const NOT_EXERCISED = new Set(["objections"]);
+   NEW-14 emptied it: `objections` was here because an objection cites a
+   meeting decision and the meeting register was not in the book, so the
+   decision was never there to be cited. The register is book data now,
+   and ENRICH objects to a decision it carries. */
+const NOT_EXERCISED = new Set([]);
 
 const importer = readFileSync(new URL("../src/import.js", import.meta.url), "utf8");
 const read = new Set([...importer.matchAll(/\bbook\??\.(\w+)/g)].map((m) => m[1]));
@@ -233,6 +231,54 @@ const ENRICH = [
    VALUES ('XL-1', 'inspection', 'INS-77', ${P1}, (SELECT min(id) FROM activity), ${SITE},
            'Crusher guard inspection', 'Open', 'Inspection', 'High', '2026-09-10', '2026-09-08',
            ${USER}, '2026-08-01T10:00:00Z', '2026-08-02T10:00:00Z', true)`,
+
+  /* NEW-14 — the meeting register and the RAID reviews. The seed holds
+     series, closed meetings with a roll, actions and one room decision;
+     it holds no frozen agenda, no deputy, no per-gate series, no
+     decision taken outside a room, no closed action, no review and no
+     objection. One of each, every exported column given a value. */
+  `INSERT INTO meeting_series (id, name, cadence, scope_kind, programme_id, site_id, chair_id, gate_n,
+                              weekday, start_time, timebox_min, active)
+   VALUES ('MS-G901', 'Gate 2 review board', 'per_gate', 'programme', (SELECT min(id) FROM programme),
+           NULL, ${PE2}, 2, 0, '15:30', 75, false)`,
+  `INSERT INTO agenda_item (occurrence_id, seq, section, section_key, headline, detail, entity,
+                           entity_id, timebox_min, urgent)
+   SELECT id, 0, 'Actions carried forward', 'actions', 'Overdue: confirm the ISO mapping',
+          'Owner asked for a week', 'meeting_action', 'ACT-001', 10, true
+     FROM meeting_occurrence WHERE status = 'closed' ORDER BY id LIMIT 1`,
+  `INSERT INTO agenda_item (occurrence_id, seq, section, section_key, headline, detail, entity,
+                           entity_id, timebox_min, urgent)
+   SELECT id, 1, 'Decisions', 'decisions', 'Hold the cutover date', '', '', '', 5, false
+     FROM meeting_occurrence WHERE status = 'closed' ORDER BY id LIMIT 1`,
+  `INSERT INTO meeting_attendance (occurrence_id, person_id, state, deputy_for)
+   SELECT id, ${PE2}, 'deputy', ${PE1}
+     FROM meeting_occurrence WHERE status = 'closed' ORDER BY id LIMIT 1`,
+  `INSERT INTO meeting_decision (id, occurrence_id, headline, rationale, alternatives, dissent,
+                                project_id, cr_id, raid_id, milestone_id, decided_by, decided_on,
+                                council, recorded_by, recorded_at, supersedes, supersedes_id,
+                                reversal_cost, source_evidence_id, evidence_uri, provenance, status,
+                                ratified_by, ratified_on, external_source, external_id)
+   VALUES ('DEC-901', NULL, 'Defer wave 3 to the next freeze window', 'Plant shutdown moved',
+           'Run wave 3 on nights', 'Operations would rather not', ${P1},
+           (SELECT min(id) FROM change_request), (SELECT min(id) FROM raid_item),
+           (SELECT min(id) FROM milestone), ${PE1}, '2026-07-14', 'Architecture board', ${USER},
+           '2026-07-14T16:00:00Z', 'DEC-001', 'DEC-001', 'medium', 'EV-901',
+           'https://docs.example/minutes/42', 'Board minutes 42', 'Ratified', ${PE2}, '2026-07-15',
+           'INT-RT', 'EXT-D1')`,
+  `UPDATE meeting_decision SET referred_to_scope = 'programme', answered_by = 'DEC-901'
+    WHERE id = 'DEC-001'`,
+  `UPDATE meeting_action SET status = 'Done', detail = 'Mapping confirmed with two banks',
+          closed_in = (SELECT max(id) FROM meeting_occurrence WHERE status = 'closed'),
+          closed_at = '2026-08-20T09:30:00Z', external_source = 'INT-RT', external_id = 'EXT-A901'
+    WHERE id = 'ACT-001'`,
+  `INSERT INTO raid_review (id, raid_id, reviewed_on, reviewed_by, note, due_on, next_review_on,
+                           recorded_by, recorded_at, external_source, external_id)
+   VALUES ('RVW-001', (SELECT min(id) FROM raid_item), '2026-08-03', ${PE1}, 'Still likely; owner chasing',
+           '2026-08-01', '2026-08-17', ${USER}, '2026-08-04T07:00:00Z', 'INT-RT', 'EXT-V1')`,
+  `INSERT INTO decision_objection (id, decision_id, seat_id, domain, reason, raised_on, escalates_on,
+                                  state, resolution)
+   VALUES ('OBJ-901', 'DEC-901', 'SE-901', 'safety', 'Night work on live plant needs a permit',
+           '2026-07-15', '2026-07-22', 'resolved', 'Permit-to-work added to the plan')`,
 ];
 
 describe("F13 · export → import → export", () => {

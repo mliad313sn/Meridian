@@ -787,7 +787,9 @@ r.post("/import", async (req, res, next) => {
     const mode = req.query.mode === "merge" ? "merge" : "replace";
     const { importBook } = await import("../import.js");
     const out = await importBook(book, req.user, { dryRun, mode });
-    res.json(out.dryRun ? out : { ok: true, mode, counts: out });
+    /* NEW-15 — the real import answers what the dry run does, `rejects`
+       included: a row refused by name is not a row silently dropped. */
+    res.json(out);
   } catch (e) { next(e); }
 });
 
@@ -806,8 +808,10 @@ r.post("/reset", async (req, res, next) => {
 
 r.get("/export", async (req, res, next) => {
   try {
-    const { loadPortfolio } = await import("../portfolio.js");
-    const db = await loadPortfolio(req.user);
+    /* NEW-14 — the book, meeting register and RAID reviews included:
+       the portfolio alone left a replace import erasing them. */
+    const { loadBook } = await import("../portfolio.js");
+    const db = await loadBook(req.user);
     res.setHeader("Content-Type", "application/json");
     res.setHeader("Content-Disposition",
       `attachment; filename="meridian-${db.statusDate}.json"`);

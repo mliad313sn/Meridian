@@ -59,13 +59,13 @@ Stated here rather than discovered later:
 - **Three blocking operational findings are yours to close**, not the
   software's: a tested backup, a second instance, and a written security
   policy. See [SECURITY.md](SECURITY.md).
-- **The meeting register is not in the JSON book.** The export does not
-  write meeting series, occurrences, decisions, actions or RAID reviews,
-  and a replace import erases them (NEW-14 in
-  [`docs/36`](docs/36-convergence.md)). Everything the export does write
-  comes back field for field, and gate F13 proves it on every build. To
-  move a whole instance, use the database backup (`npm run backup`,
-  proven with `npm run restore-drill`), not the book export.
+- **The JSON book carries only active sites, programmes and people.** A row
+  pointing at an inactive one is refused by the import, and the refusal
+  names it (NEW-18 in [`docs/36`](docs/36-convergence.md)). Everything
+  else the export writes, the meeting register included, comes back field
+  for field, and gate F13 proves it on every build. To move a whole
+  instance, use the database backup (`npm run backup`, proven with
+  `npm run restore-drill`).
 - **Five registers have no screen yet.** Requirements, evidence, review
   findings, governance seats and objections arrive only by importing a
   book (NEW-04). Everything else in
