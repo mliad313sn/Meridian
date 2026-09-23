@@ -16,7 +16,7 @@
  */
 
 import { many, one } from "./db.js";
-import { canSeeProject, projectScopeSql } from "../../shared/rbac.js";
+import { can, canSeeProject, projectScopeSql } from "../../shared/rbac.js";
 
 export const M = 1_000_000;
 /** Exact whole units (what the ledger holds) → millions (what is read). */
@@ -701,6 +701,175 @@ export async function loadPortfolio(user) {
 
     settings,
     narrative,
+  };
+}
+
+/**
+ * NEW-14 (docs/36) — the meeting register and the RAID reviews, for the
+ * BOOK only.
+ *
+ * The export wrote no series, meeting, agenda, attendance, decision,
+ * action or review, and a replace import deletes every meeting table: an
+ * export → import erased the governance record. They are read here and
+ * NOT in `loadPortfolio`, which feeds every screen and the bootstrap on a
+ * satellite link (R-08); only the book needs them all at once — the same
+ * reason `signals.js` keeps its replay out of the serialiser.
+ *
+ * Shape: flat collections beside the others, as the book already names
+ * things — one plural array per register, rows pointing at each other by
+ * id (`objections[].decision` already did). The two children that have
+ * no identity of their own, a meeting's frozen agenda (keyed by its
+ * place, `seq`) and its attendance (keyed by the person), ride inside
+ * their meeting, as a change's route rides inside its change
+ * (`crs[].steps`). Field names follow the published contract where it
+ * has one (`/api/v1/decisions`, `/api/v1/actions`) and the screens'
+ * otherwise, so a reader of either reads the book.
+ *
+ * Scope is the screens' (R1.10): a series is in the book when
+ * `meeting.read` lets this reader see its scope, and its meetings, their
+ * decisions and its actions come with it; a decision taken outside a
+ * room is in the decision register, which `audit.read` guards, and is
+ * written when its project is visible or it has none. A pointer at a
+ * project, change, risk, milestone or piece of evidence this reader
+ * cannot see is written as null — the lessons' rule — so the book is
+ * never the channel through which an out-of-scope row is learned of.
+ * Reviews follow the RAID items the book already carries.
+ */
+export async function loadMeetingBook(user, db) {
+  const has = (rows) => new Set((rows ?? []).map((r) => r.id));
+  const seen = {
+    project: has(db.projects), cr: has(db.crs), raid: has(db.raid),
+    milestone: has(db.milestones), evidence: has(db.evidence),
+  };
+  const keep = (kind, id) => (id != null && seen[kind].has(id) ? id : null);
+
+  const seriesRows = (await many(`SELECT * FROM meeting_series ORDER BY id`))
+    .filter((s) => can(user, "meeting.read", {
+      scope: { scope_kind: s.scope_kind, programme_id: s.programme_id, site_id: s.site_id },
+    }).ok);
+  const seriesIds = seriesRows.map((s) => s.id);
+  const bySeries = (sql) => (seriesIds.length ? many(sql, [seriesIds]) : Promise.resolve([]));
+
+  const [occurrences, agenda, attendance, roomDecisions, actions] = await Promise.all([
+    bySeries(`SELECT * FROM meeting_occurrence WHERE series_id = ANY($1) ORDER BY series_id, meets_on, id`),
+    bySeries(`SELECT a.* FROM agenda_item a JOIN meeting_occurrence o ON o.id = a.occurrence_id
+               WHERE o.series_id = ANY($1) ORDER BY a.occurrence_id, a.seq`),
+    bySeries(`SELECT a.* FROM meeting_attendance a JOIN meeting_occurrence o ON o.id = a.occurrence_id
+               WHERE o.series_id = ANY($1) ORDER BY a.occurrence_id, a.person_id`),
+    bySeries(`SELECT d.* FROM meeting_decision d JOIN meeting_occurrence o ON o.id = d.occurrence_id
+               WHERE o.series_id = ANY($1) ORDER BY d.id`),
+    bySeries(`SELECT * FROM meeting_action WHERE series_id = ANY($1) ORDER BY id`),
+  ]);
+  const standalone = can(user, "audit.read").ok
+    ? (await many(`SELECT * FROM meeting_decision WHERE occurrence_id IS NULL ORDER BY id`))
+        .filter((d) => d.project_id == null || seen.project.has(d.project_id))
+    : [];
+  const decisionRows = [...roomDecisions, ...standalone].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const decisionIds = has(decisionRows);
+
+  const raidIds = [...seen.raid];
+  const reviews = raidIds.length
+    ? await many(`SELECT * FROM raid_review WHERE raid_id = ANY($1) ORDER BY raid_id, reviewed_on, id`, [raidIds])
+    : [];
+
+  const group = (rows, key) => {
+    const m = new Map();
+    for (const r of rows) {
+      if (!m.has(r[key])) m.set(r[key], []);
+      m.get(r[key]).push(r);
+    }
+    return m;
+  };
+  const agendaOf = group(agenda, "occurrence_id");
+  const attendanceOf = group(attendance, "occurrence_id");
+
+  return {
+    meetingSeries: seriesRows.map((s) => ({
+      id: s.id, name: s.name, cadence: s.cadence, scopeKind: s.scope_kind,
+      programme: s.programme_id ?? null, site: s.site_id ?? null, chair: s.chair_id ?? null,
+      // MER-10 — the gate a per-gate series sits at
+      gate: s.gate_n ?? null,
+      weekday: s.weekday, startTime: s.start_time, timeboxMin: s.timebox_min,
+      active: s.active, createdAt: s.created_at, version: s.row_version,
+    })),
+
+    /* An occurrence. Its agenda is here only once it is closed: while it
+       is open it is computed live and never stored (R5.2/R5.8). */
+    meetings: occurrences.map((o) => ({
+      id: o.id, series: o.series_id, meetsOn: o.meets_on, periodLabel: o.period_label,
+      status: o.status,
+      openedAt: o.opened_at ?? null, openedBy: o.opened_by ?? null,
+      closedAt: o.closed_at ?? null, closedBy: o.closed_by ?? null,
+      notes: o.notes ?? "", version: o.row_version,
+      agenda: (agendaOf.get(o.id) ?? []).map((a) => ({
+        seq: a.seq, section: a.section, sectionKey: a.section_key ?? null,
+        headline: a.headline, detail: a.detail, entity: a.entity, entityId: a.entity_id,
+        timeboxMin: a.timebox_min, urgent: a.urgent === true,
+      })),
+      attendance: (attendanceOf.get(o.id) ?? []).map((a) => ({
+        person: a.person_id, state: a.state, deputyFor: a.deputy_for ?? null,
+      })),
+    })),
+
+    decisions: decisionRows.map((d) => ({
+      id: d.id, meeting: d.occurrence_id ?? null,
+      headline: d.headline, rationale: d.rationale ?? "",
+      alternatives: d.alternatives ?? "", dissent: d.dissent ?? "",
+      decidedBy: d.decided_by ?? null, decidedOn: d.decided_on ?? null, council: d.council ?? "",
+      project: keep("project", d.project_id), cr: keep("cr", d.cr_id),
+      raid: keep("raid", d.raid_id), milestone: keep("milestone", d.milestone_id),
+      recordedBy: d.recorded_by ?? null, recordedAt: d.recorded_at,
+      // a referral up, and the decision that answered it (006)
+      referredTo: d.referred_to_scope ?? null,
+      answeredBy: decisionIds.has(d.answered_by) ? d.answered_by : null,
+      /* Two columns say "this replaces that": 034's, written by the
+         register and the contract, and 052's, written by the room. Both
+         are carried as they are; merging them would be a rewrite. */
+      supersedes: decisionIds.has(d.supersedes) ? d.supersedes : null,
+      supersedesId: decisionIds.has(d.supersedes_id) ? d.supersedes_id : null,
+      reversalCost: d.reversal_cost ?? null,
+      sourceEvidence: keep("evidence", d.source_evidence_id),
+      evidenceUri: d.evidence_uri ?? "", provenance: d.provenance ?? "",
+      status: d.status ?? "Ratified", ratifiedBy: d.ratified_by ?? "", ratifiedOn: d.ratified_on ?? null,
+      externalSource: d.external_source ?? null, externalId: d.external_id ?? null,
+      version: d.row_version,
+    })),
+
+    actions: actions.map((a) => ({
+      id: a.id, series: a.series_id, raisedIn: a.raised_in, closedIn: a.closed_in ?? null,
+      title: a.title, detail: a.detail ?? "", owner: a.owner_id ?? null,
+      project: keep("project", a.project_id), dueDate: a.due_date ?? null, status: a.status,
+      createdAt: a.created_at, closedAt: a.closed_at ?? null,
+      externalSource: a.external_source ?? null, externalId: a.external_id ?? null,
+      version: a.row_version,
+    })),
+
+    /* REQ-46 — a review is an event; the item's `review` is its projection. */
+    raidReviews: reviews.map((v) => ({
+      id: v.id, item: v.raid_id, reviewedOn: v.reviewed_on, reviewedBy: v.reviewed_by ?? null,
+      note: v.note ?? "", dueOn: v.due_on ?? null, nextReviewOn: v.next_review_on ?? null,
+      recordedBy: v.recorded_by ?? null, recordedAt: v.recorded_at,
+      externalSource: v.external_source ?? null, externalId: v.external_id ?? null,
+      version: v.row_version,
+    })),
+  };
+}
+
+/**
+ * The whole book, as `GET /api/admin/export` writes it: the portfolio a
+ * reader may see, plus its meeting register and RAID reviews (NEW-14).
+ * An objection is written with the decision it objects to or not at all:
+ * without its decision it cannot come back in (the importer refuses it by
+ * name), and it would name a decision this reader was not shown.
+ */
+export async function loadBook(user) {
+  const db = await loadPortfolio(user);
+  const meetings = await loadMeetingBook(user, db);
+  const decisions = new Set(meetings.decisions.map((d) => d.id));
+  return {
+    ...db,
+    ...meetings,
+    objections: db.objections.filter((o) => decisions.has(o.decision)),
   };
 }
 

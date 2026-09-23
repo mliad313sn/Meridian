@@ -22,6 +22,58 @@ Nothing yet.
 
 ---
 
+## [5.21.0] — 2026-09-23
+
+**The meeting register is in the book** (NEW-14, NEW-15, NEW-16; docs/36
+wave 1).
+
+### Added
+
+- **The book export now writes the meeting register and RAID reviews** as
+  five new lists, in the book's own style:
+  - `meetingSeries`;
+  - `meetings`, each with its frozen agenda and attendance nested inside;
+  - `decisions`, including those taken outside a meeting
+    (`meeting: null`);
+  - `actions`;
+  - `raidReviews`.
+
+  They are scoped as the meeting screens are. A series is written when
+  `meeting.read` allows it, and decisions outside a meeting also need
+  `audit.read`. A link to something the reader cannot see is written as
+  null. The bootstrap every screen loads is unchanged; only the export
+  uses the fuller book.
+- **The import reads them in replace and merge mode.**
+  - Ids are preserved, and the DEC, ACT and RVW counters follow them.
+  - An account or integration this database does not hold becomes null.
+  - An agenda is accepted only for a closed meeting.
+  - A merge leaves a meeting this database holds closed exactly as it is.
+  - A merge updates a decision's status, ratification and links, never
+    its substance.
+
+### Fixed
+
+- **A replace import erased the meeting register** (NEW-14). The export did
+  not write it, and the import deleted it. FitAdapt's own `bootstrap.mjs`
+  warns "the import REPLACES the whole book, meetings included". An
+  imported objection could not find its decision either, so F13's last
+  exemption (`objections`) is gone. F13 is strict with **every list
+  empty**.
+- **A real import dropped the rows it refused by name, silently**
+  (NEW-15). Only a dry run returned them. The real import now answers the
+  same `{ok, dryRun, mode, counts, rejects}`, and the audit event records
+  the refused rows.
+- **A merge rewrote rows without bumping `row_version`** (NEW-16), so a
+  screen holding the old version could still write over them. A merge
+  now bumps the version on every row it actually changes. The tables are
+  read from the schema, and a merge of an unchanged book moves nothing.
+
+`server/test/book-meetings.test.js` (12 tests). Our own export imports
+and merges with 200 and nothing refused, and re-exports byte-identical.
+KODO's book: dry run, import and merge all 200.
+
+---
+
 ## [5.20.2] — 2026-09-23
 
 **Three defects found by walking the manual** (NEW-06, NEW-09, NEW-10;
