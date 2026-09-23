@@ -48,6 +48,16 @@ Unreleased work sits under `## [Unreleased]` until it is tagged.
   or `ss` there, sends SIGTERM, waits for the process to exit, and
   refuses to start a second server if the first is still running.
 
+### Security
+
+- **`qs` 6.15.3 → 6.16.0** (transitive, through Express and
+  `body-parser`). 6.15.3 carries two moderate advisories that reach the
+  JSON and query parsers every request goes through: an array-limit
+  bypass via bracket-key comma parsing (GHSA-x5fp-wj9c-mxmx) and a
+  denial of service through an attacker-controlled `isBuffer`
+  (GHSA-4mjr-xmp4-gh2g). `npm audit` now reports nothing, not merely
+  nothing above the `high` threshold the build enforces.
+
 ---
 
 ## [5.9.0] — 2026-09-01
