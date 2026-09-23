@@ -18,7 +18,35 @@ Unreleased work sits under `## [Unreleased]` until it is tagged.
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+- **Whole-book import answered 400 for every book, including Meridian's
+  own export.** The identifier-counter query in `importBook()` wrote
+  `'\D'` inside a template literal; JavaScript drops the backslash, so
+  PostgreSQL received `regexp_replace(id, 'D', …)` and the `::int` cast
+  failed on the first id. Nothing tested `POST /api/admin/import`, which
+  is how it shipped. `server/test/import.test.js` now round-trips the
+  seeded book. Found by running a real programme (FitAdapt) on Meridian.
+- **Imported documents lost their evidence.** The import did not carry
+  `uri`, `uri_locked_hash`, `uri_locked_on` or `supersedes`, so every
+  approved document came back as a label with nothing behind it (R-01)
+  and every cleared gate turned overdue. All four now round-trip.
+- **The import refused the file `GET /api/admin/export` produces.** The
+  route read only `{ db: <book> }`, the interface's envelope; it now also
+  accepts the bare book the export answers.
+- **The README quick start could not sign anyone in on a fresh clone.**
+  With no `PGLITE_DIR` the PGlite fallback was an in-memory database:
+  `npm run seed` built a book that died with its process and `npm run
+  dev` started on an empty one with no accounts. The fallback is now
+  `server/.data/pgdata`, as documented, and the directory is created if
+  it does not exist (setting `PGLITE_DIR` to a new path used to fail with
+  `ENOENT`). `dataDir: null` remains an explicit in-memory request and
+  now wins over `PGLITE_DIR`, so tests never touch a developer's book.
+- **`scripts/restart.sh` only worked on Windows.** It found the listener
+  through `powershell.exe`; on Linux and macOS it stopped nothing and
+  started a second server on the same data directory. It now uses `lsof`
+  or `ss` there, sends SIGTERM, waits for the process to exit, and
+  refuses to start a second server if the first is still running.
 
 ---
 

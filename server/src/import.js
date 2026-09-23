@@ -151,12 +151,24 @@ export async function importBook(book, user) {
     }
     for (const d of book.docs ?? []) {
       await t.query(
-        `INSERT INTO document (id, project_id, name, doc_type, gate, owner_id, revision, status, updated_on)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        `INSERT INTO document (id, project_id, name, doc_type, gate, owner_id, revision, status, updated_on,
+                               uri, uri_locked_hash, uri_locked_on)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
         [d.id, clean(d.project), d.name, d.type ?? "Assurance", int(d.gate),
          clean(d.owner), d.rev ?? "0.1",
          ["Draft", "In review", "Approved", "Superseded"].includes(d.status) ? d.status : "Draft",
-         d.updated ?? new Date().toISOString().slice(0, 10)]);
+         d.updated ?? new Date().toISOString().slice(0, 10),
+         /* R-01 — evidence is an approved document that points at
+            something. Dropping the uri turned every imported approved
+            document back into a label, and every cleared gate into an
+            overdue one. */
+         d.uri ?? "", d.uriHash ?? "", clean(d.uriLockedOn)]);
+    }
+    // supersession second, so both ends exist
+    for (const d of book.docs ?? []) {
+      if (d.supersedes) {
+        await t.query(`UPDATE document SET supersedes = $2 WHERE id = $1`, [d.id, d.supersedes]);
+      }
     }
     for (const i of book.items ?? []) {
       await t.query(
@@ -201,9 +213,12 @@ export async function importBook(book, user) {
       ["DEP","raid_item","id LIKE 'DEP-%'"],["CR","change_request","true"],
       ["DOC","document","true"],["WI","work_item","true"],["PE","person","true"],
     ]) {
+      /* '\\D', not '\D': inside a template literal the single backslash
+         is dropped, PostgreSQL receives 'D', and the ::int cast fails on
+         every id — which made every import answer 400. */
       await t.query(
         `INSERT INTO id_counter (prefix, next_value)
-         SELECT $1, COALESCE(MAX(NULLIF(regexp_replace(id, '\D', '', 'g'), ''))::int, 0)
+         SELECT $1, COALESCE(MAX(NULLIF(regexp_replace(id, '\\D', '', 'g'), ''))::int, 0)
            FROM ${table} WHERE ${where}
          ON CONFLICT (prefix) DO UPDATE
            SET next_value = GREATEST(id_counter.next_value, EXCLUDED.next_value)`,
