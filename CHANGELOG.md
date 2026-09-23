@@ -22,6 +22,79 @@ Nothing yet.
 
 ---
 
+## [5.17.0] — 2026-09-23
+
+**Convergence: the KODO line reaches main.** KODO's fifteen findings
+(MER-01…MER-15) were built on `claude/dynamic-gates-and-requirements` on
+19/09 and delivered to KODO as three patches it had to apply by hand.
+This release carries them, joined onto the RT365 line of 5.16.0. See
+`docs/36` line C-03.
+
+### Added (from the KODO line)
+
+- **A gate model that is configuration** (MER-01), **gates that loop**
+  (`gate_loop`), and **gates scoped to a programme or the whole
+  portfolio** (MER-02).
+- **A requirement register** (MER-03), **review findings** that close only
+  on evidence (MER-05), **seats with vetoes and incompatibilities**
+  enforced by the database (MER-06), and **objections, a reversal cost
+  and supersession** on decisions (MER-07).
+- **Import dry run and merge mode** (MER-08). **Money that declares its
+  unit** (MER-09): a book without `currencyUnit` is refused. See
+  D-36.04 below for what that means for your old exports.
+- Per-gate and ad hoc meeting cadence (MER-10), evidence that is not a
+  document (MER-11), allocation identity kept across a round trip
+  (MER-14), and an empty gate that says so (MER-15).
+- Migrations **051** and **052**. They were written as 034 and 035 on a
+  branch that never reached main, and were renumbered before anything
+  applied them.
+
+### Changed — where the two lines disagreed
+
+- **One gate model (D-36.02).** RT365 answered "our gates are not your
+  four" with a ladder per programme. KODO answered it with a portfolio
+  model whose gates loop and may be scoped. A project now walks its
+  programme's ladder if it has one, else the portfolio's, else the four
+  built-in gates. Any rung of either may carry `loopsTo` and `scope`. The
+  gate state keeps RT365's criteria and placeholder dates, and adds
+  KODO's loop filter. A programme-scoped gate with an unmet criterion is
+  not ready.
+- The refusal to advance a gate says **"No evidence has been registered"**
+  when nothing was ever attached, and names the pieces otherwise (MER-15
+  and RT365's criteria together).
+- `PGLITE_DIR=:memory:` (KODO's spelling) and `MERIDIAN_EPHEMERAL=1`
+  (RT365's) both mean in-memory, in the one resolver.
+
+### Fixed
+
+- **NEW-01: the product could not import its own export again.** KODO's
+  strict allocation check (MER-14) accepted a hand-typed list of keys,
+  and the export writes `capitalised`, which was not on it. The accepted
+  keys are now read from the export's own serialiser (`allocationOut`),
+  so they cannot drift. `capitalised` is also imported now, where before
+  it was silently dropped.
+- **NEW-03: seventeen segregation-of-duties tests had been deleted.** The
+  KODO line's `governance.test.js` replaced the file of the same name. The
+  seventeen tests it held are restored, and KODO's tests now live in
+  `review-governance.test.js`. The count showed "+18" and hid the
+  deletion.
+- **F2 could not see KODO's tables.** `CREATE TABLE IF NOT EXISTS` and
+  `ADD COLUMN IF NOT EXISTS` were not recognised: the first hid the tables
+  from the gate, and the second was read as a column named `IF`.
+- The importer keeps 5.9.1's named-row refusal and evidence fields
+  alongside KODO's dry run and merge mode.
+- The book reset now clears KODO's six registers. RT365's REQ-52 check
+  caught them the moment the two lines met.
+
+### Operator note (D-36.04)
+
+A book exported by Meridian **before 5.17.0** carries no `currencyUnit`
+and is now refused, as KODO asked. Its money was always in millions: add
+`"currencyUnit": "millions"` to the file and it imports. The refusal says
+so.
+
+---
+
 ## [5.16.0] — 2026-09-23
 
 **Convergence: the RT365 line reaches main.** Nothing in this release is

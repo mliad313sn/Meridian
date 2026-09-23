@@ -3,7 +3,7 @@
   "source": {
     "repository": "mliad313sn/RT365",
     "branch": "claude/project-owner-agent-setup-hi3xqu",
-    "commit": "fe2ee02",
+    "commit": "670bfbd",
     "documents": [
       "docs/ADRs/ADR-017.md",
       "docs/IMPROVEMENT_REGISTER.md",
@@ -18,7 +18,7 @@
       "docs/REPORTS/meridian_requests_v3.json",
       "scripts/meridian_sync.py"
     ],
-    "reviewedAt": "2026-09-08",
+    "reviewedAt": "2026-09-23",
     "branchPinned": "claude/meridian-rt365-feedback-d6vo3i",
     "vocabulary": {
       "request": [
@@ -1739,6 +1739,35 @@
           "note": "Opened and half-closed in the same round; the test found a second instance immediately."
         }
       ]
+    },
+    {
+      "id": "REQ-53",
+      "origin": [
+        "R3-5"
+      ],
+      "issue": null,
+      "title": "The register schema is checkable by the field repository that writes the register",
+      "status": "open",
+      "priority": "medium",
+      "version": null,
+      "decidedOn": "2026-09-23",
+      "delivered": [],
+      "measure": null,
+      "remaining": [
+        "The validator behind scripts/audit/register-schema.mjs is runnable against an arbitrary file path, and the schema and that command are named in the schema's own description."
+      ],
+      "accepted": null,
+      "released": false,
+      "observed": "Found by validating our own file. RT365's registerVersion 7 - the register handed over with the consolidated report - declared \"$schema\": \"meridian-request-register/1\" and failed that schema in 55 places: status \"proposed\" is not in the enum (open|partial|done|refused); `accepted: false` is forbidden on an open line by an explicit rule in the schema (E-9: absence is not silence) and was wrong in our own words, since no agent may record an acceptance at all; and every history row we wrote omitted the required `status`. Meridian validates the copy it holds; the side that WRITES the file had no way to check it, so a register that would have bounced was handed over as finished. Fixed in registerVersion 8, which validates clean.",
+      "answerToSource": "Taken (docs/36, P5 round of 23/09). Scheduled with C-05, the line that adds gates: the same validator, run against a path you name.",
+      "history": [
+        {
+          "at": "2026-09-23",
+          "registerVersion": 16,
+          "status": "open",
+          "note": "Read from RT365 meridian_requests_v3.json (registerVersion 8, 09/09) on branch claude/project-owner-agent-setup-hi3xqu at 670bfbd — filed after this register's reviewedAt of 08/09, found by the convergence campaign's P5 read."
+        }
+      ]
     }
   ],
   "channel": {
@@ -1769,5 +1798,5 @@
       "whatIsNeeded": "A maintainer merges the branch to main and pushes the tag. The owner AUTHORISED the merge on 08/09; it was then refused by the agent session's own permission classifier — `git merge --ff-only`, `git push origin <branch>:main` and even a local `git tag -a` (D-33.50). Pushing a tag ref is separately refused HTTP 403 by the session credential (D-33.18, D-33.30). Two different boundaries, neither routed around."
     }
   },
-  "registerVersion": 15
+  "registerVersion": 16
 }

@@ -1,0 +1,621 @@
+{
+  "$schema": "meridian-request-register/1",
+  "source": {
+    "repository": "mliad313sn/kodo-by-kernel-project",
+    "branch": "claude/wonderful-cannon-1hggjl",
+    "commit": "8ad1d157685c37998c0f78a8a3cad8bfe9e4a1bb",
+    "documents": [
+      "docs/reports/MERIDIAN_PRODUCT_REPORT.md",
+      "delivery/meridian/README.md",
+      "delivery/meridian/export/README.md",
+      "delivery/meridian/patches/0001-importer-and-earned-value-fixes.patch",
+      "delivery/meridian/patches/0002-dynamic-gates-and-requirements.patch",
+      "delivery/meridian/patches/0003-governance-findings-seats-decisions.patch",
+      "delivery/meridian/kodo_import_payload.json",
+      "tools/meridian_book.py",
+      "docs/governance/00_PO_DECISION_REGISTER.md (D-009)"
+    ],
+    "reviewedAt": "2026-09-23",
+    "branchPinned": "none — KODO pins Meridian 5.9.0 (77c4b49) plus its own patches 0001–0003",
+    "vocabulary": {
+      "request": [
+        "MER-\\d{2}"
+      ],
+      "context": [
+        "D-\\d{3}",
+        "CR-\\d{3}",
+        "SF-\\d{2}",
+        "FR-M\\d+-\\d{2}",
+        "NFR-[A-Z]+-\\d{2}",
+        "IMP-\\d{3}"
+      ],
+      "note": "MER = findings of KODO's Meridian product report; D/CR/SF/FR/NFR/IMP are KODO's own decisions, change requests, staffing findings, requirements and improvements — context, never counted as missing."
+    }
+  },
+  "productOwner": {
+    "charter": "docs/33-retour-terrain-rt365.md#1",
+    "command": ".claude/commands/product-owner.md",
+    "lastRun": "2026-09-23"
+  },
+  "channel": {
+    "issues": "https://github.com/mliad313sn/Meridian/issues",
+    "rule": "One issue per request. A request is answered on its issue, and the answer is what moves `accepted`.",
+    "acceptance": {
+      "done": "merged to Meridian's default branch (main) with its test; docs/36 §0: a line built only on a branch is `partial`, and says so in `remaining`",
+      "accepted": "the requester re-tested it and said so on the issue. Only the requester writes this.",
+      "notAccepted": "the requester is in a position to answer and has not.",
+      "cannotAnswerYet": "accepted is null: nothing is delivered to try, or the requester cannot judge it until a tag carries it.",
+      "released": "a version tag a third party can fetch carries it (v5.9.1 is not on the remote as of 2026-09-23, so nothing here is released)"
+    },
+    "escalation": "a rejected done or refusal goes back to open with the objection quoted; a disagreement is written in both registers rather than settled in one",
+    "release": {
+      "defaultBranch": "main",
+      "measuredAt": "2026-09-23",
+      "state": "main is 5.9.1 at 6d8eddf (PR #14). Latest tag on the remote: v5.9.0. Every `released` is false."
+    },
+    "counterpart": "KODO Product Owner (docs/reports/MERIDIAN_PRODUCT_REPORT.md); no issue filed upstream yet — the report says 'ready to send … as issues'"
+  },
+  "registerVersion": 2,
+  "requests": [
+    {
+      "id": "MER-01",
+      "origin": [
+        "MER-01"
+      ],
+      "title": "The four-gate assumption is in the schema, not in configuration",
+      "status": "partial",
+      "priority": "highest",
+      "effort": "M",
+      "version": "5.17.0",
+      "decidedOn": null,
+      "delivered": [
+        "server/migrations/051_gate_model_and_requirements.sql",
+        "shared/engine.js#gates (D-36.02)"
+      ],
+      "measure": "server/test/gate-model.test.js",
+      "remaining": [
+        "Gate 0 means « attached to no gate » in Meridian since migration 002; KODO's model numbers its mandate gate 0. Tracked as NEW-02 (docs/36): until it is decided, number the portfolio model from 1."
+      ],
+      "issue": null,
+      "accepted": null,
+      "released": false,
+      "observed": "**What happened when I tried to use it.** KODO has six gates: G0 Mandate, G1 Cahier des\ncharges, G2 Module prompts, G3 Build & integrate, G4 Deep review, G5 Market challenge. I\nmapped G1→1, G2→2, G3→3 and had to demote G0, G4 and G5 to plain milestones. Demoting them\nis not cosmetic: gate locking, gate evidence and `canAdvance` do not apply to a milestone,\nso **the two gates that actually block a KODO release are the two Meridian cannot enforce.**\n\n**Worse: the gates loop.** §16 of our specification runs G4 → G5 → back to G1, at least\nthree times before public launch, and once a quarter for ever after. Meridian's gate model\nis strictly monotonic — `currentGate` returns the first gate not `Cleared` — so a gate that\nhas been cleared and must be re-passed cannot be expressed at all. A stage-gate product\nthat cannot model a *loop* cannot model agile-at-scale, cannot model regulated re-approval,\nand cannot model any programme that ships more than once.",
+      "observedAt": "docs/reports/MERIDIAN_PRODUCT_REPORT.md:242-253 @ 8ad1d15",
+      "history": [
+        {
+          "at": "2026-09-23",
+          "registerVersion": 1,
+          "status": "partial",
+          "note": "verified in code on origin/claude/dynamic-gates-and-requirements"
+        },
+        {
+          "at": "2026-09-23",
+          "registerVersion": 2,
+          "status": "partial",
+          "note": "Built on claude/dynamic-gates-and-requirements (19/09), converged onto main by docs/36 C-03 as 5.17.0; migrations renumbered 034/035 → 051/052 before any main or tag applied them."
+        }
+      ]
+    },
+    {
+      "id": "MER-02",
+      "origin": [
+        "MER-02"
+      ],
+      "title": "Gates are attached to projects; real gates review a portfolio",
+      "status": "done",
+      "priority": "high",
+      "effort": "M",
+      "version": "5.17.0",
+      "decidedOn": null,
+      "delivered": [
+        "server/migrations/052_findings_seats_and_decisions.sql",
+        "shared/engine.js#scopedGateStatus"
+      ],
+      "measure": "server/test/governance.test.js — describe « MER-02 »",
+      "remaining": null,
+      "issue": null,
+      "accepted": null,
+      "released": false,
+      "observed": "**What happened.** KODO's G4 is *one* deep review that walks every requirement across all\n18 modules in six passes, and produces a single conformance matrix. In Meridian I had to\neither invent 18 separate gate-4s that do not exist, or hang the real one off an arbitrary\nproject (I chose M17, which is wrong but at least visible). Neither is the truth.",
+      "observedAt": "docs/reports/MERIDIAN_PRODUCT_REPORT.md:282-285 @ 8ad1d15",
+      "history": [
+        {
+          "at": "2026-09-23",
+          "registerVersion": 1,
+          "status": "partial",
+          "note": "verified in code on origin/claude/dynamic-gates-and-requirements"
+        },
+        {
+          "at": "2026-09-23",
+          "registerVersion": 2,
+          "status": "done",
+          "note": "Built on claude/dynamic-gates-and-requirements (19/09), converged onto main by docs/36 C-03 as 5.17.0; migrations renumbered 034/035 → 051/052 before any main or tag applied them."
+        }
+      ]
+    },
+    {
+      "id": "MER-03",
+      "origin": [
+        "MER-03"
+      ],
+      "title": "There is no requirement, and therefore no traceability",
+      "status": "partial",
+      "priority": "high",
+      "effort": "L",
+      "version": "5.17.0",
+      "decidedOn": null,
+      "delivered": [
+        "server/migrations/051_gate_model_and_requirements.sql",
+        "requirement table, import and export"
+      ],
+      "measure": "server/test/requirements.test.js",
+      "remaining": [
+        "No write route for a requirement yet, and no CI endpoint to post a verification result (report:336-339)."
+      ],
+      "issue": null,
+      "accepted": null,
+      "released": false,
+      "observed": "**What happened.** KODO's Definition of Done (§14.1) says a deliverable is done when it\n*\"meets its numbered requirements, each verified by a named test\"*. We have 130\nrequirements, each with a source tag, a MoSCoW priority, a verification method and the gate\nthat discharges it — and CI fails the build when a requirement marked done is not named by\na test (`tools/trace_check.dart`). **None of that is visible in Meridian.** The portfolio\nshows M1 as a project with five activities. It cannot show that M1 discharges `FR-M1-01`\nthrough `FR-M1-12`, that all twelve are named by tests, and that the evidence is a named\nartefact from a named commit.",
+      "observedAt": "docs/reports/MERIDIAN_PRODUCT_REPORT.md:305-312 @ 8ad1d15",
+      "history": [
+        {
+          "at": "2026-09-23",
+          "registerVersion": 1,
+          "status": "partial",
+          "note": "verified in code on origin/claude/dynamic-gates-and-requirements"
+        },
+        {
+          "at": "2026-09-23",
+          "registerVersion": 2,
+          "status": "partial",
+          "note": "Built on claude/dynamic-gates-and-requirements (19/09), converged onto main by docs/36 C-03 as 5.17.0; migrations renumbered 034/035 → 051/052 before any main or tag applied them."
+        }
+      ]
+    },
+    {
+      "id": "MER-04",
+      "origin": [
+        "MER-04"
+      ],
+      "title": "With no cost baseline, a finished project reports on-track, on-budget, 0 % complete",
+      "status": "done",
+      "priority": "highest",
+      "version": "5.9.1",
+      "decidedOn": "2026-09-23",
+      "delivered": [
+        "shared/engine.js (measurable requires bac > 0; progress falls back to weight × pct)"
+      ],
+      "measure": "server/test/engine.test.js",
+      "remaining": [
+        "D-36.01 (docs/36): on main after C-02 the rule becomes RT365's REQ-33 — SPI/CPI null and health N, not 5.9.1's G 'No cost baseline'",
+        "the 'right answer' — a declared unit of value (items, sites) for EVM — is not built anywhere",
+        "not in a tag: v5.9.1 is not on the remote"
+      ],
+      "answerToSource": "Patch 0001's engine.js hunk is on main (5.9.1, ported in 63b85e7).",
+      "issue": null,
+      "accepted": null,
+      "released": false,
+      "observed": "**What happened — observed, not predicted.** KODO has no agreed budget line\n(`NFR-COST-01` is genuinely open, PO open item O-01), so every project carries a zero budget\nrather than an invented number. With the portfolio loaded, `Engine.metrics(db, \"M1\")` on a\nmodule whose five activities are all at 100 % and whose phase is `Closure` returns:\n\n```\n  measurable : true          <- the guard meant to suppress noise\n  spi / cpi  : 1.00 / 1.00\n  pctComplete: 0%\n  RAG        : G - \"SPI 1.00 and CPI 1.00 both inside tolerance\"\n  honest %   : 100%          (weight x pct — already in the data)\n```\n\nAnd the portfolio roll-up across all eighteen modules reports **`measured 18 of 18`**. That\nlast line is the sharpest part of the finding: the tool is not merely wrong, it is\nconfident. It states that it has measured every project in the portfolio when it has\nmeasured none of them, and it colours the result Green with a sentence quoting two indices\nit did not compute.",
+      "observedAt": "docs/reports/MERIDIAN_PRODUCT_REPORT.md:359-376 @ 8ad1d15",
+      "history": [
+        {
+          "at": "2026-09-23",
+          "registerVersion": 1,
+          "status": "done",
+          "note": "fixed on main 5.9.1 (63b85e7, PR #14) and by RT365's REQ-33 on the RT365 line"
+        }
+      ]
+    },
+    {
+      "id": "MER-05",
+      "origin": [
+        "MER-05"
+      ],
+      "title": "A review finding is neither a risk nor a lesson, and there is nowhere to put it",
+      "status": "partial",
+      "priority": "high",
+      "effort": "S",
+      "version": "5.17.0",
+      "decidedOn": null,
+      "delivered": [
+        "server/migrations/052_findings_seats_and_decisions.sql",
+        "shared/engine.js#attention (Review finding)"
+      ],
+      "measure": "server/test/governance.test.js — describe « MER-05 »",
+      "remaining": [
+        "A session route and a screen to raise, edit and close it — today it enters only through the book import (your report:39-43). Tracked as NEW-04 in docs/36."
+      ],
+      "issue": null,
+      "accepted": null,
+      "released": false,
+      "observed": "**What happened.** KODO's G4 produces findings in a fixed shape: *ID, review pass, module,\nrequirement, what was observed as fact, why it matters, severity, owner, proposed fix,\nre-test date, evidence link*. The governing rule is that **a finding closes on re-test\nevidence, never on a merged fix**. I could not represent that. A finding is not a risk — it\nhas already happened, so P×I is meaningless. It is not a lesson — it is open and owned and\nblocking. I put the M1 defects in the RAID register with invented probabilities, which is\nthe wrong answer and I have said so in the book.\n\nThe same gap swallowed our improvement backlog: IMP-001…010 are RICE-scored (Reach ×\nImpact × Confidence ÷ Effort) and arrive from four different sources — gate reviews, the\nmarket challenge, child-panel observation, item telemetry. In Meridian they became\n`work_item` cards with a priority letter, which loses the score, the source and the loop\nnumber.",
+      "observedAt": "docs/reports/MERIDIAN_PRODUCT_REPORT.md:424-436 @ 8ad1d15",
+      "history": [
+        {
+          "at": "2026-09-23",
+          "registerVersion": 1,
+          "status": "partial",
+          "note": "verified in code on origin/claude/dynamic-gates-and-requirements"
+        },
+        {
+          "at": "2026-09-23",
+          "registerVersion": 2,
+          "status": "partial",
+          "note": "Built on claude/dynamic-gates-and-requirements (19/09), converged onto main by docs/36 C-03 as 5.17.0; migrations renumbered 034/035 → 051/052 before any main or tag applied them."
+        }
+      ]
+    },
+    {
+      "id": "MER-06",
+      "origin": [
+        "MER-06"
+      ],
+      "title": "Authority is data — but only two kinds of it",
+      "status": "partial",
+      "priority": "high",
+      "effort": "M",
+      "version": "5.17.0",
+      "decidedOn": null,
+      "delivered": [
+        "server/migrations/052_findings_seats_and_decisions.sql",
+        "shared/engine.js#openVetoes",
+        "seat_conflict_guard trigger"
+      ],
+      "measure": "server/test/governance.test.js — describe « MER-06 »",
+      "remaining": [
+        "A session route and a screen to raise, edit and close it — today it enters only through the book import (your report:39-43). Tracked as NEW-04 in docs/36."
+      ],
+      "issue": null,
+      "accepted": null,
+      "released": false,
+      "observed": "**What happened.** KODO's committee has fourteen seats. Three of them hold a **blocking veto\nin their own domain**: the Pedagogical Lead, the Child Development Psychologist, and the\nChild Safety, Privacy & Compliance Officer — who holds it at *every* gate. There is also a\nhard incompatibility: seat 13 may never be combined with seats 6, 8 or 9, because the\nofficer who must refuse a mechanic cannot also be the person who designed it. And there are\ntwo standing observers with *voice and no vote*.\n\nNone of that is expressible. Our vetoes now live in a markdown file and are enforced by\npeople remembering — which is exactly the *\"convention\"* Meridian's own README says it\nexists to replace.",
+      "observedAt": "docs/reports/MERIDIAN_PRODUCT_REPORT.md:457-466 @ 8ad1d15",
+      "history": [
+        {
+          "at": "2026-09-23",
+          "registerVersion": 1,
+          "status": "partial",
+          "note": "verified in code on origin/claude/dynamic-gates-and-requirements"
+        },
+        {
+          "at": "2026-09-23",
+          "registerVersion": 2,
+          "status": "partial",
+          "note": "Built on claude/dynamic-gates-and-requirements (19/09), converged onto main by docs/36 C-03 as 5.17.0; migrations renumbered 034/035 → 051/052 before any main or tag applied them."
+        }
+      ]
+    },
+    {
+      "id": "MER-07",
+      "origin": [
+        "MER-07"
+      ],
+      "title": "Decisions record a rationale, but not an objection, a reversal cost, or a supersession",
+      "status": "partial",
+      "priority": "high",
+      "effort": "S",
+      "version": "5.17.0",
+      "decidedOn": null,
+      "delivered": [
+        "server/migrations/052_findings_seats_and_decisions.sql",
+        "server/src/routes/meetings.js (reversal_cost, supersedes_id, source_evidence_id)"
+      ],
+      "measure": "server/test/governance.test.js — describe « MER-07 »",
+      "remaining": [
+        "Reversal cost and supersession are written by the meetings route; objections enter only through the book import, and no screen shows any of the three. Tracked as NEW-04 in docs/36."
+      ],
+      "issue": null,
+      "accepted": null,
+      "released": false,
+      "observed": "**What happened.** KODO's decision rule is **consent, not consensus**: a proposal carries\nunless a seat records a *reasoned, domain-relevant objection* in the dissent log, and an\nunresolved objection escalates to the Product Owner within one working week. Every decision\nis minuted as *decision, owner, date, rationale, source evidence, **reversal cost***.\n\nMeridian has `rationale`, which is 60 % of the way there and the hard 60 %. What is missing:\n\n- **No objection.** There is no dissent log, so consent-based governance cannot be run on\n  this tool, and neither can any board that records minority positions — which is most\n  regulated boards.\n- **No escalation clock.** \"Unresolved within one working week\" is exactly the kind of\n  thing a tool should chase onto an agenda. The meeting engine already chases\n  `meeting_action` forward onto every subsequent agenda until closed; an objection is the\n  same mechanism with a different noun.\n- **No reversal cost.** This is the field I would fight for. Our register grades every\n  decision Low / Medium / **High = effectively one-way**. D-006 (publishing the item bank\n  under CC BY-SA) is one-way; D-003 (descoping the public gallery) is not. Those two\n  decisions look identical in any tool that records only a rationale, and they are not\n  remotely the same decision. For a product whose thesis is *\"the trail cannot be\n  rewritten\"*, being able to answer **\"what would it cost to undo this?\"** is the natural\n  next sentence.\n- **No supersession.** A decision cannot point at the decision it replaces, so the trail\n  records what was decided but not what is currently true.",
+      "observedAt": "docs/reports/MERIDIAN_PRODUCT_REPORT.md:490-512 @ 8ad1d15",
+      "history": [
+        {
+          "at": "2026-09-23",
+          "registerVersion": 1,
+          "status": "partial",
+          "note": "verified in code on origin/claude/dynamic-gates-and-requirements"
+        },
+        {
+          "at": "2026-09-23",
+          "registerVersion": 2,
+          "status": "partial",
+          "note": "Built on claude/dynamic-gates-and-requirements (19/09), converged onto main by docs/36 C-03 as 5.17.0; migrations renumbered 034/035 → 051/052 before any main or tag applied them."
+        }
+      ]
+    },
+    {
+      "id": "MER-08",
+      "origin": [
+        "MER-08"
+      ],
+      "title": "The import is destructive, administrator-only, and has no dry run",
+      "status": "partial",
+      "priority": "high",
+      "effort": "S",
+      "version": "5.17.0",
+      "decidedOn": null,
+      "delivered": [
+        "server/src/import.js (dryRun, mode: merge)"
+      ],
+      "measure": "server/test/governance.test.js — describe « MER-08 »",
+      "remaining": [
+        "Item 3 — a published JSON Schema for the book, checked in CI — is on no branch."
+      ],
+      "issue": null,
+      "accepted": null,
+      "released": false,
+      "observed": "**What happened.** This is the first thing a new customer does, and it is the most dangerous\noperation in the product. I generated a 59 KB book from the importer's source and had no\nway to ask *\"would this load, and what would it say?\"* without destroying the seeded book I\nwas reading to understand the format. On a real evaluation that is the difference between a\nsuccessful pilot and a reinstall.",
+      "observedAt": "docs/reports/MERIDIAN_PRODUCT_REPORT.md:528-532 @ 8ad1d15",
+      "history": [
+        {
+          "at": "2026-09-23",
+          "registerVersion": 1,
+          "status": "partial",
+          "note": "verified in code on origin/claude/dynamic-gates-and-requirements"
+        },
+        {
+          "at": "2026-09-23",
+          "registerVersion": 2,
+          "status": "partial",
+          "note": "Built on claude/dynamic-gates-and-requirements (19/09), converged onto main by docs/36 C-03 as 5.17.0; migrations renumbered 034/035 → 051/052 before any main or tag applied them."
+        }
+      ],
+      "answerToSource": "Dry run and merge mode are on main in 5.17.0. Note for your README: the import route is POST /api/admin/import — /api/v1/admin/import (delivery/meridian/README.md:41) and /api/v1/book/import (tools/meridian_book.py:11) do not exist on any branch."
+    },
+    {
+      "id": "MER-09",
+      "origin": [
+        "MER-09"
+      ],
+      "title": "Money has an implicit unit, and the unit is millions",
+      "status": "done",
+      "priority": "highest",
+      "effort": "S",
+      "version": "5.17.0",
+      "decidedOn": null,
+      "delivered": [
+        "server/src/import.js#moneyScale",
+        "server/src/portfolio.js (currencyUnit on export)"
+      ],
+      "measure": "server/test/governance.test.js — describe « MER-09 »",
+      "remaining": null,
+      "issue": null,
+      "accepted": null,
+      "released": false,
+      "observed": "**What happened.** In the book, `\"budget\": 4` means four million. Nothing in the payload\ndeclares that, nothing validates it, and nothing rejects a book that got it wrong. A\ncustomer migrating from a spreadsheet where the column was already in units will import a\n€2.4 m project as €2 400 000 000 000, and every RAG, every CPI and every steering pack will\nbe wrong in a way that looks like a formatting bug for about a month.",
+      "observedAt": "docs/reports/MERIDIAN_PRODUCT_REPORT.md:555-559 @ 8ad1d15",
+      "history": [
+        {
+          "at": "2026-09-23",
+          "registerVersion": 1,
+          "status": "partial",
+          "note": "verified in code on origin/claude/dynamic-gates-and-requirements"
+        },
+        {
+          "at": "2026-09-23",
+          "registerVersion": 2,
+          "status": "done",
+          "note": "Built on claude/dynamic-gates-and-requirements (19/09), converged onto main by docs/36 C-03 as 5.17.0; migrations renumbered 034/035 → 051/052 before any main or tag applied them."
+        }
+      ],
+      "answerToSource": "Kept exactly as you asked it: a book without `currencyUnit` is refused (D-36.04). Your own payloads — delivery/meridian/kodo_import_payload.json and both export/*-import-payload.json — predate patch 0003 and carry no unit, so they are refused too. Add \"currencyUnit\": \"millions\" to the header (your generator's money has always been millions) and the book imports on 5.17.0 with no patch: measured 23/09, 19 projects, 136 requirements, your six gates with G5 looping to G1, and its own round trip answering 200."
+    },
+    {
+      "id": "MER-10",
+      "origin": [
+        "MER-10"
+      ],
+      "title": "Meetings are weekly or monthly; governance is not",
+      "status": "partial",
+      "priority": "medium",
+      "effort": "S",
+      "version": "5.17.0",
+      "decidedOn": null,
+      "delivered": [
+        "server/migrations/052_findings_seats_and_decisions.sql"
+      ],
+      "measure": "server/test/governance.test.js — describe « MER-10 »",
+      "remaining": [
+        "The database accepts per_gate and ad_hoc and a series' gate, but the meetings route and screen do not offer them yet: a gate-bound series enters only through the import. Tracked as NEW-04."
+      ],
+      "issue": null,
+      "accepted": null,
+      "released": false,
+      "observed": "**What happened.** KODO's committee cadence is *per gate* — G4 at weeks 26, 40 and 52 — plus\na children's panel convened per world and a safety board convened per release. None of\nthose are weekly or monthly. They are event-driven, and the event is a gate.",
+      "observedAt": "docs/reports/MERIDIAN_PRODUCT_REPORT.md:574-576 @ 8ad1d15",
+      "history": [
+        {
+          "at": "2026-09-23",
+          "registerVersion": 1,
+          "status": "partial",
+          "note": "verified in code on origin/claude/dynamic-gates-and-requirements"
+        },
+        {
+          "at": "2026-09-23",
+          "registerVersion": 2,
+          "status": "partial",
+          "note": "Built on claude/dynamic-gates-and-requirements (19/09), converged onto main by docs/36 C-03 as 5.17.0; migrations renumbered 034/035 → 051/052 before any main or tag applied them."
+        }
+      ]
+    },
+    {
+      "id": "MER-11",
+      "origin": [
+        "MER-11"
+      ],
+      "title": "The document is the unit of evidence, and evidence is increasingly not a document",
+      "status": "partial",
+      "priority": "medium",
+      "effort": "S",
+      "version": "5.17.0",
+      "decidedOn": null,
+      "delivered": [
+        "server/migrations/052_findings_seats_and_decisions.sql",
+        "evidence table"
+      ],
+      "measure": "server/test/governance.test.js — describe « MER-11 »",
+      "remaining": [
+        "A session route and a screen to raise, edit and close it — today it enters only through the book import (your report:39-43). Tracked as NEW-04 in docs/36."
+      ],
+      "issue": null,
+      "accepted": null,
+      "released": false,
+      "observed": "**What happened.** M1's evidence is: a CI run, a traceability report generated by\n`tools/trace_check.dart`, a performance measurement written to `build/m1_performance.json`,\nand 103 named tests at a specific commit. I registered it as a \"Quality\" document with\nrevision `1.0`, which is a polite fiction. The evidence has no revision; it has a commit\nSHA, and it either reproduces or it does not.",
+      "observedAt": "docs/reports/MERIDIAN_PRODUCT_REPORT.md:592-596 @ 8ad1d15",
+      "history": [
+        {
+          "at": "2026-09-23",
+          "registerVersion": 1,
+          "status": "partial",
+          "note": "verified in code on origin/claude/dynamic-gates-and-requirements"
+        },
+        {
+          "at": "2026-09-23",
+          "registerVersion": 2,
+          "status": "partial",
+          "note": "Built on claude/dynamic-gates-and-requirements (19/09), converged onto main by docs/36 C-03 as 5.17.0; migrations renumbered 034/035 → 051/052 before any main or tag applied them."
+        }
+      ]
+    },
+    {
+      "id": "MER-12",
+      "origin": [
+        "MER-12"
+      ],
+      "title": "The documented quickstart runs entirely in memory, and loses everything",
+      "status": "partial",
+      "priority": "highest",
+      "effort": "S",
+      "version": "5.9.1",
+      "decidedOn": "2026-09-23",
+      "delivered": [
+        "server/src/db.js#DEFAULT_PGLITE_DIR",
+        "server/src/db.js#resolvePgliteDir"
+      ],
+      "measure": "server/test/import.test.js (\"with nothing configured the book lives where the README says, not in memory\")",
+      "remaining": [
+        "fix item 1–2 (default store on disk, directory created) are on main in 5.9.1 (PR #14, same defect as FitAdapt DF-03)",
+        "fix item 3 (log the resolved store at boot) not found on main",
+        "fix item 4 (seed → restart → administrator can still sign in) not found as a test on main",
+        "not in a tag: v5.9.1 is not on the remote"
+      ],
+      "answerToSource": "delivery/meridian/export/README.md:50-52 (mkdir + PGLITE_DIR) is no longer needed on main 5.9.1.",
+      "issue": null,
+      "accepted": null,
+      "released": false,
+      "observed": "**What happened.** I followed the README exactly — `npm install && npm run seed && npm run\ndev`. The seed reported *\"seeded 12 projects · 10 users · 7 meeting series\"* and exited,\ndestroying the database it had just built. The server then started a second, empty\nin-memory database, migrated it, and served it. Logging in with the seeded administrator\ncredentials returned **\"Email or password is not recognised\"**, because there were no\nusers. Nothing warned me. `server/.data/` did not exist.",
+      "observedAt": "docs/reports/MERIDIAN_PRODUCT_REPORT.md:138-143 @ 8ad1d15",
+      "history": [
+        {
+          "at": "2026-09-23",
+          "registerVersion": 1,
+          "status": "partial",
+          "note": "read on main 6d8eddf; fixed by PR #14 for DF-03"
+        }
+      ]
+    },
+    {
+      "id": "MER-13",
+      "origin": [
+        "MER-13"
+      ],
+      "title": "The book importer crashes on any real book — including Meridian's own export",
+      "status": "done",
+      "priority": "highest",
+      "version": "5.9.1",
+      "decidedOn": "2026-09-23",
+      "delivered": [
+        "server/src/import.js (the '\\\\D' escape)",
+        "server/test/import.test.js"
+      ],
+      "measure": "server/test/import.test.js (\"the book this system exports imports back without error\")",
+      "remaining": "not in a tag: v5.9.1 is not on the remote",
+      "answerToSource": "Patch 0001's import.js hunk is on main (5.9.1); delivery/meridian/README.md:22-24 and export/README.md:31 ('REQUIRED') can be relaxed once v5.9.1 is tagged.",
+      "issue": null,
+      "accepted": null,
+      "released": false,
+      "observed": "**What happened.** Importing the KODO portfolio failed with\n`invalid input syntax for type integer: \"M9\"`, and the API returned the generic\n*\"One of those values is not in a form the system can read\"* with nothing in the server log.\n\nI then tested whether this was something about KODO's identifiers. It is not. I exported\nMeridian's **own seeded portfolio** through its own `loadPortfolio` — the code behind\n`GET /api/admin/export` — and fed it straight back to `importBook`:\n\n```\nexported projects: 12   sample id: PRJ-112\nRE-IMPORT FAILED: 22P02  invalid input syntax for type integer: \"PRJ-144\"\n```\n\n**Meridian cannot re-import Meridian.** `grep -rln importBook server/test/` returns nothing:\nthere is no test anywhere that exercises the importer. `scripts/restore-archive.mjs` does\nnot call it either, so `npm run restore` does not cover it.",
+      "observedAt": "docs/reports/MERIDIAN_PRODUCT_REPORT.md:192-207 @ 8ad1d15",
+      "history": [
+        {
+          "at": "2026-09-23",
+          "registerVersion": 1,
+          "status": "done",
+          "note": "read on main 6d8eddf; same defect as FitAdapt DF-01, fixed by PR #14"
+        }
+      ]
+    },
+    {
+      "id": "MER-14",
+      "origin": [
+        "MER-14"
+      ],
+      "title": "Allocations are the one table whose identity is not preserved across a round trip",
+      "status": "done",
+      "priority": "medium",
+      "effort": "S",
+      "version": "5.17.0",
+      "decidedOn": null,
+      "delivered": [
+        "server/src/import.js (allocation id kept, keys derived from portfolio.js#allocationOut — NEW-01)"
+      ],
+      "measure": "server/test/requirements.test.js — MER-14; export → import round trip 200 (docs/36 P3)",
+      "remaining": null,
+      "issue": null,
+      "accepted": null,
+      "released": false,
+      "observed": "**Observed as fact.** Exported the portfolio, re-imported it unchanged, exported again, and\ncompared the two field by field. Every table matched **except `allocations`**, where every\nrow came back with a different `id` — `172` became `191`, and so on down the list. The\ncontent was identical; only identity moved.\n\n**Why it happens.** `allocations` is the only entity the book format gives no natural key.\nProjects arrive as `M1`, people as `PE-08`, change requests as `CR-007`; the importer\nhonours those. An allocation arrives as `{person, project, from, to, pct}`, so the importer\nmints a surrogate and the exporter emits it — and the next import mints another.\n\n**Why it matters more than it looks.** Meridian's own reversibility commitment\n(`docs/25-reversibilite-et-la-porte-manquante.md`) is what makes export-then-diff the\nnatural way to review what changed between two states of a portfolio. That review is exactly\nwhere this bites: **every allocation reads as changed on every diff**, so the reviewer either\nlearns to skip the allocations section or stops diffing. A control people learn to ignore is\nnot a control.\n\n**Fix.** Honour `allocation.id` on import when the book supplies one, exactly as every other\ntable already does, and emit it as the stable key. Two lines, and it makes the round trip\nidempotent everywhere rather than nearly everywhere.\n\n**Second-order note for the schema.** While fixing this, consider that `allocation.pct` is a\npercentage with no unit in the book format, and a book that supplies `fte` — which is how\nmost resourcing tools express the same idea — is accepted silently and lands at **0 %**.\nThat is the `MER-09` failure mode (money's implicit unit) in a second place: the field is\ntaken, the number is wrong, and nothing says so. Rejecting an unknown key would have caught\nit; I caught it by exporting and reading the result.",
+      "observedAt": "docs/reports/MERIDIAN_PRODUCT_REPORT.md:608-634 @ 8ad1d15",
+      "history": [
+        {
+          "at": "2026-09-23",
+          "registerVersion": 1,
+          "status": "partial",
+          "note": "verified in code on origin/claude/dynamic-gates-and-requirements"
+        },
+        {
+          "at": "2026-09-23",
+          "registerVersion": 2,
+          "status": "done",
+          "note": "Built on claude/dynamic-gates-and-requirements (19/09), converged onto main by docs/36 C-03 as 5.17.0; migrations renumbered 034/035 → 051/052 before any main or tag applied them."
+        }
+      ]
+    },
+    {
+      "id": "MER-15",
+      "origin": [
+        "MER-15"
+      ],
+      "title": "A gate with no evidence registered refuses in a way that names nothing",
+      "status": "done",
+      "priority": "medium",
+      "version": "5.17.0",
+      "decidedOn": null,
+      "delivered": [
+        "shared/engine.js#canAdvance"
+      ],
+      "measure": "server/test/gate-model.test.js — « un jalon sans aucune preuve exigée le DIT »",
+      "remaining": null,
+      "issue": null,
+      "accepted": null,
+      "released": false,
+      "observed": "**Observed as fact.** A project sitting at a gate to which no document has ever been\nattached refuses to advance with: *\"0 evidence items outstanding for G0 — Mandate.\"* Zero\noutstanding, and blocked. The reader then looks for the missing item in an empty list.",
+      "observedAt": "docs/reports/MERIDIAN_PRODUCT_REPORT.md:640-642 @ 8ad1d15",
+      "history": [
+        {
+          "at": "2026-09-23",
+          "registerVersion": 1,
+          "status": "partial",
+          "note": "verified in code on origin/claude/dynamic-gates-and-requirements"
+        },
+        {
+          "at": "2026-09-23",
+          "registerVersion": 2,
+          "status": "done",
+          "note": "Built on claude/dynamic-gates-and-requirements (19/09), converged onto main by docs/36 C-03 as 5.17.0; migrations renumbered 034/035 → 051/052 before any main or tag applied them."
+        }
+      ]
+    }
+  ]
+}

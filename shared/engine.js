@@ -444,7 +444,7 @@ export const Engine = {
      request were built on two branches; this is the one that holds both. */
   gates(db, projectId) {
     const p = projectId ? Engine.project(db, projectId) : null;
-    const pr = p ? Engine.programme(db, p.programme) : null;
+    const pr = p && db.programmes ? Engine.programme(db, p.programme) : null;
     const model = pr && Array.isArray(pr.gateModel) && pr.gateModel.length ? pr.gateModel : null;
     return model ?? Engine.gateModel(db);
   },

@@ -1,0 +1,434 @@
+{
+  "$schema": "meridian-request-register/1",
+  "source": {
+    "repository": "mliad313sn/fitadapt",
+    "branch": "claude/vigilant-franklin-76iok4",
+    "commit": "1ae00e9986c3daedc134e62651a4e0544151bb72",
+    "documents": [
+      "pmo/meridian/dogfood-log.md",
+      "pmo/meridian/README.md",
+      "pmo/meridian/build-book.mjs",
+      "pmo/meridian/bootstrap.mjs",
+      "docs/governance/03-expert-advisory-council.md",
+      "docs/governance/04-meridian-operating-model.md",
+      "docs/governance/05-dogfooding-loop.md"
+    ],
+    "reviewedAt": "2026-09-23",
+    "branchPinned": "fix/dogfood-import-and-first-run (dogfood-log.md:27), superseded by main 5.9.1",
+    "vocabulary": {
+      "request": [
+        "DF-\\d{2}"
+      ],
+      "context": [
+        "WI-\\d{2}",
+        "PRJ-\\d{3}",
+        "RSK-\\d{2}",
+        "DEP-\\d{2}",
+        "ASM-\\d{2}",
+        "DOC-\\d{2}",
+        "PE-\\d{2}"
+      ],
+      "note": "DF = dogfooding-log friction ids; WI are the same items as PRJ-207 work items in FitAdapt's Meridian book; the rest are FitAdapt book ids — context only."
+    }
+  },
+  "productOwner": {
+    "charter": "docs/33-retour-terrain-rt365.md#1",
+    "command": ".claude/commands/product-owner.md",
+    "lastRun": "2026-09-23"
+  },
+  "channel": {
+    "issues": "https://github.com/mliad313sn/Meridian/issues",
+    "rule": "One issue per request. A request is answered on its issue, and the answer is what moves `accepted`.",
+    "acceptance": {
+      "done": "merged to Meridian's default branch (main) with its test; docs/36 §0: a line built only on a branch is `partial`, and says so in `remaining`",
+      "accepted": "the requester re-tested it and said so on the issue. Only the requester writes this.",
+      "notAccepted": "the requester is in a position to answer and has not.",
+      "cannotAnswerYet": "accepted is null: nothing is delivered to try, or the requester cannot judge it until a tag carries it.",
+      "released": "a version tag a third party can fetch carries it (v5.9.1 is not on the remote as of 2026-09-23, so nothing here is released)"
+    },
+    "escalation": "a rejected done or refusal goes back to open with the objection quoted; a disagreement is written in both registers rather than settled in one",
+    "release": {
+      "defaultBranch": "main",
+      "measuredAt": "2026-09-23",
+      "state": "main is 5.9.1 at 6d8eddf (PR #14). Latest tag on the remote: v5.9.0. Every `released` is false."
+    },
+    "counterpart": "FitAdapt delivery lead & Meridian champion (PE-14), docs/governance/05-dogfooding-loop.md"
+  },
+  "registerVersion": 1,
+  "requests": [
+    {
+      "id": "DF-01",
+      "origin": [
+        "DF-01",
+        "WI-01"
+      ],
+      "title": "Whole-book import answers 400 for every book, Meridian's own export included",
+      "status": "done",
+      "priority": "high",
+      "version": "5.9.1",
+      "decidedOn": "2026-09-23",
+      "delivered": [
+        "server/src/import.js",
+        "server/test/import.test.js"
+      ],
+      "measure": "server/test/import.test.js",
+      "remaining": "not in a tag: v5.9.1 is not on the remote",
+      "answerToSource": "DF-01 can move from 'Fix in review' to 'Fixed on main (5.9.1, PR #14)'; close WI-01 once the v5.9.1 tag exists.",
+      "issue": 14,
+      "accepted": null,
+      "released": false,
+      "observed": "`POST /api/admin/import` → 400 \"One of those values is not in a form the system can read\", for **every** book, Meridian's own export included. `'\\D'` inside a JS template literal reaches PostgreSQL as `'D'`. No test covered import.",
+      "observedAt": "pmo/meridian/dogfood-log.md:12 @ 1ae00e9 (found while: Importing the book)",
+      "history": [
+        {
+          "at": "2026-09-23",
+          "registerVersion": 1,
+          "status": "done",
+          "note": "PR #14 merged to main in 6d8eddf on 2026-09-23 (C-01)"
+        }
+      ]
+    },
+    {
+      "id": "DF-02",
+      "origin": [
+        "DF-02",
+        "WI-02"
+      ],
+      "title": "Import drops document uri, lock hash, lock date and supersedes",
+      "status": "done",
+      "priority": "high",
+      "version": "5.9.1",
+      "decidedOn": "2026-09-23",
+      "delivered": [
+        "server/src/import.js (uri, uri_locked_hash, uri_locked_on, supersedes)",
+        "server/test/import.test.js"
+      ],
+      "measure": "server/test/import.test.js",
+      "remaining": "not in a tag: v5.9.1 is not on the remote",
+      "answerToSource": "DF-02 can move from 'Fix in review' to 'Fixed on main (5.9.1, PR #14)'; close WI-02 once the v5.9.1 tag exists.",
+      "issue": 14,
+      "accepted": null,
+      "released": false,
+      "observed": "Import dropped document `uri`, lock hash, lock date and `supersedes`, so imported approved evidence stopped counting and cleared gates turned *Overdue*.",
+      "observedAt": "pmo/meridian/dogfood-log.md:13 @ 1ae00e9 (found while: Reading `import.js`)",
+      "history": [
+        {
+          "at": "2026-09-23",
+          "registerVersion": 1,
+          "status": "done",
+          "note": "PR #14 merged to main in 6d8eddf on 2026-09-23 (C-01)"
+        }
+      ]
+    },
+    {
+      "id": "DF-03",
+      "origin": [
+        "DF-03",
+        "WI-03"
+      ],
+      "title": "README quick start cannot sign anyone in: in-memory fallback, ENOENT on PGLITE_DIR",
+      "status": "done",
+      "priority": "high",
+      "version": "5.9.1",
+      "decidedOn": "2026-09-23",
+      "delivered": [
+        "server/src/db.js#DEFAULT_PGLITE_DIR",
+        "server/test/import.test.js"
+      ],
+      "measure": "server/test/import.test.js",
+      "remaining": "not in a tag: v5.9.1 is not on the remote",
+      "answerToSource": "DF-03 can move from 'Fix in review' to 'Fixed on main (5.9.1, PR #14)'; close WI-03 once the v5.9.1 tag exists.",
+      "issue": 14,
+      "accepted": null,
+      "released": false,
+      "observed": "`npm run seed && npm run dev` (the README quick start) → no account could sign in. Without `PGLITE_DIR` the fallback was an **in-memory** database. Setting `PGLITE_DIR` then failed with `ENOENT` (parent directory not created).",
+      "observedAt": "pmo/meridian/dogfood-log.md:14 @ 1ae00e9 (found while: First sign-in)",
+      "history": [
+        {
+          "at": "2026-09-23",
+          "registerVersion": 1,
+          "status": "done",
+          "note": "PR #14 merged to main in 6d8eddf on 2026-09-23 (C-01)"
+        }
+      ]
+    },
+    {
+      "id": "DF-04",
+      "origin": [
+        "DF-04",
+        "WI-04"
+      ],
+      "title": "Import refuses the bare book GET /export returns",
+      "status": "done",
+      "priority": "medium",
+      "version": "5.9.1",
+      "decidedOn": "2026-09-23",
+      "delivered": [
+        "server/src/routes/admin.js (bare book accepted)",
+        "server/test/import.test.js"
+      ],
+      "measure": "server/test/import.test.js",
+      "remaining": "not in a tag: v5.9.1 is not on the remote",
+      "answerToSource": "DF-04 can move from 'Fix in review' to 'Fixed on main (5.9.1, PR #14)'; close WI-04 once the v5.9.1 tag exists.",
+      "issue": 14,
+      "accepted": null,
+      "released": false,
+      "observed": "`GET /export` returns the bare book; import accepted only `{ db }`.",
+      "observedAt": "pmo/meridian/dogfood-log.md:15 @ 1ae00e9 (found while: Round-trip test)",
+      "history": [
+        {
+          "at": "2026-09-23",
+          "registerVersion": 1,
+          "status": "done",
+          "note": "PR #14 merged to main in 6d8eddf on 2026-09-23 (C-01)"
+        }
+      ]
+    },
+    {
+      "id": "DF-05",
+      "origin": [
+        "DF-05",
+        "WI-05"
+      ],
+      "title": "scripts/restart.sh works only through powershell.exe",
+      "status": "done",
+      "priority": "medium",
+      "version": "5.9.1",
+      "decidedOn": "2026-09-23",
+      "delivered": [
+        "scripts/restart.sh"
+      ],
+      "measure": "CHANGELOG.md [5.9.1] — no automated test found for restart.sh",
+      "remaining": "not in a tag: v5.9.1 is not on the remote",
+      "answerToSource": "DF-05 can move from 'Fix in review' to 'Fixed on main (5.9.1, PR #14)'; close WI-05 once the v5.9.1 tag exists.",
+      "issue": 14,
+      "accepted": null,
+      "released": false,
+      "observed": "`scripts/restart.sh` (README: \"`bash scripts/restart.sh`\") works only through `powershell.exe`. On Linux it stops nothing and starts a second server on the same PGlite directory.",
+      "observedAt": "pmo/meridian/dogfood-log.md:16 @ 1ae00e9 (found while: Restarting after the fix)",
+      "history": [
+        {
+          "at": "2026-09-23",
+          "registerVersion": 1,
+          "status": "done",
+          "note": "PR #14 merged to main in 6d8eddf on 2026-09-23 (C-01)"
+        }
+      ]
+    },
+    {
+      "id": "DF-06",
+      "origin": [
+        "DF-06",
+        "WI-06"
+      ],
+      "title": "Unbudgeted projects show green, SPI/CPI 1.00 (MER-04)",
+      "status": "done",
+      "priority": "high",
+      "version": "5.9.1",
+      "decidedOn": "2026-09-23",
+      "delivered": [
+        "shared/engine.js",
+        "server/test/engine.test.js"
+      ],
+      "measure": "server/test/engine.test.js",
+      "remaining": "not in a tag: v5.9.1 is not on the remote; D-36.01 changes the no-budget health from G to N once C-02 reaches main",
+      "answerToSource": "DF-06 can move from 'Fix in review' to 'Fixed on main (5.9.1, PR #14)'; close WI-06 once the v5.9.1 tag exists.",
+      "issue": 14,
+      "accepted": null,
+      "released": false,
+      "observed": "Unbudgeted projects showed green, SPI/CPI 1.00. Already fixed as MER-04 on an unmerged branch; ported with a test.",
+      "observedAt": "pmo/meridian/dogfood-log.md:17 @ 1ae00e9 (found while: Portfolio view)",
+      "history": [
+        {
+          "at": "2026-09-23",
+          "registerVersion": 1,
+          "status": "done",
+          "note": "PR #14 merged to main in 6d8eddf on 2026-09-23 (C-01)"
+        }
+      ]
+    },
+    {
+      "id": "DF-07",
+      "origin": [
+        "DF-07",
+        "WI-07"
+      ],
+      "title": "A refused import names no row and logs nothing",
+      "status": "done",
+      "priority": "medium",
+      "version": "5.9.1",
+      "decidedOn": "2026-09-23",
+      "delivered": [
+        "server/src/import.js (table and id named in the refusal)",
+        "server/test/import.test.js"
+      ],
+      "measure": "server/test/import.test.js",
+      "remaining": "not in a tag: v5.9.1 is not on the remote",
+      "answerToSource": "DF-07 can move from 'Fix in review' to 'Fixed on main (5.9.1, PR #14)'; close WI-07 once the v5.9.1 tag exists.",
+      "issue": 14,
+      "accepted": null,
+      "released": false,
+      "observed": "A refused import names no row and logs nothing; finding the bad row took an in-process harness.",
+      "observedAt": "pmo/meridian/dogfood-log.md:18 @ 1ae00e9 (found while: Bisecting DF-01)",
+      "history": [
+        {
+          "at": "2026-09-23",
+          "registerVersion": 1,
+          "status": "done",
+          "note": "PR #14 merged to main in 6d8eddf on 2026-09-23 (C-01)"
+        }
+      ]
+    },
+    {
+      "id": "DF-08",
+      "origin": [
+        "DF-08",
+        "WI-08"
+      ],
+      "title": "qs 6.15.3 carries two moderate advisories",
+      "status": "done",
+      "priority": "medium",
+      "version": "5.9.1",
+      "decidedOn": "2026-09-23",
+      "delivered": [
+        "package-lock.json (qs 6.16.0)"
+      ],
+      "measure": "npm audit (0 advisories on main, docs/36 §1 run 2)",
+      "remaining": "not in a tag: v5.9.1 is not on the remote",
+      "answerToSource": "DF-08 can move from 'Fix in review' to 'Fixed on main (5.9.1, PR #14)'; close WI-08 once the v5.9.1 tag exists.",
+      "issue": 14,
+      "accepted": null,
+      "released": false,
+      "observed": "`qs` 6.15.3 carries two moderate advisories; the audit gate only fails at `high`.",
+      "observedAt": "pmo/meridian/dogfood-log.md:19 @ 1ae00e9 (found while: `npm run verify`)",
+      "history": [
+        {
+          "at": "2026-09-23",
+          "registerVersion": 1,
+          "status": "done",
+          "note": "PR #14 merged to main in 6d8eddf on 2026-09-23 (C-01)"
+        }
+      ]
+    },
+    {
+      "id": "DF-09",
+      "origin": [
+        "DF-09",
+        "WI-09"
+      ],
+      "title": "main is behind unmerged lines; issues closed as delivered while the code is not on main",
+      "status": "partial",
+      "priority": "high",
+      "version": null,
+      "decidedOn": "2026-09-23",
+      "delivered": [
+        "PR #14 merged (5.9.1 on main)"
+      ],
+      "measure": null,
+      "remaining": [
+        "C-02: the RT365 line (5.10.0–5.15.0, incl. the gate ladder of issue #3) is merged on a working branch, not on main",
+        "C-03: the KODO line (claude/dynamic-gates-and-requirements) is open",
+        "C-04: claude/project-analysis-db-schema-yph5ho not salvaged",
+        "issues #1–4, #6–9, #11–13 closed while their fixes were on a branch (docs/36 §3)"
+      ],
+      "answerToSource": "Keep the workaround 'Phase exit gates sit on Meridian's Gate 3' until the gate ladder is on main.",
+      "issue": 15,
+      "accepted": null,
+      "released": false,
+      "observed": "`main` is behind three unmerged branches; issues #3/#4 are closed as delivered, but the code isn't on `main`.",
+      "observedAt": "pmo/meridian/dogfood-log.md:20 @ 1ae00e9 (found while: Looking for prior art)",
+      "history": [
+        {
+          "at": "2026-09-23",
+          "registerVersion": 1,
+          "status": "partial",
+          "note": "one of three unmerged lines has reached main"
+        }
+      ]
+    },
+    {
+      "id": "DF-10",
+      "origin": [
+        "DF-10",
+        "WI-10"
+      ],
+      "title": "An independent council member cannot approve evidence without write authority on the project",
+      "status": "open",
+      "priority": "high",
+      "version": null,
+      "decidedOn": null,
+      "delivered": [],
+      "measure": null,
+      "remaining": "open; campaign waves 1–4 group it with KODO MER-06 (seats/vetoes, built only on claude/dynamic-gates-and-requirements)",
+      "issue": 16,
+      "accepted": null,
+      "released": false,
+      "observed": "`document.approve` requires write authority on the project, so an independent council member can't sign evidence without edit rights.",
+      "observedAt": "pmo/meridian/dogfood-log.md:21 @ 1ae00e9 (found while: Modelling the council)",
+      "history": [
+        {
+          "at": "2026-09-23",
+          "registerVersion": 1,
+          "status": "open",
+          "note": "issue #16 open on 2026-09-23"
+        }
+      ]
+    },
+    {
+      "id": "DF-11",
+      "origin": [
+        "DF-11",
+        "WI-11"
+      ],
+      "title": "Nowhere to attach a GitHub PR or issue (ext_link.source accepts SDP sources only)",
+      "status": "open",
+      "priority": "medium",
+      "version": null,
+      "decidedOn": null,
+      "delivered": [],
+      "measure": null,
+      "remaining": "open; campaign waves 1–4 group it with RT365 REQ-29 and KODO MER-11",
+      "issue": 17,
+      "accepted": null,
+      "released": false,
+      "observed": "`ext_link.source` accepts SDP sources only; there's nowhere to attach a GitHub PR or issue.",
+      "observedAt": "pmo/meridian/dogfood-log.md:22 @ 1ae00e9 (found while: Linking modules to PRs)",
+      "history": [
+        {
+          "at": "2026-09-23",
+          "registerVersion": 1,
+          "status": "open",
+          "note": "issue #17 open on 2026-09-23"
+        }
+      ]
+    },
+    {
+      "id": "DF-12",
+      "origin": [
+        "DF-12",
+        "WI-12"
+      ],
+      "title": "Site is the only unit of delegated authority",
+      "status": "open",
+      "priority": "low",
+      "version": null,
+      "decidedOn": null,
+      "delivered": [],
+      "measure": null,
+      "remaining": "open; nothing built on any branch",
+      "issue": 18,
+      "accepted": null,
+      "released": false,
+      "observed": "Site is the only unit of delegated authority; FitAdapt models one fake site \"Distributed team\".",
+      "observedAt": "pmo/meridian/dogfood-log.md:23 @ 1ae00e9 (found while: Modelling the team)",
+      "history": [
+        {
+          "at": "2026-09-23",
+          "registerVersion": 1,
+          "status": "open",
+          "note": "issue #18 open on 2026-09-23"
+        }
+      ]
+    }
+  ]
+}

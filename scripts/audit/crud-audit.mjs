@@ -32,7 +32,12 @@ const client = ["web/src/views", "web/src/ui", "web/src/lib"]
 
 /* ── schema ───────────────────────────────────────────────────────── */
 const tables = {};
-for (const m of sql.matchAll(/CREATE TABLE (\w+) \(([\s\S]*?)\n\);/g)) {
+/* docs/36 C-03 — `IF NOT EXISTS` is how the KODO line wrote 051 and 052.
+   The old pattern read neither the tables nor the columns, and read
+   `ADD COLUMN IF NOT EXISTS gate_loop` as a column named "IF": six new
+   registers and ten columns were invisible to the one gate that asks
+   whether a stored field ever reaches a human. */
+for (const m of sql.matchAll(/CREATE TABLE (?:IF NOT EXISTS )?(\w+) \(([\s\S]*?)\n\);/g)) {
   const cols = [];
   for (const line of m[2].split("\n")) {
     const t = line.trim();
@@ -46,7 +51,7 @@ for (const m of sql.matchAll(/CREATE TABLE (\w+) \(([\s\S]*?)\n\);/g)) {
    only CREATE TABLE left everything migrations 005–007 added — origin,
    origin_site, referred_to_scope, must_change_password — outside the one
    check that asks whether a stored field ever reaches a human. */
-for (const m of sql.matchAll(/ALTER TABLE (\w+)\s+ADD COLUMN (\w+)/g)) {
+for (const m of sql.matchAll(/ALTER TABLE (\w+)\s+ADD COLUMN (?:IF NOT EXISTS )?(\w+)/g)) {
   if (tables[m[1]] && !tables[m[1]].includes(m[2])) tables[m[1]].push(m[2]);
 }
 
