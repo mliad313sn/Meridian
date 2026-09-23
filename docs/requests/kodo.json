@@ -94,7 +94,8 @@
           "status": "partial",
           "note": "Built on claude/dynamic-gates-and-requirements (19/09), converged onto main by docs/36 C-03 as 5.17.0; migrations renumbered 034/035 → 051/052 before any main or tag applied them."
         }
-      ]
+      ],
+      "answerToSource": "\n\nA question back to you (NEW-02, docs/36): since migration 002, gate 0 in Meridian means « attached to no gate », and your model numbers its mandate gate G0. In your book, is a document with gate 0 evidence FOR G0, or unattached? We will not guess. Either renumber your model from 1 in meridian_book.py, or tell us which reading is right and we will make the rule."
     },
     {
       "id": "MER-02",

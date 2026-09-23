@@ -257,6 +257,11 @@ export async function loadPortfolio(user) {
     stepsByCr.get(s.cr_id).push({
       role: s.role_label, note: s.note, state: s.state,
       when: s.decided_on ?? null, comment: s.comment,
+      /* PR-04 (D-36.11) — who signed: the person (056, NULL before it)
+         and the account. The screen reads them through the same rbac
+         rule the route applies, and does not draw Approve for someone
+         who already signed a step of this chain. */
+      by: s.decided_by_person ?? null, byUser: s.decided_by ?? null,
     });
   }
 

@@ -56,7 +56,11 @@ We will credit you when the fix lands, unless you ask us not to.
   behaviour, documented in `docs/21-campagne-securite.md`, and the
   countermeasure is organisational: create named accounts at the right
   level rather than running everything as an administrator. Report it if
-  you find a way to *reach* it without being an administrator.
+  you find a way to *reach* it without being an administrator. The
+  exemption is the raiser rule only: since PR-04 (D-36.11) each step of
+  a change chain needs a distinct signatory, and an administrator is held
+  to that like everyone else — one person signing two steps of the same
+  request is in scope.
 - **The seeded demonstration accounts and their passwords.** They are
   printed in the README on purpose so the access model can be seen
   working. `npm run reset-book` deactivates them; an instance carrying

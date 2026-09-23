@@ -89,13 +89,16 @@ describe("S-13 / I-12 · le break-glass se lit dans la piste", () => {
     });
     assert.equal(raised.status, 201, raised.text);
     const id = raised.body.id;
-    /* Signer chaque étape jusqu'à la dernière. */
-    for (let i = 0; i < 6; i++) {
-      const s = await admin.post(`/api/change/${id}/approve`, { comment: "urgent" });
-      if (s.status === 409) break;
-      assert.equal(s.status, 200, s.text);
-      if (s.body.applied) break;
-    }
+    /* PR-04 (D-36.11) — l'administrateur signe SA demande (le bris de
+       glace), mais une seule étape : chaque étape a son signataire, et
+       cette règle-là tient aussi pour l'administrateur. Avant, il signait
+       les quatre ; la mention se vérifie désormais sur la signature qu'il
+       peut encore poser, et le second essai est refusé en le disant. */
+    const s = await admin.post(`/api/change/${id}/approve`, { comment: "urgent" });
+    assert.equal(s.status, 200, s.text);
+    const again = await admin.post(`/api/change/${id}/approve`, { comment: "urgent" });
+    assert.equal(again.status, 403, again.text);
+    assert.match(again.body.error, /you signed step 1 of this request/);
     const audit = await admin.get(`/api/audit?entity=change_request&entityId=${id}&limit=20`);
     assert.equal(audit.status, 200);
     const rows = audit.body.events ?? audit.body;

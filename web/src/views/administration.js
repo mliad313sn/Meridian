@@ -250,7 +250,7 @@ export function posturePanel() {
       : null,
     h("div", { class: "xs muted", style: "margin-top:10px;max-width:70ch" },
       h("span", { class: "strong" }, t("Break-glass: ")),
-      t("an administrator is exempt from segregation of duties and may sign every step of a change request, including one it raised; each such signature is marked break-glass in the audit trail. Run the portfolio from named group and site accounts.")));
+      t("an administrator may sign a change request it raised — the one exemption from segregation of duties, marked break-glass in the audit trail. It still signs at most one step of a chain: each step is signed by a different person. Run the portfolio from named group and site accounts.")));
 }
 
 export function accessPanel(db) {

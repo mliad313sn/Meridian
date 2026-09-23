@@ -109,7 +109,10 @@ const ENRICH = [
   `INSERT INTO cost_line (project_id, period, booked_on, amount, category, note)
    SELECT project_id, period, booked_on, -amount, category, 'Reversal of #' || id || ' — mis-posted'
      FROM cost_line WHERE id = (SELECT max(id) FROM cost_line)`,
-  `UPDATE change_step SET comment = 'Approved subject to the vendor quote'
+  /* PR-04 — a signed step names who signed it (the person since 056,
+     the account since 002), and the one-signatory rule reads both. */
+  `UPDATE change_step SET comment = 'Approved subject to the vendor quote',
+          decided_by = ${USER}, decided_by_person = ${PE1}
     WHERE id = (SELECT min(id) FROM change_step)`,
   `UPDATE document SET supersedes = (SELECT max(id) FROM document)
     WHERE id = (SELECT min(id) FROM document)`,

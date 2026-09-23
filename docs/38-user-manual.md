@@ -177,7 +177,7 @@ shows.
 
 | Role | In short |
 |---|---|
-| **admin** | Everything, including accounts, grants and settings. Exempt from segregation of duties. This is a break-glass, and each such signature is marked in the audit trail. Keep admin accounts few, and run the portfolio from named group and site accounts. |
+| **admin** | Everything, including accounts, grants and settings. May sign a change request it raised — a break-glass, and each such signature is marked in the audit trail. Like everyone, it signs at most one step of a change chain: each step is signed by a different person. Keep admin accounts few, and run the portfolio from named group and site accounts. |
 | **group** | Reads the whole portfolio and writes inside the programmes granted to them. The governance role: books cost, decides changes above the threshold, approves site gate evidence, sets tolerances, writes the business case, closes periods and sets the prioritisation weighting. |
 | **site** | Reads their sites plus the group projects delivered there. Writes only **site-governed** projects in their granted sites. |
 | **viewer** | Reads their scope and writes nothing, ever. |

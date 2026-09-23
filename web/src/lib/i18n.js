@@ -1807,8 +1807,12 @@ export const FR = {
     "aucun hôte de notification nommé — rien ne sort de l'instance",
   "Break-glass: ":
     "Bris de glace : ",
-  "an administrator is exempt from segregation of duties and may sign every step of a change request, including one it raised; each such signature is marked break-glass in the audit trail. Run the portfolio from named group and site accounts.":
-    "un administrateur est exempté de la séparation des tâches et peut signer chaque étape d'une demande de modification, y compris celle qu'il a émise ; chacune de ces signatures est marquée bris de glace dans la piste d'audit. Pilotez le portefeuille depuis des comptes groupe et site nommés.",
+  "an administrator may sign a change request it raised — the one exemption from segregation of duties, marked break-glass in the audit trail. It still signs at most one step of a chain: each step is signed by a different person. Run the portfolio from named group and site accounts.":
+    "un administrateur peut signer une demande de modification qu'il a émise — la seule exemption à la séparation des tâches, marquée bris de glace dans la piste d'audit. Il ne signe pourtant qu'une étape d'une chaîne : chaque étape est signée par une personne différente. Pilotez le portefeuille depuis des comptes groupe et site nommés.",
+  "You signed an earlier step of this request — a different person signs this one.":
+    "Vous avez signé une étape précédente de cette demande — une autre personne signe celle-ci.",
+  "Each step is signed by a different person, and never by whoever raised the request.":
+    "Chaque étape est signée par une personne différente, et jamais par celle qui a émis la demande.",
   "you raised this request. As an administrator you may still sign it — the exemption exists for emergencies, and the audit trail will mark the signature as break-glass. Prefer having a colleague with group authority decide it.":
     "vous avez émis cette demande. En tant qu'administrateur vous pouvez tout de même la signer — l'exemption existe pour les urgences, et la piste d'audit marquera la signature comme bris de glace. Préférez la faire décider par un collègue de niveau groupe.",
 

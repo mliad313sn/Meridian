@@ -220,12 +220,21 @@ describe("UAT · end-to-end paths the benches described", () => {
     assert.ok(cr, "the seed has a pending change with a schedule impact");
     const before = db.projects.find((p) => p.id === cr.project);
 
-    // walk it through every step of the chain
+    /* walk it through every step of the chain — PR-04 (D-36.11): each
+       step by a DIFFERENT authorised person. The administrators first,
+       then the group account holding the project's programme. */
+    const GRANTS = { groupCBP: ["CBP", "EIT"], groupDCH: ["DCH"], groupDAI: ["DAI"] };
+    const pool = [admin, await as("pmo")];
+    for (const [who, progs] of Object.entries(GRANTS)) {
+      if (progs.includes(before.programme)) pool.push(await as(who));
+    }
+    const remaining = cr.steps.filter((s) => s.state !== "done").length;
+    assert.ok(pool.length >= remaining, `enough independent signers for ${remaining} steps`);
     for (let i = 0; i < 6; i++) {
       const state = (await admin.get("/api/bootstrap")).body.db.crs.find((c) => c.id === cr.id);
       if (state.status !== "Pending") break;
-      const r = await admin.post(`/api/change/${cr.id}/approve`, { comment: "Agreed" });
-      assert.equal(r.status, 200, `step ${i}`);
+      const r = await pool[i].post(`/api/change/${cr.id}/approve`, { comment: "Agreed" });
+      assert.equal(r.status, 200, `step ${i}: ${r.text}`);
     }
 
     const after = (await admin.get("/api/bootstrap")).body.db;

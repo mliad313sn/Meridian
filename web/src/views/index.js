@@ -4796,6 +4796,11 @@ function crDetail(db, c) {
           h("span", { class: "strong" }, t("Break-glass: ")),
           t("you raised this request. As an administrator you may still sign it — the exemption exists for emergencies, and the audit trail will mark the signature as break-glass. Prefer having a colleague with group authority decide it."))
       : null,
+    /* PR-04 (D-36.11) — the screen says what the chain guarantees, next
+       to the chain, so nobody reads four role labels as four people
+       without being told they are. */
+    h("div", { class: "xs muted", style: "margin:-4px 0 10px;max-width:60ch" },
+      t("Each step is signed by a different person, and never by whoever raised the request.")),
     h("div", { style: "margin-bottom:14px" }, c.steps.map((st, i) =>
       h("div", { class: "step" },
         h("span", { class: "step-i " + (st.state === "done" ? "ok" : st.state === "rejected" ? "no" : st.state === "current" ? "" : "wait") },
@@ -4812,9 +4817,13 @@ function crDetail(db, c) {
        design and the operational committee ruled out. Approving is also
        gated on magnitude, so it is asked separately from editing. */
     c.status === "Pending" ? h("div", { class: "btn-row" },
+      /* PR-04 — the same resource the approve route builds: who already
+         signed which step. Approve is not drawn for a person who signed
+         an earlier step; Reject ends the chain and is not held to it. */
       p && App.can("change.approve", {
         project: asRow(p),
         raised_by: c.raisedBy, raised_by_user: c.raisedByUser,
+        signers: crSigners(c),
         cost_delta: c.cost, weeks_delta: c.weeks,
         threshold: { cost: db.settings.ccbThreshold, weeks: db.settings.ccbWeeks },
       })
@@ -4824,10 +4833,27 @@ function crDetail(db, c) {
       p && App.can("change.approve", {
         project: asRow(p),
         raised_by: c.raisedBy, raised_by_user: c.raisedByUser,
+        decision: "reject",
         cost_delta: c.cost, weeks_delta: c.weeks,
         threshold: { cost: db.settings.ccbThreshold, weeks: db.settings.ccbWeeks },
       })
         ? h("button", { class: "btn btn-sm btn-danger", onClick: () => rejectCR(db, c) }, "Reject")
+        : null,
+      /* PR-04 — when the ONLY thing keeping Approve off the screen is a
+         signature this person already put on the chain, say so rather
+         than leave a missing button to be guessed at. Both questions go
+         to rbac.js; the view decides nothing. */
+      p && !App.can("change.approve", {
+        project: asRow(p), raised_by: c.raisedBy, raised_by_user: c.raisedByUser,
+        signers: crSigners(c), cost_delta: c.cost, weeks_delta: c.weeks,
+        threshold: { cost: db.settings.ccbThreshold, weeks: db.settings.ccbWeeks },
+      }) && App.can("change.approve", {
+        project: asRow(p), raised_by: c.raisedBy, raised_by_user: c.raisedByUser,
+        signers: [], cost_delta: c.cost, weeks_delta: c.weeks,
+        threshold: { cost: db.settings.ccbThreshold, weeks: db.settings.ccbWeeks },
+      })
+        ? h("div", { class: "xs muted", style: "max-width:56ch" },
+            t("You signed an earlier step of this request — a different person signs this one."))
         : null,
       p && may("change.raise", p)
         ? h("button", { class: "btn btn-sm", onClick: () => editCR(db, c) }, "Edit")
@@ -4860,6 +4886,14 @@ function crDetail(db, c) {
     return h("div", { style: "display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--rule-1)" },
       h("span", { class: "muted" }, k), h("span", { class: "mono strong" }, v));
   }
+}
+
+/* PR-04 — the signed steps of a chain, in the shape rbac.js's
+   distinct-signatory rule reads (the approve route builds the same). */
+function crSigners(c) {
+  return (c.steps ?? [])
+    .map((st, i) => ({ seq: i, state: st.state, person: st.by ?? null, user: st.byUser ?? null }))
+    .filter((st) => st.state === "done");
 }
 
 function approveStep(db, c) {

@@ -97,9 +97,13 @@ describe("the gate itself", () => {
     const gru = mk("site", [], ["GRU"]);
     const own = proj("DCH", "GRU", "site");
     const threshold = { cost: 0.25, weeks: 2 };
-    assert.equal(can(gru, "change.approve", { project: own, cost_delta: 0.1, weeks_delta: 1, threshold }).ok, true);
-    assert.equal(can(gru, "change.approve", { project: own, cost_delta: 0.9, weeks_delta: 0, threshold }).ok, false);
-    assert.equal(can(gru, "change.approve", { project: own, cost_delta: 0, weeks_delta: 6, threshold }).ok, false);
+    /* PR-04 — an approval now carries the chain's signed steps (none
+       here), as the route always loads them; without them the rule
+       fails closed, so the magnitude is tested on a well-formed request. */
+    const signers = [];
+    assert.equal(can(gru, "change.approve", { project: own, cost_delta: 0.1, weeks_delta: 1, threshold, signers }).ok, true);
+    assert.equal(can(gru, "change.approve", { project: own, cost_delta: 0.9, weeks_delta: 0, threshold, signers }).ok, false);
+    assert.equal(can(gru, "change.approve", { project: own, cost_delta: 0, weeks_delta: 6, threshold, signers }).ok, false);
   });
 
   test("allocation respects the site boundary on people, not just projects", () => {

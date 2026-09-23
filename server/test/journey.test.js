@@ -314,6 +314,31 @@ describe("6 · le travail et l'argent", () => {
 });
 
 describe("7 · maîtrise des modifications — le seuil et la seconde paire d'yeux", () => {
+  /* PR-04 (D-36.11) — chaque étape de la chaîne a son propre signataire.
+     La chaîne a quatre étapes ; il faut donc quatre personnes habilitées
+     pour la signer, et le client les nomme : trois adjoints au site, trois
+     contrôleurs au programme, en plus du chef de site et du bureau de
+     programme créés en 3. Des comptes sans personne liée : chacun est sa
+     propre identité pour la règle. */
+  const siteSigners = [];   // + lead = quatre signataires de site
+  const groupSigners = [];  // + pmo  = quatre signataires de groupe
+  test("PR-04 · le client nomme les signataires de la chaîne", async () => {
+    const provision = async (email, role, grant) => {
+      const pw = email.split("@")[0] + "-password-2026";
+      const made = await dir.post("/api/admin/users",
+        { email, displayName: email.split("@")[0], role, password: pw, grants: [grant] });
+      assert.equal(made.status, 201, JSON.stringify(made.body));
+      const c = client();
+      assert.equal((await c.post("/api/auth/login", { email, password: pw })).status, 200);
+      assert.equal((await c.post("/api/auth/password", { current: pw, next: pw + "-mine" })).status, 200);
+      return c;
+    };
+    for (const n of [2, 3, 4]) {
+      siteSigners.push(await provision(`site${n}@lima-mining.example`, "site", { kind: "site", target: SITE }));
+      groupSigners.push(await provision(`ctrl${n}@lima-mining.example`, "group", { kind: "programme", target: PROG }));
+    }
+  });
+
   test("l'émetteur ne décide JAMAIS sa propre demande — même le groupe", async () => {
     const small = await pmo.post("/api/change",
       { project: PROJECT, title: "Décaler la recette d'une semaine", cost: 0.05, weeks: 1 });
@@ -324,10 +349,16 @@ describe("7 · maîtrise des modifications — le seuil et la seconde paire d'ye
     assert.equal(self.status, 403, "PR-03 : un compte sans personne liée ne s'auto-approuve pas — " + JSON.stringify(self.body));
     assert.match(self.body.error, /you raised this request/i);
     /* La chaîne a PLUSIEURS étapes — approuver, c'est signer chacune.
-       Sous le seuil, le site signe. */
-    let applied = false;
-    for (let i = 0; i < 6 && !applied; i++) {
-      const bySite = await lead.post(`/api/change/${small.body.id}/approve`, {});
+       Sous le seuil, le site signe — PR-04 : un signataire de site
+       DIFFÉRENT par étape, et le premier ne signe pas la deuxième. */
+    const first = await lead.post(`/api/change/${small.body.id}/approve`, {});
+    assert.equal(first.status, 200, "sous le seuil, le site décide — " + JSON.stringify(first.body));
+    const twice = await lead.post(`/api/change/${small.body.id}/approve`, {});
+    assert.equal(twice.status, 403, "PR-04 : la même personne ne signe pas deux étapes — " + JSON.stringify(twice.body));
+    assert.match(twice.body.error, /you signed step 1 of this request — a different person signs each step/);
+    let applied = first.body.applied !== false;
+    for (let i = 0; i < siteSigners.length && !applied; i++) {
+      const bySite = await siteSigners[i].post(`/api/change/${small.body.id}/approve`, {});
       assert.equal(bySite.status, 200, "sous le seuil, le site décide — " + JSON.stringify(bySite.body));
       applied = bySite.body.applied !== false;
     }
@@ -344,9 +375,11 @@ describe("7 · maîtrise des modifications — le seuil et la seconde paire d'ye
     assert.equal(raised.status, 201, JSON.stringify(raised.body));
     const siteTry = await lead.post(`/api/change/${raised.body.id}/approve`, {});
     assert.equal(siteTry.status, 403, "le site ne décide pas au-dessus du seuil");
+    /* PR-04 — le groupe signe, une personne par étape. */
+    const groupChain = [pmo, ...groupSigners];
     let last = null;
-    for (let i = 0; i < 6; i++) {
-      last = await pmo.post(`/api/change/${raised.body.id}/approve`, {});
+    for (let i = 0; i < groupChain.length; i++) {
+      last = await groupChain[i].post(`/api/change/${raised.body.id}/approve`, {});
       if (last.status !== 200) break;
       if (last.body.applied !== false) break;
     }
@@ -358,12 +391,12 @@ describe("7 · maîtrise des modifications — le seuil et la seconde paire d'ye
       { project: PROJECT, title: "Convoyeur de reprise — financement budget", cost: 0.5, weeks: 6, funding: "Budget" });
     assert.equal(cr2.status, 201);
     let applied = false;
-    for (let i = 0; i < 6 && !applied; i++) {
-      const r = await pmo.post(`/api/change/${cr2.body.id}/approve`, {});
+    for (let i = 0; i < groupChain.length && !applied; i++) {
+      const r = await groupChain[i].post(`/api/change/${cr2.body.id}/approve`, {});
       assert.equal(r.status, 200, JSON.stringify(r.body));
       applied = r.body.applied !== false;
     }
-    assert.ok(applied, "le groupe signe chaque étape et la demande est appliquée");
+    assert.ok(applied, "le groupe signe chaque étape — une personne par étape — et la demande est appliquée");
   });
 });
 

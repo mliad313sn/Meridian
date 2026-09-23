@@ -513,9 +513,14 @@ missing from the published contract (§10, NEW-08).
 
 Four roles:
 
-- **admin**: unrestricted, and exempt from segregation of duties. This
-  is a break-glass, and every such signature is marked in the audit
-  trail.
+- **admin**: unrestricted, and exempt from the raiser rule of change
+  control (it may sign a request it raised). This is a break-glass, and
+  every such signature is marked in the audit trail. It is NOT exempt
+  from the distinct-signatory rule (PR-04, D-36.11): each step of a
+  change chain is signed by a different person — the person behind the
+  account, or the account itself when it represents nobody — and
+  `change_step.decided_by_person` (056) records that person beside the
+  account `decided_by` has always recorded.
 - **group**: reads the whole portfolio, and writes inside its granted
   programmes.
 - **site**: reads its own sites and the group projects landing there,
