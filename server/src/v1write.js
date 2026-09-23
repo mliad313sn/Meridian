@@ -48,6 +48,7 @@ import { assertPlantWindow } from "./plant.js";
 import { isEvidenceLocator, EVIDENCE_REFUSAL } from "./evidence.js";
 import { assertCaseReconfirmed } from "./value.js";
 import { canRatifyDecision } from "../../shared/rbac.js";
+import { reprojectNextReview } from "./raidreview.js";
 
 const bad = (msg) => { throw new HttpError(400, msg); };
 const sha = (s) => crypto.createHash("sha256").update(s).digest("hex");
@@ -1351,6 +1352,10 @@ export const WRITE_BODIES = {
     owner: "string", realiseOn: "date", measuredOn: "date", status: "string", version: "integer" },
   "business-case": { adopt: "string", project: "string", summary: "string", basis: "string",
     expectedCost: "number", expectedBenefit: "number", version: "integer" },
+  /* REQ-51 — a review that HAPPENED, not a date moved: `item` is the
+     register row reviewed, `on` the day, `by` the person, `next` the due
+     date it sets (which the row's `review` then projects). */
+  "raid-reviews": { item: "string", on: "date", by: "string", note: "string", next: "date", version: "integer" },
 };
 
 /* ── REQ-19 · un corps que la collection ne comprend pas est REFUSÉ ───
@@ -1406,4 +1411,80 @@ export function assertKnownBody(collection, body) {
     bad(`A ${collection} write names nothing to write — send at least one of: ` +
         `${writable.join(", ")}. See ${CONTRACT_DOC}`);
   }
+}
+
+/**
+ * REQ-51 (RT365) — the contract records that a RAID review HAPPENED.
+ *
+ * `PUT /api/v1/raid` sets `review`, which SCHEDULES one; performing a
+ * review is another act (REQ-46, 050), and until now only a screen could
+ * write it. RT365's sync moved the date instead, which erases the only
+ * evidence that the review took place. Keyed by (integration, its own
+ * id), like every contract row, so a sync that runs twice records one
+ * review. The due date is re-derived by the one projection both doors
+ * share (raidreview.js).
+ */
+export async function upsertRaidReview(user, externalId, b) {
+  const source = user.id;
+  const existing = await one(
+    `SELECT * FROM raid_review WHERE external_source = $1 AND external_id = $2`, [source, externalId]);
+  const itemRef = b.item ?? existing?.raid_id;
+  if (!itemRef) bad("item names the register item that was reviewed: a Meridian id, or an externalId you created");
+  const item = await one(
+    `SELECT id, project_id, title, review_on FROM raid_item
+      WHERE id = $1 OR (external_source = $2 AND external_id = $1)`, [String(itemRef), source]);
+  if (!item) bad(`No such register item: ${itemRef} — send a Meridian id, or an externalId you created`);
+  if (existing && item.id !== existing.raid_id) {
+    bad(`Review ${externalId} is on ${existing.raid_id}; a review stays on the item it reviewed — record a new one`);
+  }
+  /* The same scope as writing the row itself: a project the integration
+     can reach, or a portfolio-wide item. */
+  if (item.project_id) await resolveProject(source, item.project_id);
+  const on = b.on === undefined ? undefined : isoDate(b.on, "on");
+  const next = b.next === undefined ? undefined : isoDate(b.next, "next");
+  const by = b.by === undefined ? undefined : await resolvePerson(b.by, "by");
+  const note = text(b.note, 2000, "note");
+
+  if (!existing) {
+    const day = on ?? iso(new Date());
+    if (!by) bad("by names the person who performed the review — an active person of the directory");
+    if (next && next < day) bad("next is when the following review is due — after the one being recorded, not before it");
+    let id = null;
+    await audited(user,
+      () => ({ action: "Register item reviewed", entity: "raid_item", entityId: item.id,
+               detail: `${item.title} — reviewed ${day}` + (next ? `, next due ${next}` : ", no next review set") +
+                       ` — from ${user.displayName} (${externalId})`,
+               before: { review_on: item.review_on }, after: { review_on: next ?? null } }),
+      async (t) => {
+        id = await allocateId(t, "RVW", { pad: 3 });
+        await t.query(
+          `INSERT INTO raid_review
+             (id, raid_id, reviewed_on, reviewed_by, note, due_on, next_review_on, recorded_by,
+              external_source, external_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+          [id, item.id, day, by, note ?? "", item.review_on ?? null, next ?? null, user.id, source, externalId]);
+        await reprojectNextReview(t, item.id);
+      });
+    return stamp(true, id, externalId, 1);
+  }
+  let patch = {};
+  if (on !== undefined) patch.reviewed_on = on;
+  if (by !== undefined) patch.reviewed_by = by;
+  if (note !== undefined) patch.note = note;
+  if (next !== undefined) patch.next_review_on = next;
+  patch = changedOnly(patch, existing);
+  if (!Object.keys(patch).length) return stamp(false, existing.id, externalId, existing.row_version);
+  const dayAfter = patch.reviewed_on ?? iso(existing.reviewed_on);
+  const nextAfter = "next_review_on" in patch ? patch.next_review_on : (existing.next_review_on ? iso(existing.next_review_on) : null);
+  if (nextAfter && nextAfter < dayAfter) bad("next is when the following review is due — after the one being recorded, not before it");
+  const version = sentVersion(b);
+  const out = await audited(user,
+    { action: "Register review corrected", entity: "raid_item", entityId: item.id,
+      detail: `${item.title} — review ${existing.id} corrected — from ${user.displayName} (${externalId})` },
+    async (t) => {
+      const rv = await writeRow(t, "raid_review", existing.id, version, patch, "review");
+      await reprojectNextReview(t, item.id);
+      return rv;
+    });
+  return stamp(false, existing.id, externalId, out.version);
 }

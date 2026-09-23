@@ -22,6 +22,39 @@ Nothing yet.
 
 ---
 
+## [5.20.0] — 2026-09-23
+
+**The write contract records that a review happened** (REQ-51, RT365;
+docs/36 wave 1).
+
+### Added
+
+- **`PUT /api/v1/raid-reviews/:externalId`** (`write:portfolio`). A review
+  performed on a register item is an event: `item`, `by` (a person of the
+  directory, required when created), `on` (today when omitted), `note`,
+  and `next`, the following due date.
+  - It is keyed by the integration's own id, so a sync that runs twice
+    records one review.
+  - Corrections re-derive the item's `review` date, and a review stays on
+    the item it reviewed.
+  - The body is closed (REQ-19), described in the published contract,
+    audited, and read back by the screen as the same event.
+- Migration **054**: `raid_review` gains `external_source` and
+  `external_id`, like every contract row.
+- The next-review projection moved to `server/src/raidreview.js`, so the
+  screen and the contract derive the due date one way.
+
+### Why this was wrong before
+
+`review` on `PUT /api/v1/raid` *schedules* a review. Performing one has
+been an event since 050 (REQ-46), but only a screen could write it.
+RT365's `meridian_sync.py` moved the date instead, which erases the only
+evidence that the review took place.
+
+`server/test/raidreview-contract.test.js` (7 tests).
+
+---
+
 ## [5.19.0] — 2026-09-23
 
 **A decision is ratified from a screen, by someone independent, in their

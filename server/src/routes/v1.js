@@ -30,7 +30,7 @@ import { requireIntegration } from "../integrations.js";
 import { openApiDocument, scopedEndpoints } from "../openapi.js";
 import { packageVersion } from "../env.js";
 import {
-  idempotent, assertKnownBody, upsertProject, upsertMilestone, upsertRaid, upsertDecision,
+  idempotent, assertKnownBody, upsertProject, upsertMilestone, upsertRaid, upsertRaidReview, upsertDecision,
   upsertAction, upsertActivity, upsertWorkItem, upsertCriterion, upsertBenefit, upsertBusinessCase,
 } from "../v1write.js";
 
@@ -232,6 +232,8 @@ r.put("/criteria/:externalId", requireIntegration("write:portfolio"), known(), i
    et ce qu'il rend se synchronisent comme ce qu'il livre. */
 r.put("/benefits/:externalId", requireIntegration("write:portfolio"), known(), idempotent(), write(upsertBenefit));
 r.put("/business-case/:externalId", requireIntegration("write:portfolio"), known(), idempotent(), write(upsertBusinessCase));
+/* REQ-51 — a review performed, not a date moved (050). */
+r.put("/raid-reviews/:externalId", requireIntegration("write:portfolio"), known(), idempotent(), write(upsertRaidReview));
 r.put("/decisions/:externalId", requireIntegration("write:meetings"), known(), idempotent(), write(upsertDecision));
 r.put("/actions/:externalId", requireIntegration("write:meetings"), known(), idempotent(), write(upsertAction));
 

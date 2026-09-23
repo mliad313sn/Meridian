@@ -178,6 +178,13 @@ const WRITE_DOCS = {
     "records the closure with its date: send `closedOn` when your register knows it, otherwise today " +
     "is stamped, and `closedBy` names the person on whose word it closed. Reopening clears both, " +
     "because an open item has no closure (REQ-18)."),
+  "PUT /api/v1/raid-reviews/:externalId": upsert("a review performed on a register item", "write:portfolio",
+    "`review` on /raid SCHEDULES a review; this records that one HAPPENED (REQ-46, REQ-51). `item` is the " +
+    "register item — a Meridian id or an externalId you created — and a review stays on it. `by` names " +
+    "the person who performed it (required when created), `on` the day (today when omitted), `note` what " +
+    "it found, and `next` when the following review is due; the item's `review` date is then derived from " +
+    "the latest review, on this door and on the screen alike. Keyed by your id, so a sync that runs twice " +
+    "records one review."),
   "PUT /api/v1/activities/:externalId": upsert("the link to a schedule stage, and its measured progress", "write:portfolio",
     "Stages are not created by integrations — the plan belongs to the project. The first call binds " +
     "your id to an existing stage (`activity`); every call may carry `pct`, stamped with `source` and " +

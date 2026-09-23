@@ -233,7 +233,7 @@ server/          src/env.js        .env, the data directory, the one version num
                  src/portfolio.js  rows → the shape the engine reads
                  src/routes/       auth · portfolio · meetings · admin · import ·
                                    ladder · signals · valuepage · federation · v1
-                 migrations/       ordered SQL (001–053, 63 tables, applied at boot)
+                 migrations/       ordered SQL (001–054, 63 tables, applied at boot)
                  test/             the suites — count in CHANGELOG.md
 
 web/             src/ui/kit.js     h() builder, dialogs, tables, charts (from v4)

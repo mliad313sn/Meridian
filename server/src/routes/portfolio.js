@@ -11,6 +11,7 @@
 import crypto from "node:crypto";
 import { Router } from "express";
 import { many, one, tx, updateVersioned, allocateId, insertMany, requiredVersion } from "../db.js";
+import { reprojectNextReview } from "../raidreview.js";
 import { can, canSeeProject, canRatifyDecision } from "../../../shared/rbac.js";
 import { audited, readAudit, record } from "../audit.js";
 import { HttpError } from "../auth.js";
@@ -1078,31 +1079,9 @@ async function raidItemFor(id, user, { write = false } = {}) {
   return item;
 }
 
-/**
- * La date de prochaine revue du registre, RECALCULÉE depuis les revues
- * qui subsistent.
- *
- * Elle s'écrit sous `updateVersioned` comme toute ligne mutable, mais la
- * version assertée est celle lue DANS la transaction et non celle que
- * l'appelant tenait : ce n'est pas une valeur qu'il a lue puis remplacée,
- * c'est une conséquence de l'événement qu'il vient d'inscrire. Ce que sa
- * version garde, c'est la revue elle-même (`requiredVersion` plus bas).
- *
- * `fallback` sert au retrait de la DERNIÈRE revue : la date qui redevient
- * due est celle que cette revue avait trouvée en place — sans quoi
- * annuler une revue laisserait le registre sans échéance du tout.
- */
-async function reprojectNextReview(t, itemId, fallback = null) {
-  const cur = (await t.query(`SELECT row_version, review_on FROM raid_item WHERE id = $1`, [itemId])).rows[0];
-  const last = (await t.query(
-    `SELECT next_review_on FROM raid_review WHERE raid_id = $1
-      ORDER BY reviewed_on DESC, recorded_at DESC, id DESC LIMIT 1`, [itemId])).rows[0];
-  const next = last ? (last.next_review_on ?? null) : (fallback ?? null);
-  if (String(cur.review_on ?? "") === String(next ?? "")) return next;   // rien n'a bougé
-  await updateVersioned(t, "raid_item", itemId, cur.row_version, { review_on: next });
-  return next;
-}
-
+/* The next-review projection lives in server/src/raidreview.js since
+   REQ-51: the screen and the contract record the same event and must
+   re-derive the same due date. */
 const asReview = (v) => ({
   id: v.id, item: v.raid_id,
   reviewedOn: v.reviewed_on, reviewedBy: v.reviewed_by ?? null,
