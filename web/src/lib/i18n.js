@@ -2668,6 +2668,85 @@ export const FR = {
     "Livraison hebdomadaire",
   "Monthly steering":
     "Pilotage mensuel",
+  /* ── NEW-20 · the import says what a replace would erase ── */
+  "Sites":
+    "Sites",
+  "People":
+    "Personnes",
+  "Projects":
+    "Projets",
+  "Schedule stages":
+    "Étapes du planning",
+  "Cross-project dependencies":
+    "Dépendances entre projets",
+  "Milestones and gates":
+    "Jalons et portes",
+  "RAID items":
+    "Lignes RAID",
+  "Cost postings":
+    "Écritures de coût",
+  "Work items":
+    "Éléments de travail",
+  "Allocations":
+    "Affectations",
+  "Governance seats":
+    "Sièges de gouvernance",
+  "Objections":
+    "Objections",
+  "Site windows":
+    "Fenêtres de site",
+  "Absences":
+    "Absences",
+  "Rollout waves":
+    "Vagues de déploiement",
+  "Timesheets":
+    "Feuilles de temps",
+  "Tolerances":
+    "Tolérances",
+  "Business cases":
+    "Cas d'affaire",
+  "Case reconfirmations":
+    "Reconfirmations de cas",
+  "Gate criteria":
+    "Critères de porte",
+  "External links":
+    "Liens externes",
+  "Report narrative":
+    "Commentaire du rapport",
+  "Meeting series":
+    "Séries de réunions",
+  "Decisions":
+    "Décisions",
+  "Meeting actions":
+    "Actions de réunion",
+  "RAID reviews":
+    "Revues RAID",
+  "The file could not be checked":
+    "Le fichier n'a pas pu être vérifié",
+  "Replace the whole book?":
+    "Remplacer tout le livre ?",
+  "Import book":
+    "Importer le livre",
+  "A replace deletes the whole book in this database and puts the file in its place. Whatever the file does not carry is erased, not kept.":
+    "Un remplacement supprime tout le livre de cette base et met le fichier à sa place. Ce que le fichier ne porte pas est effacé, pas conservé.",
+  "This file carries none of the lists below. Replacing will erase what the database holds for them:":
+    "Ce fichier ne porte aucune des listes ci-dessous. Le remplacement effacera ce que la base en détient :",
+  "row(s) erased":
+    "ligne(s) effacée(s)",
+  "A file that does not carry a list should be merged instead: a merge updates rows by identifier and erases nothing.":
+    "Un fichier qui ne porte pas une liste se fusionne plutôt : une fusion met à jour les lignes par identifiant et n'efface rien.",
+  "The file carries every list this database holds rows for; nothing is erased that the file does not bring back.":
+    "Le fichier porte toutes les listes dont cette base détient des lignes ; rien n'est effacé que le fichier ne rapporte pas.",
+  "row(s) of the file would be refused by name — the dry run lists them in the audit trail.":
+    "ligne(s) du fichier seraient refusées nommément — l'essai à blanc les liste dans la piste d'audit.",
+  "Merge instead":
+    "Fusionner plutôt",
+  "Replace and erase":
+    "Remplacer et effacer",
+  "Replace the book":
+    "Remplacer le livre",
+  "Book merged":
+    "Livre fusionné",
 };
 
 /* ── enregistrement des dictionnaires ─────────────────────────────────

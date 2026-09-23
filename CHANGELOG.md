@@ -22,6 +22,56 @@ Nothing yet.
 
 ---
 
+## [5.24.0] — 2026-09-23
+
+**The demonstration book says what it is worth, and the book survives its
+own replace** (REQ-48, NEW-18, NEW-19, NEW-20; docs/36 wave 1).
+
+### Changed
+
+- **REQ-48 · The demonstration book carries value.** Six projects carry a
+  business case (one states a cost and no benefit yet) and six
+  deliberately do not; eight benefits carry baselines, targets and
+  measures; two projects carry a tolerance. The seed runs the production
+  tolerance sweep, so a fresh book's exceptions are found, not typed in.
+  On a fresh install all six value-page figures are measured, and the
+  ranking shows both an order and the not-placed worklist. Before, four
+  figures read as absences and the ranking placed nothing. A book reset
+  for production still reads six honest absences. The suites that
+  asserted a rule through the old, empty seed now build their own
+  fixture with the same assertions (`demobook.test.js` proves both
+  halves).
+
+### Fixed
+
+- **NEW-18 · Inactive sites, programmes and people are in the book.**
+  The export wrote only active rows, so a closed project on its old site,
+  or a risk owned by a leaver, was refused on the way back in. They are
+  now exported with `active: false` and restored as such; screens still
+  offer only active rows.
+- **NEW-19 · A replace import no longer resets every version to 1.** A
+  screen holding version 1 of a row that had been at 7 could write over
+  the import. Every row a replace writes now moves past the highest
+  `row_version` its table held before, so any version read before the
+  import is refused with 409.
+- **NEW-20 · The import screen says what a replace erases.** A file with
+  no meeting register (a KODO book, or any export older than 5.21.0)
+  erased the meeting register without a word. The screen now runs the
+  dry run first, lists each list the file does not carry with the rows
+  it would erase ("Meeting series — 7 row(s) erased"), and offers the
+  merge beside the replace. The dry run reports `wouldErase`; a real
+  replace returns `erased` and records it in the audit trail.
+
+### Measure
+
+`demobook.test.js` and `book-replace.test.js` (6); F13 now requires every
+version to come back strictly greater and adds an inactive site,
+programme and person. Browser: six measured value-page figures; the
+replace warning listed Meeting series 7, Meetings 12, Decisions 1,
+Meeting actions 8, and Cancel left the book intact.
+
+---
+
 ## [5.23.0] — 2026-09-23
 
 **Each step of a change request is signed by a different person** (PR-04,

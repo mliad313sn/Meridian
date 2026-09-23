@@ -193,8 +193,13 @@ test("un abonnement décide enfin de ce qui SORT — et de rien d'autre", async 
   await queue({ userId: me.id, email: me.email, kind: "action-overdue",
     subject: "Vraiment urgent", body: "x", dedupeKey: "sub-urgent", severity: "urgent" });
 
+  /* REQ-48 — only THIS account's deliveries are asserted on. `deliver`
+     drains the whole queue, and the demonstration book now queues a
+     message of its own (the tolerance sweep tells R. Kaur her margin on
+     PRJ-101 is breached). The property is unchanged and still exact:
+     of this account's two messages, only the urgent one goes out. */
   const sent = [];
-  await deliver(async ({ subject }) => { sent.push(subject); });
+  await deliver(async ({ to, subject }) => { if (to === me.email) sent.push(subject); });
   assert.deepEqual(sent, ["Vraiment urgent"], "seul ce qui atteint le seuil sort");
 
   /* Mais le centre, lui, a tout reçu : un abonnement règle ce qui sort,

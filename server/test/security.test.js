@@ -250,9 +250,14 @@ test("N-05 — « hebdomadaire » ne reçoit pas comme « immédiat »", async (
   await queue({ userId: me.id, email: me.email, kind: "digest",
     subject: "Nouveau 2", body: "x", dedupeKey: "n05-b" });
 
+  /* REQ-48 — counted for THIS account, not for the whole queue: the
+     demonstration book now queues a message of its own (the tolerance
+     sweep writes to R. Kaur, who is on "immediate"), and it rightly goes
+     out on this round. The property is the same and still exact: none
+     of this weekly reader's messages leaves before the week is up. */
   const sentTo = [];
-  const out = await deliver(async ({ subject }) => { sentTo.push(subject); });
-  assert.equal(out.sent, 0, "rien ne part avant l'échéance de la cadence");
+  await deliver(async ({ to, subject }) => { if (to === me.email) sentTo.push(subject); });
+  assert.equal(sentTo.length, 0, "rien ne part avant l'échéance de la cadence");
 
   const still = await many(
     `SELECT count(*)::int AS n FROM notification WHERE user_id = $1 AND state = 'queued'`, [me.id]);
@@ -261,8 +266,8 @@ test("N-05 — « hebdomadaire » ne reçoit pas comme « immédiat »", async (
   /* Une fois la semaine écoulée, le lot part. */
   await query(`UPDATE notification SET sent_at = now() - interval '8 days'
                 WHERE user_id = $1 AND state = 'sent'`, [me.id]);
-  const after = await deliver(async ({ subject }) => { sentTo.push(subject); });
-  assert.ok(after.sent >= 1, "à l'échéance, ce qui attendait part");
+  await deliver(async ({ to, subject }) => { if (to === me.email) sentTo.push(subject); });
+  assert.ok(sentTo.length >= 1, "à l'échéance, ce qui attendait part");
 
   await pm.patch("/api/auth/preferences", { notifyPref: "immediate" });
 });

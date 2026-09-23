@@ -63,14 +63,16 @@ const NOT_EXERCISED = new Set([]);
 const importer = readFileSync(new URL("../src/import.js", import.meta.url), "utf8");
 const read = new Set([...importer.matchAll(/\bbook\??\.(\w+)/g)].map((m) => m[1]));
 
-/* Every leaf that differs, named by its path with indices folded. */
-function differences(a, b, path = "", out = new Map()) {
+/* Every leaf that differs, named by its path with indices folded.
+   `skip` names keys compared elsewhere, by a rule of their own. */
+function differences(a, b, path = "", out = new Map(), skip = null) {
+  if (skip && skip.has(path.split(".").pop())) return out;
   if (JSON.stringify(a) === JSON.stringify(b)) return out;
   const bothObjects = a && b && typeof a === "object" && typeof b === "object";
   if (bothObjects && Array.isArray(a) === Array.isArray(b) &&
       (!Array.isArray(a) || a.length === b.length)) {
     const keys = Array.isArray(a) ? a.keys() : new Set([...Object.keys(a), ...Object.keys(b)]);
-    for (const k of keys) differences(a[k], b[k], Array.isArray(a) ? `${path}[]` : `${path}${path ? "." : ""}${k}`, out);
+    for (const k of keys) differences(a[k], b[k], Array.isArray(a) ? `${path}[]` : `${path}${path ? "." : ""}${k}`, out, skip);
     return out;
   }
   if (!out.has(path)) out.set(path, `${JSON.stringify(a)?.slice(0, 60)} → ${JSON.stringify(b)?.slice(0, 60)}`);
@@ -94,6 +96,16 @@ const PE1 = `(SELECT min(id) FROM person)`;
 const PE2 = `(SELECT max(id) FROM person)`;
 const SITE = `(SELECT min(id) FROM site)`;
 const USER = `(SELECT min(id) FROM app_user)`;
+/* REQ-48 — the seed now writes business cases and tolerances of its own
+   (CAS-001…, TOL-001…, and the EXC rows the sweep raises), and a project
+   has one case. The value rows below therefore take ids of their own
+   (…-901) and a project that the SEED left without a case or tolerance,
+   rather than colliding with the demonstration book. The ids of this
+   file's own rows are excluded so the choice does not move once they are
+   written. Every field they exercise is exercised as before. */
+const PV = `(SELECT min(id) FROM project
+              WHERE id NOT IN (SELECT project_id FROM business_case WHERE id <> 'CAS-901')
+                AND id NOT IN (SELECT project_id FROM project_tolerance WHERE id <> 'TOL-901'))`;
 const ENRICH = [
   /* An integration is not book data (the import never writes one), so it
      survives the import, and every `externalSource` that names it must
@@ -119,6 +131,19 @@ const ENRICH = [
   `UPDATE work_item SET source = 'Gate 2 review', score = 42.5, score_method = 'RICE'
     WHERE id = (SELECT max(id) FROM work_item)`,
   `UPDATE project SET closed = true WHERE id = (SELECT max(id) FROM project)`,
+  /* NEW-18 — a closed project still sits on the site it was delivered at,
+     under the programme that ran it, after both have been closed; and a
+     risk still names the leaver who owned it. The export wrote only
+     ACTIVE sites, programmes and people, so each of these pointers was
+     refused on the way back in. */
+  `INSERT INTO site (id, city, region, tz_offset, tz_name, headcount, fte, charter, active)
+   VALUES ('OLD', 'Obuasi', 'West Africa', 0, 'GMT', 12, 10, 'Closed 2025 — site office', false)`,
+  `INSERT INTO programme (id, name, sponsor, manager_id, active)
+   VALUES ('OLDP', 'Legacy estate exit', 'Group CFO', ${PE1}, false)`,
+  `UPDATE project SET site_id = 'OLD', programme_id = 'OLDP' WHERE id = (SELECT max(id) FROM project)`,
+  `INSERT INTO person (id, name, job_role, site_id, day_rate, active)
+   VALUES ('PE-901', 'A. Leaver', 'Risk manager', 'OLD', 600, false)`,
+  `UPDATE raid_item SET owner_id = 'PE-901' WHERE id = (SELECT max(id) FROM raid_item)`,
   `UPDATE programme SET gate_model = '[{"n":1,"name":"Idea","at":0.1,"owner":"Sponsor","evidence":"Charter"},
           {"n":2,"name":"Build","at":0.5,"owner":"PMO","evidence":"","loopsTo":1}]'::jsonb,
           origin = 'sdp'
@@ -185,7 +210,7 @@ const ENRICH = [
    VALUES ('ABS-001', ${PE1}, '2026-09-01', '2026-09-14', 'training', ${PE2}, 'HV authorisation course')`,
   `INSERT INTO benefit (id, project_id, kind, title, detail, measure, unit, baseline, target, actual,
                        owner_id, realise_on, measured_on, status, external_source, external_id)
-   VALUES ('BEN-01', ${P1}, 'Availability', 'Mill availability', 'Fewer unplanned stops',
+   VALUES ('BEN-901', ${P1}, 'Availability', 'Mill availability', 'Fewer unplanned stops',
            'Monthly availability', '%', 91.5, 96, 94.25, ${PE2}, '2026-12-31', '2026-08-31',
            'Partially realised', 'INT-RT', 'EXT-B1')`,
   `INSERT INTO rollout_wave (id, project_id, site_id, seq, planned_on, actual_on, status, note)
@@ -197,19 +222,19 @@ const ENRICH = [
   `INSERT INTO timesheet (id, person_id, project_id, week_start, days, entered_by)
    VALUES (7, ${PE1}, ${P1}, '2026-08-24', 3.5, ${USER})`,
   `INSERT INTO project_tolerance (id, project_id, schedule_days, cost_pct, benefit_pct, note, set_by, set_on)
-   VALUES ('TOL-001', ${P1}, 10, 7.5, 12.5, 'Board delegation', ${USER}, '2026-07-01')`,
+   VALUES ('TOL-901', ${PV}, 10, 7.5, 12.5, 'Board delegation', ${USER}, '2026-07-01')`,
   `INSERT INTO project_exception (id, project_id, tolerance_id, dimension, raised_on, measured, allowed,
                                  detail, status, answer_kind, answer, answered_by, answered_on)
-   VALUES ('EXC-001', ${P1}, 'TOL-001', 'cost', '2026-08-02', 9.25, 7.5, 'Forecast over by 1.75 pts',
+   VALUES ('EXC-901', ${PV}, 'TOL-901', 'cost', '2026-08-02', 9.25, 7.5, 'Forecast over by 1.75 pts',
            'Answered', 'Plan revised', 'Scope of wave 3 deferred', ${USER}, '2026-08-09')`,
   `INSERT INTO business_case (id, project_id, summary, expected_cost, expected_benefit, value_confidence,
                              basis, written_by, written_on, updated_on, reconfirmed_gate,
                              reconfirmed_on, reconfirmed_by, external_source, external_id)
-   VALUES ('CAS-001', ${P1}, 'Replace the crusher PLC', 1234567.89, 2500000, 4, 'Vendor quote Q-88',
+   VALUES ('CAS-901', ${PV}, 'Replace the crusher PLC', 1234567.89, 2500000, 4, 'Vendor quote Q-88',
            ${USER}, '2026-01-05', '2026-06-10', 2, '2026-05-01', ${USER}, 'INT-RT', 'EXT-C1')`,
   `INSERT INTO case_reconfirmation (id, case_id, project_id, gate, expected_cost, expected_benefit,
                                    verdict, note, reconfirmed_by, reconfirmed_on)
-   VALUES ('CRC-001', 'CAS-001', ${P1}, 2, 1200000, 2400000.5, 'Continue with conditions',
+   VALUES ('CRC-001', 'CAS-901', ${PV}, 2, 1200000, 2400000.5, 'Continue with conditions',
            'Hold the contingency', ${PE1}, '2026-05-01')`,
   `INSERT INTO lesson (id, project_id, programme_id, site_id, gate_n, category, title, what_happened,
                       why, recommendation, outcome, raised_by, raised_on, status, adopted_by, adopted_on)
@@ -300,6 +325,27 @@ describe("F13 · export → import → export", () => {
     assert.equal(status, 200, text);
   });
 
+  test("NEW-18 · inactive sites, programmes and people travel, flagged, and stay inactive", async () => {
+    assert.equal(first.sites.find((x) => x.id === "OLD")?.active, false);
+    assert.equal(first.programmes.find((x) => x.id === "OLDP")?.active, false);
+    assert.equal(first.people.find((x) => x.id === "PE-901")?.active, false);
+    const risk = first.raid.find((x) => x.owner === "PE-901");
+    assert.ok(risk, "the leaver's risk is in the book");
+    assert.equal(second.raid.find((x) => x.id === risk.id)?.owner, "PE-901",
+      "and comes back owned by the leaver, not refused");
+    const held = await query(`SELECT
+        (SELECT active FROM site WHERE id = 'OLD') AS site,
+        (SELECT active FROM programme WHERE id = 'OLDP') AS prog,
+        (SELECT active FROM person WHERE id = 'PE-901') AS person`);
+    assert.deepEqual(held.rows?.[0] ?? held[0], { site: false, prog: false, person: false },
+      "the import restores the flag: an inactive row does not come back active");
+    /* …and the screens still do not offer them. */
+    const boot_ = (await (await as("admin")).get("/api/bootstrap")).body.db;
+    assert.ok(!boot_.sites.some((x) => x.id === "OLD"));
+    assert.ok(!boot_.programmes.some((x) => x.id === "OLDP"));
+    assert.ok(!boot_.people.some((x) => x.id === "PE-901"));
+  });
+
   test("every collection the export writes is imported, or named with the line that will", () => {
     const unread = Object.keys(first).filter((k) =>
       !read.has(k) && !NOT_BOOK.has(k) && !KNOWN_LOST_COLLECTIONS.has(k));
@@ -315,15 +361,41 @@ describe("F13 · export → import → export", () => {
     assert.deepEqual(gone, [], "no longer exported — remove from KNOWN_LOST_COLLECTIONS");
   });
 
+  /* NEW-19 — `version` is the one field a REPLACE must change: it is the
+     concurrency token, not book data, and a replace that brought every
+     row back at the version it was exported with (or at 1, before
+     NEW-19) let a screen holding a pre-import version write over the
+     import. So it is compared by its own rule, which is stricter than
+     equality: every row that comes back is at a version strictly greater
+     than the one the book was exported with. */
+  const VERSION = new Set(["version"]);
+  test("NEW-19 · every row comes back at a version past the one exported", () => {
+    const pairs = [];
+    const walk = (a, b, path) => {
+      if (Array.isArray(a) && Array.isArray(b) && a.length === b.length) {
+        a.forEach((x, i) => walk(x, b[i], `${path}[${i}]`));
+      } else if (a && b && typeof a === "object" && typeof b === "object") {
+        for (const k of Object.keys(a)) {
+          if (k === "version" && typeof a[k] === "number") pairs.push([`${path}.${k}`, a[k], b[k]]);
+          else walk(a[k], b[k], `${path}.${k}`);
+        }
+      }
+    };
+    walk(first, second, "");
+    assert.ok(pairs.length > 100, "the book carries versions to compare");
+    const notPast = pairs.filter(([, was, now]) => !(typeof now === "number" && now > was));
+    assert.deepEqual(notPast, [], "a version a screen could hold from before the replace must not match");
+  });
+
   test("the book comes back field for field, except the named losses", () => {
-    const diff = differences(first, second);
+    const diff = differences(first, second, "", new Map(), VERSION);
     const unexplained = [...diff].filter(([p]) => !KNOWN_LOST_FIELDS.has(p));
     assert.deepEqual(unexplained, [],
       "these fields do not survive the round trip, and nobody has said so");
   });
 
   test("a named field loss that no longer happens is struck off", () => {
-    const diff = differences(first, second);
+    const diff = differences(first, second, "", new Map(), VERSION);
     const healed = [...KNOWN_LOST_FIELDS].filter((p) => !diff.has(p));
     assert.deepEqual(healed, [], "survives now — remove from KNOWN_LOST_FIELDS");
   });

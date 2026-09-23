@@ -15,7 +15,7 @@
 import { test, before, after, describe } from "node:test";
 import assert from "node:assert/strict";
 import { boot, shutdown, as, SITE_PROJECT_GRU } from "./harness.js";
-import { one } from "../src/db.js";
+import { one, query } from "../src/db.js";
 
 before(async () => { await boot(); });
 after(shutdown);
@@ -190,7 +190,13 @@ describe("PM-03 · la justification continue", () => {
 
   test("on ne reconfirme pas un cas qui n'existe pas", async () => {
     const group = await as("groupCBP");
-    /* PRJ-101 (CBP) n'a pas de cas d'affaire. */
+    /* REQ-48 — the precondition is BUILT here rather than read off the
+       demonstration book: the seed now gives PRJ-101 a case, so the test
+       removes it and asserts the project really carries none before it
+       tries. The property asserted is unchanged. */
+    await query(`DELETE FROM business_case WHERE project_id = 'PRJ-101'`);
+    assert.equal((await one(
+      `SELECT count(*)::int AS n FROM business_case WHERE project_id = 'PRJ-101'`)).n, 0);
     const r = await group.post(`/api/projects/PRJ-101/case/reconfirm`, { gate: 1, version: 1 });
     assert.equal(r.status, 400);
     assert.match(r.body.error, /write it first/i,

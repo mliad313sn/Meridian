@@ -486,6 +486,88 @@ function genAllocations(projects, today) {
   return out;
 }
 
+/* REQ-48 — what the book says each project is WORTH, not only what it
+   costs. Before this, the demonstration book carried no business case, no
+   benefit and no tolerance, so four of the value page's six figures read
+   as absences on a fresh install and the ranking placed nothing.
+
+   Deliberately uneven, because a real portfolio is:
+     · six projects carry a case, six do not — so the ranking (REQ-24) and
+       its "not placed" worklist are both on screen;
+     · PRJ-140 has a case that states a cost and NO benefit yet (funding
+       is released to Gate 1 only), so a case can be present and still
+       not place its project;
+     · PRJ-136 states a benefit with no case behind it — the other
+       silence the value report names;
+     · PRJ-129 is in closure with one benefit measured short of its
+       target and one past its realisation date and unmeasured, so the
+       overdue review, and the exception the sweep raises for it, are real.
+
+   Money is in millions like every other seed figure (the seed converts
+   with `fromM`). Benefit units are the benefit's own, never converted.
+   Dates the figures read relative to the status date are OFFSETS in days
+   from `today`, so a book seeded on any day tells the same story. */
+const SEED_CASES = [
+  { project: "PRJ-101", cost: 8.4, benefit: 3.1, confidence: 4, written: "2026-01-20",
+    summary: "Retire the 1998 payments mainframe before its support contract lapses, and settle ISO 20022 natively rather than through a translation layer.",
+    basis: "Mainframe run cost (2.2 M a year) and correspondent-bank penalty exposure (0.9 M a year), from the 2025 finance baseline agreed with V. Rossi." },
+  { project: "PRJ-104", cost: 5.2, benefit: 2.4, confidence: 3, written: "2025-12-02",
+    summary: "One onboarding journey instead of six, so a customer who starts on the phone can finish in a branch without starting again.",
+    basis: "Abandonment on the six journeys (46 % in 2025) priced at the average first-year margin of a retail account; channel running costs from the 2025 budget." },
+  { project: "PRJ-107", cost: 6.8, benefit: 1.9, confidence: 4, written: "2025-10-28",
+    summary: "Eleven regional warehouses become one governed lakehouse, and the same revenue number is the same number in every region.",
+    basis: "Licence and hosting of the eleven warehouses (1.9 M a year) as invoiced in 2025; the reconciliation effort saved is not counted." },
+  { project: "PRJ-118", cost: 3.6, benefit: 4.2, confidence: 2, written: "2026-01-12",
+    summary: "One real-time decision service replaces three rules engines for card, transfer and onboarding fraud.",
+    basis: "Fraud losses of 2025 at 14.2 bps of card volume, and the vendor's claimed reduction to 9 bps. The vendor's figure has not been seen on our own data yet, hence the low confidence." },
+  { project: "PRJ-129", cost: 2.4, benefit: 0.8, confidence: 5, written: "2025-08-30",
+    summary: "Refresh four thousand seats before the current estate leaves warranty, with a managed disposal chain.",
+    basis: "Out-of-warranty repair cost and service-desk load of the 2025 estate; the energy saving is the manufacturer's rated figure." },
+  { project: "PRJ-140", cost: 3.4, benefit: null, confidence: null, written: "2026-07-28",
+    summary: "Retire the legacy ledger and its 214 downstream feeds once the payments migration has landed.",
+    basis: "Funding released to Gate 1 only. The cost is the envelope; the benefit is quantified at design, when the feeds that can simply stop are known." },
+];
+
+const SEED_BENEFITS = [
+  { project: "PRJ-129", kind: "Cost", title: "Service-desk tickets per 100 seats", owner: "PE-08",
+    measure: "Monthly service-desk tickets per 100 seats, averaged over the quarter", unit: "tickets",
+    baseline: 38, target: 22, actual: 25, realise: -45, measured: -10, status: "Partially realised",
+    detail: "Measured on the refreshed sites only; the two late sites are still on the old estate." },
+  { project: "PRJ-129", kind: "Cost", title: "Device estate energy cost", owner: "PE-08",
+    measure: "Metered energy of the seat estate, annualised", unit: "$m",
+    baseline: 0.62, target: 0.41, actual: null, realise: -21, measured: null, status: "Forecast",
+    detail: "Due with the closure report. The metering export has not been run." },
+  { project: "PRJ-101", kind: "Cost", title: "Mainframe run cost retired", owner: "PE-25",
+    measure: "Annual run cost of the payments mainframe, from the finance ledger", unit: "$m",
+    baseline: 2.2, target: 0, actual: null, realise: 220, measured: null, status: "Forecast", detail: "" },
+  { project: "PRJ-104", kind: "Production", title: "Onboarding completed without a branch visit", owner: "PE-13",
+    measure: "Share of new accounts opened end to end in one channel", unit: "%",
+    baseline: 54, target: 75, actual: null, realise: 120, measured: null, status: "Forecast", detail: "" },
+  { project: "PRJ-107", kind: "Cost", title: "Regional warehouse licences", owner: "PE-03",
+    measure: "Annual licence and hosting invoiced for the regional warehouses", unit: "$m",
+    baseline: 1.9, target: 0.3, actual: null, realise: 150, measured: null, status: "Forecast", detail: "" },
+  { project: "PRJ-118", kind: "Risk", title: "Card fraud loss rate", owner: "PE-05",
+    measure: "Card fraud losses as basis points of card volume, rolling quarter", unit: "bps",
+    baseline: 14.2, target: 9, actual: null, realise: 200, measured: null, status: "Forecast", detail: "" },
+  { project: "PRJ-118", kind: "Availability", title: "Decisions answered within 150 ms", owner: "PE-05",
+    measure: "Share of scoring calls answered inside the 150 ms budget", unit: "%",
+    baseline: 91, target: 99.5, actual: 97.8, realise: 30, measured: -14, status: "Forecast",
+    detail: "Interim reading from the pilot traffic." },
+  { project: "PRJ-136", kind: "Compliance", title: "Local identity evidence accepted", owner: "PE-19",
+    measure: "Entities whose regulator accepts the local identity evidence", unit: "entities",
+    baseline: 0, target: 2, actual: null, realise: 90, measured: null, status: "Forecast", detail: "" },
+];
+
+/* The margins the group has granted. PRJ-101 is already past its
+   schedule margin on the plan the book holds, so the sweep constates an
+   exception on it the first time it runs; PRJ-104 is inside all three. */
+const SEED_TOLERANCES = [
+  { project: "PRJ-101", scheduleDays: 30, costPct: 10, benefitPct: null, set: "2026-02-10",
+    note: "Group margin for a group-governed migration: a month on the date, a tenth on the cost." },
+  { project: "PRJ-104", scheduleDays: 45, costPct: 10, benefitPct: 25, set: "2026-01-15",
+    note: "Agile delivery inside a funding envelope: dates may move more than money." },
+];
+
 function hashCode(str) { let hHash = 0; for (let i = 0; i < str.length; i++) { hHash = (hHash * 31 + str.charCodeAt(i)) | 0; } return Math.abs(hHash) || 1; }
 
 
@@ -493,5 +575,6 @@ export {
   SITES, PROGRAMMES, PEOPLE, PROJECTS, WBS, PHASES, DOC_TYPES, RAID_TYPES,
   RESPONSES, COLUMNS, SEED_RAID, SEED_CRS, CR_STEPS, SEED_DOCS, SEED_ITEMS,
   SEED_MILESTONES, CROSS_DEPS, SLOTS, OVERBOOKED,
+  SEED_CASES, SEED_BENEFITS, SEED_TOLERANCES,
   genActivities, genMilestones, genLedger, genAllocations, hashCode,
 };

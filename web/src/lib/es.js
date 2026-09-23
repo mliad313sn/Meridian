@@ -2520,6 +2520,85 @@ export const ES = {
     "Entrega semanal",
   "Monthly steering":
     "Dirección mensual",
+  /* ── NEW-20 · la importación dice lo que un reemplazo borraría ── */
+  "Sites":
+    "Sitios",
+  "People":
+    "Personas",
+  "Projects":
+    "Proyectos",
+  "Schedule stages":
+    "Etapas del cronograma",
+  "Cross-project dependencies":
+    "Dependencias entre proyectos",
+  "Milestones and gates":
+    "Hitos y puertas",
+  "RAID items":
+    "Elementos RAID",
+  "Cost postings":
+    "Asientos de coste",
+  "Work items":
+    "Elementos de trabajo",
+  "Allocations":
+    "Asignaciones",
+  "Governance seats":
+    "Puestos de gobierno",
+  "Objections":
+    "Objeciones",
+  "Site windows":
+    "Ventanas de sitio",
+  "Absences":
+    "Ausencias",
+  "Rollout waves":
+    "Olas de despliegue",
+  "Timesheets":
+    "Partes de horas",
+  "Tolerances":
+    "Tolerancias",
+  "Business cases":
+    "Casos de negocio",
+  "Case reconfirmations":
+    "Reconfirmaciones de caso",
+  "Gate criteria":
+    "Criterios de puerta",
+  "External links":
+    "Enlaces externos",
+  "Report narrative":
+    "Comentario del informe",
+  "Meeting series":
+    "Series de reuniones",
+  "Decisions":
+    "Decisiones",
+  "Meeting actions":
+    "Acciones de reunión",
+  "RAID reviews":
+    "Revisiones RAID",
+  "The file could not be checked":
+    "No se pudo comprobar el archivo",
+  "Replace the whole book?":
+    "¿Reemplazar todo el libro?",
+  "Import book":
+    "Importar el libro",
+  "A replace deletes the whole book in this database and puts the file in its place. Whatever the file does not carry is erased, not kept.":
+    "Un reemplazo borra todo el libro de esta base y pone el archivo en su lugar. Lo que el archivo no contiene se borra, no se conserva.",
+  "This file carries none of the lists below. Replacing will erase what the database holds for them:":
+    "Este archivo no contiene ninguna de las listas siguientes. Reemplazar borrará lo que la base tiene de ellas:",
+  "row(s) erased":
+    "fila(s) borrada(s)",
+  "A file that does not carry a list should be merged instead: a merge updates rows by identifier and erases nothing.":
+    "Un archivo que no contiene una lista debe fusionarse: una fusión actualiza las filas por identificador y no borra nada.",
+  "The file carries every list this database holds rows for; nothing is erased that the file does not bring back.":
+    "El archivo contiene todas las listas de las que esta base tiene filas; no se borra nada que el archivo no traiga de vuelta.",
+  "row(s) of the file would be refused by name — the dry run lists them in the audit trail.":
+    "fila(s) del archivo se rechazarían por su nombre — la prueba en seco las enumera en la pista de auditoría.",
+  "Merge instead":
+    "Fusionar en su lugar",
+  "Replace and erase":
+    "Reemplazar y borrar",
+  "Replace the book":
+    "Reemplazar el libro",
+  "Book merged":
+    "Libro fusionado",
 };
 
 /* ── fragments composés autour de nombres vivants (R-15) ────────────── */
