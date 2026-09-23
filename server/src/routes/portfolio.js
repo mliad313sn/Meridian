@@ -166,6 +166,11 @@ r.get("/bootstrap", async (req, res, next) => {
       me: {
         id: req.user.id, name: req.user.displayName, role: req.user.role,
         personId: req.user.personId,
+        /* NEW-06 (docs/36) — the client opens the forced password change
+           when this is true (main.js). It was never sent: an account an
+           administrator created was refused every write by the guard in
+           auth.js and never shown the dialog that lifts it. */
+        mustChangePassword: req.user.mustChangePassword === true,
         actingFor: req.user.actingForUserId ?? null,
         actingForPersonId: req.user.actingForPersonId ?? null,
         locale: req.user.locale ?? "", notifyPref: req.user.notifyPref ?? "immediate",

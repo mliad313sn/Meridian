@@ -737,7 +737,8 @@ function programmeDialog(db, g) {
       { key: "ladder", label: t("Gate ladder"), type: "textarea", span: 2, rows: 5,
         value: g?.gateModel?.length ? formatGateLadder(g.gateModel) : "",
         placeholder: formatGateLadder(GATES),
-        hint: t("One gate per line: name | owner | evidence, comma separated | position in the project window as a percentage. Leave empty for the default ladder. Projects take the ladder at creation; a later change does not rewrite them."),
+        hint: t("One gate per line: name | owner | evidence, comma separated | position in the project window as a percentage. Leave empty for the default ladder. Projects take the ladder at creation; a later change does not rewrite them.")
+          + " " + t("Optionally, two more columns: « loops to N » when a review can send the work back to gate N, and « programme » or « portfolio » when the gate clears for all of them at once."),
         validate: (v) => { try { parseGateLadder(v); return ""; } catch (e) { return e.message; } } },
     ],
     saveLabel: g ? "Save programme" : "Add programme",

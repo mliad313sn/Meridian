@@ -22,6 +22,42 @@ Nothing yet.
 
 ---
 
+## [5.20.2] — 2026-09-23
+
+**Three defects found by walking the manual** (NEW-06, NEW-09, NEW-10;
+docs/36 wave 1).
+
+### Fixed
+
+- **An account an administrator created was stuck read-only** (NEW-06).
+  The server refuses every write until the holder chooses their own
+  password, and the client opens that dialog when `me.mustChangePassword`
+  is true. `/api/bootstrap` never sent the flag, so the dialog never
+  opened and the refusal had no way out. The bootstrap carries it now,
+  and drops it once the password is the holder's own. Seen in the
+  browser: a freshly provisioned account opens on "Choose your own
+  password".
+- **SIGTERM left the book unclosed** (NEW-09). The book's own signal
+  handler (`claimBook`) called `process.exit` at once, and it is
+  registered before the server's orderly stop, so the process died with
+  PGlite never closed. It now steps aside for whoever answers the signal.
+  A script that answers nothing (seed, migrate) closes the book before
+  leaving. Measured on the way: PGlite 0.2.x leaves `postmaster.pid` and
+  its socket lock behind even after a clean close. The "cleared 2 stale
+  lock file(s)" message at start is the engine's own behaviour, and
+  `clearStaleLocks` is why it is harmless.
+- **Saving a gate ladder from the screen dropped its loops and scopes**
+  (NEW-10). The editor's text form had four columns. It now takes two
+  optional ones, `loops to N` and `programme` or `portfolio` (D-36.02),
+  and writes them back. A four-column ladder is untouched. Seen in the
+  browser: a ladder with a loop and a programme-scoped gate survives an
+  unchanged save.
+
+Tests: `governance.test.js` (bootstrap flag), `shutdown.test.js` (new),
+`gates.test.js` (the text form's round trip). Each fails on 5.20.1.
+
+---
+
 ## [5.20.1] — 2026-09-23
 
 **The product imports what it exports** (NEW-05, NEW-07; docs/36 wave 1).
