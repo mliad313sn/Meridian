@@ -94,7 +94,7 @@ tag) · Measure · Remains**.
   `052_findings_seats_and_decisions` (constitution §3: never applied by
   main or a tag).
 - **Measure**:
-  - `npm test` passes 817/817. That is 781 + KODO's 18 + the 17 restored
+  - `npm test` passes 816/816. That is 781 + KODO's 18 + the 17 restored
     by NEW-03.
   - The P3 round trip returns 200, and a re-export matches the first
     export count for count.
