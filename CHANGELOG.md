@@ -47,6 +47,16 @@ Unreleased work sits under `## [Unreleased]` until it is tagged.
   started a second server on the same data directory. It now uses `lsof`
   or `ss` there, sends SIGTERM, waits for the process to exit, and
   refuses to start a second server if the first is still running.
+- **A project with no cost baseline reported itself measured and green
+  (MER-04).** With a zero budget the earned-value guard still passed, so
+  SPI and CPI came out as 1.00 and health read "within tolerance" over a
+  project nobody had measured; progress read 0% whatever the plan said.
+  The engine now says there is no cost baseline, and progress falls back
+  to the weighted activity progress. Ported from
+  `claude/dynamic-gates-and-requirements` (44782b1), which carried the
+  fix without a test and was never merged; `engine.test.js` now pins it.
+  This changes a number `shared/engine.js` produces, deliberately: the
+  old number was not a measurement.
 
 ### Security
 

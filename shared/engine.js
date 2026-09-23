@@ -125,15 +125,20 @@ export const Engine = {
 
     /* Below a couple of per cent elapsed the indices are arithmetic noise.
        Real PMOs don't report an index that early, so neither does this. */
-    const measurable = pv >= bac * 0.02 && ac >= bac * 0.005;
+    const measurable = bac > 0 && pv >= bac * 0.02 && ac >= bac * 0.005;
     const spi = !measurable ? 1 : pv > 0.0001 ? ev / pv : 1;
     const cpi = !measurable ? 1 : ac > 0.0001 ? ev / ac : 1;
     const sv = ev - pv, cv = ev - ac;
     const eac = cpi > 0.01 ? bac / cpi : bac;
     const vac = bac - eac;
     const tcpi = (bac - ac) > 0.0001 ? (bac - ev) / (bac - ac) : 1;
-    const pctComplete = bac > 0 ? clamp(ev / bac, 0, 1) : 0;
-    const plannedComplete = bac > 0 ? clamp(pv / bac, 0, 1) : 0;
+    const physical = sum(acts, a => a.weight * (a.pct / 100));
+    const physicalPlanned = sum(acts, a => {
+      const span = Math.max(1, days(a.baseStart, a.baseEnd));
+      return a.weight * clamp(days(a.baseStart, today) / span, 0, 1);
+    });
+    const pctComplete = bac > 0 ? clamp(ev / bac, 0, 1) : clamp(physical, 0, 1);
+    const plannedComplete = bac > 0 ? clamp(pv / bac, 0, 1) : clamp(physicalPlanned, 0, 1);
 
     const totalSpan = days(p.start, p.finish);
     const elapsed = clamp(days(p.start, today), 0, totalSpan);
@@ -141,7 +146,7 @@ export const Engine = {
     const forecastFinish = iso(addDays(today, spi > 0.05 ? Math.round(remaining / spi) : remaining));
     const slipDays = days(p.finish, forecastFinish);
 
-    const health = Engine.health(db, p, { spi, cpi, measurable });
+    const health = Engine.health(db, p, { spi, cpi, measurable, bac });
     return {
       project: p, bac, pv, ev, ac, spi, cpi, sv, cv, eac, vac, tcpi, measurable,
       pctComplete, plannedComplete, forecastFinish, slipDays, health,
@@ -154,6 +159,7 @@ export const Engine = {
     if (p.healthOverride) return { rag: p.healthOverride, derived: false, why: p.healthOverrideWhy || "Set by the project manager" };
     const st = db.settings;
     if (!st.autoRag) return { rag: "G", derived: false, why: "Automatic status is off — PM judgement applies" };
+    if (m.bac <= 0) return { rag: "G", derived: true, why: "No cost baseline — schedule progress only, earned value is not computed" };
     if (m.measurable === false) return { rag: "G", derived: true, why: "Too early to measure — less than 2% of the plan has been spent" };
     const s = m.spi, c = m.cpi;
     if (s < st.redSpi || c < st.redCpi)
