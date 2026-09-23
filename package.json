@@ -1,6 +1,6 @@
 {
   "name": "meridian-itpmo",
-  "version": "5.18.1",
+  "version": "5.18.2",
   "private": true,
   "type": "module",
   "description": "Meridian group IT-PMO — multi-site project portfolio management",
@@ -15,7 +15,7 @@
     "restore": "node scripts/restore-archive.mjs",
     "test": "node --test \"server/test/**/*.test.js\"",
     "test:watch": "node --test --watch \"server/test/**/*.test.js\"",
-    "audit": "node scripts/audit/route-match.mjs && node scripts/audit/crud-audit.mjs && node scripts/audit/version-audit.mjs && node scripts/audit/control-audit.mjs && node scripts/audit/i18n-audit.mjs && node scripts/audit/help-coverage.mjs && node scripts/audit/kit-imports.mjs && node scripts/audit/openapi-drift.mjs && node scripts/audit/release-audit.mjs && node scripts/audit/register-schema.mjs && node scripts/audit/register-reachable.mjs && node scripts/audit/merge-debt.mjs && npm run audit:views",
+    "audit": "node scripts/audit/route-match.mjs && node scripts/audit/crud-audit.mjs && node scripts/audit/version-audit.mjs && node scripts/audit/control-audit.mjs && node scripts/audit/i18n-audit.mjs && node scripts/audit/help-coverage.mjs && node scripts/audit/kit-imports.mjs && node scripts/audit/openapi-drift.mjs && node scripts/audit/release-audit.mjs && node scripts/audit/register-schema.mjs && node scripts/audit/register-reachable.mjs && node scripts/audit/merge-debt.mjs && node scripts/audit/public-record.mjs && npm run audit:views",
     "audit:views": "node scripts/audit/view-render.mjs",
     "audit:reachable": "node scripts/audit/register-reachable.mjs",
     "audit:debt": "node scripts/audit/merge-debt.mjs",

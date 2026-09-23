@@ -246,7 +246,32 @@ contradicts `docs/25` (reversibility).
 | NEW-12 | `/` answers 404 when the install path contains a dot-directory (`sendFile` refuses it). | 4 |
 | NEW-13 | Spanish notification strings reach nobody: `inLocale` treats any non-`fr` locale as English, and `/auth/preferences` accepts only `en` and `fr`. | 3 |
 
-#### C-06 · Refresh the public record — open
+#### C-06 · Refresh the public record — BUILT, PR as 5.18.2
+
+- **Observed**: the README said twelve gates (there were thirteen),
+  SECURITY.md said "334 tests, eight static gates", and "What you are not
+  getting" said nothing of NEW-05, NEW-04 or the missing tags.
+- **Delivered**: gate **F15** (`scripts/audit/public-record.mjs`). The
+  numbers are corrected, and the README section is restated for 5.18.
+- **Measure**: F15 failed on the five stale numbers (proven) and passes
+  with 0. `npm run verify` is green.
+- **`released` fields**: every register line stays `released: false`,
+  honestly. No tag newer than `v5.9.0` exists on the remote as of this
+  line, and constitution §4 says a line no tag carries is built, not done.
+- **Branch deletion (proposed, not performed; the owner confirms)**:
+
+  | Branch | State on 23/09 | Proposal |
+  |---|---|---|
+  | `fix/dogfood-import-and-first-run` | 0 ahead of main (PR #14 merged) | delete |
+  | `claude/meridian-rt365-feedback-d6vo3i` | 0 ahead (PR #19 merged) | delete |
+  | `claude/dynamic-gates-and-requirements` | 0 ahead (PR #20 merged) | delete |
+  | `claude/project-analysis-db-schema-yph5ho` | 6 ahead, superseded (C-04, `docs/superseded-branches.json`) | delete, then remove its entry from the superseded list |
+  | `claude/relaxed-ritchie-bps7ih` | this campaign's working branch | keep until the campaign closes |
+
+- **Issues #1–4, #6–9, #11–13** (§3): their fixes are on `main` since
+  #19 (f423a00). They stay closed, because none is on a branch any
+  more. What they still lack is a tag, and that is stated once on #15,
+  not eleven times.
 
 ### Waves 1–4
 

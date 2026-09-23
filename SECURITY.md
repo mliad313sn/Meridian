@@ -70,7 +70,7 @@ We will credit you when the fix lands, unless you ask us not to.
 
 ## What the project does to earn the claim
 
-Every change runs `npm run verify`: 334 tests, eight static gates and a
+Every change runs `npm run verify`: every test suite, fourteen static gates and a
 dependency audit. Three of those gates exist specifically to keep
 security properties from eroding:
 
