@@ -22,6 +22,38 @@ Nothing yet.
 
 ---
 
+## [5.18.3] — 2026-09-23
+
+**A decision is ratified by someone independent, on both doors** (REQ-49,
+RT365; docs/36 wave 1).
+
+### Fixed
+
+- **The session route accepted any text as a ratifier.**
+  `POST /api/decisions` took `ratifiedBy` as free text, with no directory
+  lookup and no independence check. The integration contract had
+  enforced `canRatifyDecision` since the security round. Since 5.15 that
+  unchecked name is also dated (`ratified_on`), so a ratification nobody
+  independent ever saw looked like evidence of one. The route now
+  resolves the ratifier in the directory (400, naming the field, when
+  nobody matches). It refuses the person who took the decision and the
+  person behind the recording account (403, saying which rule).
+- **The contract's own independence check never fired.** It compared the
+  ratifier, a *person* id, with the recording *account* id: two id spaces
+  that never meet. So "the hand that recorded it does not also ratify it"
+  let that hand through. `canRatifyDecision` now compares the ratifier
+  with the account's person (`app_user.person_id`), on both doors.
+- Two REQ-47 tests used a committee's name ("Comité d'investissement",
+  "ARB") as the ratifier on the session route. Their subject is the
+  ratification date, so they now name a person of the directory. A
+  committee is recorded in `council`.
+
+`server/test/ratify.test.js` (6 tests). Four of them fail on 5.18.2: the
+decider ratifying, the recorder ratifying on each door, and a name
+outside the directory.
+
+---
+
 ## [5.18.2] — 2026-09-23
 
 **The public record counts what the tree holds** (docs/36 C-06).
