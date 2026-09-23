@@ -114,7 +114,11 @@ describe("schema and migrations (R2.2, R2.7)", () => {
        /* 058 - docs/36 D-36.12: an access grant carries a power, write or
           review; a review grant may name one project; a document may name
           the seat expected to approve it. */
-       "058_a_grant_to_review.sql"]);
+       "058_a_grant_to_review.sql",
+       /* 059 - D-36.15 (REQ-13, second half): a standing human act is a
+          RAID dependency that holds the gate it blocks until it closes
+          on its evidence. */
+       "059_a_human_act_holds_its_gate.sql"]);
     const again = await migrate({ silent: true });
     assert.deepEqual(again, [], "a second run applies nothing");
   });

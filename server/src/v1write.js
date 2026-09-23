@@ -45,7 +45,7 @@ import { fromM, loadSettings } from "./portfolio.js";
 import { scaffoldProject, reschedule, phaseFor } from "./wbs.js";
 import { iso, D } from "../../shared/engine.js";
 import { assertPlantWindow } from "./plant.js";
-import { isEvidenceLocator, EVIDENCE_REFUSAL } from "./evidence.js";
+import { isEvidenceLocator, EVIDENCE_REFUSAL, humanActRefusal } from "./evidence.js";
 import { assertCaseReconfirmed } from "./value.js";
 import { canRatifyDecision } from "../../shared/rbac.js";
 import { reprojectNextReview } from "./raidreview.js";
@@ -582,9 +582,22 @@ export async function upsertRaid(user, externalId, b) {
     bad("closedOn and closedBy belong to a closure — send status: \"Closed\" with them, " +
         "or correct them on an item that is already closed");
   }
+  /* D-36.15 — RT365's H-nn: a standing human act blocks the gate it
+     names (`blocksGate`) and closes on its evidence (`closureEvidence`),
+     "an action stays here until its evidence file exists". */
+  if (b.blocksGate !== undefined && typeof b.blocksGate !== "boolean") bad("blocksGate is true or false");
+  const blocksGate = b.blocksGate;
+  const closureEvidence = b.closureEvidence === undefined ? undefined
+    : String(text(b.closureEvidence, 1000, "closureEvidence") ?? "").trim();
 
   if (!existing) {
     const k = kind ?? "Risk";
+    {
+      const refusal = humanActRefusal(null, {
+        kind: k, gate: gateN ?? null, project_id: p?.id ?? null, blocks_gate: blocksGate === true,
+        status: status ?? "Open", closure_evidence: closureEvidence ?? "" }, await loadSettings());
+      if (refusal) bad(refusal);
+    }
     const prefix = { Risk: "RSK", Issue: "ISS", Assumption: "ASM", Dependency: "DEP" }[k];
     let id = null;
     await audited(user,
@@ -596,8 +609,8 @@ export async function upsertRaid(user, externalId, b) {
           `INSERT INTO raid_item
              (id, project_id, kind, title, detail, probability, impact, status, response, owner_id,
               opened_on, review_on, target_probability, target_impact, gate, cr_id, external_source, external_id,
-              category, closed_on, closed_by)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,CURRENT_DATE,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
+              category, closed_on, closed_by, blocks_gate, closure_evidence)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,CURRENT_DATE,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)`,
           [id, p?.id ?? null, k, title, detail ?? "", clampScale(b.p, 3), clampScale(b.i, 3),
            status ?? "Open", response ?? "Monitor", owner ?? null, review ?? null,
            clampScale(b.tp), clampScale(b.ti), gateN ?? null, cr ?? null, source, externalId,
@@ -606,7 +619,8 @@ export async function upsertRaid(user, externalId, b) {
               elle, un registre repris arriverait clos sans histoire — la
               perte que REQ-18 a mesurée, au chargement initial. */
            status === "Closed" ? (closedOn ?? iso(new Date())) : null,
-           status === "Closed" ? (closedBy ?? null) : null]);
+           status === "Closed" ? (closedBy ?? null) : null,
+           blocksGate === true, closureEvidence ?? ""]);
       });
     return stamp(true, id, externalId, 1);
   }
@@ -641,6 +655,15 @@ export async function upsertRaid(user, externalId, b) {
        le nom aussi — ce sont des faits consignés, pas des verrous. */
     if (closedOn !== undefined) patch.closed_on = closedOn;
     if (closedBy !== undefined) patch.closed_by = closedBy;
+  }
+  /* D-36.15 — reopening an act withdraws the evidence it closed on, as it
+     withdraws its closure date, unless the sync sends one. */
+  if (blocksGate !== undefined) patch.blocks_gate = blocksGate;
+  if (closureEvidence !== undefined) patch.closure_evidence = closureEvidence;
+  else if (status === "Open" && existing.status === "Closed" && existing.blocks_gate) patch.closure_evidence = "";
+  {
+    const refusal = humanActRefusal(existing, { ...existing, ...patch }, await loadSettings());
+    if (refusal) bad(refusal);
   }
   patch = changedOnly(patch, existing);            // ne réécrire que ce qui bouge
   Object.assign(patch, binding);   // H-2 — la liaison valide avec l'écriture
@@ -1328,7 +1351,9 @@ export const WRITE_BODIES = {
      `closedOn`/`closedBy` (une clôture a une date et un nom). */
   raid: { adopt: "string", project: "string", type: "string", title: "string", detail: "string", p: "integer", i: "integer",
     tp: "integer", ti: "integer", response: "string", owner: "string", review: "date", status: "string",
-    gate: "integer", cr: "string", category: "string", closedOn: "date", closedBy: "string", version: "integer" },
+    gate: "integer", cr: "string", category: "string", closedOn: "date", closedBy: "string",
+    /* D-36.15 — RT365's H-nn: the act holds its gate, and closes on its evidence. */
+    blocksGate: "boolean", closureEvidence: "string", version: "integer" },
   criteria: { adopt: "string", project: "string", gate: "integer", text: "string", document: "string", note: "string",
     met: "boolean", reviewedBy: "string", version: "integer" },
   decisions: { adopt: "string", headline: "string", rationale: "string", alternatives: "string", dissent: "string",

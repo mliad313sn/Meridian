@@ -638,6 +638,9 @@ export async function loadPortfolio(user, { inactive = false } = {}) {
            close. Nul sur une ligne close avant que nous sachions le
            noter : on ne rétro-date pas. */
         closedOn: r.closed_on ?? null, closedBy: r.closed_by ?? null,
+        /* D-36.15 (059) — a standing human act holds the gate it names
+           until it closes on its evidence. False on every row before. */
+        blocksGate: !!r.blocks_gate, closureEvidence: r.closure_evidence ?? "",
         externalSource: r.external_source ?? null, externalId: r.external_id ?? null,
         originSite: r.origin_site ?? null,   // a site concern names its raising site
         version: r.row_version,

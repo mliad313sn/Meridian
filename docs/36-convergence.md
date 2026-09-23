@@ -302,6 +302,18 @@ contradicts `docs/25` (reversibility).
 
 ### Waves 1–4
 
+#### REQ-13 · A standing human act holds its gate — BUILT, PR as 5.27.0
+
+- **Delivered** (D-36.15): migration 059 (`blocks_gate`,
+  `closure_evidence`, two database checks); `humanActRefusal` shared by
+  every write path; `gateStatus`/`scopedGateStatus` return `holds`, and
+  `canAdvance` refuses after vetoes and before evidence; screens and the
+  contract.
+- **Measure**: `humanact.test.js`, 11 tests, including identical engine
+  numbers before and after. Browser: held, refused on prose, lifted on a
+  locator.
+- **Remains**: none. RT365 marks its H-nn rows `blocksGate` in its sync.
+
 #### #16 · DF-10 · MER-06 · An evidence-review grant — BUILT, PR as 5.26.0
 
 - **Delivered** (D-36.12, D-36.12 bis): migration 058; review grants in

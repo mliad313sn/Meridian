@@ -171,6 +171,11 @@ const ENRICH = [
           gate = 2, cr_id = (SELECT min(id) FROM change_request), closed_on = '2026-04-01',
           closed_by = ${PE1}, origin_site = ${SITE}, external_source = 'INT-RT', external_id = 'EXT-R1'
     WHERE id = (SELECT min(id) FROM raid_item)`,
+  /* D-36.15 (059) — a standing human act that blocked its gate and
+     closed on its evidence: the flag and the locator both come back. */
+  `UPDATE raid_item SET blocks_gate = true, gate = 1, category = 'Human act', status = 'Closed',
+          closed_on = '2026-05-02', closure_evidence = 'docs/evidence/H-03.md@a1b2c3d'
+    WHERE id = (SELECT min(id) FROM raid_item WHERE kind = 'Dependency' AND project_id IS NOT NULL)`,
   `UPDATE activity SET progress_source = 'probe', progress_at = '2026-08-20T08:30:00Z', origin = 'sdp',
           external_source = 'INT-RT', external_id = 'EXT-A1'
     WHERE id = (SELECT min(id) FROM activity)`,
