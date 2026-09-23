@@ -504,9 +504,10 @@ export async function importBook(book, user, opts = {}) {
         `INSERT INTO raid_item (id, project_id, kind, title, detail, probability, impact,
                                 status, response, owner_id, opened_on, review_on,
                                 target_probability, target_impact, gate, cr_id, category,
-                                closed_on, closed_by, origin_site, external_source, external_id)
+                                closed_on, closed_by, origin_site, external_source, external_id,
+                                blocks_gate, closure_evidence)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
-                 ${INTEGRATION(21)},$22)`,
+                 ${INTEGRATION(21)},$22,$23,$24)`,
         [x.id, clean(x.project), x.type ?? "Risk", x.title, x.detail ?? "",
          Math.max(1, Math.min(5, int(x.p, 1))), Math.max(1, Math.min(5, int(x.i, 1))),
          x.status === "Closed" ? "Closed" : "Open", x.response ?? "Monitor",
@@ -520,7 +521,11 @@ export async function importBook(book, user, opts = {}) {
          num(x.ti) === null ? null : Math.max(1, Math.min(5, int(x.ti))),
          intOrNull(x.gate), clean(x.cr), x.category ?? "",
          clean(x.closedOn), clean(x.closedBy), clean(x.originSite),
-         clean(x.externalSource), clean(x.externalId)]);
+         clean(x.externalSource), clean(x.externalId),
+         /* D-36.15 (059) — whether it holds its gate, and the evidence it
+            closed on. The database refuses a closed blocking act without
+            one, so a file cannot bring back a green nobody earned. */
+         x.blocksGate === true, String(x.closureEvidence ?? "")]);
     }
     /* NEW-05 — the ledger comes back as it was written. It used to be
        re-numbered and rewritten "Imported", "Labour", USD, capex, on the

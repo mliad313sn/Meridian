@@ -1960,6 +1960,37 @@ export const ES = {
     "seguridad, suministro, regulatorio…",
   "Your own classification, kept beside the RAID type the engine reads.":
     "Su propia clasificación, guardada junto al tipo RAID que lee el motor.",
+  /* D-36.15 — el acto humano permanente que retiene su puerta (H-nn de RT365). */
+  "Blocks its gate":
+    "Retiene su puerta",
+  "For a dependency on a person's act: the gate named above does not clear while this is open, and it closes only on its evidence.":
+    "Para una dependencia del acto de una persona: la puerta indicada arriba no se supera mientras siga abierta, y solo se cierra con su evidencia.",
+  "Only a dependency can block its gate.":
+    "Solo una dependencia puede retener su puerta.",
+  "Name the gate it blocks.":
+    "Indique la puerta que retiene.",
+  "A portfolio-wide item has no gate to block.":
+    "Un elemento de toda la cartera no tiene puerta que retener.",
+  "Closure evidence":
+    "Evidencia de cierre",
+  "The locator of what shows the act was done — a repository path, a commit, or an address on a trusted document host. Required to close an act that blocks its gate.":
+    "El localizador de lo que demuestra que el acto se realizó — una ruta de repositorio, un commit o una dirección en un host documental de confianza. Obligatorio para cerrar un acto que retiene su puerta.",
+  "A closed act that blocks its gate keeps its evidence.":
+    "Un acto cerrado que retiene su puerta conserva su evidencia.",
+  "Close on evidence":
+    "Cerrar con evidencia",
+  "Close item":
+    "Cerrar el elemento",
+  "Item closed":
+    "Elemento cerrado",
+  "This act holds its gate until it closes on its evidence.":
+    "Este acto retiene su puerta hasta que se cierre con su evidencia.",
+  "Closed on evidence":
+    "Cerrado con evidencia",
+  "held by human act":
+    "retenida por el acto humano",
+  "It clears when the act closes on its evidence.":
+    "Se libera cuando el acto se cierra con su evidencia.",
   "Closed on":
     "Cerrada el",
   "The day this item actually closed — stamped when it was closed here, corrected when it was closed elsewhere.":
@@ -2713,6 +2744,10 @@ export const ES = {
    « above the escalation threshold » traduit en FR et pas en ES : ce
    miroir était partiel. Il est désormais tenu complet par la porte F5. */
 export const ES_FRAG = [
+  /* D-36.15 — la negativa de una puerta retenida por un acto humano (ver FR). */
+  [/ is held by human act /g, " está retenida por el acto humano "],
+  [/ until it closes on its evidence\b/g, " hasta que se cierre con su evidencia"],
+  [/ — and (\d+) more\b/g, " — y $1 más"],
   /* REQ-30 — la población de una cifra de la página de valor (ver FR). */
   [/(\d+) case\(s\) with an expected cost, of (\d+) project\(s\)/g, "$1 caso(s) con coste previsto, de $2 proyecto(s)"],
   [/(\d+) live of (\d+) benefit\(s\) stated/g, "$1 vigente(s) de $2 beneficio(s) declarado(s)"],

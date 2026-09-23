@@ -82,6 +82,12 @@ export function t(s) {
    FRAGMENTS by pattern, leaving the numbers alone. Applied to composed
    notes and to server-composed agenda text at render time. */
 export const FRAG = [
+  /* D-36.15 — the refusal of a gate held by a human act, composed around
+     the act's id, title and owner. First: generic words below would eat
+     it before it is recognised. */
+  [/ is held by human act /g, " est retenue par l'acte humain "],
+  [/ until it closes on its evidence\b/g, " jusqu'à ce qu'il soit clos sur sa preuve"],
+  [/ — and (\d+) more\b/g, " — et $1 autre(s)"],
   /* REQ-30 — la population d'une figure de la page de valeur : la phrase
      qui fait qu'un zéro se lit comme un zéro. Elle porte des nombres,
      donc elle passe par ici et non par le dictionnaire. En TÊTE : les
@@ -2106,6 +2112,37 @@ export const FR = {
     "sécurité, approvisionnement, réglementaire…",
   "Your own classification, kept beside the RAID type the engine reads.":
     "Votre propre classement, gardé à côté du genre RAID que le moteur lit.",
+  /* D-36.15 — l'acte humain permanent qui retient sa porte (H-nn de RT365). */
+  "Blocks its gate":
+    "Retient sa porte",
+  "For a dependency on a person's act: the gate named above does not clear while this is open, and it closes only on its evidence.":
+    "Pour une dépendance envers l'acte d'une personne : la porte nommée plus haut ne se franchit pas tant qu'elle est ouverte, et elle ne se clôt que sur sa preuve.",
+  "Only a dependency can block its gate.":
+    "Seule une dépendance peut retenir sa porte.",
+  "Name the gate it blocks.":
+    "Nommez la porte qu'elle retient.",
+  "A portfolio-wide item has no gate to block.":
+    "Un élément de portefeuille n'a pas de porte à retenir.",
+  "Closure evidence":
+    "Preuve de clôture",
+  "The locator of what shows the act was done — a repository path, a commit, or an address on a trusted document host. Required to close an act that blocks its gate.":
+    "Le localisateur de ce qui montre que l'acte a été accompli — un chemin de dépôt, un commit, ou une adresse sur un hôte documentaire de confiance. Obligatoire pour clore un acte qui retient sa porte.",
+  "A closed act that blocks its gate keeps its evidence.":
+    "Un acte clos qui retient sa porte garde sa preuve.",
+  "Close on evidence":
+    "Clore sur preuve",
+  "Close item":
+    "Clore l'élément",
+  "Item closed":
+    "Élément clos",
+  "This act holds its gate until it closes on its evidence.":
+    "Cet acte retient sa porte jusqu'à ce qu'il soit clos sur sa preuve.",
+  "Closed on evidence":
+    "Clos sur preuve",
+  "held by human act":
+    "retenue par l'acte humain",
+  "It clears when the act closes on its evidence.":
+    "Elle se libère quand l'acte est clos sur sa preuve.",
   "Closed on":
     "Close le",
   "The day this item actually closed — stamped when it was closed here, corrected when it was closed elsewhere.":

@@ -22,7 +22,7 @@ import { scaffoldProject, reschedule, phaseFor } from "../wbs.js";
 import { ladderLength, resolvePerson } from "../v1write.js";
 import { assertPlantWindow } from "../plant.js";
 import { sweepExceptions } from "../exceptions.js";
-import { isEvidenceLocator, EVIDENCE_REFUSAL } from "../evidence.js";
+import { isEvidenceLocator, EVIDENCE_REFUSAL, humanActRefusal } from "../evidence.js";
 import { assertCaseReconfirmed, deltaAgainst, reconfirmationsFor } from "../value.js";
 import { prioritise, INPUTS } from "../../../shared/prioritise.js";
 
@@ -940,6 +940,17 @@ r.post("/raid", async (req, res, next) => {
     const crId = await crLink(b.cr, b.project || null);
     const gateN = gateLink(b.gate);
     if (gateN && b.project) await assertGateExists(b.project, gateN);
+    /* D-36.15 — a standing human act (RT365's H-nn) blocks the gate it
+       names, and closes only on its evidence. The rule is read on the row
+       as it will be, by the same function the contract uses. */
+    const blocksGate = b.blocksGate === true;
+    const closureEvidence = String(b.closureEvidence ?? "").trim();
+    {
+      const refusal = humanActRefusal(null, {
+        kind, gate: gateN, project_id: b.project || null, blocks_gate: blocksGate,
+        status: "Open", closure_evidence: closureEvidence }, await loadSettings());
+      if (refusal) bad(refusal);
+    }
 
     let id = null;
     await audited(req.user,
@@ -950,8 +961,8 @@ r.post("/raid", async (req, res, next) => {
         return t.query(
           `INSERT INTO raid_item
              (id, project_id, kind, title, detail, probability, impact, status, response, owner_id, opened_on, review_on, origin_site,
-              target_probability, target_impact, gate, cr_id, category)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,'Open',$8,$9,CURRENT_DATE,$10,$11,$12,$13,$14,$15,$16)`,
+              target_probability, target_impact, gate, cr_id, category, blocks_gate, closure_evidence)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,'Open',$8,$9,CURRENT_DATE,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
           [id, b.project || null, kind, b.title, b.detail ?? "",
            Math.max(1, Math.min(5, num(b.p, 3))), Math.max(1, Math.min(5, num(b.i, 3))),
            b.response ?? "Monitor", b.owner ?? null, b.review ?? null, originSite,
@@ -963,7 +974,8 @@ r.post("/raid", async (req, res, next) => {
            gateN, crId,
            /* REQ-13 — le mot du registre qui tient cette ligne, à côté du
               nôtre : `kind` reste le contrat que le moteur lit. */
-           String(b.category ?? "").slice(0, 120)]);
+           String(b.category ?? "").slice(0, 120),
+           blocksGate, closureEvidence]);
       });
     res.status(201).json({ id });
   } catch (e) { next(e); }
@@ -1027,6 +1039,16 @@ r.patch("/raid/:id", async (req, res, next) => {
       if (patch.gate && item.project_id) await assertGateExists(item.project_id, patch.gate);
     }
     if (b.cr !== undefined) patch.cr_id = await crLink(b.cr, item.project_id);
+    /* D-36.15 — the flag, the evidence, and the rule on the row as it
+       will be. Reopening an act withdraws the evidence it closed on,
+       like its closure date: an open act has not been done. */
+    if (b.blocksGate !== undefined) patch.blocks_gate = b.blocksGate === true;
+    if (b.closureEvidence !== undefined) patch.closure_evidence = String(b.closureEvidence ?? "").trim();
+    else if (patch.status === "Open" && item.status === "Closed" && item.blocks_gate) patch.closure_evidence = "";
+    {
+      const refusal = humanActRefusal(item, { ...item, ...patch }, await loadSettings());
+      if (refusal) bad(refusal);
+    }
 
     const out = await audited(req.user,
       { action: b.status === "Closed" ? "Item closed" : "Item updated",

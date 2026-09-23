@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Meridian IT-PMO",
-    "version": "5.26.0",
+    "version": "5.27.0",
     "summary": "Read a governed project portfolio, and the trail of how it got that way",
     "description": "The surface other systems read. It is versioned in the path: the day the shape has to change it becomes /api/v2, so that nobody has to guess. Authentication is a key issued per connected system, carrying explicit scopes; the product never stores the key itself, only its fingerprint.\n\nWrites arrived with the first real integrator (RT365, docs/33): PUT by your own identifier on projects, milestones, register items, stage progress, work items, decisions and actions, under two write scopes, with an optional Idempotency-Key. A scope is only published once a route honours it: declaring one earlier would advertise a door that does not exist and imply it is guarded.",
     "license": {
@@ -1744,7 +1744,7 @@
     "/api/v1/raid/{externalId}": {
       "put": {
         "summary": "Create or update a register item (risk, issue, assumption, dependency), keyed by your own identifier",
-        "description": "Creates the a register item (risk, issue, assumption, dependency) when nothing carries this externalId for your integration, updates it otherwise. The identity is (integration, externalId): two connected systems may both say \"E01\" without colliding. `version` is optional — when sent it is asserted (409 if stale); when omitted your system is the master of this row and the last write wins. Optional `Idempotency-Key` header: the same key with the same body replays the recorded answer (Idempotent-Replayed: true); the same key with another body is refused (422) — one key names ONE request, not a run. `adopt: \"<Meridian id>\"` binds your externalId to a row that already exists (created on a screen, or scaffolded) instead of creating another. A field this collection does not declare is REFUSED (400) and nothing is written or audited: the properties below are the whole of what a body may carry (REQ-19). The same business rules as the screens apply. `gate` links it to a governance gate of the project, `cr` to a change request of the same project (I-8). Omit `project` for a portfolio-wide item. `category` is your own free classification label, kept beside `type` — which stays the RAID contract the engine reads (REQ-13). `status: \"Closed\"` records the closure with its date: send `closedOn` when your register knows it, otherwise today is stamped, and `closedBy` names the person on whose word it closed. Reopening clears both, because an open item has no closure (REQ-18).",
+        "description": "Creates the a register item (risk, issue, assumption, dependency) when nothing carries this externalId for your integration, updates it otherwise. The identity is (integration, externalId): two connected systems may both say \"E01\" without colliding. `version` is optional — when sent it is asserted (409 if stale); when omitted your system is the master of this row and the last write wins. Optional `Idempotency-Key` header: the same key with the same body replays the recorded answer (Idempotent-Replayed: true); the same key with another body is refused (422) — one key names ONE request, not a run. `adopt: \"<Meridian id>\"` binds your externalId to a row that already exists (created on a screen, or scaffolded) instead of creating another. A field this collection does not declare is REFUSED (400) and nothing is written or audited: the properties below are the whole of what a body may carry (REQ-19). The same business rules as the screens apply. `gate` links it to a governance gate of the project, `cr` to a change request of the same project (I-8). Omit `project` for a portfolio-wide item. `category` is your own free classification label, kept beside `type` — which stays the RAID contract the engine reads (REQ-13). `status: \"Closed\"` records the closure with its date: send `closedOn` when your register knows it, otherwise today is stamped, and `closedBy` names the person on whose word it closed. Reopening clears both, because an open item has no closure (REQ-18). A standing human act — a Dependency with `category` \"Human act\", an `owner`, a `review` date and a `gate` — sends `blocksGate: true`: while it is open the gate it names does not clear, and the refusal to advance names the act and its owner. It closes only with `closureEvidence`, the locator of what shows it was done (a repository path at a revision, a commit, a named locator, or an https address on a trusted document host); closing one without it is a 400. Reopening withdraws the evidence. A row that does not block is only read against its gate (D-36.15).",
         "security": [
           {
             "apiKey": []
@@ -1834,6 +1834,12 @@
                     "format": "date"
                   },
                   "closedBy": {
+                    "type": "string"
+                  },
+                  "blocksGate": {
+                    "type": "boolean"
+                  },
+                  "closureEvidence": {
                     "type": "string"
                   },
                   "version": {

@@ -1257,6 +1257,11 @@ Views.project = (db) => {
           (g && waitingOnSeats(db, g.outstanding || []) ? " · " + waitingOnSeats(db, g.outstanding || []) : "") +
           (g && g.criteria.length ? " · " + t("criteria") + " " + g.criteriaMet + "/" + g.criteria.length : "") +
           (g && g.risks.length ? " · " + g.risks.length + " " + t("open register item(s) against it") : "") +
+          /* D-36.15 — who holds it, by name: a hold nobody can name is
+             a hold nobody can lift. */
+          (g && g.holds && g.holds.length
+            ? " · " + g.holds.map(a => t("held by human act") + " " + a.id + " (" + Engine.personName(db, a.owner) + ")").join(" · ")
+            : "") +
           /* Et QUI l'a accepté, et quand : le nom n'apparaissait sur
              aucune surface de lecture du produit, seulement dans le
              formulaire qui l'écrit. */
@@ -1313,7 +1318,18 @@ Views.project = (db) => {
       : null,
     h("div", { style: "margin-bottom:8px" }, milestones),
     criteriaBlock(db, p, gate),
-    !advance.ok ? h("div", { class: "drop-hint", style: "margin-top:12px" },
+    /* D-36.15 — a gate held by an open human act says so by name and
+       opens the act, where it closes on its evidence. */
+    !advance.ok && advance.holds && advance.holds.length
+      ? h("div", { class: "drop-hint", style: "margin-top:12px", "data-hold": "human-act" },
+          h("span", { class: "strong" }, t("Phase advance is blocked. ")),
+          ...advance.holds.map(a => h("div", { class: "small", style: "margin-top:4px" },
+            gate.name + " — " + t("held by human act") + " ",
+            h("span", { class: "linkish strong", onClick: () => go("#/risk/" + a.id) }, a.id + " · " + a.title),
+            " (" + Engine.personName(db, a.owner) + ")")),
+          h("div", { class: "xs muted", style: "margin-top:4px" },
+            t("It clears when the act closes on its evidence.")))
+      : !advance.ok ? h("div", { class: "drop-hint", style: "margin-top:12px" },
       h("span", { class: "strong" }, t("Phase advance is blocked. ")), tData(advance.reason),
       h("div", { style: "margin-top:8px" }, h("button", { class: "btn btn-xs", onClick: () => go("#/documents") }, t("Open the evidence list")))) : null,
 
@@ -2779,6 +2795,13 @@ function raidDetail(db, r) {
         ? h("div", { class: "xs muted", style: "margin-top:6px" },
             r.gate ? t("Against gate ") + r.gate + " " : "",
             r.cr ? "· " + t("Change request") + " " + r.cr : "")
+        : null,
+      /* D-36.15 — say it holds the gate, and what it closed on. */
+      r.blocksGate
+        ? h("div", { class: "small strong", style: "margin-top:6px" },
+            r.status === "Open"
+              ? t("This act holds its gate until it closes on its evidence.")
+              : t("Closed on evidence") + " · " + (r.closureEvidence || "—"))
         : null),
     actions: (close) => [
       h("button", { class: "btn btn-sm btn-danger", onClick: () => {
@@ -2786,7 +2809,10 @@ function raidDetail(db, r) {
           .then(ok => { if (ok) { App.write("RAID item deleted", (a) => a.del("/raid/" + r.id), { detail: r.id }); close(); } });
       } }, "Delete"),
       h("button", { class: "btn btn-sm", onClick: () => { close(); editRaid(db, r); } }, icon("pencil", 12), "Edit"),
-      r.status === "Open"
+      r.status === "Open" && r.blocksGate
+        ? h("button", { class: "btn btn-sm btn-primary", onClick: () => { close(); closeHumanAct(db, r); } },
+            icon("check", 12), t("Close on evidence"))
+        : r.status === "Open"
         ? h("button", { class: "btn btn-sm btn-primary", onClick: () => {
             App.write("Item closed", (a) => a.patch("/raid/" + r.id, { status: "Closed", version: r.version }), { detail: r.id + " · " + r.title });
             close(); } }, icon("check", 12), "Close item")
@@ -2960,6 +2986,22 @@ function raidFields(db, r, projectId) {
     { key: "category", label: t("Category"), value: r ? (r.category ?? "") : "", advanced: true,
       placeholder: t("safety, supply, regulatory…"),
       hint: t("Your own classification, kept beside the RAID type the engine reads.") },
+    /* D-36.15 — a standing human act (RT365's H-nn): a dependency that
+       HOLDS its gate until it closes on its evidence. Offered here for a
+       dependency only; a risk linked to a gate is read, never a lock. */
+    { key: "blocksGate", label: t("Blocks its gate"), type: "checkbox", span: 2, advanced: true,
+      value: !!(r && r.blocksGate),
+      hint: t("For a dependency on a person's act: the gate named above does not clear while this is open, and it closes only on its evidence."),
+      validate: (v, s) => !v ? ""
+        : s.type !== "Dependency" ? t("Only a dependency can block its gate.")
+        : !s.gate ? t("Name the gate it blocks.")
+        : !s.project ? t("A portfolio-wide item has no gate to block.") : "" },
+    { key: "closureEvidence", label: t("Closure evidence"), span: 2, advanced: true,
+      value: r ? (r.closureEvidence ?? "") : "",
+      placeholder: "docs/evidence/H-03.md@a1b2c3d",
+      hint: t("The locator of what shows the act was done — a repository path, a commit, or an address on a trusted document host. Required to close an act that blocks its gate."),
+      validate: (v, s) => s.blocksGate && r && r.status === "Closed" && !String(v ?? "").trim()
+        ? t("A closed act that blocks its gate keeps its evidence.") : "" },
     /* REQ-18 — une clôture a une date et un nom. Renseignés tout seuls
        au moment où l'on clôt ; ici pour les CORRIGER, parce qu'une ligne
        close hier sur un registre repris n'a pas été close aujourd'hui. */
@@ -4648,6 +4690,7 @@ function newRaid(db, projectId) {
         type: v.type, project: v.project || null, title: v.title, detail: v.detail,
         p: +v.p, i: +v.i, response: v.response, owner: v.owner, review: v.review,
         tp: v.tp, ti: v.ti, gate: v.gate || null, cr: v.cr || null, category: v.category,
+        blocksGate: !!v.blocksGate, closureEvidence: v.closureEvidence || "",
       }), { detail: v.title });
       if (ok !== false) {
         const exposure = v.p * v.i;
@@ -4667,11 +4710,30 @@ function editRaid(db, r) {
       title: v.title, detail: v.detail, p: +v.p, i: +v.i, response: v.response,
       owner: v.owner, review: v.review, status: v.status, version: r.version,
       tp: v.tp, ti: v.ti, gate: v.gate || null, cr: v.cr || null, category: v.category,
+      blocksGate: !!v.blocksGate, closureEvidence: v.closureEvidence || "",
       /* REQ-18 — n'envoyer la clôture que sur une ligne close : sur une
          ligne ouverte les champs n'existent pas, et envoyer `undefined`
          effacerait ce qu'on n'a pas montré. */
       ...(r.status === "Closed" ? { closedOn: v.closedOn || null, closedBy: v.closedBy || null } : {}),
     }), { detail: r.id }),
+  });
+}
+
+/* D-36.15 — RT365's rule: "an action stays here until its evidence file
+   exists". Closing an act that holds its gate asks for that evidence and
+   nothing else; the server refuses the closure without it (400). */
+function closeHumanAct(db, r) {
+  formDialog({
+    title: t("Close on evidence"), kicker: r.id + " · " + r.title,
+    fields: [
+      { key: "closureEvidence", label: t("Closure evidence"), required: true, span: 2,
+        value: r.closureEvidence ?? "", placeholder: "docs/evidence/H-03.md@a1b2c3d",
+        hint: t("The locator of what shows the act was done — a repository path, a commit, or an address on a trusted document host. Required to close an act that blocks its gate.") },
+    ],
+    saveLabel: t("Close item"),
+    onSave: (v) => App.write(t("Item closed"), (a) => a.patch("/raid/" + r.id, {
+      status: "Closed", closureEvidence: v.closureEvidence, version: r.version,
+    }), { detail: r.id + " · " + r.title }),
   });
 }
 

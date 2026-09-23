@@ -458,6 +458,12 @@ export const Engine = {
        never blocking: a risk is a reason to look, not a lock (the lock is
        the evidence). The frozen arithmetic below is untouched. */
     const risks = (db.raid || []).filter(r => r.project === projectId && r.gate === gateN && r.status === "Open");
+    /* D-36.15 — the one exception I-8 admits, and only by an explicit
+       flag: a standing human act (RT365's H-nn), a Dependency marked
+       `blocksGate`, HOLDS this gate while it is open, as an open veto
+       holds it (MER-06). It closes only on its evidence. With no such
+       row — every book before 059 — `complete` is exactly what it was. */
+    const holds = risks.filter(r => r.blocksGate === true);
     /* I-4 — the criteria posed in advance for this gate, and whether a
        named reviewer has found each one met. With no criteria the
        arithmetic is exactly what it was; with criteria, evidence alone
@@ -465,9 +471,9 @@ export const Engine = {
     const criteria = (db.criteria || []).filter(c => c.project === projectId && c.gate === gateN);
     const criteriaMet = criteria.filter(c => c.met).length;
     const allMet = criteriaMet === criteria.length;
-    const complete = approved === docs.length && allMet;
+    const complete = approved === docs.length && allMet && !holds.length;
     return {
-      gate: gateN, loop, date, docs, approved, total: docs.length, risks,
+      gate: gateN, loop, date, docs, approved, total: docs.length, risks, holds,
       criteria, criteriaMet,
       ready: docs.length > 0 && complete,
       outstanding: docs.filter(d => !Engine.isEvidence(d)),
@@ -520,21 +526,24 @@ export const Engine = {
        the documents say. */
     const unmet = parts.flatMap(({ st }) => st.unmet ?? []);
     const criteria = parts.flatMap(({ st }) => st.criteria ?? []);
+    /* D-36.15 — an open human act on any project of the scope holds the
+       scoped gate, as a missing piece of evidence on any of them does. */
+    const holds = parts.flatMap(({ st }) => st.holds ?? []);
     /* La date du jalon de portée est la PLUS TARDIVE : le programme n'a
        pas franchi tant que son dernier projet n'a pas franchi. */
     const dates = parts.map(({ st }) => st.date).filter(Boolean).sort();
     const date = dates.length ? dates[dates.length - 1] : null;
-    const cleared = withEvidence.length > 0 && !unmet.length &&
+    const cleared = withEvidence.length > 0 && !unmet.length && !holds.length &&
       parts.every(({ st }) => st.total === 0 || st.state === "Cleared");
     return {
       gate: gateN, loop, scope, date, docs: parts.flatMap(({ st }) => st.docs),
-      approved, total, criteria, unmet,
-      ready: total > 0 && approved === total && !unmet.length,
+      approved, total, criteria, unmet, holds,
+      ready: total > 0 && approved === total && !unmet.length && !holds.length,
       outstanding,
       state: cleared ? "Cleared"
            : parts.some(({ st }) => st.state === "Overdue") ? "Overdue"
            : parts.some(({ st }) => st.state === "At risk") ? "At risk"
-           : total > 0 && approved === total && !unmet.length ? "Ready"
+           : total > 0 && approved === total && !unmet.length && !holds.length ? "Ready"
            : "Planned",
     };
   },
@@ -609,6 +618,23 @@ export const Engine = {
                 " and has an unresolved objection: " + v.objection.reason,
         items: [],
         vetoes: vetoes.map(x => ({ seat: x.seat.id, objection: x.objection.id })),
+      };
+    }
+    /* D-36.15 — an open standing human act holds the gate it blocks,
+       after a veto and before the evidence: a gate whose pieces are all
+       filed, while the person who must sign has not signed, is not
+       passable. The refusal names the act and its owner, because "held"
+       without a name is a refusal nobody can act on. */
+    const holds = g.holds ?? [];
+    if (holds.length) {
+      const a = holds[0];
+      return {
+        ok: false,
+        reason: g.name + " is held by human act " + a.id + " · " + a.title +
+                " (" + Engine.personName(db, a.owner) + ") until it closes on its evidence" +
+                (holds.length > 1 ? " — and " + (holds.length - 1) + " more" : ""),
+        items: [],
+        holds: holds.map(x => ({ id: x.id, title: x.title, owner: x.owner ?? null })),
       };
     }
     if (g.state === "Cleared" || g.ready) return { ok: true, reason: "Evidence complete for " + g.name };

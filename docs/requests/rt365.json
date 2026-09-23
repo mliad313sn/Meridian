@@ -442,18 +442,20 @@
         "scripts/meridian_sync.py#RAID_KIND"
       ],
       "title": "Implied by the sync: a free category label on register items; standing human acts (H-nn) modelled as RAID dependencies with a review date (D-33.14)",
-      "status": "partial",
-      "version": "5.14.0",
+      "status": "done",
+      "version": "5.27.0",
       "decidedOn": "2026-09-08",
       "delivered": [
         "server/migrations/045_what_a_row_rests_on.sql (raid_item.category)",
         "server/src/v1write.js#upsertRaid",
-        "web/src/views/index.js#raidFields"
+        "web/src/views/index.js#raidFields",
+        "server/migrations/059_a_human_act_holds_its_gate.sql (blocks_gate, closure_evidence)",
+        "server/src/evidence.js#humanActRefusal",
+        "shared/engine.js — gateStatus holds, canAdvance refuses while a blocking act is open",
+        "PUT /api/v1/raid — blocksGate, closureEvidence"
       ],
-      "measure": "server/test/writeapi.test.js (REQ-13, two tests)",
-      "remaining": [
-        "H-nn standing human acts modelled as RAID dependencies with a review date (D-33.14)"
-      ],
+      "measure": "server/test/writeapi.test.js (REQ-13, two tests) · server/test/humanact.test.js (11 tests; engine numbers identical before and after) · browser: held, refused on prose, lifted on a locator",
+      "remaining": null,
       "issue": null,
       "accepted": null,
       "released": false,
@@ -468,9 +470,15 @@
           "registerVersion": 11,
           "status": "partial",
           "note": "Delivered in 5.14.0; proven by test and walked in a real browser as four roles."
+        },
+        {
+          "at": "2026-09-23",
+          "registerVersion": 24,
+          "status": "done",
+          "note": "Second half delivered by docs/36 wave 2 (5.27.0)."
         }
       ],
-      "answerToSource": "Half closed, and the half you can use now. `category` is your word, free, beside ours: it writes through the contract, reads back, reaches the screen in all three languages, and no arithmetic reads it. `kind` stays Risk/Issue/Assumption/Dependency because it is the contract the engine reads and it does not open. The other half — standing human acts H-nn modelled as dependencies carrying a review date — stays open deliberately: it is a modelling decision about what a register item IS, not a field, and it deserves its own round rather than being smuggled in beside a label."
+      "answerToSource": "Fully closed in 5.27.0 (D-36.15). An H-nn is a RAID Dependency with category \"Human act\", an owner, a review date and `blocksGate: true` on its gate. While it is open, that gate does not clear, and the refusal names the act and its owner. It closes only on `closureEvidence`, a locator (path, commit, or an https address on your documentHosts): \"an action stays until its evidence file exists\" is now the product's rule, not a convention. What to try: send one H-nn through your sync with blocksGate, try to advance the gate, then close it with its evidence path."
     },
     {
       "id": "REQ-14",
@@ -1857,5 +1865,5 @@
       "whatIsNeeded": "A maintainer merges the branch to main and pushes the tag. The owner AUTHORISED the merge on 08/09; it was then refused by the agent session's own permission classifier — `git merge --ff-only`, `git push origin <branch>:main` and even a local `git tag -a` (D-33.50). Pushing a tag ref is separately refused HTTP 403 by the session credential (D-33.18, D-33.30). Two different boundaries, neither routed around."
     }
   },
-  "registerVersion": 23
+  "registerVersion": 24
 }

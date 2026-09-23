@@ -22,6 +22,49 @@ Nothing yet.
 
 ---
 
+## [5.27.0] — 2026-09-23
+
+**A standing human act holds the gate it blocks** (D-36.15; RT365 REQ-13,
+second half; docs/36 wave 2).
+
+### Added
+
+- **A RAID dependency can be marked "blocks its gate".** This is RT365's
+  H-nn: category "Human act", an owner, a review date, and the gate it
+  blocks. RT365's rule is that "an action stays until its evidence file
+  exists". While the act is open, that gate is never ready and never
+  Cleared, just as an open veto holds it (MER-06). The refusal to advance
+  is a 409 that names the act and its owner: "… is held by human act
+  DEP-nn · title (Owner) until it closes on its evidence".
+- **The act closes only on evidence**: a repository path, a commit, a
+  named locator, or an https address on a trusted `documentHosts` host
+  (refused when none is configured). One rule, `humanActRefusal` in
+  `server/src/evidence.js`, serves the screen routes and `PUT /api/v1/raid`,
+  and migration 059's checks refuse the rest in the database. Reopening an
+  act clears its evidence.
+- The RAID form's "Blocks its gate" and "Closure evidence"; "Close on
+  evidence" on an open blocking act; "held by human act X (owner)" on the
+  gate line and the blocked banner. FR and ES.
+- `PUT /api/v1/raid` accepts `blocksGate` and `closureEvidence`; the
+  export and import carry both.
+
+### Engine
+
+No number the engine produced before changes. The flag defaults to false
+on every existing row, and no metric, roll-up, exposure, escalation or
+evidence count reads it; the tests compare `Engine.metrics` of every
+project and `Engine.roll` before and after. The only new behaviour is the
+refusal (D-05 holds).
+
+### Measure
+
+`humanact.test.js`, 11 tests. F13 carries a closed blocking dependency
+with its evidence. Browser, PRJ-101 at Gate 3: DEP-08 raised as a blocking
+act and the gate held; closing with a sentence refused; closing on
+`docs/evidence/H-03.md@a1b2c3d` lifted the hold.
+
+---
+
 ## [5.26.0] — 2026-09-23
 
 **An evidence-review grant, not a role** (D-36.12; FitAdapt #16 · DF-10,

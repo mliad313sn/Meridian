@@ -202,7 +202,13 @@ const WRITE_DOCS = {
     "beside `type` — which stays the RAID contract the engine reads (REQ-13). `status: \"Closed\"` " +
     "records the closure with its date: send `closedOn` when your register knows it, otherwise today " +
     "is stamped, and `closedBy` names the person on whose word it closed. Reopening clears both, " +
-    "because an open item has no closure (REQ-18)."),
+    "because an open item has no closure (REQ-18). A standing human act — a Dependency with `category` " +
+    "\"Human act\", an `owner`, a `review` date and a `gate` — sends `blocksGate: true`: while it is open " +
+    "the gate it names does not clear, and the refusal to advance names the act and its owner. It closes " +
+    "only with `closureEvidence`, the locator of what shows it was done (a repository path at a revision, " +
+    "a commit, a named locator, or an https address on a trusted document host); closing one without it " +
+    "is a 400. Reopening withdraws the evidence. A row that does not block is only read against its gate " +
+    "(D-36.15)."),
   "PUT /api/v1/raid-reviews/:externalId": upsert("a review performed on a register item", "write:portfolio",
     "`review` on /raid SCHEDULES a review; this records that one HAPPENED (REQ-46, REQ-51). `item` is the " +
     "register item — a Meridian id or an externalId you created — and a review stays on it. `by` names " +

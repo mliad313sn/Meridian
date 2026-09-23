@@ -27,6 +27,11 @@ const CONSTRAINT_MESSAGES = {
      laissait croire à un doublon accidentel ; ce qui est refusé est une
      seconde vague sur le même site, et la phrase doit dire ce qu'est une
      vague et où consigner des phases. Voir la migration 044. */
+  /* D-36.15 (059) — a standing human act that holds its gate. */
+  raid_blocking_act_shape:
+    "Only a dependency on a project's gate can block that gate — name the project and the gate",
+  raid_blocking_act_closed_on_evidence:
+    "A human act that blocks its gate closes on its evidence — give the locator of what shows it was done",
   rollout_wave_one_per_site:
     "This project already has a rollout wave at that site — a wave IS a site in this rollout, "
     + "and seq is the order the sites go live in, not a phase number within one site. "
