@@ -1702,25 +1702,35 @@
       ],
       "issue": null,
       "title": "The write contract can record that a RAID review happened, not only move the date it is next due",
-      "status": "open",
+      "status": "done",
       "priority": "medium",
-      "version": null,
-      "decidedOn": "2026-09-09",
-      "delivered": [],
-      "measure": null,
-      "remaining": [
-        "A contract route for the review event, its OpenAPI entry, and its declared write body."
+      "version": "5.20.0",
+      "decidedOn": "2026-09-23",
+      "delivered": [
+        "server/src/routes/v1.js — PUT /api/v1/raid-reviews/:externalId",
+        "server/src/v1write.js#upsertRaidReview",
+        "server/migrations/054_raid_review_external.sql",
+        "server/src/raidreview.js (one projection of the next due date for both doors)",
+        "docs/openapi.v1.json"
       ],
+      "measure": "server/test/raidreview-contract.test.js (7 tests: the event, idempotent re-sync, the screen reads it, correction re-derives, refusals, closed body in the published contract)",
+      "remaining": null,
       "accepted": null,
       "released": false,
       "observed": "`PUT /api/v1/raid/:externalId` sets `review` directly, which is scheduling and is correct. There is no contract door for the review EVENT that migration 050 introduced. So an integrator syncing a real register can move the due date but cannot tell us a review occurred — which is precisely the defect REQ-46 just fixed for the screen, one door along.",
-      "answerToSource": "Filed against ourselves the moment 050 landed, rather than waiting for you to measure the asymmetry as you did with REQ-18.",
+      "answerToSource": "Closed in 5.20.0. PUT /api/v1/raid-reviews/<your id> with { item, by, on, note, next } records the review as an event (050) and derives the row's review date from it; the same id sent twice is one review. Your meridian_sync.py can stop moving `review` to stand for a review that happened — send the review, and let `review` be derived. What to try: re-run your sync twice over the same register and read GET /api/raid/<id>/reviews on the screen side.",
       "history": [
         {
           "at": "2026-09-09",
           "registerVersion": 13,
           "status": "open",
           "note": "Opened by the instrument counsellor while delivering REQ-45/46/47 — found in our own product."
+        },
+        {
+          "at": "2026-09-23",
+          "registerVersion": 20,
+          "status": "done",
+          "note": "Delivered by docs/36 wave 1 (5.20.0)."
         }
       ]
     },
@@ -1822,5 +1832,5 @@
       "whatIsNeeded": "A maintainer merges the branch to main and pushes the tag. The owner AUTHORISED the merge on 08/09; it was then refused by the agent session's own permission classifier — `git merge --ff-only`, `git push origin <branch>:main` and even a local `git tag -a` (D-33.50). Pushing a tag ref is separately refused HTTP 403 by the session credential (D-33.18, D-33.30). Two different boundaries, neither routed around."
     }
   },
-  "registerVersion": 19
+  "registerVersion": 20
 }

@@ -94,7 +94,9 @@ describe("schema and migrations (R2.2, R2.7)", () => {
        /* 053 - docs/36 C-04: the notification kinds the exception sweep
           emitted and 018's CHECK refused (027 on the unmerged committee
           branch, renumbered because main's 027 is international). */
-       "053_notification_kinds.sql"]);
+       "053_notification_kinds.sql",
+       /* 054 - REQ-51, a review written through the contract has an external identity. */
+       "054_raid_review_external.sql"]);
     const again = await migrate({ silent: true });
     assert.deepEqual(again, [], "a second run applies nothing");
   });

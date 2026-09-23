@@ -275,6 +275,17 @@ contradicts `docs/25` (reversibility).
 
 ### Waves 1–4
 
+#### REQ-51 · The contract records that a review happened — BUILT, PR as 5.20.0
+
+- **Delivered**:
+  - `PUT /api/v1/raid-reviews/:externalId`.
+  - Migration 054: `raid_review` gets an external identity.
+  - `raidreview.js`: one projection of the next due date for both doors.
+- **Measure**: `raidreview-contract.test.js`, 7 tests. `writeapi.test.js`
+  is unchanged and green (54).
+- **Remains**: RT365 deleting its `meridian_sync.py` workaround is theirs
+  to do. `accepted` stays null until they say so.
+
 #### REQ-50 · Ratify from a screen, in one's own name — BUILT, PR as 5.19.0
 
 - **Delivered**:

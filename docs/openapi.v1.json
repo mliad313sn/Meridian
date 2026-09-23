@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Meridian IT-PMO",
-    "version": "5.19.0",
+    "version": "5.20.0",
     "summary": "Read a governed project portfolio, and the trail of how it got that way",
     "description": "The surface other systems read. It is versioned in the path: the day the shape has to change it becomes /api/v2, so that nobody has to guess. Authentication is a key issued per connected system, carrying explicit scopes; the product never stores the key itself, only its fingerprint.\n\nWrites arrived with the first real integrator (RT365, docs/33): PUT by your own identifier on projects, milestones, register items, stage progress, work items, decisions and actions, under two write scopes, with an optional Idempotency-Key. A scope is only published once a route honours it: declaring one earlier would advertise a door that does not exist and imply it is guarded.",
     "license": {
@@ -1504,6 +1504,152 @@
                   },
                   "closureNote": {
                     "type": "string"
+                  },
+                  "version": {
+                    "type": "integer"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The document described above",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "contract": {
+                      "type": "string"
+                    },
+                    "generatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "externalId": {
+                      "type": "string"
+                    },
+                    "created": {
+                      "type": "boolean"
+                    },
+                    "version": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created — the row did not exist for this externalId",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "contract": {
+                      "type": "string"
+                    },
+                    "generatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "externalId": {
+                      "type": "string"
+                    },
+                    "created": {
+                      "type": "boolean"
+                    },
+                    "version": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body breaks a rule the screens enforce too; the message says which"
+          },
+          "401": {
+            "description": "No key, an unknown key, or a revoked key — the three are indistinguishable on purpose"
+          },
+          "403": {
+            "description": "The key is live but does not carry the scope this route requires"
+          },
+          "409": {
+            "description": "A stale version, an immutable decision, or a meeting that is not open"
+          },
+          "422": {
+            "description": "Idempotency-Key reused with a different request"
+          }
+        }
+      }
+    },
+    "/api/v1/raid-reviews/{externalId}": {
+      "put": {
+        "summary": "Create or update a review performed on a register item, keyed by your own identifier",
+        "description": "Creates the a review performed on a register item when nothing carries this externalId for your integration, updates it otherwise. The identity is (integration, externalId): two connected systems may both say \"E01\" without colliding. `version` is optional — when sent it is asserted (409 if stale); when omitted your system is the master of this row and the last write wins. Optional `Idempotency-Key` header: the same key with the same body replays the recorded answer (Idempotent-Replayed: true); the same key with another body is refused (422) — one key names ONE request, not a run. `adopt: \"<Meridian id>\"` binds your externalId to a row that already exists (created on a screen, or scaffolded) instead of creating another. A field this collection does not declare is REFUSED (400) and nothing is written or audited: the properties below are the whole of what a body may carry (REQ-19). The same business rules as the screens apply. `review` on /raid SCHEDULES a review; this records that one HAPPENED (REQ-46, REQ-51). `item` is the register item — a Meridian id or an externalId you created — and a review stays on it. `by` names the person who performed it (required when created), `on` the day (today when omitted), `note` what it found, and `next` when the following review is due; the item's `review` date is then derived from the latest review, on this door and on the screen alike. Keyed by your id, so a sync that runs twice records one review.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scope": "write:portfolio",
+        "parameters": [
+          {
+            "name": "externalId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "Your own identifier for this row — stable across runs, unique within your integration"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "One key names ONE request. The same key with the same body replays the recorded answer (response header Idempotent-Replayed: true); the same key with a different body is refused (422)."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "item": {
+                    "type": "string"
+                  },
+                  "on": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "by": {
+                    "type": "string"
+                  },
+                  "note": {
+                    "type": "string"
+                  },
+                  "next": {
+                    "type": "string",
+                    "format": "date"
                   },
                   "version": {
                     "type": "integer"
