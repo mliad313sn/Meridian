@@ -727,7 +727,10 @@ export async function upsertDecision(user, externalId, b) {
     if (changed.status === "Ratified" || changed.ratified_by !== undefined) {
       const who = await resolvePerson(b.ratifiedBy, "ratifiedBy");
       if (!who) bad("Ratifying a decision names the person who ratified it: ratifiedBy, an active person");
-      const verdict = canRatifyDecision({ ratifier: who, decidedBy: existing.decided_by, recordedBy: existing.recorded_by });
+      const recorder = existing.recorded_by
+        ? await one(`SELECT person_id FROM app_user WHERE id = $1`, [existing.recorded_by]) : null;
+      const verdict = canRatifyDecision({ ratifier: who, decidedBy: existing.decided_by,
+        recorderPerson: recorder?.person_id ?? null });
       if (!verdict.ok) throw new HttpError(403, verdict.why);
       changed.ratified_by = who;
     }
@@ -775,7 +778,7 @@ export async function upsertDecision(user, externalId, b) {
   if (b.ratifiedBy !== undefined && String(b.ratifiedBy ?? "") !== "") {
     ratifiedBy = await resolvePerson(b.ratifiedBy, "ratifiedBy");
     if (!ratifiedBy) bad("ratifiedBy names an active person");
-    const verdict = canRatifyDecision({ ratifier: ratifiedBy, decidedBy, recordedBy: user.id });
+    const verdict = canRatifyDecision({ ratifier: ratifiedBy, decidedBy, recorderPerson: user.personId ?? null });
     if (!verdict.ok) throw new HttpError(403, verdict.why);
   }
   let id = null;

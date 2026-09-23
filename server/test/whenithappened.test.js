@@ -372,7 +372,10 @@ describe("REQ-47 · une décision dit quand elle a été ratifiée", () => {
     const r = await group.post("/api/decisions", {
       headline: "Adopter l'échelle à quatre portes", rationale: "…",
       decidedBy: "PE-15", decidedOn: "2026-06-11", projectId: GROUP_PROJECT,
-      status: "Ratified", ratifiedBy: "Comité d'investissement",
+      /* REQ-49 — a ratifier is a person of the directory, not a text:
+         PE-07, neither the decider (PE-15) nor the recording account's
+         person (groupCBP is PE-15). The subject here is the DATE. */
+      status: "Ratified", ratifiedBy: "PE-07",
     });
     assert.equal(r.status, 201, r.text);
     const row = await one(`SELECT status, ratified_on FROM meeting_decision WHERE id = $1`, [r.body.id]);
@@ -469,7 +472,7 @@ describe("REQ-47 · une décision dit quand elle a été ratifiée", () => {
     const group = await as("groupCBP");
     const made = await group.post("/api/decisions", {
       headline: "Lecture de la date de ratification", decidedBy: "PE-15",
-      decidedOn: "2026-05-05", projectId: GROUP_PROJECT, status: "Ratified", ratifiedBy: "ARB",
+      decidedOn: "2026-05-05", projectId: GROUP_PROJECT, status: "Ratified", ratifiedBy: "PE-07",
     });
     assert.equal(made.status, 201, made.text);
 

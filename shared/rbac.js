@@ -596,7 +596,7 @@ const outsideProject = (user, project) => deny(
  * peut quoi — et parce que l'écran qui portera ce geste devra lire la
  * même règle que le contrat.
  */
-export function canRatifyDecision({ ratifier, decidedBy, recordedBy } = {}) {
+export function canRatifyDecision({ ratifier, decidedBy, recorderPerson } = {}) {
   if (!ratifier) {
     return { ok: false, why: "Ratifying a decision names the person who ratified it: ratifiedBy, an active person" };
   }
@@ -605,8 +605,16 @@ export function canRatifyDecision({ ratifier, decidedBy, recordedBy } = {}) {
   }
   /* Le COMPTE qui a consigné compte autant que la personne : une clé
      d'intégration consigne sous son propre compte, et « la personne est
-     différente » ne suffit pas quand c'est la même main qui écrit. */
-  if (recordedBy && ratifier === recordedBy) {
+     différente » ne suffit pas quand c'est la même main qui écrit.
+
+     REQ-49 (docs/36) — cette règle comparait `ratifier`, un identifiant de
+     PERSONNE (l'annuaire), à `recordedBy`, un identifiant de COMPTE
+     (app_user) : deux espaces qui ne se rencontrent jamais, donc la règle
+     ne mordait jamais. On compare maintenant à la personne que ce compte
+     représente (`app_user.person_id`) ; un compte qui ne représente
+     personne — une clé d'intégration nue — n'a pas de personne à
+     confondre avec le ratifieur. */
+  if (recorderPerson && ratifier === recorderPerson) {
     return { ok: false, why: "the account that recorded this decision does not also ratify it" };
   }
   return { ok: true };

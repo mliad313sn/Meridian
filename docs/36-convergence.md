@@ -275,6 +275,24 @@ contradicts `docs/25` (reversibility).
 
 ### Waves 1–4
 
+#### REQ-49 · Ratification held to one rule on both doors — BUILT, PR as 5.18.3
+
+- **Observed**: the session route took `ratifiedBy` as free text. While
+  proving the fix, a second defect turned up: the contract's
+  "recording hand" check compared a person id with an account id, so it
+  never fired.
+- **Delivered**: `canRatifyDecision` now compares the ratifier with the
+  recorder's person. `POST /api/decisions` resolves the ratifier in the
+  directory and applies the rule.
+- **Measure**: `ratify.test.js`, 6 tests. Four fail on 5.18.2 and pass
+  now.
+- **Remains**: none for REQ-49. On the campaign's two other conditions:
+  - "The signal ignores unmarked rows": no governance signal reads
+    `ratified_by` (checked in `govsignals.js` and `valuepage.js`), so no
+    row is counted on an unchecked name. Old rows keep their text,
+    visible and not rewritten (D-36.09).
+  - The ratification screen is REQ-50.
+
 These are taken in the order of the campaign file once wave 0 is closed:
 REQ-49, REQ-50, REQ-51, PR-04, REQ-48, REQ-52, then #16/DF-10/MER-06,
 #18/DF-12, #17/DF-11/REQ-29/MER-11, REQ-13, then wave 3 (under the check
@@ -304,6 +322,7 @@ carry it. An issue is closed as delivered only when `v5.16.0` exists.
 | D-36.05 | 23/09 | **C-03 converges the KODO line as built**: data, engine, import. It does not add the write routes and screens KODO's registers lack. Those are NEW-04, with REQ-52, in wave 1, and five MER lines say `partial` until then. | Build the routes inside C-03. Refused: wave 0 is convergence, and a convergence PR that also adds six CRUD surfaces cannot be reviewed as either. Mark the MER lines done because the data lands. Refused: KODO's own report says they are not. | C-03 |
 | D-36.07 | 23/09 | **F13 ships strict, with the existing losses named, not fixed.** The losses are 15 collections and 38 fields (NEW-05). The gate fails on any unnamed loss and on any named loss that has been fixed, so the list only shrinks. NEW-05 becomes the first line of wave 1. | Make F13 "status 200", as the campaign's P3 probe did. Refused: it certifies an empty book, and it passed on every one of these losses. Fix NEW-05 inside C-05. Refused: rewriting the importer for 15 registers is a feature line, and the campaign keeps wave 0 to convergence. Leave F13 red until NEW-05 lands. Refused: a red main stops every other line. | C-05, NEW-05 |
 | D-36.08 | 23/09 | **A branch that must not be merged is declared, not deleted.** `docs/superseded-branches.json` names it, the tip it was judged at, and the line that judged it. F14 accepts it only at that tip. Deleting the branch remains the owner's call (C-06 proposes it). | Delete the branch from this session. Refused: the owner confirms deletions (C-06). Exempt branches by name pattern. Refused: a pattern outlives the reason it was written for. | C-05, C-04 |
+| D-36.09 | 23/09 | **Rows ratified by free text before REQ-49 keep their text, unmarked.** No signal or figure reads `ratified_by`. Marking would add a column, or a derived flag, that nothing reads, and rewriting the rows would invent a person. The rule changes what can be written from 5.18.3 on. | Resolve old texts to people by name match. Refused: it invents who ratified. Flag them in the API. Refused for now: no reader needs it. If a signal ever reads the ratifier, it must first separate these rows, and this decision says so. | REQ-49 |
 | D-36.03 | 23/09 | **C-02 is delivered as a merge of main into the RT365 line, not a commit-by-commit rebase.** The 20 commits keep their SHAs, which `docs/33` cites in about fifty places, including D-33.50 and the register's `source.commit`. The six conflicts are resolved once, in one reviewable merge commit, not up to six times across 20 replays. The line still reaches main through a pull request. | A rebase, as the campaign file says. Refused: it would invalidate every SHA the RT365 record cites, and the campaign's own rule is that a record must stay readable. | C-02 |
 
 ---

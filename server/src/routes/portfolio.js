@@ -11,14 +11,14 @@
 import crypto from "node:crypto";
 import { Router } from "express";
 import { many, one, tx, updateVersioned, allocateId, insertMany, requiredVersion } from "../db.js";
-import { can, canSeeProject } from "../../../shared/rbac.js";
+import { can, canSeeProject, canRatifyDecision } from "../../../shared/rbac.js";
 import { audited, readAudit, record } from "../audit.js";
 import { HttpError } from "../auth.js";
 import { loadPortfolio, projectFor, fromM, toM, loadSettings, loadWeighting } from "../portfolio.js";
 import { adoptionBySite } from "../adoption.js";
 import { Engine, GATES, PHASES, LESSON_CATEGORIES, iso, addDays, days, D } from "../../../shared/engine.js";
 import { scaffoldProject, reschedule, phaseFor } from "../wbs.js";
-import { ladderLength } from "../v1write.js";
+import { ladderLength, resolvePerson } from "../v1write.js";
 import { assertPlantWindow } from "../plant.js";
 import { sweepExceptions } from "../exceptions.js";
 import { isEvidenceLocator, EVIDENCE_REFUSAL } from "../evidence.js";
@@ -4157,6 +4157,19 @@ r.post("/decisions", async (req, res, next) => {
       if (!prev) bad("The decision this one supersedes does not exist");
       supersedes = prev.id;
     }
+    /* REQ-49 (RT365) — the contract door resolved the ratifier in the
+       directory and refused the decider or the recording hand as their
+       own second pair of eyes; this door took any text at all. Since 5.15
+       that text is dated and read by the governance signals, so a
+       decision could be ratified here by the person who took it, or by a
+       name nobody can find. The same predicate now holds on both doors. */
+    let ratifier = null;
+    if (b.ratifiedBy !== undefined && String(b.ratifiedBy ?? "") !== "") {
+      ratifier = await resolvePerson(b.ratifiedBy, "ratifiedBy");
+      const verdict = canRatifyDecision({ ratifier, decidedBy: who?.id ?? null,
+        recorderPerson: req.user.personId ?? null });
+      if (!verdict.ok) throw new HttpError(403, verdict.why);
+    }
 
     let id = null;
     await audited(req.user,
@@ -4174,7 +4187,7 @@ r.post("/decisions", async (req, res, next) => {
            String(b.alternatives ?? "").slice(0, 4000), String(b.dissent ?? "").slice(0, 2000),
            p?.id ?? null, crId, raidId, msId, supersedes, who?.id ?? null, on, req.user.id,
            council, evidence, String(b.provenance ?? "").slice(0, 200),
-           status, String(b.ratifiedBy ?? "").slice(0, 200),
+           status, ratifier ?? "",
            status === "Ratified" ? ratifiedOn : null]);
       });
     res.status(201).json({ id });
