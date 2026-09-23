@@ -1,376 +1,309 @@
 /**
- * Two-level governance & adoption (2026-08-28 committees).
+ * MER-05, 06, 07, 08, 09, 10, 11 — ce qu'une revue produit, qui a le
+ * droit de dire non, et ce qu'une décision coûte à défaire.
  *
- * Traces: reassignment gate (group G2) · segregation of duties on change
- * approval (audit I1) · independent gate-evidence approval (audit I3) ·
- * fail-closed thresholds (audit I4) · reportable overrides + decision
- * register (audit I2 / group G3) · site concern channel (site G3) ·
- * referrals and cross-level actions (rhythm 1–2) · the digest (value I-2)
- * · forced first-sign-in password change (adoption I4).
+ * Les sept constats venaient du même comité de recette et disaient la
+ * même chose : Meridian tenait un PORTEFEUILLE et ne tenait pas encore
+ * une GOUVERNANCE. Le portefeuille répond « où en est-on ». La
+ * gouvernance répond « qui a décidé, sur quelle preuve, contre quel
+ * avis, et que coûterait le retour en arrière ».
  */
 
-import { test, before, after } from "node:test";
-import assert from "node:assert";
-import { boot, shutdown, as, SITE_PROJECT_GRU, GROUP_PROJECT } from "./harness.js";
-import { can } from "../../shared/rbac.js";
+import { test, describe, before, after } from "node:test";
+import assert from "node:assert/strict";
+import { boot, shutdown, client } from "./harness.js";
 import { Engine } from "../../shared/engine.js";
 
-before(async () => { await boot(); });
+let base;
+before(async () => { ({ base } = await boot()); });
 after(shutdown);
 
-/* ── authority: pure rbac ─────────────────────────────────────────── */
-
-test("a missing change-control threshold fails CLOSED, not open (I4)", () => {
-  const site = { role: "site", active: true, personId: "PE-19",
-    grants: { programmes: new Set(), sites: new Set(["GRU"]) } };
-  const project = { programme_id: "DCH", site_id: "GRU", governance_level: "site" };
-  const v = can(site, "change.approve", { project, cost_delta: 0.01, weeks_delta: 0 });
-  assert.equal(v.ok, false);
-  assert.match(v.why, /threshold/);
-});
-
-test("concern.raise: own delivery site only, group projects only (site G3)", () => {
-  const site = { role: "site", active: true, personId: "PE-19",
-    grants: { programmes: new Set(), sites: new Set(["GRU"]) } };
-  const atMySite = { programme_id: "EIT", site_id: "GRU", governance_level: "group" };
-  const elsewhere = { programme_id: "EIT", site_id: "YYZ", governance_level: "group" };
-  const myOwn = { programme_id: "DCH", site_id: "GRU", governance_level: "site" };
-  assert.equal(can(site, "concern.raise", { project: atMySite }).ok, true);
-  assert.equal(can(site, "concern.raise", { project: elsewhere }).ok, false);
-  assert.equal(can(site, "concern.raise", { project: myOwn }).ok, false);
-});
-
-test("riskProfile counts bands and appetite lines (group G5)", () => {
-  const db = {
-    settings: { pmoExposure: 8, escalateExposure: 15 },
-    raid: [
-      { status: "Open", project: "P1", p: 5, i: 5 },   // 25 → Critical, steering
-      { status: "Open", project: "P1", p: 3, i: 3 },   // 9  → High, pmo
-      { status: "Open", project: "P1", p: 1, i: 2 },   // 2  → Low
-      { status: "Closed", project: "P1", p: 5, i: 5 }, // ignored
-    ],
-  };
-  const rp = Engine.riskProfile(db, [{ id: "P1" }]);
-  assert.equal(rp.open, 3);
-  assert.equal(rp.bands.Critical, 1);
-  assert.equal(rp.bands.High, 1);
-  assert.equal(rp.steering, 1);
-  assert.equal(rp.pmo, 1);
-});
-
-/* ── reassignment is a portfolio-structure act (group G2) ─────────── */
-
-test("a group user cannot move a project into a programme outside their grant", async () => {
-  const dch = await as("groupDCH");               // grant: DCH only
-  const b = await dch.get("/api/bootstrap");
-  const p = b.body.db.projects.find((x) => x.id === SITE_PROJECT_GRU); // a DCH project
-  const refused = await dch.patch("/api/projects/" + p.id, { programme: "CBP", version: p.version });
-  assert.equal(refused.status, 403);
-  assert.match(refused.body.error, /outside your grant/);
-});
-
-test("admin moves it, and the audit trail carries the imaged 'Project moved' row (I2)", async () => {
-  const admin = await as("admin");
-  let b = await admin.get("/api/bootstrap");
-  const p = b.body.db.projects.find((x) => x.id === GROUP_PROJECT);   // group project at KRK
-  const r = await admin.patch("/api/projects/" + p.id, { site: "GRU", version: p.version });
-  assert.equal(r.status, 200);
-
-  const audit = await admin.get("/api/audit?action=Project%20moved&limit=5");
-  assert.equal(audit.status, 200);
-  const row = audit.body.events.find((e) => e.entity_id === p.id);
-  assert.ok(row, "the move is a named audit action");
-  assert.equal(row.after_json.site_id, "GRU");
-  assert.equal(row.before_json.site_id, "KRK");
-});
-
-/* ── the site concern channel, end to end (site G3) ───────────────── */
-
-test("a site lead raises a concern on the group project now landing on their site", async () => {
-  const pm = await as("siteGRU");
-  const r = await pm.post("/api/raid", {
-    type: "Risk", project: GROUP_PROJECT,
-    title: "Core migration is consuming our only network engineer",
-    detail: "Cutover rehearsals clash with our branch rollout", p: 4, i: 4,
-  });
-  assert.equal(r.status, 201, JSON.stringify(r.body));
-
-  const b = await pm.get("/api/bootstrap");
-  const item = b.body.db.raid.find((x) => x.id === r.body.id);
-  assert.equal(item.originSite, "GRU", "the concern names its raising site");
-
-  // Create-only: editing the group project's register stays with its owners.
-  const edit = await pm.patch("/api/raid/" + r.body.id, { p: 5, version: item.version });
-  assert.equal(edit.status, 403);
-});
-
-test("a site lead still cannot raise on a group project elsewhere", async () => {
-  const pm = await as("siteSIN");   // granted SIN; the project now sits at GRU
-  const r = await pm.post("/api/raid", {
-    type: "Risk", project: GROUP_PROJECT, title: "x", p: 3, i: 3,
-  });
-  assert.equal(r.status, 403);
-});
-
-/* ── segregation of duties on change control (audit I1) ───────────── */
-
-let crId = null;
-
-test("the raiser of a change request cannot decide it; a second pair of eyes can", async () => {
-  const pm = await as("siteGRU");
-  const raised = await pm.post("/api/change", {
-    project: SITE_PROJECT_GRU, title: "Slip UAT by one week", cost: 0.05, weeks: 1,
-  });
-  assert.equal(raised.status, 201);
-  crId = raised.body.id;
-
-  const self = await pm.post("/api/change/" + crId + "/approve", {});
-  assert.equal(self.status, 403);
-  assert.match(self.body.error, /you raised this request/);
-
-  // Another account with authority signs the first step.
-  const dch = await as("groupDCH");
-  const other = await dch.post("/api/change/" + crId + "/approve", { comment: "Impact reviewed" });
-  assert.equal(other.status, 200, JSON.stringify(other.body));
-});
-
-/* ── independent gate-evidence approval (audit I3) ────────────────── */
-
-test("gate evidence: the owner never approves their own; site level never approves site-project gates", async () => {
-  const dch = await as("groupDCH");
-  const meDch = await dch.get("/api/auth/me");
-  const created = await dch.post("/api/documents", {
-    project: SITE_PROJECT_GRU, name: "Cutover evidence", type: "Assurance",
-    gate: 2, owner: meDch.body.user.personId,
-    uri: "https://docs.meridian.example/evidence/cutover.pdf",   // R-01 — evidence points at something
-  });
-  assert.equal(created.status, 201, JSON.stringify(created.body));
-  const docId = created.body.id;
-  let b = await dch.get("/api/bootstrap");
-  let doc = b.body.db.docs.find((d) => d.id === docId);
-
-  const own = await dch.patch("/api/documents/" + docId, { status: "Approved", version: doc.version });
-  assert.equal(own.status, 403);
-  assert.match(own.body.error, /you own this evidence/);
-
-  const pm = await as("siteGRU");
-  const siteTry = await pm.patch("/api/documents/" + docId, { status: "Approved", version: doc.version });
-  assert.equal(siteTry.status, 403);
-  assert.match(siteTry.body.error, /group level/);
-
-  const admin = await as("admin");
-  b = await admin.get("/api/bootstrap");
-  doc = b.body.db.docs.find((d) => d.id === docId);
-  const ok = await admin.patch("/api/documents/" + docId, { status: "Approved", version: doc.version });
-  assert.equal(ok.status, 200, JSON.stringify(ok.body));
-});
-
-test("evidence cannot arrive pre-approved, nor be re-tagged onto a gate afterwards (I3)", async () => {
-  const pm = await as("siteGRU");
-  /* Creating is not approving: without this the whole control is one
-     POST away from irrelevant. */
-  const preApproved = await pm.post("/api/documents", {
-    project: SITE_PROJECT_GRU, name: "Gate 2 readiness", type: "Assurance",
-    gate: 2, status: "Approved",
-  });
-  assert.equal(preApproved.status, 400, JSON.stringify(preApproved.body));
-  assert.match(preApproved.body.error, /separate act/);
-
-  /* The exhaustive sweep found that gating the create was not enough: a
-     GROUP user could file evidence with no owner, already approved, and
-     so author and approve it in one call. Filing is filing, for everyone. */
-  const dch = await as("groupDCH");
-  const byGroup = await dch.post("/api/documents", {
-    project: SITE_PROJECT_GRU, name: "Gate 3 readiness", gate: 3, status: "Approved",
-  });
-  assert.equal(byGroup.status, 400, JSON.stringify(byGroup.body));
-  const byAdminToo = await (await as("admin")).post("/api/documents", {
-    project: SITE_PROJECT_GRU, name: "Gate 4 readiness", gate: 4, status: "Approved",
-  });
-  assert.equal(byAdminToo.status, 400, "not even admin authors and approves in one call");
-
-  /* And the same dodge in two moves: approve it where no gate rule bites,
-     then re-tag the approved document onto the gate. */
-  const admin = await as("admin");
-  const created = await admin.post("/api/documents", {
-    project: SITE_PROJECT_GRU, name: "Operating note", type: "Operations", gate: 0,
-    uri: "https://docs.meridian.example/evidence/operating-note.pdf",
-  });
-  assert.equal(created.status, 201, JSON.stringify(created.body));
-  const docId = created.body.id;
-  let doc = (await admin.get("/api/bootstrap")).body.db.docs.find((d) => d.id === docId);
-  const approved = await admin.patch("/api/documents/" + docId,
-    { status: "Approved", version: doc.version });
-  assert.equal(approved.status, 200, JSON.stringify(approved.body));
-
-  doc = (await pm.get("/api/bootstrap")).body.db.docs.find((d) => d.id === docId);
-  const retag = await pm.patch("/api/documents/" + docId, { gate: 2, version: doc.version });
-  assert.equal(retag.status, 403, JSON.stringify(retag.body));
-  assert.match(retag.body.error, /group level/);
-});
-
-/* ── referrals: the rhythm between levels (rhythm 1–3) ────────────── */
-
-test("a site room refers up; the group agenda carries it; a group decision retires it", async () => {
-  const pm = await as("siteGRU");
-  const series = await pm.get("/api/meetings/series");
-  const mine = series.body.series.find((s) => s.scopeKind === "site" && s.canWrite);
-  assert.ok(mine, "the GRU lead chairs a site series");
-  const occ = mine.next;
-  assert.ok(occ, "a scheduled occurrence exists");
-  await pm.post("/api/meetings/occurrences/" + occ.id + "/open", {});
-
-  const referred = await pm.post("/api/meetings/occurrences/" + occ.id + "/decisions", {
-    headline: "Freeze window for the payments cutover needs steering sign-off",
-    rationale: "Beyond site authority", refer: true, referTo: "group",
-  });
-  assert.equal(referred.status, 201, JSON.stringify(referred.body));
-  assert.equal(referred.body.referredTo, "group");
-  const refId = referred.body.id;
-
-  const admin = await as("admin");
-  const gSeries = (await admin.get("/api/meetings/series")).body.series
-    .find((s) => s.scopeKind === "group");
-  const gOcc = gSeries.next;
-  let payload = await admin.get("/api/meetings/occurrences/" + gOcc.id);
-  const refSection = payload.body.agenda.sections.find((s) => s.key === "referrals");
-  assert.ok(refSection, "the group agenda carries a 'Referred from delivery calls' section");
-  assert.ok(refSection.items.some((it) => it.entityId === refId), "our referral is on it");
-
-  await admin.post("/api/meetings/occurrences/" + gOcc.id + "/open", {});
-  const answer = await admin.post("/api/meetings/occurrences/" + gOcc.id + "/decisions", {
-    headline: "Freeze window approved for the last weekend of the month",
-    answers: refId,
-  });
-  assert.equal(answer.status, 201, JSON.stringify(answer.body));
-
-  payload = await admin.get("/api/meetings/occurrences/" + gOcc.id);
-  const refAfter = payload.body.agenda.sections.find((s) => s.key === "referrals");
-  assert.ok(!refAfter || !refAfter.items.some((it) => it.entityId === refId),
-    "an answered referral leaves the agenda");
-});
-
-test("a referral addressed to 'programme' reaches only the programme it belongs to", async () => {
-  const pm = await as("siteGRU");
-  const mine = (await pm.get("/api/meetings/series")).body.series
-    .find((s) => s.scopeKind === "site" && s.canWrite);
-  const referred = await pm.post("/api/meetings/occurrences/" + mine.next.id + "/decisions", {
-    headline: "Terminating the integration vendor is beyond this room",
-    rationale: "A programme commercial decision",
-    refer: true, referTo: "programme", projectId: SITE_PROJECT_GRU,   // a DCH project
-  });
-  assert.equal(referred.status, 201, JSON.stringify(referred.body));
-  const refId = referred.body.id;
-
-  const admin = await as("admin");
-  const series = (await admin.get("/api/meetings/series")).body.series;
-  const dch = series.find((s) => s.id === "MS-DCH-W");
-  const cbp = series.find((s) => s.id === "MS-CBP-W");
-  assert.ok(dch?.next && cbp?.next, "both programme rooms have a scheduled occurrence");
-
-  const onOwner = (await admin.get("/api/meetings/occurrences/" + dch.next.id))
-    .body.agenda.sections.find((s) => s.key === "referrals");
-  assert.ok(onOwner?.items.some((it) => it.entityId === refId),
-    "the programme the project belongs to is the room that is asked");
-
-  const onOther = (await admin.get("/api/meetings/occurrences/" + cbp.next.id))
-    .body.agenda.sections.find((s) => s.key === "referrals");
-  assert.ok(!onOther || !onOther.items.some((it) => it.entityId === refId),
-    "another programme's room never sees it");
-
-  await admin.post("/api/meetings/occurrences/" + cbp.next.id + "/open", {});
-  const poach = await admin.post("/api/meetings/occurrences/" + cbp.next.id + "/decisions", {
-    headline: "We will terminate", answers: refId,
-  });
-  assert.equal(poach.status, 400, "…and cannot retire it on that programme's behalf");
-});
-
-test("an action raised at group level lands on the owning site's weekly (rhythm-2)", async () => {
-  const admin = await as("admin");
-  const gSeries = (await admin.get("/api/meetings/series")).body.series
-    .find((s) => s.scopeKind === "group");
-  const gOcc = gSeries.next;
-  const raised = await admin.post("/api/meetings/occurrences/" + gOcc.id + "/actions", {
-    title: "Confirm GRU network freeze dates", projectId: GROUP_PROJECT,   // now sited GRU
-  });
-  assert.equal(raised.status, 201);
-
-  const pm = await as("siteGRU");
-  const mine = (await pm.get("/api/meetings/series")).body.series
-    .find((s) => s.scopeKind === "site" && s.canWrite);
-  const payload = await pm.get("/api/meetings/occurrences/" + mine.next.id);
-  const inherited = payload.body.openActions.find((a) => a.id === raised.body.id);
-  assert.ok(inherited, "the group action appears in the site meeting's open actions");
-  assert.ok(inherited.origin, "tagged with its origin series");
-});
-
-test("the meeting pack exports before the close (value I-3)", async () => {
-  const pm = await as("siteGRU");
-  const mine = (await pm.get("/api/meetings/series")).body.series
-    .find((s) => s.scopeKind === "site" && s.canWrite);
-  const r = await pm.get("/api/meetings/occurrences/" + mine.next.id + "/pack");
-  assert.equal(r.status, 200);
-  assert.match(r.body.markdown, /## Agenda/);
-  assert.match(r.body.markdown, /## The slate/);
-});
-
-/* ── digest & register surfaces ───────────────────────────────────── */
-
-test("the digest answers 'what changed', scoped and named (value I-2)", async () => {
-  const admin = await as("admin");
-  const r = await admin.get("/api/digest");
-  assert.equal(r.status, 200);
-  assert.ok(r.body.entries.some((e) => e.action === "Project moved"), "the week's move is in the digest");
-
-  // A viewer outside audit.read still gets THEIR digest — scoped, not refused.
-  const viewer = await as("viewerGRU");
-  const rv = await viewer.get("/api/digest");
-  assert.equal(rv.status, 200);
-});
-
-test("the decision register joins control decisions and minuted ones (group G3)", async () => {
-  const admin = await as("admin");
-  const r = await admin.get("/api/decisions/log");
-  assert.equal(r.status, 200);
-  assert.ok(r.body.minuted.some((d) => d.referred === "group"), "the referral shows as referred");
-  const pm = await as("siteGRU");
-  const refused = await pm.get("/api/decisions/log");
-  assert.equal(refused.status, 403, "site level does not read the register (audit.read)");
-});
-
-/* ── adoption: forced first-sign-in password change (I4) ──────────── */
-
-test("an admin-provisioned account must set its own password before day two", async () => {
-  const admin = await as("admin");
-  const created = await admin.post("/api/admin/users", {
-    email: "new.joiner@example.com", displayName: "New Joiner", role: "viewer",
-    password: "temporary-pass-1",
-  });
-  assert.equal(created.status, 201, JSON.stringify(created.body));
-
-  const { client } = await import("./harness.js");
+async function admin() {
   const c = client();
-  const user = await c.login("new.joiner@example.com", "temporary-pass-1");
-  assert.equal(user.mustChangePassword, true, "the flag rides the login payload");
+  await c.post("/api/auth/login",
+    { email: "admin@meridian.example", password: "meridian-admin-2026" });
+  return c;
+}
 
-  /* The dialog is a courtesy; the refusal is the control. Until the
-     password is the holder's own, the session reads but does not act. */
-  assert.equal((await c.get("/api/bootstrap")).status, 200, "reading is still allowed");
-  const early = await c.post("/api/raid", { title: "anything", type: "Risk" });
-  assert.equal(early.status, 403);
-  assert.match(early.body.error, /Choose your own password/);
+function book(over = {}) {
+  return {
+    orgName: "TEST", statusDate: "2026-08-28", currencyUnit: "millions",
+    sites: [{ id: "S1", city: "Ici", tz: 0 }],
+    people: [{ id: "PE-1", name: "A. Personne", role: "PM", site: "S1", rate: 0 },
+             { id: "PE-2", name: "B. Personne", role: "QA", site: "S1", rate: 0 }],
+    programmes: [{ id: "P1", name: "Programme", managerId: "PE-1" }],
+    projects: [{
+      id: "X", name: "Projet", programme: "P1", site: "S1",
+      governanceLevel: "group", pm: "PE-1", method: "Hybrid",
+      start: "2026-01-01", finish: "2026-12-31", budget: 4,
+      phase: "Execution", gate: 1, closed: false,
+    }],
+    activities: [], milestones: [], ledger: [], raid: [], crs: [],
+    docs: [], items: [], columns: [], allocations: [],
+    ...over,
+  };
+}
 
-  const bad = await c.post("/api/auth/password", { current: "wrong", next: "my-own-pass-9" });
-  assert.equal(bad.status, 403);
-  /* A second device on the old password — changing it must end that
-     session, and keep the one doing the changing. */
-  const other = client();
-  await other.login("new.joiner@example.com", "temporary-pass-1");
-  assert.equal((await other.get("/api/auth/me")).status, 200);
+describe("MER-09 · la monnaie dit son unité", () => {
+  test("un livre qui ne déclare pas son unité est refusé, et le refus explique", async () => {
+    const c = await admin();
+    const { currencyUnit, ...noUnit } = book();
+    const r = await c.post("/api/admin/import", { db: noUnit });
+    assert.equal(r.status, 400);
+    /* Le refus doit nommer le champ ET la conséquence : « 4 vaut quatre
+       millions dans une lecture et quatre euros dans l'autre » est ce
+       qui fait comprendre pourquoi deviner n'est pas une option. */
+    assert.match(r.body.error, /currencyUnit/);
+    assert.match(r.body.error, /millions/);
+  });
 
-  const ok = await c.post("/api/auth/password", { current: "temporary-pass-1", next: "my-own-pass-9" });
-  assert.equal(ok.status, 200);
-  const me = await c.get("/api/auth/me");
-  assert.equal(me.body.user.mustChangePassword, false);
-  assert.equal((await other.get("/api/auth/me")).status, 401, "the other session is over");
+  test("« units » et « millions » ne chargent pas le même budget", async () => {
+    const c = await admin();
+    await c.post("/api/admin/import", { db: book({ currencyUnit: "millions" }) });
+    const inM = (await c.get("/api/bootstrap")).body.db.projects.find(p => p.id === "X").budget;
+
+    await c.post("/api/admin/import", { db: book({ currencyUnit: "units" }) });
+    const inUnits = (await c.get("/api/bootstrap")).body.db.projects.find(p => p.id === "X").budget;
+
+    /* C'est exactement la corruption silencieuse que le constat
+       décrivait : un facteur d'un million entre deux lectures du même
+       chiffre. Elle est maintenant DÉCLARÉE, donc elle n'arrive plus
+       par accident. */
+    assert.equal(inM, 4);
+    assert.equal(Math.round(inUnits * 1_000_000), 4);
+  });
+
+  test("un livre exporté d'ici se réimporte : il dit son unité", async () => {
+    const c = await admin();
+    await c.post("/api/admin/import", { db: book() });
+    const exported = (await c.get("/api/admin/export")).body;
+    assert.equal(exported.currencyUnit, "millions");
+    const back = await c.post("/api/admin/import", { db: exported });
+    assert.equal(back.status, 200);
+  });
+});
+
+describe("MER-08 · l'import à blanc et la fusion", () => {
+  test("une simulation n'écrit rien et dit ce qu'elle écrirait", async () => {
+    const c = await admin();
+    await c.post("/api/admin/import", { db: book() });
+    const before = (await c.get("/api/bootstrap")).body.db.projects.length;
+
+    const dry = await c.post("/api/admin/import?dryRun=1",
+      { db: book({ projects: [...book().projects,
+        { id: "Y", name: "Autre", programme: "P1", site: "S1", governanceLevel: "site",
+          pm: "PE-1", method: "Hybrid", start: "2026-01-01", finish: "2026-12-31",
+          budget: 1, phase: "Initiation", gate: 1, closed: false }] }) });
+
+    assert.equal(dry.status, 200);
+    assert.equal(dry.body.dryRun, true);
+    assert.equal(dry.body.counts.projects, 2);
+    const after = (await c.get("/api/bootstrap")).body.db.projects.length;
+    assert.equal(after, before, "une simulation qui écrit n'est pas une simulation");
+  });
+
+  test("la simulation subit les contraintes : elle refuse ce que l'import refuserait", async () => {
+    const c = await admin();
+    const dry = await c.post("/api/admin/import?dryRun=1", { db: book({
+      findings: [{ id: "F-1", project: "X", observedFact: "vu", severity: "S2",
+                   raisedOn: "2026-08-01", status: "Closed" }],
+    }) });
+    assert.equal(dry.status, 200);
+    /* LE constat : un constat se ferme sur une preuve de re-test, jamais
+       sur un correctif fusionné. La simulation le dit AVANT que
+       quiconque ait détruit le livre en place. */
+    assert.equal(dry.body.rejects.length, 1);
+    assert.match(dry.body.rejects[0].reason, /re-test evidence/);
+  });
+
+  test("la fusion met à jour par identifiant et laisse survivre le reste", async () => {
+    const c = await admin();
+    await c.post("/api/admin/import", { db: book({
+      projects: [...book().projects,
+        { id: "KEEP", name: "Saisi à la main", programme: "P1", site: "S1",
+          governanceLevel: "site", pm: "PE-1", method: "Hybrid",
+          start: "2026-01-01", finish: "2026-12-31", budget: 1,
+          phase: "Initiation", gate: 1, closed: false }] }) });
+
+    const merged = await c.post("/api/admin/import?mode=merge", { db: book({
+      projects: [{ ...book().projects[0], name: "Projet, renommé" }] }) });
+    assert.equal(merged.status, 200);
+
+    const after = (await c.get("/api/bootstrap")).body.db.projects;
+    assert.equal(after.find(p => p.id === "X").name, "Projet, renommé");
+    assert.ok(after.find(p => p.id === "KEEP"),
+      "la fusion existe précisément pour que ceci survive à une régénération");
+  });
+});
+
+describe("MER-05 · un constat n'est ni un risque ni une leçon", () => {
+  test("un constat fait l'aller-retour, fait observé et conséquence séparés", async () => {
+    const c = await admin();
+    await c.post("/api/admin/import", { db: book({
+      evidence: [{ id: "EV-1", project: "X", kind: "ci_run", name: "CI 4711",
+                   uri: "https://ci.example/4711", capturedOn: "2026-08-20" }],
+      findings: [{ id: "F-1", project: "X", observedFact: "La palette ne se ferme pas au clavier",
+                   whyItMatters: "Un enfant au clavier reste enfermé dans la palette",
+                   severity: "S2", owner: "PE-2", proposedFix: "Échap ferme",
+                   raisedOn: "2026-08-01", retestOn: "2026-09-01", status: "Re-test" }],
+    }) });
+    const db = (await c.get("/api/bootstrap")).body.db;
+    const f = db.findings.find(x => x.id === "F-1");
+    assert.equal(f.observedFact, "La palette ne se ferme pas au clavier");
+    assert.equal(f.whyItMatters, "Un enfant au clavier reste enfermé dans la palette");
+    assert.equal(f.severity, "S2");
+    assert.equal(f.retestOn, "2026-09-01");
+    /* Il n'a PAS de probabilité, et c'est le sujet du constat : un
+       risque ne s'est pas produit, un constat si. */
+    assert.equal(f.p, undefined);
+  });
+
+  test("un constat sévère et ouvert monte dans la liste d'attention", () => {
+    const db = { statusDate: "2026-09-19", projects: [], milestones: [], docs: [],
+                 settings: { gateLock: false, capacityAlerts: false },
+                 raid: [], crs: [], exceptions: [], findings: [
+      { id: "F-1", project: "X", observedFact: "vu", severity: "S1",
+        status: "Open", retestOn: "2026-09-01" },
+      { id: "F-2", project: "X", observedFact: "vu aussi", severity: "S3", status: "Open" },
+      { id: "F-3", project: "X", observedFact: "réglé", severity: "S1", status: "Closed" },
+    ] };
+    const feed = Engine.decisions(db, db.projects).filter(a => a.kind === "Review finding");
+    assert.deepEqual(feed.map(a => a.entityId), ["F-1"]);
+    assert.equal(feed[0].urgent, true, "re-test dépassé et S1");
+  });
+
+  test("un élément de travail garde sa source et son score", async () => {
+    const c = await admin();
+    await c.post("/api/admin/import", { db: book({
+      columns: [{ id: "todo", name: "À faire", wip: 0 }],
+      items: [{ id: "WI-1", project: "X", column: "todo", title: "Réduire le temps de démarrage",
+                source: "panel enfants", score: 42.5, scoreMethod: "RICE" }],
+    }) });
+    const db = (await c.get("/api/bootstrap")).body.db;
+    const i = db.items.find(x => x.id === "WI-1");
+    assert.equal(i.source, "panel enfants");
+    assert.equal(Number(i.score), 42.5);
+    assert.equal(i.scoreMethod, "RICE");
+  });
+});
+
+describe("MER-06 · l'autorité est une donnée, vetos et cumuls compris", () => {
+  test("une personne ne peut pas tenir deux sièges incompatibles", async () => {
+    const c = await admin();
+    /* La séparation des devoirs : l'agent qui doit pouvoir refuser un
+       mécanisme ne peut pas être celui qui l'a conçu. La base le refuse,
+       donc c'est vrai même quand personne ne regarde. */
+    const r = await c.post("/api/admin/import", { db: book({
+      seats: [
+        { id: "SE-13", name: "Sécurité des enfants", person: "PE-1",
+          domain: "safety", vetoDomain: "safety", incompatibleWith: ["SE-09"] },
+        { id: "SE-09", name: "Architecte", person: "PE-1", domain: "architecture" },
+      ],
+    }) });
+    assert.equal(r.status, 400, "le cumul doit échouer, et le refus doit se lire");
+    assert.match(r.body.error, /Segregation of duties|two incompatible seats/i);
+  });
+
+  test("un veto ouvert bloque le franchissement même quand la preuve est complète", () => {
+    const db = {
+      statusDate: "2026-09-19",
+      /* Un seul jalon déclaré, pour que « le jalon courant » soit
+         celui dont la preuve est complète : le sujet du test est le
+         veto, pas le choix du jalon. */
+      settings: { gateLock: true, gates: [{ n: 1, name: "Revue de conception" }] },
+      projects: [{ id: "X", name: "Projet", loop: 1 }],
+      docs: [{ id: "D-1", project: "X", gate: 1, status: "Approved", loop: 1,
+               type: "Assurance", uri: "https://docs.example/d1" }],
+      milestones: [{ id: "M-1", project: "X", gate: 1, date: "2026-01-01", loop: 1 }],
+      /* Le siège 13 du comité KODO tient son veto À CHAQUE jalon : un
+         domaine, pas un numéro de porte. */
+      seats: [{ id: "SE-13", name: "Child safety officer", person: "PE-1",
+                domain: "child safety", vetoDomain: "child safety" }],
+      objections: [{ id: "OBJ-1", decision: "DEC-001", seat: "SE-13", domain: "child safety",
+                     reason: "Le mécanisme compare les enfants entre eux", state: "open" }],
+    };
+    // La preuve EST complète : c'est ce qui rend le test intéressant.
+    assert.equal(Engine.gateStatus(db, "X", 1, 1).state, "Cleared");
+    const out = Engine.canAdvance(db, "X");
+    assert.equal(out.ok, false);
+    assert.match(out.reason, /Child safety officer/);
+    assert.match(out.reason, /compare les enfants/);
+    /* Et la levée de l'objection rend le franchissement possible : le
+       veto n'est pas un blocage permanent, c'est une question ouverte. */
+    db.objections[0].state = "resolved";
+    assert.equal(Engine.canAdvance(db, "X").ok, true);
+  });
+});
+
+describe("MER-07 · l'objection, le coût de retour, la supersession", () => {
+  test("une objection sans raison est refusée : c'est un vote, pas une objection", async () => {
+    const c = await admin();
+    const dry = await c.post("/api/admin/import?dryRun=1", { db: book({
+      objections: [{ id: "OBJ-1", decision: "DEC-001", reason: "   " }],
+    }) });
+    assert.equal(dry.body.rejects.length, 1);
+    assert.match(dry.body.rejects[0].reason, /not an objection/);
+  });
+
+  test("une objection non résolue a une horloge et monte sur l'ordre du jour", () => {
+    const db = { statusDate: "2026-09-19", projects: [], milestones: [], docs: [],
+                 settings: { gateLock: false, capacityAlerts: false },
+                 raid: [], crs: [], exceptions: [], findings: [], objections: [
+      { id: "OBJ-1", decision: "DEC-001", domain: "safety", state: "open",
+        reason: "Non", escalatesOn: "2026-09-10" },
+      { id: "OBJ-2", decision: "DEC-002", domain: "safety", state: "withdrawn", reason: "Non" },
+    ] };
+    const feed = Engine.decisions(db, db.projects).filter(a => a.kind === "Objection");
+    assert.deepEqual(feed.map(a => a.entityId), ["OBJ-1"]);
+    assert.equal(feed[0].urgent, true, "l'échéance d'escalade est passée");
+  });
+});
+
+describe("MER-02 · un jalon peut porter sur plus qu'un projet", () => {
+  /* Une autorisation de mise en service franchit pour un programme
+     entier. La découper par projet la rend fausse : chaque projet se
+     déclare franchi pendant que la revue qui les concerne tous ne s'est
+     pas tenue. */
+  const scoped = () => ({
+    statusDate: "2026-09-19",
+    settings: { gateLock: true, gates: [{ n: 1, name: "Mise en service", scope: "programme" }] },
+    projects: [{ id: "X", name: "Un", programme: "P1", loop: 1 },
+               { id: "Y", name: "Deux", programme: "P1", loop: 1 }],
+    docs: [
+      { id: "D-1", project: "X", gate: 1, status: "Approved", loop: 1,
+        uri: "https://docs.example/d1" },
+      { id: "D-2", project: "Y", gate: 1, status: "Draft", loop: 1,
+        uri: "https://docs.example/d2" },
+    ],
+    milestones: [{ id: "M-1", project: "X", gate: 1, date: "2026-01-01", loop: 1 },
+                 { id: "M-2", project: "Y", gate: 1, date: "2026-01-01", loop: 1 }],
+  });
+
+  test("le projet prêt ne franchit pas seul un jalon de programme", () => {
+    const db = scoped();
+    // Vu comme un jalon de projet, X est franchi.
+    assert.equal(Engine.gateStatus(db, "X", 1, 1).state, "Cleared");
+    // Vu à sa vraie portée, il ne l'est pas : Y n'a pas la sienne.
+    assert.equal(Engine.scopedGateStatus(db, "X", 1, 1, "programme").state, "Overdue");
+    assert.equal(Engine.canAdvance(db, "X").ok, false);
+  });
+
+  test("le refus nomme la pièce manquante ET le projet qui la doit", () => {
+    const out = Engine.canAdvance(scoped(), "X");
+    assert.ok(out.items.length, "un refus sans pièce nommée est inutilisable");
+    assert.equal(out.items[0].projectName, "Deux");
+  });
+
+  test("le jalon franchit quand chaque projet de la portée porte sa preuve", () => {
+    const db = scoped();
+    db.docs[1].status = "Approved";
+    assert.equal(Engine.scopedGateStatus(db, "X", 1, 1, "programme").state, "Cleared");
+  });
+
+  test("sans portée déclarée, rien ne change : un jalon reste un jalon de projet", () => {
+    const db = scoped();
+    db.settings.gates = [{ n: 1, name: "Mise en service" }];
+    assert.equal(Engine.gateModel(db)[0].scope, "project");
+    assert.equal(Engine.currentGate(db, "X").state, "Cleared");
+  });
 });

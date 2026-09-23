@@ -32,6 +32,17 @@ const DEFAULT_SETTINGS = {
   /* V-04 — the capital envelope the queue is ranked against, in millions.
      Zero means "no envelope agreed", and nothing falls below the line. */
   capexEnvelope: 0,
+  /* MER-01 — le modèle de jalons, en donnée. `null` veut dire « garder
+     les quatre intégrés » : un portefeuille qui n'a rien déclaré ne
+     change pas de comportement. Un produit qui a six jalons qui
+     bouclent les déclare ici, et le verrouillage de jalon s'applique
+     enfin aux jalons qui bloquent réellement sa sortie. */
+  gates: null,
+  /* Au-delà de combien de tours une boucle est elle-même une alerte.
+     Zéro = aucune limite décidée, et la boucle ne déclenche rien —
+     même règle que `notifyRetentionDays` : on s'abstient plutôt que
+     d'inventer un seuil que personne n'a posé. */
+  gateLoopLimit: 0,
   cadence: "Weekly — Monday 09:00",
   orgName: "MERIDIAN",
   /* SaaS-04 — the instance's own name in a fleet; empty on a single one. */
@@ -56,6 +67,19 @@ const DEFAULT_SETTINGS = {
 /* Both drivers already decode jsonb, but a plain JSON string round-trips
    as a bare JS string that must not be parsed again — so parse only when
    it actually looks like encoded JSON, and keep the value otherwise. */
+/* NEW-01 (docs/36) — the one shape an allocation leaves the product in.
+   The importer derives the keys it accepts from THIS function, so a field
+   added here is importable the day it is exported: KODO's hand-typed list
+   (MER-14) refused `capitalised`, which this very serialiser writes, and
+   the product could no longer import its own export. */
+export const allocationOut = (a) => ({
+  id: String(a.id), person: a.person_id, project: a.project_id,
+  from: a.from_date, to: a.to_date, pct: a.pct,
+  // capitalised effort is not the same money as expensed (V-05/V-09)
+  capitalised: a.capitalised !== false,
+  version: a.row_version,
+});
+
 export function jsonValue(v) {
   if (typeof v !== "string") return v;
   try { return JSON.parse(v); } catch { return v; }
@@ -105,15 +129,17 @@ export async function loadPortfolio(user) {
     ids.length ? many(sql, [ids, ...extra]) : Promise.resolve([]);
 
   const [
-    activities, deps, milestones, ledger, raidRows, crRows, stepRows,
+    activities, deps, milestones, requirementRows, ledger, raidRows, crRows, stepRows,
     allocations, docs, columns, items, crossDeps, narrativeRows, extLinks,
     benefits, waves, commitments, timesheets, lessonRows, tolerances, exceptions, caseRows, criterionRows,
     stakeholderRows, commsRows, reconfirmRows,
+    evidenceRows, findingRows, seatRows, seatConflicts, objectionRows,
   ] = await Promise.all([
     inScope(`SELECT * FROM activity WHERE project_id = ANY($1) ORDER BY project_id, stage`),
     inScope(`SELECT d.* FROM activity_dep d JOIN activity a ON a.id = d.activity_id
               WHERE a.project_id = ANY($1)`),
     inScope(`SELECT * FROM milestone WHERE project_id = ANY($1) ORDER BY due_date`),
+    inScope(`SELECT * FROM requirement WHERE project_id = ANY($1) ORDER BY id`),
     /* Individual postings, not a monthly sum. The aggregate was enough to
        compute actual cost, but it left no line to point at — so a
        mis-posting could not be corrected, which is the whole reason the
@@ -174,6 +200,21 @@ export async function loadPortfolio(user) {
        reconfirmé À CE jalon » est une question par jalon, qu'une colonne
        unique ne pouvait pas porter. */
     inScope(`SELECT * FROM case_reconfirmation WHERE project_id = ANY($1) ORDER BY project_id, gate`),
+    /* MER-11 — la preuve, document ou non. Une exécution d'intégration
+       continue n'a ni révision ni propriétaire ; la forcer dans le
+       registre documentaire produit une révision « 0.1 » qui ne veut
+       rien dire. Bornée au périmètre comme tout le reste. */
+    inScope(`SELECT * FROM evidence WHERE project_id = ANY($1) ORDER BY captured_on DESC, id`),
+    /* MER-05 — les constats de revue. Ni risques (ils se sont produits)
+       ni enseignements (ils sont ouverts et bloquants). */
+    inScope(`SELECT * FROM finding WHERE project_id = ANY($1) ORDER BY id`),
+    /* MER-06 — les sièges. Une gouvernance, contrairement à un
+       portefeuille, n'est pas bornée par projet : qui siège et qui peut
+       opposer un veto est un fait de groupe. */
+    many(`SELECT * FROM seat ORDER BY id`),
+    many(`SELECT * FROM seat_conflict ORDER BY seat_id, other_id`),
+    /* MER-07 — le registre des dissensions. */
+    many(`SELECT * FROM decision_objection ORDER BY raised_on DESC, id`),
   ]);
 
   /* La longueur d'échelle déclarée par chaque programme, lue une fois :
@@ -187,6 +228,12 @@ export async function loadPortfolio(user) {
     return [pr.id, n];
   }));
   const ladderOf = (programmeId) => ladderByProgramme.get(programmeId) ?? 4;
+
+  const conflictsBySeat = new Map();
+  for (const c of seatConflicts) {
+    if (!conflictsBySeat.has(c.seat_id)) conflictsBySeat.set(c.seat_id, []);
+    conflictsBySeat.get(c.seat_id).push(c.other_id);
+  }
 
   const depsByActivity = new Map();
   for (const d of deps) {
@@ -209,6 +256,11 @@ export async function loadPortfolio(user) {
 
   return {
     orgName: settings.orgName ?? "MERIDIAN",
+    /* MER-09 — le livre DIT son unité. Le sérialiseur divise par un
+       million (`toM`), donc il l'écrit, et un livre exporté d'ici se
+       réimporte sans que quiconque ait à deviner. Un livre qui ne le
+       dit pas est refusé à l'import, ce qui est le but. */
+    currencyUnit: "millions",
     statusDate: await statusDate(settings),
     currentUser: user?.personId ?? null,
     viewer: user ? { id: user.id, role: user.role, name: user.displayName } : null,
@@ -284,6 +336,9 @@ export async function loadPortfolio(user) {
       scaffoldedGates: p.scaffolded_gates ?? null,
       ladderDiffers: p.scaffolded_gates != null
         && p.scaffolded_gates !== ladderOf(p.programme_id),
+      /* MER-01 — quel tour de boucle ce projet fait. Tout ce qui
+         existe est au tour 1 : la colonne a un défaut. */
+      loop: p.gate_loop ?? 1,
       // the post-implementation verdict, where one has been given (V-01)
       pirOn: p.pir_on ?? null, pirVerdict: p.pir_verdict ?? null, pirNote: p.pir_note ?? "",
       /* PM-08 — les trois signatures de la clôture. */
@@ -336,7 +391,8 @@ export async function loadPortfolio(user) {
 
     milestones: milestones.map((m) => ({
       id: m.id, project: m.project_id, name: m.name, date: m.due_date,
-      baseDate: m.base_date, gate: m.gate, kind: m.kind, owner: m.owner_id,
+      baseDate: m.base_date, gate: m.gate, loop: m.gate_loop ?? 1,
+      kind: m.kind, owner: m.owner_id,
       done: m.done, intrusive: m.intrusive === true,
       /* PM-04 — les critères posés d'avance, et qui a constaté. */
       acceptanceCriteria: m.acceptance_criteria ?? "",
@@ -351,6 +407,64 @@ export async function loadPortfolio(user) {
       retiredGate: m.retired_gate ?? null,
       externalSource: m.external_source ?? null, externalId: m.external_id ?? null,
       origin: m.origin ?? "local", version: m.row_version,
+    })),
+
+    /* MER-03 — le registre d'exigences. C'était le plus gros manque du
+       produit : un portefeuille qui suit des projets sans suivre ce
+       qu'ils doivent tenir oblige à tenir les exigences À CÔTÉ de
+       l'outil, ce qui est exactement la situation qu'il existe pour
+       supprimer.
+
+       `verification` est la MÉTHODE promise ; `verifiedBy` la PREUVE
+       produite. Les deux sont séparées parce que les confondre est la
+       façon dont une exigence se déclare vérifiée du seul fait que
+       quelqu'un a écrit comment elle le serait. */
+    requirements: requirementRows.map((r) => ({
+      id: r.id, project: r.project_id, statement: r.statement,
+      source: r.source, priority: r.priority,
+      verification: r.verification, verifiedBy: r.verified_by,
+      gate: r.gate_n, status: r.status, waiverReason: r.waiver_reason,
+      owner: r.owner_id, updated: r.updated_on, version: r.row_version,
+    })),
+
+    /* MER-11 — une pièce de preuve pointe un document DU REGISTRE ou
+       porte sa propre adresse, jamais ni l'un ni l'autre : la contrainte
+       `evidence_has_a_source` le tient côté base. */
+    evidence: evidenceRows.map((e) => ({
+      id: e.id, project: e.project_id, document: e.document_id,
+      kind: e.kind, name: e.name, uri: e.uri, digest: e.digest,
+      gate: e.gate_n, loop: e.gate_loop,
+      capturedOn: e.captured_on, capturedBy: e.captured_by,
+    })),
+
+    /* MER-05 — le constat. `observedFact` est ce qui a été VU ;
+       `whyItMatters` est la conséquence. Deux colonnes parce que les
+       confondre est la façon dont un constat devient une opinion. */
+    findings: findingRows.map((f) => ({
+      id: f.id, project: f.project_id, requirement: f.requirement_id,
+      gate: f.gate_n, loop: f.gate_loop,
+      observedFact: f.observed_fact, whyItMatters: f.why_it_matters,
+      severity: f.severity, owner: f.owner_id, proposedFix: f.proposed_fix,
+      raisedOn: f.raised_on, retestOn: f.retest_on, status: f.status,
+      closedEvidence: f.closed_evidence_id, waiverReason: f.waiver_reason,
+    })),
+
+    /* MER-06 — qui siège, sur quel domaine, avec ou sans veto, et ce
+       que le siège ne peut pas être cumulé avec. */
+    seats: seatRows.map((s2) => ({
+      id: s2.id, name: s2.name, person: s2.person_id, domain: s2.domain,
+      vetoDomain: s2.veto_domain, observer: s2.observer, active: s2.active,
+      incompatibleWith: conflictsBySeat.get(s2.id) ?? [],
+    })),
+
+    /* MER-07 — les objections. Une gouvernance par consentement a
+       besoin d'un endroit pour l'objection raisonnée ; un conseil
+       réglementé a besoin d'un endroit pour la position minoritaire.
+       C'est le même endroit. */
+    objections: objectionRows.map((o) => ({
+      id: o.id, decision: o.decision_id, seat: o.seat_id, domain: o.domain,
+      reason: o.reason, raisedOn: o.raised_on, escalatesOn: o.escalates_on,
+      state: o.state, resolution: o.resolution,
     })),
 
     ledger: ledger.map((l) => ({
@@ -492,19 +606,14 @@ export async function loadPortfolio(user) {
       version: c.row_version,
     })),
 
-    allocations: allocations.map((a) => ({
-      id: String(a.id), person: a.person_id, project: a.project_id,
-      from: a.from_date, to: a.to_date, pct: a.pct,
-      // capitalised effort is not the same money as expensed (V-05/V-09)
-      capitalised: a.capitalised !== false,
-      version: a.row_version,
-    })),
+    allocations: allocations.map(allocationOut),
 
     docs: docs
       .filter((d) => !d.project_id || idSet.has(d.project_id))
       .map((d) => ({
         id: d.id, project: d.project_id, name: d.name, type: d.doc_type,
-        gate: d.gate, owner: d.owner_id, rev: d.revision, status: d.status,
+        gate: d.gate, loop: d.gate_loop ?? 1,
+        owner: d.owner_id, rev: d.revision, status: d.status,
         updated: d.updated_on,
         /* R-01 / R-13 — the artefact, its frozen address, its lineage. */
         uri: d.uri ?? "", uriHash: d.uri_locked_hash ?? "",
@@ -557,6 +666,12 @@ export async function loadPortfolio(user) {
     items: items.map((i) => ({
       id: i.id, project: i.project_id, column: i.column_id, title: i.title,
       assignee: i.assignee_id, points: i.points, priority: i.priority,
+      /* MER-05 — d'où vient cet élément, ce qu'il vaut, et par quelle
+         méthode. Une lettre de priorité perdait les trois : un arriéré
+         d'améliorations noté par RICE et arrivé d'un panel d'enfants
+         devenait « P2 », et la note comme la source disparaissaient. */
+      source: i.source ?? "", score: i.score === null || i.score === undefined ? null : Number(i.score),
+      scoreMethod: i.score_method ?? "",
       created: i.created_on,
       externalSource: i.external_source ?? null, externalId: i.external_id ?? null,
       version: i.row_version,
