@@ -15,6 +15,7 @@
 import { test, before, after, describe } from "node:test";
 import assert from "node:assert/strict";
 import { boot, shutdown, as, GROUP_PROJECT } from "./harness.js";
+import { query } from "../src/db.js";
 import {
   prioritise, PRIORITY_TEXT, INPUTS, DEFAULT_WEIGHTS,
   formatScore, formatFte, formatInput, formatShare,
@@ -401,7 +402,28 @@ describe("REQ-24 · the ranking over the wire", () => {
   before(async () => { await boot(); });
   after(shutdown);
 
-  test("the seeded book ranks nothing and says, row by row, exactly what is missing", async () => {
+  /* REQ-48 — the demonstration book now carries a case on some projects
+     and deliberately not on others, so a fresh install shows BOTH halves
+     of the screen: an order, and the worklist of what is not placed. */
+  test("the seeded book shows an order AND a not-placed worklist", async () => {
+    const g = await as("groupCBP");
+    const r = await g.get("/api/prioritisation");
+    assert.equal(r.status, 200);
+    assert.ok(r.body.counts.ranked > 0, "some seeded projects carry all four inputs");
+    assert.ok(r.body.counts.notPlaced > 0, "and some deliberately do not");
+    const noCase = r.body.notPlaced.filter((x) => x.missing.includes("value"));
+    assert.ok(noCase.length, "a project with no case is listed as not placed, not ranked last");
+  });
+
+  /* Before REQ-48 this read "the seeded book ranks nothing": the property
+     was asserted through the demonstration data. It is a property of the
+     RULE — a book in which no project has stated its value ranks nothing,
+     and every row says what it lacks — so the test now builds that book
+     itself, by removing every case, instead of relying on the seed to
+     have none. Nothing it asserts was loosened. */
+  test("a book with no business case ranks nothing and says, row by row, exactly what is missing", async () => {
+    await query(`DELETE FROM case_reconfirmation`);
+    await query(`DELETE FROM business_case`);
     const g = await as("groupCBP");
     const r = await g.get("/api/prioritisation");
     assert.equal(r.status, 200);
@@ -416,8 +438,12 @@ describe("REQ-24 · the ranking over the wire", () => {
 
   test("a project reaches the order once its four inputs exist, and leaves it when one is withdrawn", async () => {
     const admin = await as("admin");
+    /* The precondition, built rather than inherited from the seed (REQ-48):
+       this project has no case, so it is not in the order yet. */
+    await query(`DELETE FROM business_case WHERE project_id = $1`, [GROUP_PROJECT]);
     const before = await admin.get("/api/prioritisation");
     const wasRanked = before.body.ranked.length;
+    assert.ok(!before.body.ranked.some((x) => x.id === GROUP_PROJECT), "not in the order yet");
 
     const put = await admin.put(`/api/projects/${GROUP_PROJECT}/case`, {
       summary: "Card scheme mandate: the alternative is a fine.",
@@ -512,6 +538,12 @@ describe("REQ-24 · changing a weight re-ranks, and is audited", () => {
 
   /** Two projects that swap places when value stops outweighing capacity. */
   async function twoRankedProjects(admin) {
+    /* REQ-48 — the seed now ranks projects of its own, so the "otherwise
+       empty ranking" this swap is measured on is BUILT here: every case is
+       removed, then exactly these two are written. The two-row order and
+       its reversal are asserted exactly as before. */
+    await query(`DELETE FROM case_reconfirmation`);
+    await query(`DELETE FROM business_case`);
     await admin.put("/api/projects/PRJ-101/case", {
       summary: "Big claim, heavy team.", expectedCost: 9,
       expectedBenefit: 40, valueConfidence: 3 });

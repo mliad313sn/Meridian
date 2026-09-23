@@ -6548,14 +6548,88 @@ function importAll() {
       catch (e) { return toast("Import failed", "That file is not valid JSON", true); }
       if (!parsed || !Array.isArray(parsed.projects))
         return toast("Import failed", "No project register found in that file", true);
-      App.write("Book imported", (a) => a.post("/admin/import", { db: parsed }),
-        { detail: parsed.projects.length + " projects" });
+      confirmImport(parsed);
     };
     reader.readAsText(file);
   });
   document.body.appendChild(input);
   input.click();
   setTimeout(() => input.remove(), 60000);
+}
+
+/* NEW-20 — the name of each list of the book, as the import dry run
+   reports it (`wouldErase`, keyed on the book's own list names). Literal
+   t() calls, so the i18n gate holds every one of them to FR and ES. */
+function bookListLabel(k) {
+  return ({
+    sites: t("Sites"), people: t("People"), programmes: t("Programmes"), projects: t("Projects"),
+    activities: t("Schedule stages"), crossDeps: t("Cross-project dependencies"),
+    milestones: t("Milestones and gates"), requirements: t("Requirements"),
+    crs: t("Change requests"), raid: t("RAID items"), ledger: t("Cost postings"),
+    docs: t("Documents"), items: t("Work items"), allocations: t("Allocations"),
+    evidence: t("Evidence"), findings: t("Review findings"), seats: t("Governance seats"),
+    objections: t("Objections"), windows: t("Site windows"), absences: t("Absences"),
+    benefits: t("Benefits"), waves: t("Rollout waves"), commitments: t("Commitments"),
+    timesheets: t("Timesheets"), tolerances: t("Tolerances"), exceptions: t("Exceptions"),
+    businessCases: t("Business cases"), caseReconfirmations: t("Case reconfirmations"),
+    lessons: t("Lessons"), criteria: t("Gate criteria"), stakeholders: t("Stakeholders"),
+    comms: t("Communication plan"), extLinks: t("External links"),
+    narrative: t("Report narrative"), meetingSeries: t("Meeting series"),
+    meetings: t("Meetings"), decisions: t("Decisions"), actions: t("Meeting actions"),
+    raidReviews: t("RAID reviews"),
+  })[k] ?? k;
+}
+
+/* NEW-20 — a replace erases everything the file does not carry, and the
+   screen used to replace on the spot, without a word. It now runs the
+   dry run first (the same code path as the import, rolled back), and
+   says before anything is written which lists the database holds that
+   the file would not bring back — with the merge offered beside it,
+   because a book that does not carry a list should be merged. */
+async function confirmImport(parsed) {
+  let dry;
+  try { dry = await api.post("/admin/import?dryRun=1", { db: parsed }); }
+  catch (e) { return reportError(e, t("The file could not be checked")); }
+  const erase = Object.entries(dry?.wouldErase ?? {});
+  const refused = (dry?.rejects ?? []).length;
+  const replace = () => App.write("Book imported", (a) => a.post("/admin/import", { db: parsed }),
+    { detail: parsed.projects.length + " projects" });
+  const merge = () => App.write("Book merged", (a) => a.post("/admin/import?mode=merge", { db: parsed }),
+    { detail: parsed.projects.length + " projects" });
+  dialog({
+    title: t("Replace the whole book?"), kicker: t("Import book"), wide: true,
+    body: h("div", { "data-import-check": "" },
+      h("p", { style: "margin:0 0 10px" },
+        t("A replace deletes the whole book in this database and puts the file in its place. Whatever the file does not carry is erased, not kept.")),
+      erase.length
+        ? h("div", { class: "import-erase", role: "alert" },
+            h("p", { class: "strong small", style: "margin:0 0 6px;color:var(--sig-red)" },
+              t("This file carries none of the lists below. Replacing will erase what the database holds for them:")),
+            h("ul", { class: "small", style: "margin:0 0 10px;padding-left:18px" },
+              ...erase.map(([k, n]) => h("li", { "data-list": k },
+                bookListLabel(k), " — ", h("span", { class: "mono strong" }, String(n)), " ",
+                t("row(s) erased")))),
+            h("p", { class: "small muted", style: "margin:0" },
+              t("A file that does not carry a list should be merged instead: a merge updates rows by identifier and erases nothing.")))
+        : h("p", { class: "small muted", style: "margin:0" },
+            t("The file carries every list this database holds rows for; nothing is erased that the file does not bring back.")),
+      refused
+        ? h("p", { class: "small bad", style: "margin:10px 0 0" },
+            String(refused) + " " + t("row(s) of the file would be refused by name — the dry run lists them in the audit trail."))
+        : null),
+    /* The same question the Import button asked (R7.3): a control the
+       account has no authority for is absent, not greyed. */
+    actions: (closeDialog) => [
+      h("button", { class: "btn", onClick: () => closeDialog() }, t("Cancel")),
+      App.can("data.import", {})
+        ? h("button", { class: "btn", onClick: () => { closeDialog(); merge(); } }, t("Merge instead"))
+        : null,
+      App.can("data.import", {})
+        ? h("button", { class: "btn btn-danger", onClick: () => { closeDialog(); replace(); } },
+            erase.length ? t("Replace and erase") : t("Replace the book"))
+        : null,
+    ].filter(Boolean),
+  });
 }
 
 function resetAll() {

@@ -49,6 +49,32 @@ const PORTFOLIO_TABLES = [
   "programme", "person", "site",
 ];
 
+/* NEW-20 — which table each list of the book fills. A replace deletes
+   every table in PORTFOLIO_TABLES whatever the file carries, so a file
+   with no meeting register (a KODO book, any export older than 5.21.0)
+   erased the meeting register without a word. The dry run now says, per
+   list, how many rows the database holds that the file would not bring
+   back — computed from this map, before anything is deleted. */
+export const BOOK_TABLES = {
+  sites: "site", people: "person", programmes: "programme", projects: "project",
+  activities: "activity", crossDeps: "cross_dep", milestones: "milestone",
+  requirements: "requirement", crs: "change_request", raid: "raid_item", ledger: "cost_line",
+  docs: "document", items: "work_item", allocations: "allocation",
+  evidence: "evidence", findings: "finding", seats: "seat", objections: "decision_objection",
+  windows: "site_window", absences: "person_absence", benefits: "benefit", waves: "rollout_wave",
+  commitments: "commitment", timesheets: "timesheet", tolerances: "project_tolerance",
+  exceptions: "project_exception", businessCases: "business_case",
+  caseReconfirmations: "case_reconfirmation", lessons: "lesson", criteria: "gate_criterion",
+  stakeholders: "stakeholder", comms: "comms_plan", extLinks: "ext_link",
+  narrative: "report_narrative",
+  meetingSeries: "meeting_series", meetings: "meeting_occurrence", decisions: "meeting_decision",
+  actions: "meeting_action", raidReviews: "raid_review",
+};
+
+/** Does the file carry at least one row of this list? */
+const carries = (v) => (Array.isArray(v) ? v.length > 0
+  : v && typeof v === "object" ? Object.keys(v).length > 0 : false);
+
 const clean = (v) => (v === undefined || v === "" ? null : v);
 const int = (v, d = 0) => (Number.isFinite(Number(v)) ? Math.round(Number(v)) : d);
 /* NEW-05 — a number that may be absent: absent stays absent (null), it
@@ -192,9 +218,36 @@ export async function importBook(book, user, opts = {}) {
     throw new HttpError(400, `${known?.message ?? "That row could not be imported"} — ${e.importAt}`);
   };
 
+  const wouldErase = {};
+  /* NEW-19 — the highest row_version each table held before the replace. */
+  const versionFloor = new Map();
+
   const run = async (tracked) => {
     const raw = locate(tracked);
     if (mode === "replace") {
+      /* NEW-20 — what the replace would erase that the file does not
+         bring back, list by list, read before the delete. A list the
+         file carries is replaced by it and is not "erased". */
+      for (const [key, table] of Object.entries(BOOK_TABLES)) {
+        if (carries(book[key])) continue;
+        const r = await raw.query(`SELECT count(*)::int AS n FROM ${table}`);
+        const n = r.rows?.[0]?.n ?? 0;
+        if (n > 0) wouldErase[key] = n;
+      }
+      /* NEW-19 — a replace inserted every row at version 1, so a screen
+         holding version 1 of a row that had been at 7 before the import
+         could write straight over what the import brought in (and one
+         holding 7 was refused for the wrong reason). The rule: after a
+         replace, every row of a table is at a version strictly greater
+         than ANY version that table held before it — the table's maximum
+         plus one — so no version a screen read before the import can
+         match. Read here, applied after the inserts below. */
+      const versioned = await versionedTables(raw);
+      for (const table of PORTFOLIO_TABLES) {
+        if (!versioned.has(table)) continue;
+        const r = await raw.query(`SELECT COALESCE(MAX(row_version), 0)::int AS m FROM ${table}`);
+        versionFloor.set(table, r.rows?.[0]?.m ?? 0);
+      }
       for (const table of PORTFOLIO_TABLES) await raw.query(`DELETE FROM ${table}`);
     }
     /* MER-08 · la fusion par identifiant.
@@ -212,33 +265,38 @@ export async function importBook(book, user, opts = {}) {
     /* NEW-16 — the in-place UPDATEs below (a site's champion, a
        document's supersession, a decision's links) rewrite a row the
        merge handle never sees, so they say their own bump. In replace
-       mode the row was inserted a moment ago at version 1 and stays
-       there, as every other imported row does. */
+       mode the row was inserted a moment ago, and NEW-19 moves every
+       replaced table past its old versions once all rows are in. */
     const bump = (table, cols, next) => (mode === "merge" ? ", " + bumpIfChanged(table, cols, next) : "");
 
     /* ── reference ────────────────────────────────────────────────── */
     for (const s of book.sites ?? []) {
       await t.query(
         `INSERT INTO site (id, city, region, tz_offset, tz_name, headcount, fte, charter,
-                           country, legal_entity, link_mbps, link_kind, readiness, readiness_note)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+                           country, legal_entity, link_mbps, link_kind, readiness, readiness_note,
+                           active)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
         [s.id, s.city, s.region ?? "", Number(s.tz ?? 0), s.tzName ?? "UTC",
          int(s.headcount), int(s.fte), s.role ?? s.charter ?? "",
          /* NEW-05 — what the site is (V-07, MC-01), not only where. */
          s.country ?? "", s.legalEntity ?? "", num(s.linkMbps), s.linkKind ?? "",
          ["Unknown", "Not ready", "Preparing", "Ready"].includes(s.readiness) ? s.readiness : "Unknown",
-         s.readinessNote ?? ""]);
+         s.readinessNote ?? "",
+         /* NEW-18 — the book carries inactive rows too; absent means
+            active, which is what every older file meant. */
+         s.active !== false]);
     }
     for (const p of book.people ?? []) {
       await t.query(
         `INSERT INTO person (id, name, job_role, site_id, day_rate,
-                             employment, rotation, availability, supplier)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+                             employment, rotation, availability, supplier, active)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
         [p.id, p.name, p.role ?? "", p.site, Number(p.rate ?? 0),
          /* NEW-05 — how this person actually works (V-09): a fly-in
             contractor on four-and-two came back as staff at 100 %. */
          p.employment === "contractor" ? "contractor" : "staff", p.rotation ?? "",
-         Math.max(0, Math.min(100, int(p.availability, 100))), p.supplier ?? ""]);
+         Math.max(0, Math.min(100, int(p.availability, 100))), p.supplier ?? "",
+         p.active !== false]);
     }
     // the site champion second, so the person exists (A-12)
     for (const s of book.sites ?? []) {
@@ -249,12 +307,13 @@ export async function importBook(book, user, opts = {}) {
     }
     for (const g of book.programmes ?? []) {
       await t.query(
-        `INSERT INTO programme (id, name, sponsor, manager_id, gate_model, origin)
-         VALUES ($1,$2,$3,$4,$5,$6)`,
+        `INSERT INTO programme (id, name, sponsor, manager_id, gate_model, origin, active)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
         /* NEW-05 — the programme's own ladder (I-3). Dropping it put every
            project of a six-gate programme back on the default four. */
         [g.id, g.name, g.sponsor ?? "", clean(g.managerId),
-         g.gateModel == null ? null : JSON.stringify(g.gateModel), origin(g.origin)]);
+         g.gateModel == null ? null : JSON.stringify(g.gateModel), origin(g.origin),
+         g.active !== false]);
     }
     for (const c of book.columns ?? []) {
       await t.query(`INSERT INTO board_column (id, name, seq, wip) VALUES ($1,$2,$3,$4)
@@ -1216,6 +1275,12 @@ export async function importBook(book, user, opts = {}) {
       counts[k] = (book[k] ?? []).length;
     }
 
+    /* NEW-19 — every row a replace wrote moves past the versions its
+       table held before (see above). Tables that were empty keep 1. */
+    for (const [table, m] of versionFloor) {
+      if (m > 0) await raw.query(`UPDATE ${table} SET row_version = $1`, [m + 1]);
+    }
+
     /* The import replaces every row, so the identifier counters have to
        follow it or the next create collides with an imported id. */
     for (const [prefix, table, where] of [
@@ -1292,13 +1357,17 @@ export async function importBook(book, user, opts = {}) {
         (rejects.length
           ? `; ${rejects.length} row(s) refused: ` + rejects.map((x) => `${x.table} ${x.id}`).join(", ")
           : ""),
-      after: rejects.length ? { mode, rejects } : undefined,
+      /* NEW-20 — and what a replace erased that the file did not carry,
+         so "where did the meeting register go" has an answer in the trail. */
+      after: rejects.length || Object.keys(wouldErase).length
+        ? { mode, rejects, ...(Object.keys(wouldErase).length ? { erased: wouldErase } : {}) }
+        : undefined,
     });
 
     /* La simulation s'arrête ICI, après avoir tout écrit et donc après
        avoir subi toutes les contraintes — c'est ce qui la rend utile.
        L'exception annule la transaction ; rien n'a existé. */
-    if (dryRun) throw new DryRunComplete({ ok: true, dryRun: true, mode, counts, rejects });
+    if (dryRun) throw new DryRunComplete({ ok: true, dryRun: true, mode, counts, rejects, wouldErase });
   };
 
   try {
@@ -1307,5 +1376,5 @@ export async function importBook(book, user, opts = {}) {
     if (e instanceof DryRunComplete) return e.payload;
     located(e);
   }
-  return { ok: true, dryRun: false, mode, counts, rejects };
+  return { ok: true, dryRun: false, mode, counts, rejects, erased: wouldErase };
 }

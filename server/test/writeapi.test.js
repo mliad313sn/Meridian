@@ -769,7 +769,19 @@ describe("V-4 · ce qui a été promis, contre ce qui a été mesuré", () => {
     const t = r.body.value.totals;
     /* La règle qui compte : le total n'additionne QUE l'argent, et dit
        tout haut ce qu'il a laissé dehors. */
-    assert.equal(t.moneyBenefitsCounted, 1);
+    /* REQ-48 — the demonstration book now states benefits of its own,
+       some in money, so the portfolio-wide count is no longer "this
+       project's one". The rule is asserted over the whole report instead,
+       exactly: the total counts every money benefit and nothing else, and
+       its sum is the sum of those benefits' measurements — which is
+       stricter than the single count it replaces. */
+    const every = r.body.value.rows.flatMap((x) => x.benefits);
+    const moneyRows = every.filter((b) => b.money);
+    assert.equal(t.moneyBenefitsCounted, moneyRows.length);
+    assert.ok(row.benefits.some((b) => b.money && b.actual === 3), "this project's money benefit is counted");
+    assert.equal(t.excludedBenefits, every.length - moneyRows.length);
+    const measuredMoney = moneyRows.filter((b) => b.actual != null);
+    assert.equal(t.moneyActual, measuredMoney.reduce((a, b) => a + Number(b.actual), 0));
     assert.ok(t.excludedBenefits >= 1);
     assert.ok(t.excludedUnits.includes("hours"),
       "les unités écartées sont nommées, pas silencieusement absentes");

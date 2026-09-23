@@ -130,8 +130,16 @@ describe("l'identité des allocations (MER-14)", () => {
     const first = (await c.get("/api/admin/export")).body;
     await c.post("/api/admin/import", { db: first });
     const second = (await c.get("/api/admin/export")).body;
-    assert.deepEqual(second.allocations, first.allocations,
+    /* NEW-19 — a replace now moves every row's `version` (the
+       concurrency token) past what a screen could hold from before it,
+       so that one field is compared by its own rule: strictly greater.
+       Every other field, the identifier first, must be identical, which
+       is the MER-14 property this test exists for. */
+    const sansVersion = (xs) => xs.map(({ version, ...rest }) => rest);
+    assert.deepEqual(sansVersion(second.allocations), sansVersion(first.allocations),
       "comparer deux exports ne doit pas montrer toutes les allocations comme modifiées");
+    first.allocations.forEach((a, i) => assert.ok(second.allocations[i].version > a.version,
+      "la version, elle, dépasse celle que tenait un écran avant le remplacement"));
   });
 
   test("une clé inconnue est refusée au lieu d'atterrir à zéro", async () => {

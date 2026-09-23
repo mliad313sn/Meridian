@@ -332,22 +332,39 @@ describe("REQ-30 · chaque figure dit ce qu'elle ne sait pas", () => {
    ═══════════════════════════════════════════════════════════════════ */
 
 describe("REQ-30 · la page servie, et l'instantané écrit", () => {
-  before(async () => { await boot({ today: AS_AT }); });
+  /* REQ-48 — this storyline goes from silence to numbers: a book with no
+     case, no benefit and no tolerance answers four absences, writing a
+     case and a benefit turns three of them into figures, the stored page
+     keeps its absence as an absence, and a tolerance set afterwards moves
+     the live page and not the stored one. Before REQ-48 the demonstration
+     book WAS that silent book, so the storyline was told on the seed.
+     REQ-48 gives the seed a value story of its own, so the silent book is
+     now BUILT here, from the seed, by removing exactly the value
+     registers (cases, benefits, tolerances and what hangs off them).
+     Every assertion below is the one it was; only where the silence
+     comes from has changed. */
+  before(async () => {
+    await boot({ today: AS_AT });
+    for (const tbl of ["project_exception", "project_tolerance", "case_reconfirmation",
+                       "business_case", "benefit"]) {
+      await query(`DELETE FROM ${tbl}`);
+    }
+  });
   after(shutdown);
 
   let periodId = null;
   let storedExposure = null;
 
-  test("le livre de démonstration répond honnêtement : deux mesurées, quatre absences motivées", async () => {
+  test("un livre sans cas, sans bénéfice ni tolérance répond honnêtement : deux mesurées, quatre absences motivées", async () => {
     const admin = await as("admin");
     const r = await admin.get("/api/valuepage");
     assert.equal(r.status, 200, JSON.stringify(r.body));
     const page = r.body;
     assert.equal(page.asAt, AS_AT);
     assert.equal(page.order.length, 6);
-    /* Le livre semé ne porte NI cas d'affaire, NI bénéfice, NI tolérance
-       (REQ-48). Quatre figures sur six doivent donc dire pourquoi elles
-       se taisent — et aucune ne doit rendre un zéro à la place. */
+    /* Ce livre ne porte NI cas d'affaire, NI bénéfice, NI tolérance.
+       Quatre figures sur six doivent donc dire pourquoi elles se taisent
+       — et aucune ne doit rendre un zéro à la place. */
     assert.equal(page.figures.spendAgainstCase.state, "N");
     assert.equal(page.figures.benefitsByStatus.state, "N");
     assert.equal(page.figures.overdueReviews.state, "N");

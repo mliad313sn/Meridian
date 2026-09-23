@@ -108,14 +108,22 @@ export async function statusDate(settings) {
  * same book exported in a different order, and two exports of an
  * unchanged book could not be compared (the MER-14 argument).
  */
-export async function loadPortfolio(user) {
+export async function loadPortfolio(user, { inactive = false } = {}) {
   const settings = await loadSettings();
   const scope = projectScopeSql(user, "p");
 
+  /* NEW-18 — the screens are drawn from ACTIVE sites, programmes and
+     people (a leaver is not offered as an owner, a closed site is not
+     offered as a location), and `/api/bootstrap` keeps that. The BOOK
+     must not: a closed project still sits on its old site and a risk
+     still names the leaver who owned it, so an export that left the
+     inactive rows out wrote pointers the import then refused. `loadBook`
+     asks for them; every row says whether it is active. */
+  const live = inactive ? "" : "WHERE active";
   const [sites, programmes, people, windows] = await Promise.all([
-    many(`SELECT * FROM site WHERE active ORDER BY city, id`),
-    many(`SELECT * FROM programme WHERE active ORDER BY name, id`),
-    many(`SELECT * FROM person WHERE active ORDER BY name, id`),
+    many(`SELECT * FROM site ${live} ORDER BY city, id`),
+    many(`SELECT * FROM programme ${live} ORDER BY name, id`),
+    many(`SELECT * FROM person ${live} ORDER BY name, id`),
     // the plant's own calendar (010) — a site fact, not a project one
     many(`SELECT * FROM site_window ORDER BY starts_on, id`),
   ]);
@@ -295,6 +303,7 @@ export async function loadPortfolio(user) {
       readinessNote: s.readiness_note ?? "",
       /* A-12 — la personne du site qu'on appelle en premier. */
       champion: s.champion_id ?? null,
+      active: s.active !== false,
       version: s.row_version,
     })),
 
@@ -321,7 +330,7 @@ export async function loadPortfolio(user) {
       id: p.id, name: p.name, sponsor: p.sponsor, managerId: p.manager_id,
       /* I-3 — the programme's own gate ladder, or null for the default. */
       gateModel: p.gate_model ? jsonValue(p.gate_model) : null,
-      origin: p.origin ?? "local", version: p.row_version,
+      origin: p.origin ?? "local", active: p.active !== false, version: p.row_version,
     })),
     people: people.map((p) => ({
       id: p.id, name: p.name, role: p.job_role, site: p.site_id,
@@ -330,6 +339,7 @@ export async function loadPortfolio(user) {
          weeks on, two off is not 1.0 FTE for fifty-two weeks. */
       employment: p.employment ?? "staff", rotation: p.rotation ?? "",
       availability: p.availability ?? 100, supplier: p.supplier ?? "",
+      active: p.active !== false,
       version: p.row_version,
     })),
 
@@ -884,7 +894,9 @@ export async function loadMeetingBook(user, db) {
  * name), and it would name a decision this reader was not shown.
  */
 export async function loadBook(user) {
-  const db = await loadPortfolio(user);
+  /* NEW-18 — the book is complete: inactive sites, programmes and people
+     too, flagged `active: false`, so every pointer it writes resolves. */
+  const db = await loadPortfolio(user, { inactive: true });
   const meetings = await loadMeetingBook(user, db);
   const decisions = new Set(meetings.decisions.map((d) => d.id));
   return {

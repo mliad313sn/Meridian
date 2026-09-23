@@ -16,6 +16,7 @@ import { fromM } from "./portfolio.js";
 import { GATES, iso, days, addDays, clamp, D, isoWeek } from "../../shared/engine.js";
 import { nextOccurrenceDate, periodLabel } from "../../shared/meetings.js";
 import * as S from "./seed-data.js";
+import { sweepExceptions } from "./exceptions.js";
 
 /* Which projects the group runs, and which belong to a site (D-03 / R4.1).
    The rule the committee applied: anything crossing more than one site's
@@ -304,7 +305,18 @@ export async function seed({ force = false, today = iso(new Date()) } = {}) {
        register has something to carry forward on day one ─────────── */
   await seedMeetings(today);
 
+  /* ── REQ-48: what the book says it is worth ───────────────────── */
+  await seedValue(today);
+
   await syncIdCounters();
+
+  /* REQ-48 — the exceptions are CONSTATED, not typed: the same hourly
+     sweep production runs (server/src/exceptions.js) reads the
+     tolerances and benefits just written and raises what it finds. A
+     seeded exception row with numbers chosen here would be a claim about
+     the plan the engine never made. After the counters, because the
+     sweep allocates EXC ids from them. */
+  await sweepExceptions();
 
   await query(
     `INSERT INTO audit_event (user_id, user_label, action, entity, detail)
@@ -315,6 +327,44 @@ export async function seed({ force = false, today = iso(new Date()) } = {}) {
 
   console.log(`  seeded ${S.PROJECTS.length} projects · ${USERS.length} users · ${MEETING_SERIES.length} meeting series`);
   return { skipped: false };
+}
+
+/**
+ * REQ-48 — business cases, benefits and tolerances (see seed-data.js for
+ * why the spread is uneven). Written after the accounts, because a case
+ * and a tolerance name the account that wrote or granted them.
+ */
+async function seedValue(today) {
+  const writer = "U-KAUR";
+  let n = 1;
+  for (const c of S.SEED_CASES) {
+    await query(
+      `INSERT INTO business_case (id, project_id, summary, expected_cost, expected_benefit,
+                                  value_confidence, basis, written_by, written_on)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      ["CAS-" + String(n++).padStart(3, "0"), c.project, c.summary,
+       c.cost == null ? null : fromM(c.cost), c.benefit == null ? null : fromM(c.benefit),
+       c.confidence, c.basis, writer, c.written]);
+  }
+  n = 1;
+  for (const b of S.SEED_BENEFITS) {
+    await query(
+      `INSERT INTO benefit (id, project_id, kind, title, detail, measure, unit, baseline, target,
+                            actual, owner_id, realise_on, measured_on, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+      ["BEN-" + String(n++).padStart(2, "0"), b.project, b.kind, b.title, b.detail, b.measure,
+       b.unit, b.baseline, b.target, b.actual, b.owner, iso(addDays(today, b.realise)),
+       b.measured == null ? null : iso(addDays(today, b.measured)), b.status]);
+  }
+  n = 1;
+  for (const x of S.SEED_TOLERANCES) {
+    await query(
+      `INSERT INTO project_tolerance (id, project_id, schedule_days, cost_pct, benefit_pct,
+                                      note, set_by, set_on)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      ["TOL-" + String(n++).padStart(3, "0"), x.project, x.scheduleDays, x.costPct,
+       x.benefitPct, x.note, writer, x.set]);
+  }
 }
 
 async function seedMeetings(today) {
@@ -430,6 +480,10 @@ async function syncIdCounters() {
     ["PE", "person", "true"],
     ["DEC", "meeting_decision", "true"],
     ["ACT", "meeting_action", "true"],
+    ["BEN", "benefit", "id ~ '^BEN-[0-9]+$'"],
+    ["CAS", "business_case", "id ~ '^CAS-[0-9]+$'"],
+    ["TOL", "project_tolerance", "id ~ '^TOL-[0-9]+$'"],
+    ["EXC", "project_exception", "id ~ '^EXC-[0-9]+$'"],
   ];
   for (const [prefix, table, where] of highest) {
     await query(
