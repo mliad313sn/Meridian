@@ -17,6 +17,8 @@
 import { tx } from "./db.js";
 import { record } from "./audit.js";
 import { fromM } from "./portfolio.js";
+import { HttpError } from "./auth.js";
+import { translate } from "./pgerror.js";
 
 const PORTFOLIO_TABLES = [
   "meeting_action", "meeting_decision", "meeting_attendance", "agenda_item",
@@ -33,7 +35,28 @@ const int = (v, d = 0) => (Number.isFinite(Number(v)) ? Math.round(Number(v)) : 
 export async function importBook(book, user) {
   const counts = {};
 
-  await tx(async (t) => {
+  /* A refused row used to answer only "One of those values is not in a
+     form the system can read", with nothing in the log: on a book of a
+     few hundred rows the operator could not tell which one. Every insert
+     now names its table and the row's id when it fails. */
+  const locate = (raw) => ({
+    ...raw,
+    query: (sql, params) => raw.query(sql, params).catch((e) => {
+      const table = /^\s*(?:INSERT INTO|UPDATE)\s+(\w+)/i.exec(sql)?.[1];
+      if (table && !e.importAt) e.importAt = `${table} ${params?.[0] ?? ""}`.trim();
+      throw e;
+    }),
+  });
+
+  const located = (e) => {
+    if (!e.importAt) throw e;
+    const known = translate(e);
+    console.error(`import refused at ${e.importAt}: ${e.message}`);
+    throw new HttpError(400, `${known?.message ?? "That row could not be imported"} — ${e.importAt}`);
+  };
+
+  await tx(async (raw) => {
+    const t = locate(raw);
     for (const table of PORTFOLIO_TABLES) await t.query(`DELETE FROM ${table}`);
 
     /* ── reference ────────────────────────────────────────────────── */
@@ -151,12 +174,24 @@ export async function importBook(book, user) {
     }
     for (const d of book.docs ?? []) {
       await t.query(
-        `INSERT INTO document (id, project_id, name, doc_type, gate, owner_id, revision, status, updated_on)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        `INSERT INTO document (id, project_id, name, doc_type, gate, owner_id, revision, status, updated_on,
+                               uri, uri_locked_hash, uri_locked_on)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
         [d.id, clean(d.project), d.name, d.type ?? "Assurance", int(d.gate),
          clean(d.owner), d.rev ?? "0.1",
          ["Draft", "In review", "Approved", "Superseded"].includes(d.status) ? d.status : "Draft",
-         d.updated ?? new Date().toISOString().slice(0, 10)]);
+         d.updated ?? new Date().toISOString().slice(0, 10),
+         /* R-01 — evidence is an approved document that points at
+            something. Dropping the uri turned every imported approved
+            document back into a label, and every cleared gate into an
+            overdue one. */
+         d.uri ?? "", d.uriHash ?? "", clean(d.uriLockedOn)]);
+    }
+    // supersession second, so both ends exist
+    for (const d of book.docs ?? []) {
+      if (d.supersedes) {
+        await t.query(`UPDATE document SET supersedes = $2 WHERE id = $1`, [d.id, d.supersedes]);
+      }
     }
     for (const i of book.items ?? []) {
       await t.query(
@@ -201,9 +236,12 @@ export async function importBook(book, user) {
       ["DEP","raid_item","id LIKE 'DEP-%'"],["CR","change_request","true"],
       ["DOC","document","true"],["WI","work_item","true"],["PE","person","true"],
     ]) {
+      /* '\\D', not '\D': inside a template literal the single backslash
+         is dropped, PostgreSQL receives 'D', and the ::int cast fails on
+         every id — which made every import answer 400. */
       await t.query(
         `INSERT INTO id_counter (prefix, next_value)
-         SELECT $1, COALESCE(MAX(NULLIF(regexp_replace(id, '\D', '', 'g'), ''))::int, 0)
+         SELECT $1, COALESCE(MAX(NULLIF(regexp_replace(id, '\\D', '', 'g'), ''))::int, 0)
            FROM ${table} WHERE ${where}
          ON CONFLICT (prefix) DO UPDATE
            SET next_value = GREATEST(id_counter.next_value, EXCLUDED.next_value)`,
@@ -215,7 +253,7 @@ export async function importBook(book, user) {
       entity: "system",
       detail: Object.entries(counts).map(([k, n]) => `${n} ${k}`).join(", "),
     });
-  });
+  }).catch(located);
 
   return counts;
 }

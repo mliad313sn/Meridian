@@ -371,3 +371,32 @@ describe("capacity", () => {
     assert.equal(Engine.overAllocated(one, 4).length, 0);
   });
 });
+
+/* MER-04 — ported from claude/dynamic-gates-and-requirements (44782b1),
+   where it shipped without a test. With no budget the indices used to
+   come out as 1.00 over a project nobody had measured, and progress read
+   0% whatever the plan said. Found again running FitAdapt, whose budgets
+   are deliberately zero until the sponsor baselines them. */
+describe("a project with no cost baseline (MER-04)", () => {
+  const unbudgeted = () => fixture({ project: { budget: 0, contingency: 0 }, ledger: [] });
+
+  test("earned value is not measured, and health says why", () => {
+    const m = Engine.metrics(unbudgeted(), "X");
+    assert.equal(m.bac, 0);
+    assert.equal(m.measurable, false);
+    assert.equal(m.health.rag, "G");
+    assert.match(m.health.why, /No cost baseline/);
+  });
+
+  test("progress falls back to the weighted activity progress of the plan", () => {
+    const m = Engine.metrics(unbudgeted(), "X");
+    assert.equal(m.pctComplete, 0.5, "A1 (weight 0.5) is 100% done, A2 not started");
+    assert.ok(Math.abs(m.plannedComplete - 0.5) < 0.01, `planned ${m.plannedComplete}`);
+  });
+
+  test("a budgeted project is unchanged", () => {
+    const m = Engine.metrics(fixture(), "X");
+    assert.equal(m.bac, 100);
+    assert.doesNotMatch(m.health.why, /No cost baseline/);
+  });
+});

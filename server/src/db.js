@@ -148,6 +148,13 @@ async function clearStaleLocks(dataDir) {
 
 async function openPglite(dataDir) {
   const { PGlite } = await import("@electric-sql/pglite");
+  /* PGlite creates the last path segment only. On a fresh clone
+     server/.data does not exist yet, so the first seed failed with
+     ENOENT instead of creating the book. */
+  if (dataDir) {
+    const { mkdir } = await import("node:fs/promises");
+    await mkdir(dataDir, { recursive: true });
+  }
   await clearStaleLocks(dataDir);
   const pglite = dataDir ? new PGlite(dataDir) : new PGlite();
   await pglite.waitReady;
@@ -220,10 +227,26 @@ async function openPglite(dataDir) {
 
 /* ── lifecycle ────────────────────────────────────────────────────── */
 
+/* Where PGlite keeps the book when nobody says otherwise: the directory
+   the README promises. The fallback used to be `null` — an in-memory
+   database — so on a fresh clone `npm run seed` built a book that died
+   with its process, and `npm run dev` then started on an empty one with
+   no accounts: the documented quick start could not sign anyone in.
+
+   `dataDir: null` still means in-memory, explicitly: that is how the test
+   harness and the audit scripts ask for a throwaway database, and it now
+   wins over PGLITE_DIR instead of silently falling through to it. */
+export const DEFAULT_PGLITE_DIR = join(HERE, "..", ".data", "pgdata");
+
+export function resolvePgliteDir(opts = {}, env = process.env) {
+  if (opts.dataDir === null) return null;
+  return opts.dataDir ?? env.PGLITE_DIR ?? DEFAULT_PGLITE_DIR;
+}
+
 export async function connect(opts = {}) {
   const url = opts.url ?? process.env.DATABASE_URL;
   if (url) impl = await openPg(url);
-  else impl = await openPglite(opts.dataDir ?? process.env.PGLITE_DIR ?? null);
+  else impl = await openPglite(resolvePgliteDir(opts));
   engineName = impl.name;
   return impl;
 }
