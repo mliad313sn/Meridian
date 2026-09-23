@@ -22,6 +22,41 @@ Nothing yet.
 
 ---
 
+## [5.28.0] — 2026-09-23
+
+**A site is a place or a team** (D-36.13; FitAdapt #18 · DF-12; docs/36
+wave 2).
+
+### Added
+
+- **A site has a kind, `place` (the default) or `team`.** FitAdapt
+  observed "Site is the only unit of delegated authority; FitAdapt models
+  one fake site 'Distributed team'", in a UTC nobody chose. One site per
+  squad would have put places that do not exist on the Locations view,
+  the plant calendar and the rollout waves. A team is a delivery unit
+  located nowhere:
+  - its timezone is optional, stored as none rather than UTC;
+  - it is left out of the Locations view, which says how many teams it
+    left out and names them;
+  - a plant window or rollout wave cannot target it (400, and a database
+    trigger for every other path).
+- **It is still the unit of delegated authority**: grants, site-governed
+  projects, meetings and absences work on a team exactly as on a place,
+  so the group/site thesis of docs/04 is untouched.
+- Administration → Sites offers the kind ("8 places · 1 team"); wherever
+  a site is named with its noun, a team reads "Team". FR and ES.
+- Migration 060. Export and import carry the kind; a book with no kind
+  imports every site as a place, as it always did. The reporting view of
+  sites gains `kind` (docs/30).
+
+### Measure
+
+`site-kind.test.js`, 11 tests; F13 carries a team with no timezone.
+Browser: team "Payments squad" created with no timezone, labelled Team,
+absent from Locations and from the window form.
+
+---
+
 ## [5.27.0] — 2026-09-23
 
 **A standing human act holds the gate it blocks** (D-36.15; RT365 REQ-13,

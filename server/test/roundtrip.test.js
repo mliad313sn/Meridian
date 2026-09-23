@@ -152,6 +152,11 @@ const ENRICH = [
           link_kind = 'VSAT', readiness = 'Preparing', readiness_note = 'probe',
           champion_id = ${PE1}
     WHERE id = ${SITE}`,
+  /* D-36.13 (060) — a team: kind 'team', and NO timezone. The absent
+     timezone must come back absent (null), not as the UTC that #18 was
+     about, and the kind must come back a team. */
+  `INSERT INTO site (id, city, region, kind, tz_offset, tz_name, charter)
+   VALUES ('SQD', 'Payments squad', '', 'team', NULL, NULL, 'A delivery squad, located nowhere')`,
   `UPDATE project SET pir_on = '2026-01-15', pir_verdict = 'Partly met', pir_note = 'probe',
           plant_impact = 'plant', moc_ref = 'MOC-1', fit_score = 3, value_score = 4, risk_score = 2,
           effort_score = 5, rank_seq = 7, closure_note = 'probe', date_basis = 'placeholder',

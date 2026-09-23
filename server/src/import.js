@@ -271,12 +271,18 @@ export async function importBook(book, user, opts = {}) {
 
     /* ── reference ────────────────────────────────────────────────── */
     for (const s of book.sites ?? []) {
+      /* D-36.13 (060) — a team comes back a team, with no timezone if it
+         had none. A book written before 060 carries no kind: every site
+         in it is a place, and a place keeps the historical UTC default. */
+      const team = s.kind === "team";
       await t.query(
         `INSERT INTO site (id, city, region, tz_offset, tz_name, headcount, fte, charter,
                            country, legal_entity, link_mbps, link_kind, readiness, readiness_note,
-                           active)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
-        [s.id, s.city, s.region ?? "", Number(s.tz ?? 0), s.tzName ?? "UTC",
+                           active, kind)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+        [s.id, s.city, s.region ?? "",
+         team ? num(s.tz) : Number(s.tz ?? 0),
+         team ? (s.tzName || null) : (s.tzName ?? "UTC"),
          int(s.headcount), int(s.fte), s.role ?? s.charter ?? "",
          /* NEW-05 — what the site is (V-07, MC-01), not only where. */
          s.country ?? "", s.legalEntity ?? "", num(s.linkMbps), s.linkKind ?? "",
@@ -284,7 +290,7 @@ export async function importBook(book, user, opts = {}) {
          s.readinessNote ?? "",
          /* NEW-18 — the book carries inactive rows too; absent means
             active, which is what every older file meant. */
-         s.active !== false]);
+         s.active !== false, team ? "team" : "place"]);
     }
     for (const p of book.people ?? []) {
       await t.query(

@@ -1103,15 +1103,21 @@ export const Engine = {
     return /^(\$|€|£|¥)/.test(u) || /^(usd|eur|gbp|chf|cad|aud|jpy|xof|xaf|m\$|\$m|k\$|\$k)$/i.test(u);
   },
 
+  /* D-36.13 (060) — a TEAM may have no timezone (tz null). Where a time
+     must still be computed, it falls back to the group default, UTC
+     (offset 0, shared/sitekind.js DEFAULT_TZ_OFFSET). For every place the
+     arithmetic is unchanged: a place always carries its offset. The
+     Locations view no longer passes teams here at all. */
   overlapHours(a, b) {
-    const aStart = 9 - a.tz, aEnd = 17.5 - a.tz;
-    const bStart = 9 - b.tz, bEnd = 17.5 - b.tz;
+    const at = Number(a.tz ?? 0), bt = Number(b.tz ?? 0);
+    const aStart = 9 - at, aEnd = 17.5 - at;
+    const bStart = 9 - bt, bEnd = 17.5 - bt;
     return Math.max(0, Math.min(aEnd, bEnd) - Math.max(aStart, bStart));
   },
   siteClock(site, now) {
     const n = now || new Date();
     const utc = n.getTime() + n.getTimezoneOffset() * 60000;
-    const t = new Date(utc + site.tz * 3600000);
+    const t = new Date(utc + Number(site.tz ?? 0) * 3600000);
     return String(t.getHours()).padStart(2, "0") + ":" + String(t.getMinutes()).padStart(2, "0");
   },
 

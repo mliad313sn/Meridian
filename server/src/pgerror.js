@@ -36,6 +36,10 @@ const CONSTRAINT_MESSAGES = {
     "This project already has a rollout wave at that site — a wave IS a site in this rollout, "
     + "and seq is the order the sites go live in, not a phase number within one site. "
     + "Record phases at a single site as milestones on the project.",
+  /* D-36.13 (060) — a place keeps its timezone; only a team may have none. */
+  site_place_has_timezone:
+    "A place needs a timezone (UTC offset and zone name) — only a team may have none",
+  site_kind_known: "A site is a place or a team",
 };
 
 /** Which table a foreign key points at, in words. */
@@ -102,6 +106,10 @@ export function translate(err) {
         return { status: 400, message: text +
           " — give one of the two seats to someone else, or remove the incompatibility if it was declared in error" };
       }
+      /* D-36.13 (060) — a plant window or a rollout wave at a team. The
+         routes refuse first, in the same words; this is the import's and
+         any other path's answer. */
+      if (/^A team is not a place:/.test(text)) return { status: 400, message: text };
       return null;
     }
     case "40001": // serialization_failure

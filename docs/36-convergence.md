@@ -29,6 +29,7 @@ here, and the one before it is kept for comparison.
 |---|---|---|---|---|---|
 | 23/09 (1) | 5.9.0 · 77c4b49 | v5.9.0 | 4: `fix/dogfood-import-and-first-run` (6 ahead), `claude/meridian-rt365-feedback-d6vo3i` (20 ahead, 14 days), `claude/dynamic-gates-and-requirements` (3 ahead, 4 days), `claude/project-analysis-db-schema-yph5ho` (6 ahead, 7 behind, 23 days) | 449/449, gates ok, 1 moderate advisory (`qs`) | **400** |
 | 23/09 (2) | 5.9.1 · 6d8eddf (PR #14) | v5.9.0: **`v5.9.1` is not on the remote** (not in `git ls-remote`, not in the GitHub API) | 3 | 460/460, audit 0 | 200 |
+| 23/09 (3) | 5.28.0 (PRs #19–#37) | v5.9.0: **no newer tag on the remote**; twenty tags owed (§5) | 1, declared superseded (`claude/project-analysis-db-schema-yph5ho`, 6 ahead, D-36.08); the three field lines are 0 ahead | 1004/1004, fourteen static gates plus F13, audit 0 | 200, strict (F13: no loss named, none found) |
 
 ---
 
@@ -302,6 +303,16 @@ contradicts `docs/25` (reversibility).
 
 ### Waves 1–4
 
+#### #18 · DF-12 · A site is a place or a team — BUILT, PR as 5.28.0
+
+- **Delivered** (D-36.13): migration 060 (`site.kind`, optional
+  timezone for a team, trigger refusing windows and waves at a team);
+  `shared/sitekind.js`; every timezone reader checked, falling back to
+  UTC for a team; Locations shows places only and names what it left out.
+- **Measure**: `site-kind.test.js`, 11 tests; F13 enriched. Browser: 15
+  checks.
+- **Remains**: none.
+
 #### REQ-13 · A standing human act holds its gate — BUILT, PR as 5.27.0
 
 - **Delivered** (D-36.15): migration 059 (`blocks_gate`,
@@ -476,3 +487,27 @@ inference. They come from `docs/23` §6, which the campaign file calls §7:
 |---|---|---|
 | 1–10 | none found on 23/09 | open |
 | R2 | not pronounced | open |
+
+**Tags owed.** Each release below is on `main` and no tag carries it.
+Every register line stays `released: false` until its tag exists
+(constitution §4). The owner runs, from a clone of `main`:
+
+| Tag | Commit on `main` | Tag | Commit on `main` |
+|---|---|---|---|
+| v5.9.1 | 6d8eddf | v5.20.1 | f2223cd |
+| v5.16.0 | f423a00 | v5.20.2 | 2a4f249 |
+| v5.17.0 | 7269fea | v5.21.0 | d82e793 |
+| v5.18.0 | 3e92db5 | v5.21.1 | c92076f |
+| v5.18.1 | be2df88 | v5.22.0 | 3e081c4 |
+| v5.18.2 | aa5fea5 | v5.23.0 | 83c5ba7 |
+| v5.18.3 | 1a597bd | v5.24.0 | 3838ea0 |
+| v5.19.0 | 8d9b946 | v5.25.0 | fcadb98 |
+| v5.20.0 | 11bc923 | v5.26.0 | cd372fd |
+| v5.27.0 | 086f7cc | v5.28.0 | the squash of PR #37 |
+
+```sh
+git fetch origin main
+git tag -a v5.26.0 cd372fd -m "Meridian 5.26.0"   # one line per row
+git push origin --tags
+```
+

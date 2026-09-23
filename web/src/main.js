@@ -31,6 +31,7 @@ import { api, setUnauthenticatedHandler } from "./lib/api.js";
 import { Engine } from "../../shared/engine.js";
 import { VIEWS, HEADER_ACTIONS, initials } from "./views/index.js";
 import { guideDialog } from "./ui/guide.js";
+import { unitName, unitLabel } from "./lib/units.js";
 
 bindEngine(Engine);
 
@@ -182,7 +183,8 @@ function scopeSentence(db, me) {
   if (me.role === "admin") return "Administrator · unrestricted";
   const names = [
     ...me.grants.programmes.map((id) => (db.programmes.find((p) => p.id === id) || {}).name || id),
-    ...me.grants.sites.map((id) => (db.sites.find((s) => s.id === id) || {}).city || id),
+    /* D-36.13 — a team grant reads as a team. */
+    ...me.grants.sites.map((id) => { const s = db.sites.find((x) => x.id === id); return s ? unitName(s) : id; }),
   ];
   /* O-6 (docs/32 → docs/36 C-04) — the level names speak the interface's
      language; the stored role value stays English, as everywhere. */
@@ -211,7 +213,7 @@ function header(db) {
       (v) => App.set({ scope: v }), "168px"),
     selectField("Site", App.ui.siteScope,
       [{ value: "all", label: "All sites" }]
-        .concat(db.sites.map((x) => ({ value: x.id, label: x.city }))),
+        .concat(db.sites.map((x) => ({ value: x.id, label: unitName(x) }))),
       (v) => App.set({ siteScope: v }), "126px"),
     selectField("Health", App.ui.healthScope,
       [{ value: "all", label: "Any" }, { value: "G", label: "Green" },
@@ -535,7 +537,7 @@ function subsPanel() {
   const box = h("div", { style: "margin-top:14px" });
   const scopeOpts = () => [{ value: "portfolio:", label: t("Whole portfolio") }]
     .concat((App.db?.programmes ?? []).map((p) => ({ value: "programme:" + p.id, label: t("Programme") + " · " + p.name })))
-    .concat((App.db?.sites ?? []).map((s) => ({ value: "site:" + s.id, label: t("Site") + " · " + s.city })))
+    .concat((App.db?.sites ?? []).map((s) => ({ value: "site:" + s.id, label: unitLabel(s) })))
     .concat((App.db?.projects ?? []).filter((p) => !p.closed).map((p) => ({ value: "project:" + p.id, label: p.id + " · " + p.name })));
   const addRow = () => {
     const sel = (label, opts) => h("select", { class: "input input-sm", "aria-label": label },
@@ -570,7 +572,11 @@ function subsPanel() {
       ...subs.map((s) => h("div", { class: "list-row", style: "align-items:center" },
         h("div", { class: "small", style: "flex:1" },
           (s.kind === "*" ? t("Everything") : s.kind) + " · " +
-          (s.scopeKind === "portfolio" ? t("Whole portfolio") : s.scopeKind + " " + s.scopeId) +
+          (s.scopeKind === "portfolio" ? t("Whole portfolio")
+            /* D-36.13 — a subscription scoped to a team says "team". */
+            : s.scopeKind === "site" && (App.db?.sites ?? []).some((x) => x.id === s.scopeId && x.kind === "team")
+              ? t("team") + " " + s.scopeId
+              : s.scopeKind + " " + s.scopeId) +
           " · ≥ " + s.minSeverity + " · " + s.cadence),
         h("button", { class: "btn btn-xs btn-ghost", onClick: async () => {
           try { await api.del("/auth/subscriptions/" + s.id); render(); }

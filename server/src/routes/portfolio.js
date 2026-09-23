@@ -2189,11 +2189,24 @@ r.patch("/prioritisation/weighting", async (req, res, next) => {
  * a project that touches the plant, needs a released MOC.
  */
 
+/* D-36.13 (060) — a plant window and a rollout wave land at a PLACE.
+   A team has no plant and nowhere to go live; refused here in words
+   before a transaction opens, and again by 060's trigger for any path
+   that does not come through these routes. */
+async function assertPlace(siteId, what) {
+  const s = await one(`SELECT city, kind FROM site WHERE id = $1`, [siteId]);
+  if (s?.kind === "team") {
+    bad(`A team is not a place: ${s.city} has no plant calendar and no rollout wave can land at it — ` +
+        `${what} belongs at a location`);
+  }
+}
+
 r.post("/windows", async (req, res, next) => {
   try {
     const b = req.body ?? {};
     if (!b.site) bad("A window belongs to a site");
     gate(req.user, "window.write", { site_id: b.site });
+    await assertPlace(b.site, "a shutdown or a freeze");
     if (!b.label) bad("A window needs a label — what the site calls it");
     if (!b.from || !b.to) bad("A window needs a start and an end date");
     if (D(b.to) < D(b.from)) bad("A window cannot end before it starts");
@@ -2303,6 +2316,7 @@ r.post("/waves", async (req, res, next) => {
     const p = await project(b.project, req.user);
     gate(req.user, "wave.write", { project: p });
     if (!b.site) bad("A wave lands at a site");
+    await assertPlace(b.site, "a rollout wave");
     let id = null;
     await audited(req.user,
       () => ({ action: "Rollout wave added", entity: "rollout_wave", entityId: id,

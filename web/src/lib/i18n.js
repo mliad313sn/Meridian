@@ -2888,6 +2888,49 @@ export const FR = {
     "remplacé",
   "Cite a reference":
     "Citer une référence",
+  /* D-36.13 — a site is a place or a team (FitAdapt #18). */
+  "Team":
+    "Équipe",
+  "team":
+    "équipe",
+  "Place":
+    "Lieu",
+  "none":
+    "aucun",
+  " place":
+    " lieu",
+  " team":
+    " équipe",
+  " places":
+    " lieux",
+  " teams":
+    " équipes",
+  "Add site or team":
+    "Ajouter un site ou une équipe",
+  "A place needs a timezone — only a team may have none":
+    "Un lieu a besoin d'un fuseau horaire — seule une équipe peut s'en passer",
+  "Edit team":
+    "Modifier l'équipe",
+  "Place — a location":
+    "Lieu — un emplacement",
+  "Team — a delivery unit with no location":
+    "Équipe — une unité de livraison sans emplacement",
+  "A team is governed like a site (grants, its own projects, meetings, absences) but has no geography: no timezone needed, no plant window, no rollout wave, and it is not on the Locations view.":
+    "Une équipe est gouvernée comme un site (habilitations, projets propres, réunions, absences) mais n'a pas de géographie : pas de fuseau horaire obligatoire, pas de fenêtre d'usine, pas de vague de déploiement, et elle n'apparaît pas dans la vue Sites.",
+  "City, or the team's name":
+    "Ville, ou nom de l'équipe",
+  "Hours from UTC. A team may leave it empty.":
+    "Heures d'écart avec UTC. Une équipe peut laisser vide.",
+  "Save team":
+    "Enregistrer l'équipe",
+  "Team added":
+    "Équipe ajoutée",
+  "Team updated":
+    "Équipe mise à jour",
+  " team is not shown: a team is a delivery unit with no location, so it has no clock, no overlap and no plant calendar. ":
+    " équipe n'est pas affichée : une équipe est une unité de livraison sans emplacement, elle n'a donc ni horloge, ni recouvrement horaire, ni calendrier d'usine. ",
+  " teams are not shown: a team is a delivery unit with no location, so it has no clock, no overlap and no plant calendar. ":
+    " équipes ne sont pas affichées : une équipe est une unité de livraison sans emplacement, elle n'a donc ni horloge, ni recouvrement horaire, ni calendrier d'usine. ",
 };
 
 /* ── enregistrement des dictionnaires ─────────────────────────────────

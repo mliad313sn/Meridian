@@ -118,7 +118,11 @@ describe("schema and migrations (R2.2, R2.7)", () => {
        /* 059 - D-36.15 (REQ-13, second half): a standing human act is a
           RAID dependency that holds the gate it blocks until it closes
           on its evidence. */
-       "059_a_human_act_holds_its_gate.sql"]);
+       "059_a_human_act_holds_its_gate.sql",
+       /* 060 - docs/36 D-36.13 (#18): a site is a place or a team. A
+          team's timezone may be NULL (a place's may not, by CHECK), and
+          no plant window or rollout wave can land at a team. */
+       "060_a_team_is_located_nowhere.sql"]);
     const again = await migrate({ silent: true });
     assert.deepEqual(again, [], "a second run applies nothing");
   });

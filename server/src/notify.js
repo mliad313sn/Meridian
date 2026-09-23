@@ -459,7 +459,11 @@ export async function deliver(send, { limit = 50 } = {}) {
         aux heures de Zurich. Un message émis pendant le silence n'est pas
         supprimé, il attend le matin. « urgent » passe, parce qu'un
         silence qu'on ne peut pas percer devient un silence qu'on
-        désactive. */
+        désactive.
+        D-36.13 (060) — a person whose unit is a TEAM may have no site
+        timezone (NULL). The coalesce falls back to the group default,
+        UTC (shared/sitekind.js DEFAULT_TZ_OFFSET), exactly as it already
+        did for a person with no site at all. */
      local AS (
        SELECT u.id AS user_id, u.quiet_from, u.quiet_to,
               extract(hour FROM (now() + (coalesce(s.tz_offset, 0) || ' hours')::interval))::int AS hour
