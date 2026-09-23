@@ -15,6 +15,7 @@ import {
 } from "../integrations.js";
 import { acceptableWebhook, deliveriesOf } from "../events.js";
 import { posture } from "../posture.js";
+import { outboundTransport } from "../notify.js";
 import { normaliseGateModel } from "../../../shared/engine.js";
 
 /* I-3 — l'échelle de jalons d'un programme, validée par la même fonction
@@ -451,7 +452,11 @@ r.get("/notifications", async (req, res, next) => {
               count(*) FILTER (WHERE state='failed')::int AS failed
          FROM notification`);
     res.json({
-      transport: process.env.MERIDIAN_SMTP_URL ? "configured" : "none",
+      /* docs/32 → docs/36 C-04 — the flag read MERIDIAN_SMTP_URL, a
+         transport this product does not carry; the real channel is the
+         outbound webhook (notify.js), and "configured" must mean a
+         message would actually leave. */
+      transport: (await outboundTransport()) ? "configured" : "none",
       counts,
       notifications: rows.map((n) => ({
         id: String(n.id), at: n.at, email: n.email, kind: n.kind, subject: n.subject,

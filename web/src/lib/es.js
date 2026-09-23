@@ -1119,6 +1119,68 @@ export const ES = {
   "Restore": "Restaurar",
   "Restored from the trail": "Restaurado desde la pista",
   "Risk": "Riesgo",
+  /* O-6 (docs/32 → docs/36 C-04) — les natures RAID et les libellés de rôle, enfin traduits. Les VALEURS stockées restent anglaises ; seul l'affichage se traduit. */
+  "Issue": "Problema",
+  "Assumption": "Supuesto",
+  "Dependency": "Dependencia",
+  "Viewer": "Lector",
+  "Administrator": "Administrador",
+  "read-only": "solo lectura",
+  "no grants held": "ningún permiso concedido",
+  "Unrestricted, including accounts, grants and global settings":
+    "Sin restricción, incluidas las cuentas, los permisos y los ajustes globales",
+  "Portfolio-wide read; write inside the granted programmes; money and baselines":
+    "Lectura de toda la cartera; escritura en los programas concedidos; el dinero y las líneas base",
+  "Own sites plus group projects read-only; write site-governed projects only":
+    "Sus sitios más los proyectos de grupo en solo lectura; solo escribe los proyectos gobernados por el sitio",
+  "Read-only, inside the granted scope": "Solo lectura, dentro del ámbito concedido",
+  /* O-1 (docs/32 → docs/36 C-04) — les heures de silence et les abonnements fins, enfin à l'écran. */
+  "Quiet from (hour)": "Silencio desde (hora)",
+  "Quiet until (hour)": "Silencio hasta (hora)",
+  "Read in your site's timezone. Nothing is lost — messages wait for morning; urgent passes.":
+    "Se leen en la zona horaria de su sitio. Nada se pierde — los mensajes esperan a la mañana; lo urgente pasa.",
+  "Quiet hours need both ends, or neither":
+    "Las horas de silencio necesitan ambos extremos, o ninguno",
+  "Fine-grained subscriptions": "Suscripciones detalladas",
+  "With none, the cadence above governs everything. With any, only what a subscription covers goes out — the centre always receives everything.":
+    "Sin ninguna, la cadencia de arriba lo gobierna todo. Con alguna, solo sale lo que una suscripción cubre — el centro siempre lo recibe todo.",
+  "Whole portfolio": "Toda la cartera",
+  "Everything": "Todo",
+  "Subscriptions": "Suscripciones",
+  "Minimum severity": "Gravedad mínima",
+  /* O-2 (docs/32 → docs/36 C-04) — le panneau des notifications nomme le vrai transport. */
+  "an outbound webhook is configured": "hay un webhook saliente configurado",
+  "no outbound webhook — messages queue and are shown here":
+    "ningún webhook saliente — los mensajes esperan en cola y se muestran aquí",
+  "Queued messages are handed to the outbound webhook.":
+    "Los mensajes en cola se entregan al webhook saliente.",
+  "Nothing is sent until the outbound webhook is configured: MERIDIAN_NOTIFY_URL or MERIDIAN_TEAMS_WEBHOOK, plus its host in the trusted webhook hosts setting. Until then this is what people would have been told — deliberately visible rather than silent.":
+    "No sale nada hasta que el webhook saliente esté configurado: MERIDIAN_NOTIFY_URL o MERIDIAN_TEAMS_WEBHOOK, más su host en los hosts de webhook de confianza. Hasta entonces, esto es lo que la gente habría recibido — deliberadamente visible en lugar de silencioso.",
+  /* O-3 (docs/32 → docs/36 C-04) — les enseignements pertinents, proposés à la création. */
+  "Before you plan": "Antes de planificar",
+  "Adopted lessons from this programme and this site. Two minutes here is what the register is for.":
+    "Las lecciones adoptadas de este programa y de este sitio. Dos minutos aquí son la razón de ser del registro.",
+  "Open the register": "Abrir el registro",
+  "Noted": "Entendido",
+  /* O-4 (docs/32 → docs/36 C-04) — la fiche personne porte enfin la rotation et la disponibilité que l'API acceptait depuis V-09. */
+  "Employment": "Vinculación",
+  "Staff": "Plantilla",
+  "Contractor": "Contratista",
+  "Rotation": "Rotación",
+  "Availability (%)": "Disponibilidad (%)",
+  "Avail.": "Disp.",
+  "Contractors only — who the day rate is paid to.":
+    "Solo contratistas — a quién se paga la tarifa diaria.",
+  "\"4/2\", \"14/14\" — blank for an ordinary office roster. Informative: the capacity number below is what counts.":
+    "«4/2», «14/14» — vacío para un horario de oficina corriente. Informativo: lo que cuenta es la cifra de disponibilidad de abajo.",
+  "The fraction of a year actually available for project work, after rotation, leave and the day job. This is what the capacity arithmetic uses.":
+    "La fracción del año realmente disponible para trabajo de proyecto, tras rotación, vacaciones y el puesto habitual. Es lo que usa la aritmética de capacidad.",
+  /* R-01 (docs/32 P-03 → docs/36 C-04) — le réglage des hôtes de preuve, enfin posé à l'écran. */
+  "Evidence": "Evidencia",
+  "where a proof may point": "adónde puede apuntar una evidencia",
+  "Trusted evidence hosts": "Hosts de evidencia de confianza",
+  "Closed by default: with none named, no document can be approved as evidence.":
+    "Cerrado por defecto: sin ningún host nombrado, ningún documento puede aprobarse como evidencia.",
   "Risks": "Riesgos",
   "Rough cost (M)": "Coste aproximado (M)",
   "Score ": "Puntuación ",

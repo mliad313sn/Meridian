@@ -158,8 +158,14 @@ export async function sweepExceptions() {
 
 Answer it: record the measurement, or say the benefit ` +
               `was missed or withdrawn and why.`,
+        /* docs/36 C-04 — comme tolerance-breached plus bas : nature
+           absente du CHECK (élargi par 053) et dedupe_key NOT NULL jamais
+           fournie. Le catch reste — la file ne doit pas faire tomber le
+           constat — mais il ne se tait plus. */
+        entity: "project_exception", entityId: id,
+        dedupeKey: `exception:${id}`,
         groupKey: `exception:${id}`,
-      }).catch(() => { /* la file ne doit jamais faire tomber le constat */ });
+      }).catch((e) => { console.error("[exceptions] benefit-review-due not queued:", e?.message ?? e); });
     }
   }
 
@@ -201,8 +207,16 @@ Answer it: record the measurement, or say the benefit ` +
           subject: `${p.name} has gone past the tolerance you set`,
           body: `${detail}.\n\nAnswer it: raise the tolerance, revise the plan, ` +
                 `accept the overrun, or stop the project.`,
+          /* docs/32 → docs/36 C-04 — cet appel a violé DEUX contraintes
+             pendant tout le temps où le catch le protégeait : la nature
+             absente du CHECK de 018 (élargie par 053) et dedupe_key NOT
+             NULL, jamais fournie. Personne n'a jamais été prévenu, et
+             rien ne l'a dit. Un catch qui protège un flux ne doit jamais
+             protéger une contrainte : il journalise désormais. */
+          entity: "project_exception", entityId: id,
+          dedupeKey: `exception:${id}`,
           groupKey: `exception:${id}`,
-        }).catch(() => { /* la file ne doit jamais faire tomber le constat */ });
+        }).catch((e) => { console.error("[exceptions] tolerance-breached not queued:", e?.message ?? e); });
       }
     }
   }

@@ -129,6 +129,24 @@ const ES_NOTIFY = {
   " cannot pass its next gate while ": " no puede pasar su próxima puerta mientras ",
   " evidence document(s) remain unapproved.": " documento(s) de evidencia siguen sin aprobar.",
   "Open the project's document list in Meridian.": "Abra la lista de documentos del proyecto en Meridian.",
+  /* O-2 (docs/32 → docs/36 C-04) — las cinco naturalezas por fin emitidas. */
+  "Decision owed: ": "Decisión pendiente: ",
+  "Referred up from ": "Elevada desde ",
+  ", and not yet answered. It heads the agenda of ": ", y aún sin respuesta. Encabeza el orden del día de ",
+  " until a decision there answers it.": " hasta que una decisión allí la responda.",
+  "Concern from ": "Inquietud de ",
+  " raised this concern on ": " levantó esta inquietud sobre ",
+  ". It appears on your next agenda; the register holds the detail.": ". Aparece en su próximo orden del día; el registro tiene el detalle.",
+  ": no progress recorded for 30 days": ": ningún avance registrado en 30 días",
+  " has recorded no stage update, milestone or status call in thirty days. A quiet book usually means the tool has drifted, not the site.":
+    " no ha registrado ninguna actualización de etapa, hito ni estado en treinta días. Un libro silencioso suele significar que la herramienta se ha descolgado, no el sitio.",
+  "Open Adoption to see the site's indicators.": "Abra Adopción para ver los indicadores del sitio.",
+  "Last week's effort is not recorded": "El esfuerzo de la semana pasada no está registrado",
+  "You were allocated to project work last week and no days are recorded. Four fields, once a week — the real sits beside the plan, and the gap is the point.":
+    "Estaba asignado a trabajo de proyecto la semana pasada y no hay días registrados. Cuatro campos, una vez por semana — lo real se muestra junto al plan, y lo que importa es la diferencia.",
+  "Your Meridian digest is ready": "Su resumen de Meridian está listo",
+  "Everything that changed in your scope, in one page: open Reports, then the digest.":
+    "Todo lo que cambió en su ámbito, en una página: abra Informes y luego el resumen.",
   // REQ-19 (045) — la base de una fecha de proyecto.
   "dateBasis is committed or placeholder":
     "dateBasis es committed (un compromiso) o placeholder (una posición)",

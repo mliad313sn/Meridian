@@ -90,7 +90,11 @@ describe("schema and migrations (R2.2, R2.7)", () => {
           on a branch that never reached main, renumbered by docs/36 C-03
           before anything applied them. */
        "051_gate_model_and_requirements.sql",
-       "052_findings_seats_and_decisions.sql"]);
+       "052_findings_seats_and_decisions.sql",
+       /* 053 - docs/36 C-04: the notification kinds the exception sweep
+          emitted and 018's CHECK refused (027 on the unmerged committee
+          branch, renumbered because main's 027 is international). */
+       "053_notification_kinds.sql"]);
     const again = await migrate({ silent: true });
     assert.deepEqual(again, [], "a second run applies nothing");
   });
