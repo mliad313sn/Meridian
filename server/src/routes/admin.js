@@ -765,7 +765,9 @@ r.patch("/programmes/:id", async (req, res, next) => {
 
 r.post("/import", async (req, res, next) => {
   try {
-    const book = req.body?.db;
+    /* The interface posts { db: <book> }; GET /export answers the bare
+       book. Accept both, so the file this system exports imports back. */
+    const book = req.body?.db ?? req.body;
     if (!book || !Array.isArray(book.projects)) {
       throw new HttpError(400, "No project register found in that file");
     }

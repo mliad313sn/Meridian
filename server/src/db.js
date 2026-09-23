@@ -13,7 +13,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { readFileSync, writeFileSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadEnv, resolveDataDir } from "./env.js";
+import { loadEnv, resolveDataDir, pgliteDirFor, DEFAULT_PGLITE_DIR } from "./env.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 /* A packaged build ships the .sql files beside the executable rather than
@@ -194,6 +194,13 @@ async function clearStaleLocks(dataDir) {
 
 async function openPglite(dataDir) {
   const { PGlite } = await import("@electric-sql/pglite");
+  /* PGlite creates the last path segment only. On a fresh clone
+     server/.data does not exist yet, so the first seed failed with
+     ENOENT instead of creating the book. */
+  if (dataDir) {
+    const { mkdir } = await import("node:fs/promises");
+    await mkdir(dataDir, { recursive: true });
+  }
   await clearStaleLocks(dataDir);
   const pglite = dataDir ? new PGlite(dataDir) : new PGlite();
   await pglite.waitReady;
@@ -269,6 +276,15 @@ async function openPglite(dataDir) {
 }
 
 /* ── lifecycle ────────────────────────────────────────────────────── */
+
+/* Where PGlite keeps the book when nobody says otherwise: the directory
+   the README promises, never memory by accident (5.9.1, M-01). `dataDir:
+   null` is an explicit in-memory request and wins over PGLITE_DIR. The rule
+   itself lives in env.js (D-36.01 bis); this is the name 5.9.1 exported. */
+export { DEFAULT_PGLITE_DIR };
+export function resolvePgliteDir(opts = {}, env = process.env) {
+  return pgliteDirFor("dataDir" in opts ? opts.dataDir : undefined, env);
+}
 
 export async function connect(opts = {}) {
   /* I-1 — `.env` est lu ici, au seul endroit par lequel tout passe (le

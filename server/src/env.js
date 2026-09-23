@@ -70,15 +70,19 @@ export function resetEnvLoader() { loaded = false; }
  * pour moi ».
  */
 export function resolveDataDir(explicit, env = process.env) {
-  if (explicit === null) return null;
-  if (explicit) return prepared(explicit);
-  if (env.MERIDIAN_EPHEMERAL === "1") return null;
-  const dir = env.PGLITE_DIR && env.PGLITE_DIR.trim() ? env.PGLITE_DIR.trim() : DEFAULT_PGLITE_DIR;
-  return prepared(dir);
+  const dir = pgliteDirFor(explicit, env);
+  if (dir) fs.mkdirSync(dir, { recursive: true });
+  return dir;
 }
 
-function prepared(dir) {
-  const abs = resolve(ROOT, dir);
-  fs.mkdirSync(abs, { recursive: true });
-  return abs;
+/* D-36.01 bis — the one resolution rule, without touching the disk. 5.9.1
+   and the RT365 line each wrote their own (`resolvePgliteDir` in db.js,
+   this one here); convergence keeps this one and db.js delegates to it. */
+export function pgliteDirFor(explicit, env = process.env) {
+  if (explicit === null) return null;
+  if (explicit) return resolve(ROOT, explicit);
+  if (env.MERIDIAN_EPHEMERAL === "1") return null;
+  const dir = env.PGLITE_DIR && env.PGLITE_DIR.trim() ? env.PGLITE_DIR.trim() : DEFAULT_PGLITE_DIR;
+  return resolve(ROOT, dir);
 }
+

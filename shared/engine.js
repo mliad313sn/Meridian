@@ -199,8 +199,13 @@ export const Engine = {
     const eac = cpi != null && cpi > 0.01 ? bac / cpi : bac;
     const vac = bac - eac;
     const tcpi = (bac - ac) > 0.0001 ? (bac - ev) / (bac - ac) : 1;
-    const pctComplete = bac > 0 ? clamp(ev / bac, 0, 1) : 0;
-    const plannedComplete = bac > 0 ? clamp(pv / bac, 0, 1) : 0;
+    const physical = sum(acts, a => a.weight * (a.pct / 100));
+    const physicalPlanned = sum(acts, a => {
+      const span = Math.max(1, days(a.baseStart, a.baseEnd));
+      return a.weight * clamp(days(a.baseStart, today) / span, 0, 1);
+    });
+    const pctComplete = bac > 0 ? clamp(ev / bac, 0, 1) : clamp(physical, 0, 1);
+    const plannedComplete = bac > 0 ? clamp(pv / bac, 0, 1) : clamp(physicalPlanned, 0, 1);
 
     const totalSpan = days(p.start, p.finish);
     const elapsed = clamp(days(p.start, today), 0, totalSpan);

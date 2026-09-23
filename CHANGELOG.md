@@ -22,7 +22,49 @@ Nothing yet.
 
 ---
 
-## [5.15.0] — 2026-09-09
+## [5.16.0] — 2026-09-23
+
+**Convergence: the RT365 line reaches main.** Nothing in this release is
+new code. It is 5.10.0 through 5.15.0, built on
+`claude/meridian-rt365-feedback-d6vo3i` between 08/09 and 09/09 and never
+merged, joined onto 5.9.1. Their sections below keep the dates they were
+built and now say when they were first released. See `docs/36` line C-02.
+
+### Why this was wrong before
+
+On 23/09 the product anyone clones (main, 5.9.0) could not import its own
+export, while four unreleased lines carried the fix. Three field
+programmes had each rediscovered defects another had already fixed, and
+the register in `docs/requests/rt365.json` promised 66 files that main did
+not carry (gate F12).
+
+### Changed
+
+- **One MER-04 rule (D-36.01).** 5.9.1 and the RT365 line each fixed "an
+  unbudgeted project reports SPI/CPI 1.00 and green". 5.9.1 kept the
+  indices at 1 and the colour green with a "no cost baseline" note.
+  RT365's REQ-33 made the indices `null` and the health `N`. Main now
+  carries REQ-33's rule, because an index nobody measured is not 1, and
+  keeps 5.9.1's other half: percent complete falls back to the weighted
+  physical progress of the plan, which *is* a measurement. 5.9.1's test
+  now asserts `N` and `null`, which is stricter than `G`.
+- **One first-run implementation.** `server/src/env.js` keeps the only
+  resolution rule for the PGlite directory (`pgliteDirFor`).
+  `resolvePgliteDir` and `DEFAULT_PGLITE_DIR` stay exported from `db.js`
+  under 5.9.1's names and delegate to it. Semantics kept: `dataDir: null`
+  is in-memory and wins over `PGLITE_DIR`. RT365's production start
+  refusals are unchanged.
+- `scripts/restart.sh`: RT365's version, which already covered lsof, fuser, ss
+  and PowerShell. 5.9.1's version is a subset of it.
+- The importer keeps 5.9.1's fixes: `'\\D'`, evidence fields, the bare
+  book, and the named row on refusal.
+- `docs/requests/rt365.json`: REQ-45, REQ-46 and REQ-47 read `open` while
+  migrations 049 and 050 and their tests delivered them. They are
+  corrected from the code.
+
+---
+
+## [5.15.0] — 2026-09-09 · built, first released in 5.16.0
 
 Two waves in one release: the executive value page RT365 asked for, and
 the three instrument defects we filed against ourselves while building
@@ -104,7 +146,7 @@ the governance signals of 5.14.0.
 
 ---
 
-## [5.14.0] — 2026-09-08
+## [5.14.0] — 2026-09-08 · built, first released in 5.16.0
 
 RT365's integrator rewrote `meridian_sync.py` against our published
 contract and then **measured** what it still could not do. Everything in
@@ -179,7 +221,7 @@ beside it.
 
 ---
 
-## [5.13.0] — 2026-09-08
+## [5.13.0] — 2026-09-08 · built, first released in 5.16.0
 
 RT365 consolidated two rounds into one report and handed over the most
 exacting document this product has received. It measures what Meridian is
@@ -291,7 +333,7 @@ for paying it.
 
 ---
 
-## [5.12.0] — 2026-09-08
+## [5.12.0] — 2026-09-08 · built, first released in 5.16.0
 
 RT365 consolidated its field work into two reports — one on **value**, one
 on **evidence** — and they are the most exacting thing this product has
@@ -395,7 +437,7 @@ V-5, V-6, V-7, V-10 and V-11 remain open in their sequence.
 
 ---
 
-## [5.11.0] — 2026-09-08
+## [5.11.0] — 2026-09-08 · built, first released in 5.16.0
 
 RT365 re-tested 5.10.0 and filed a second list, V-1…V-12, under a heading
 that named the point: *requirements for Meridian as the tool that drives
@@ -482,7 +524,7 @@ the integrator ranked highest of its own three.
 
 ---
 
-## [5.10.0] — 2026-09-08
+## [5.10.0] — 2026-09-08 · built, first released in 5.16.0
 
 The RT365 field return (docs/33). For the first time a programme that is
 not this product's own demo ran its whole lifecycle in Meridian — sixteen
@@ -711,6 +753,66 @@ added to a release being tagged (D-33.27).
   "every scope served, every scoped route listed".
 
 Tests: 449 → 515; gates 9 → 10; migrations 033 → 040.
+## [5.9.1] — 2026-09-23
+
+What running a real programme (FitAdapt) on a clean clone of `main`
+found on its first day: the import could not import, the quick start
+could not sign anyone in, and an unmeasured project called itself green.
+
+### Fixed
+
+- **Whole-book import answered 400 for every book, including Meridian's
+  own export.** The identifier-counter query in `importBook()` wrote
+  `'\D'` inside a template literal; JavaScript drops the backslash, so
+  PostgreSQL received `regexp_replace(id, 'D', …)` and the `::int` cast
+  failed on the first id. Nothing tested `POST /api/admin/import`, which
+  is how it shipped. `server/test/import.test.js` now round-trips the
+  seeded book. Found by running a real programme (FitAdapt) on Meridian.
+- **Imported documents lost their evidence.** The import did not carry
+  `uri`, `uri_locked_hash`, `uri_locked_on` or `supersedes`, so every
+  approved document came back as a label with nothing behind it (R-01)
+  and every cleared gate turned overdue. All four now round-trip.
+- **The import refused the file `GET /api/admin/export` produces.** The
+  route read only `{ db: <book> }`, the interface's envelope; it now also
+  accepts the bare book the export answers.
+- **The README quick start could not sign anyone in on a fresh clone.**
+  With no `PGLITE_DIR` the PGlite fallback was an in-memory database:
+  `npm run seed` built a book that died with its process and `npm run
+  dev` started on an empty one with no accounts. The fallback is now
+  `server/.data/pgdata`, as documented, and the directory is created if
+  it does not exist (setting `PGLITE_DIR` to a new path used to fail with
+  `ENOENT`). `dataDir: null` remains an explicit in-memory request and
+  now wins over `PGLITE_DIR`, so tests never touch a developer's book.
+- **`scripts/restart.sh` only worked on Windows.** It found the listener
+  through `powershell.exe`; on Linux and macOS it stopped nothing and
+  started a second server on the same data directory. It now uses `lsof`
+  or `ss` there, sends SIGTERM, waits for the process to exit, and
+  refuses to start a second server if the first is still running.
+- **A refused import did not say which row.** The answer was only "One
+  of those values is not in a form the system can read", and nothing
+  reached the log. It now names the table and the id (`… — project
+  PRJ-104`), logs the database's own message, and the transaction still
+  rolls back whole.
+- **A project with no cost baseline reported itself measured and green
+  (MER-04).** With a zero budget the earned-value guard still passed, so
+  SPI and CPI came out as 1.00 and health read "within tolerance" over a
+  project nobody had measured; progress read 0% whatever the plan said.
+  The engine now says there is no cost baseline, and progress falls back
+  to the weighted activity progress. Ported from
+  `claude/dynamic-gates-and-requirements` (44782b1), which carried the
+  fix without a test and was never merged; `engine.test.js` now pins it.
+  This changes a number `shared/engine.js` produces, deliberately: the
+  old number was not a measurement.
+
+### Security
+
+- **`qs` 6.15.3 → 6.16.0** (transitive, through Express and
+  `body-parser`). 6.15.3 carries two moderate advisories that reach the
+  JSON and query parsers every request goes through: an array-limit
+  bypass via bracket-key comma parsing (GHSA-x5fp-wj9c-mxmx) and a
+  denial of service through an attacker-controlled `isBuffer`
+  (GHSA-4mjr-xmp4-gh2g). `npm audit` now reports nothing, not merely
+  nothing above the `high` threshold the build enforces.
 
 ---
 
