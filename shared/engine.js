@@ -131,19 +131,34 @@ export function normaliseGateModel(input) {
   });
   return out;
 }
-/* "Name | Owner | Evidence, comma separated | at%" — one gate per line.
-   The textual form an administrator types; the JSON form is what is stored. */
+/* "Name | Owner | Evidence, comma separated | at% [| loops to N [| scope]]"
+   — one gate per line. The textual form an administrator types; the JSON
+   form is what is stored.
+
+   NEW-10 (docs/36) — the two trailing columns are D-36.02's: a rung may
+   loop back to an earlier one (MER-01) and may clear for the whole
+   programme or portfolio (MER-02). The form had four columns, so saving a
+   ladder from the screen silently dropped both. They are optional, so a
+   four-column ladder reads and writes exactly as before. */
 export function parseGateLadder(text) {
   const lines = String(text ?? "").split("\n").map((l) => l.trim()).filter(Boolean);
   if (!lines.length) return null;
   return normaliseGateModel(lines.map((l) => {
-    const [name, owner, evidence, at] = l.split("|").map((x) => (x ?? "").trim());
+    const [name, owner, evidence, at, loop, scope] = l.split("|").map((x) => (x ?? "").trim());
     const pct = Number(String(at ?? "").replace("%", ""));
-    return { name, owner, evidence, at: Number.isFinite(pct) ? pct / 100 : NaN };
+    /* "1", "G1", "loops to 1", "↺ 1" all name rung 1. */
+    const loopN = String(loop ?? "").match(/\d+/)?.[0];
+    return { name, owner, evidence, at: Number.isFinite(pct) ? pct / 100 : NaN,
+      loopsTo: loopN ? Number(loopN) : undefined,
+      scope: scope ? scope.toLowerCase() : undefined };
   }));
 }
-export const formatGateLadder = (model) => (model ?? []).map((g) =>
-  `${g.name} | ${g.owner} | ${g.evidence} | ${Math.round(g.at * 100)}%`).join("\n");
+export const formatGateLadder = (model) => (model ?? []).map((g) => {
+  const base = `${g.name} | ${g.owner} | ${g.evidence} | ${Math.round(g.at * 100)}%`;
+  const scoped = g.scope && g.scope !== "project";
+  if (!g.loopsTo && !scoped) return base;
+  return `${base} | ${g.loopsTo ? "loops to " + g.loopsTo : ""}` + (scoped ? ` | ${g.scope}` : "");
+}).join("\n");
 export const RAID_TYPES = ["Risk", "Issue", "Assumption", "Dependency"];
 export const RESPONSES = ["Mitigate", "Avoid", "Transfer", "Accept", "Monitor", "Fix"];
 /* PM-02 — où l'on ira CHERCHER un enseignement plus tard. Les onze

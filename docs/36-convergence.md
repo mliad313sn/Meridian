@@ -250,11 +250,11 @@ contradicts `docs/25` (reversibility).
 | NEW-15 | A real (non-dry-run) import drops the rows it refuses by name without returning `rejects`. Only a dry run says so. | 1 |
 | NEW-16 | A merge import rewrites rows without bumping `row_version`, so a screen holding the old version can still write over them. | 1 |
 | NEW-17 | A merge can leave two active tolerances on one project when the file's active tolerance has a different id. | 3 |
-| NEW-06 | The forced password change never opens: `/api/bootstrap` `me` carries no `mustChangePassword`, so an account an administrator created cannot change its password from any screen, and every write is refused. | 1 |
+| NEW-06 | The forced password change never opens: `/api/bootstrap` `me` carries no `mustChangePassword`, so an account an administrator created cannot change its password from any screen, and every write is refused. **BUILT (5.20.2)**: seen in the browser. | 1 |
 | NEW-07 | A merge-mode dry run of the product's own export answers 400 on a duplicate `change_step` key (MER-08). **BUILT with NEW-05 (5.20.1).** | 1 |
 | NEW-08 | `GET /api/v1/signals` is live and absent from the published contract: F9 reads only `routes/v1.js` (REQ-52's blind spot, a sixth time). | 1 |
-| NEW-09 | On SIGTERM the process exits before PGlite closes (`claimBook` calls `process.exit` first): `postmaster.pid` is left behind and every start clears "2 stale lock files". | 1 |
-| NEW-10 | Saving a programme's gate ladder from the screen drops `loopsTo` and `scope` (D-36.02 holds in the engine and the validator, not in the form). | 1 |
+| NEW-09 | On SIGTERM the process exits before PGlite closes (`claimBook` calls `process.exit` first). **BUILT (5.20.2)**. Corrected diagnosis: the leftover `postmaster.pid` is PGlite 0.2.x behaviour even after a clean close; the defect was the unclosed book. `shutdown.test.js` fails on 5.20.1. | 1 |
+| NEW-10 | Saving a programme's gate ladder from the screen drops `loopsTo` and `scope` (D-36.02 holds in the engine and the validator, not in the form). **BUILT (5.20.2)**: optional `loops to N` and scope columns; seen in the browser. | 1 |
 | NEW-11 | Administration's notifications panel still names SMTP, and the CSV import panel is French in every language. | 3 |
 | NEW-12 | `/` answers 404 when the install path contains a dot-directory (`sendFile` refuses it). | 4 |
 | NEW-13 | Spanish notification strings reach nobody: `inLocale` treats any non-`fr` locale as English, and `/auth/preferences` accepts only `en` and `fr`. | 3 |

@@ -895,6 +895,7 @@ export const ES = {
   "Open in portfolio": "Abrir en la cartera",
   "Meeting pack": "Dossier de reunión",
   "Minutes": "Acta",
+  "Optionally, two more columns: « loops to N » when a review can send the work back to gate N, and « programme » or « portfolio » when the gate clears for all of them at once.": "Opcionalmente, dos columnas más: « loops to N » cuando una revisión puede devolver el trabajo al hito N, y « programme » o « portfolio » cuando el hito se supera para todos a la vez.",
   "Record a decision": "Consignar una decisión",
   /* REQ-50 */
   "Ratify": "Ratificar",

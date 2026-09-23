@@ -164,7 +164,23 @@ function claimBook(dir) {
   try { writeFileSync(join(dir, HOLDER), String(process.pid)); } catch { /* lecture seule : tant pis */ }
   const drop = () => { try { unlinkSync(join(dir, HOLDER)); } catch { /* déjà parti */ } };
   process.once("exit", drop);
-  for (const sig of ["SIGINT", "SIGTERM"]) process.once(sig, () => { drop(); process.exit(0); });
+  /* NEW-09 (docs/36) — this handler used to `process.exit(0)` at once.
+     It is registered when the book is opened, BEFORE the server's own
+     orderly stop (index.js: close the listener, then the database), so it
+     ran first and the process died with PGlite still open: every restart
+     then printed "cleared 2 stale lock file(s)". Now it steps aside when
+     anyone else answers the signal — their stop ends in process.exit, and
+     the `exit` hook above still drops the marker — and, for a script that
+     answers nothing (seed, migrate), it closes the book before leaving. */
+  for (const sig of ["SIGINT", "SIGTERM"]) {
+    const onSignal = async () => {
+      if (process.listenerCount(sig) > 0) return;          // someone else stops us, in order
+      await close().catch(() => {});
+      drop();
+      process.exit(0);
+    };
+    process.once(sig, onSignal);
+  }
 }
 
 /**

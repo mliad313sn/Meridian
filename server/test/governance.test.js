@@ -355,7 +355,12 @@ test("an admin-provisioned account must set its own password before day two", as
 
   /* The dialog is a courtesy; the refusal is the control. Until the
      password is the holder's own, the session reads but does not act. */
-  assert.equal((await c.get("/api/bootstrap")).status, 200, "reading is still allowed");
+  const boot1 = await c.get("/api/bootstrap");
+  assert.equal(boot1.status, 200, "reading is still allowed");
+  /* NEW-06 — the CLIENT opens the forced change from the bootstrap's
+     `me`, not from the login payload; the flag was missing there, so the
+     dialog never opened and the account was stuck read-only. */
+  assert.equal(boot1.body.me.mustChangePassword, true, "the bootstrap carries the flag the client acts on");
   const early = await c.post("/api/raid", { title: "anything", type: "Risk" });
   assert.equal(early.status, 403);
   assert.match(early.body.error, /Choose your own password/);
@@ -370,6 +375,7 @@ test("an admin-provisioned account must set its own password before day two", as
 
   const ok = await c.post("/api/auth/password", { current: "temporary-pass-1", next: "my-own-pass-9" });
   assert.equal(ok.status, 200);
+  assert.equal((await c.get("/api/bootstrap")).body.me.mustChangePassword, false, "and drops it once the password is the holder's own");
   const me = await c.get("/api/auth/me");
   assert.equal(me.body.user.mustChangePassword, false);
   assert.equal((await other.get("/api/auth/me")).status, 401, "the other session is over");

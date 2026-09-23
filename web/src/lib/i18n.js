@@ -1000,6 +1000,7 @@ export const FR = {
   "Open in portfolio": "Ouvrir dans le portefeuille",
   "Meeting pack": "Dossier de réunion",
   "Minutes": "Compte rendu",
+  "Optionally, two more columns: « loops to N » when a review can send the work back to gate N, and « programme » or « portfolio » when the gate clears for all of them at once.": "Facultativement, deux colonnes de plus : « loops to N » quand une revue peut renvoyer le travail au jalon N, et « programme » ou « portfolio » quand le jalon se franchit pour tous à la fois.",
   "Record a decision": "Consigner une décision",
   /* REQ-50 — ratifier depuis l'écran, en son propre nom. */
   "Ratify": "Ratifier",

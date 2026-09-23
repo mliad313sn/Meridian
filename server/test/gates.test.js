@@ -39,6 +39,18 @@ describe("I-3 · l'échelle est une donnée du programme", () => {
     const back = parseGateLadder(formatGateLadder(m));
     assert.deepEqual(back.map((g) => [g.name, g.at]), m.map((g) => [g.name, g.at]));
     assert.equal(parseGateLadder("   "), null);
+    /* NEW-10 — a loop and a scope survive the screen's text form. */
+    const loops = normaliseGateModel([
+      { name: "Spec", at: 0.1, owner: "PO", evidence: "" },
+      { name: "Review", at: 0.5, owner: "Chair", evidence: "Report", loopsTo: 1, scope: "programme" },
+      { name: "Launch", at: 0.9, owner: "Sponsor", evidence: "", scope: "portfolio" },
+    ]);
+    const text = formatGateLadder(loops);
+    assert.match(text, /loops to 1 \| programme/);
+    const again = parseGateLadder(text);
+    assert.deepEqual(again.map((g) => [g.loopsTo ?? null, g.scope ?? "project"]),
+      [[null, "project"], [1, "programme"], [null, "portfolio"]]);
+    assert.equal(formatGateLadder(parseGateLadder("A | PO | x | 20%")), "A | PO | x | 20%", "four columns stay four");
     assert.throws(() => parseGateLadder("Only a name"), /between 0 and 1/);
   });
 
