@@ -22,6 +22,51 @@ Nothing yet.
 
 ---
 
+## [5.21.1] — 2026-09-23
+
+**A gate's own list is checked against the product** (REQ-52, RT365;
+NEW-08; docs/36 wave 1).
+
+### Changed
+
+RT365 put the class of defect in one sentence: *"a thing a list does not
+name is not reported missing, it is not seen."* Every hand-written list a
+gate walked is now derived from the product, or held against it:
+- **F1** reads a mount table (`server/src/routemap.js`) that records every
+  router the app mounts, and where. A router file that is never mounted
+  fails by name. It also reads every client file, not six.
+- **F2** fails on any table a migration creates that it does not name, and
+  on a name no migration creates. Schema reading lives in
+  `scripts/audit/lib/schema.mjs` and is checked against the live
+  database, table by table and column by column. It now examines 15
+  tables it never had.
+  - KODO's six registers are declared, and the 16 verbs NEW-04 owes them
+    sit in a dated, shrink-only `KNOWN_GAPS` list printed on every run.
+  - Four fields that no screen shows are listed too:
+    `notification.acted_at`, `integration.rotated_at`,
+    `event_delivery.last_error` and `delivered_at`.
+- **F3, F4 and F7** read every client file and every table carrying
+  `row_version`: 38 tables, where the list had 16.
+- **F8** holds NAV, TITLES, ROUTES, ROUTE_ROLES and the guide's 42 links
+  against the screens the product draws, and its role list against
+  `shared/rbac.js`. NAV and TITLES moved to `web/src/lib/state.js`.
+- **F9** reads every route the app serves under `/api/v1`, not just
+  `routes/v1.js`.
+
+### Fixed
+
+- **`GET /api/v1/signals` answered and was absent from the published
+  contract** (NEW-08), because F9 read one file. It is described now, with
+  scope `read:portfolio`.
+
+Each gate was proven in both directions with a deliberate break: a scratch
+table, an unmounted router, a `/api/v1` route outside `v1.js`, an
+unversioned PATCH, an unguarded delete button, an unimported helper, and
+a screen missing from NAV. Each break passed the old gate and fails the
+new one. `server/test/gate-lists.test.js` (6 tests).
+
+---
+
 ## [5.21.0] — 2026-09-23
 
 **The meeting register is in the book** (NEW-14, NEW-15, NEW-16; docs/36

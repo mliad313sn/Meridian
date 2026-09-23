@@ -25,7 +25,7 @@ import "@fontsource/ibm-plex-mono/600.css";
 import "./styles.css";
 import { h, clear, icon, $, dialog, formDialog, searchBox, selectField, openDialogCount } from "./ui/kit.js";
 import { renderLogin } from "./ui/login.js";
-import { App, go, readRoute, routeAllowed, toast, bindEngine, reportError, clearSnapshot } from "./lib/state.js";
+import { App, go, readRoute, routeAllowed, toast, bindEngine, reportError, clearSnapshot, NAV, TITLES } from "./lib/state.js";
 import { t, getLang, setLang, nextLang } from "./lib/i18n.js";
 import { api, setUnauthenticatedHandler } from "./lib/api.js";
 import { Engine } from "../../shared/engine.js";
@@ -36,56 +36,9 @@ bindEngine(Engine);
 
 /* ── navigation ───────────────────────────────────────────────────── */
 
-/* Which roles see which entry lives in ROUTE_ROLES beside the routes, so
-   that hiding an entry and refusing the route it points at cannot drift
-   apart (R7.3 — an entry an account cannot use is not there). "My site"
-   is the site lead's governance surface; "Programmes" the group PMO's;
-   "My week" is everyone's landing (2026-08-28 governance + UX
-   committees). */
-const NAV = [
-  { label: "Deliver", items: [
-    ["my", "My week"],
-    ["inbox", "Notifications"],
-    ["portfolio", "Portfolio"],
-    ["roadmap", "Roadmap"],
-    ["pipeline", "Pipeline"],
-    ["programmes", "Programmes"],
-    ["mysite", "My site"],
-    ["project", "Project overview"],
-    ["schedule", "Schedule"], ["board", "Board"]] },
-  { label: "Control", items: [
-    ["risk", "Risks & issues"], ["budget", "Budget & cost"],
-    ["change", "Change requests"], ["resources", "Resources"]] },
-  { label: "Govern", items: [["meetings", "Meetings"]] },
-  { label: "Record", items: [
-    ["documents", "Documents"], ["reports", "Reports"], ["lessons", "Lessons"],
-    ["locations", "Locations"], ["adoption", "Adoption"]] },
-  { label: "System", items: [["admin", "Administration"]] },
-];
-
-const TITLES = {
-  my: ["Deliver", "My week"],
-  inbox: ["Deliver", "Notification centre"],
-  portfolio: ["Portfolio", "Executive portfolio view"],
-  roadmap: ["Deliver", "Portfolio roadmap"],
-  pipeline: ["Deliver", "Demand & prioritisation"],
-  programmes: ["Deliver", "Programme governance"],
-  mysite: ["Deliver", "My site"],
-  project: ["Project", null],
-  schedule: ["Schedule", "Integrated master schedule"],
-  board: ["Delivery", "Work board"],
-  risk: ["Control", "Risks & issues"],
-  budget: ["Control", "Budget & earned value"],
-  change: ["Control", "Change requests"],
-  resources: ["Control", "Resource capacity"],
-  meetings: ["Govern", "Meetings & decisions"],
-  documents: ["Record", "Document library"],
-  reports: ["Record", "Status reporting"],
-  locations: ["Record", "Delivery locations"],
-  lessons: ["Record", "Lessons learned"],
-  adoption: ["Record", "How the tool is used"],
-  admin: ["System", "Governance & administration"],
-};
+/* NAV and TITLES live in lib/state.js beside ROUTES, which is derived
+   from NAV: one list of the screens, not three (REQ-52). F8 holds it
+   against VIEWS. */
 
 /** An entry an account has no use for is not there — not greyed (R7.3). */
 function navFor(me) {

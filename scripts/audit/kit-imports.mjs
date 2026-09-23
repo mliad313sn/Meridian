@@ -37,15 +37,26 @@ import path from "node:path";
 
 const root = path.resolve(import.meta.dirname, "../..");
 
-/** Les modules partagés dont l'oubli d'un nom casse un rendu. */
-const SHARED = [
-  "web/src/ui/kit.js",
-  "web/src/lib/api.js",
-  "web/src/lib/i18n.js",
-  "web/src/lib/state.js",
-  "web/src/lib/permissions.js",
-  "shared/engine.js",
-];
+/* REQ-52 — les fichiers du client sont parcourus, et les modules
+   surveillés sont DÉDUITS de leurs imports : tout module que le client
+   importe par un chemin relatif. La porte en nommait six ; un septième
+   module partagé (shared/govsignals.js, web/src/ui/guide.js…) était un
+   module dont l'oubli d'un nom cassait un écran sans qu'elle le voie. */
+const files = [];
+(function walk(dir) {
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) walk(p);
+    else if (e.name.endsWith(".js")) files.push(p);
+  }
+})(path.join(root, "web/src"));
+files.sort();
+
+const SHARED = [...new Set(files.flatMap((f) => {
+  const src = fs.readFileSync(f, "utf8");
+  return [...src.matchAll(/\bfrom\s+["'](\.{1,2}\/[^"']+)["']/g)]
+    .map((m) => path.relative(root, path.resolve(path.dirname(f), m[1])).replace(/\\/g, "/"));
+}))].sort();
 
 /** Les noms qu'un module expose, par `export {…}` ou par `export function`. */
 function exportsOf(src) {
@@ -62,14 +73,6 @@ function exportsOf(src) {
   return names;
 }
 
-const files = [];
-for (const dir of ["web/src/views", "web/src/lib", "web/src", "web/src/ui"]) {
-  const full = path.join(root, dir);
-  if (!fs.existsSync(full)) continue;
-  for (const f of fs.readdirSync(full)) {
-    if (f.endsWith(".js")) files.push(path.join(full, f));
-  }
-}
 
 const problems = [];
 let checked = 0;
