@@ -1458,7 +1458,9 @@ Views.project = (db) => {
         h("span", { class: "muted" }, "To-complete index"),
         h("span", { class: "mono strong" }, m.measurable ? idx(m.tcpi) : "—"))),
     h("div", { style: "height:26px" }), h("hr", { class: "hr" }), h("div", { style: "height:18px" }),
-    sdpPanel(db, p));
+    sdpPanel(db, p),
+    h("div", { style: "height:22px" }),
+    referencesPanel(db, p));
 
   return h("div", null, head, stats, h("div", { class: "split" }, left, rail));
 };
@@ -1470,7 +1472,8 @@ Views.project = (db) => {
    the feeds no longer return the item. */
 
 function sdpPanel(db, p) {
-  const links = (db.extLinks || []).filter((l) => l.project === p.id);
+  /* D-36.14 — SDP's own items only; repository references have their panel. */
+  const links = (db.extLinks || []).filter((l) => l.project === p.id && SDP_SRC.has(l.source));
   const SRC_LABEL = { change: "Change", meetings: "Meeting action", inspection: "Inspection", report: "Report action" };
 
   const rows = links.map((l) => h("div", { class: "list-row", style: "align-items:flex-start" },
@@ -1508,6 +1511,156 @@ function sdpPanel(db, p) {
               (a) => a.post("/federation/refresh", { site: p.site }),
               { detail: "site " + p.site }) }, "Refresh from SDP"))
       : null);
+}
+
+/* ── D-36.14 · where the work is (FitAdapt #17 · RT365 REQ-29) ─────────
+   A typed external reference: an issue, a pull request, a commit, a CI
+   run or an artefact, on the project or on one stage, RAID row or gate
+   criterion. Meridian never looks it up (NOTICE): the state on the card
+   is what a named integration last REPORTED, and the card says so in
+   those words — never "verified". A criterion's citation becomes part of
+   the gate record once the criterion is found met or its gate is done:
+   a change then cites a new version, and the old one stays readable. */
+
+const REPO_KIND = ["issue", "pull_request", "commit", "ci_run", "artefact"];
+const SDP_SRC = new Set(["meetings", "inspection", "report", "change"]);
+const refKindLabel = (k) => ({
+  issue: t("Tracker issue"), pull_request: t("Pull request"), commit: t("Commit"),
+  ci_run: t("CI run"), artefact: t("Artefact"),
+})[k] ?? k;
+const REF_GLYPH = { issue: "◌", pull_request: "⇄", commit: "◆", ci_run: "▶", artefact: "▣" };
+const refStateLabel = (s) => ({
+  open: t("Open"), merged: t("Merged"), closed: t("Closed"), passed: t("Passed"), failed: t("Failed"),
+})[s] ?? s;
+const REF_SHAPE = {
+  issue: "owner/repo#123", pull_request: "owner/repo#123", commit: "owner/repo@<sha>",
+  ci_run: "owner/repo/runs/<id>", artefact: "sha256:<digest>",
+};
+const whenReported = (v) => {
+  if (!v) return "—";
+  const d = new Date(v);
+  return fmtDate(v) + " " + String(d.getUTCHours()).padStart(2, "0") + ":" + String(d.getUTCMinutes()).padStart(2, "0") + " UTC";
+};
+/** The criterion's gate relies on this citation (the server's rule, drawn). */
+function citationFrozen(db, l) {
+  if (!l.criterion) return false;
+  const c = (db.criteria || []).find((x) => x.id === l.criterion);
+  if (!c) return false;
+  return !!c.met || (db.milestones || []).some((m) => m.project === c.project && m.gate === c.gate && m.done);
+}
+function refTarget(db, l) {
+  if (l.activity) return t("stage") + " " + ((db.activities || []).find((a) => a.id === l.activity)?.name ?? l.activity);
+  if (l.raid) return t("RAID") + " " + l.raid;
+  if (l.criterion) {
+    const c = (db.criteria || []).find((x) => x.id === l.criterion);
+    return t("criterion") + " " + (c ? "G" + c.gate + " · " + c.text : l.criterion);
+  }
+  return t("project level");
+}
+/** "State as last reported by <integration> at <time>" — the only claim. */
+function refStateLine(l) {
+  if (!l.state) {
+    return h("div", { class: "xs muted" }, l.source === "commit" || l.source === "artefact"
+      ? t("Named by its hash — it has no state to report.")
+      : t("No state reported yet. Meridian does not look it up; an integration reports it."));
+  }
+  return h("div", { class: "xs" },
+    h("span", { class: "strong", "data-ref-state": l.state }, refStateLabel(l.state)),
+    h("span", { class: "muted" }, " · " + t("as last reported by") + " " + (l.stateSourceName || t("an integration")) +
+      " " + t("at") + " " + whenReported(l.stateAt)));
+}
+function referenceRow(db, p, l) {
+  const frozen = citationFrozen(db, l);
+  const title = l.title || l.extId;
+  return h("div", { class: "list-row", style: "align-items:flex-start", "data-ref": l.id },
+    h("span", { class: "mono", "aria-hidden": "true", style: "flex:none;width:16px;text-align:center" }, REF_GLYPH[l.source] ?? "·"),
+    h("div", { style: "flex:1;min-width:0" },
+      h("div", { class: "kicker" }, refKindLabel(l.source) + " · " + l.extId + " · " + refTarget(db, l)),
+      h("div", { class: "strong small", style: "margin:2px 0 1px" },
+        l.url && safeHref(l.url)
+          ? h("a", { href: l.url, target: "_blank", rel: "noopener noreferrer", class: "linkish" }, title)
+          : title),
+      refStateLine(l),
+      frozen ? h("div", { class: "xs muted", style: "margin-top:2px" },
+        t("Part of the gate record — a change cites a new version and keeps this one.")) : null),
+    mayWrite(p)
+      ? h("div", { class: "btn-row", style: "flex:none" },
+          h("button", { class: "btn btn-xs btn-ghost", title: t("Correct the reference"),
+            onClick: () => editReference(db, p, l) }, icon("pencil", 11)),
+          frozen ? null : h("button", { class: "btn btn-xs btn-ghost", title: t("Remove the reference"),
+            onClick: () => App.write("Reference removed", (a) => a.del("/references/" + l.id),
+              { detail: l.extId + " ⇸ " + p.id }) }, icon("x", 12)))
+      : null);
+}
+function referencesPanel(db, p) {
+  const links = (db.extLinks || []).filter((l) => l.project === p.id && REPO_KIND.includes(l.source) && !l.supersededAt);
+  return h("div", { "data-panel": "references" },
+    sectionHead(t("Where the work is"), links.length + " " + t("reference(s)"),
+      mayWrite(p) ? h("button", { class: "btn btn-sm", onClick: () => addReference(db, p) }, icon("plus", 12), t("Link a reference")) : null),
+    h("div", null, links.length ? links.map((l) => referenceRow(db, p, l)) : h("div", { class: "small muted" },
+      t("No issue, pull request, commit, CI run or artefact is linked to this project."))));
+}
+function addReference(db, p, preset = {}) {
+  const targets = [{ value: "", label: t("Project level") }]
+    .concat(Engine.activities(db, p.id).map((a) => ({ value: "activity:" + a.id, label: t("Stage") + " · " + a.name })))
+    .concat((db.raid || []).filter((r) => r.project === p.id).map((r) => ({ value: "raid:" + r.id, label: "RAID · " + r.id + " · " + r.title })))
+    .concat((db.criteria || []).filter((c) => c.project === p.id).map((c) => ({ value: "criterion:" + c.id, label: t("Criterion") + " · G" + c.gate + " · " + c.text })));
+  formDialog({
+    title: t("Link a reference"), kicker: p.id,
+    fields: [
+      { key: "kind", label: t("Kind"), type: "select", value: preset.kind ?? "pull_request",
+        hint: t("What the reference is. Its state, if it has one, is reported by an integration — never typed here."),
+        options: REPO_KIND.map((k) => ({ value: k, label: refKindLabel(k) })) },
+      { key: "ref", label: t("Reference"), required: true, value: "", placeholder: "owner/repo#123",
+        hint: t("Canonical form: owner/repo#123 for an issue or a pull request, owner/repo@<sha> for a commit, owner/repo/runs/<id> for a CI run, sha256:<digest> for an artefact.") },
+      { key: "target", label: t("Attached to"), type: "select", span: 2, value: preset.target ?? "",
+        hint: t("The project, or one stage, RAID row or gate criterion of it."), options: targets },
+      { key: "url", label: t("Web address"), span: 2, value: "", placeholder: "https://…", advanced: true,
+        hint: t("Where a person can look. Stored for people to follow — Meridian never opens it.") },
+      { key: "title", label: t("Title"), span: 2, value: "", advanced: true,
+        hint: t("A readable name for the card. An integration may replace it with the title it reports.") },
+    ],
+    saveLabel: t("Link"),
+    onSave: (v) => {
+      const [what, id] = (v.target || "").split(":");
+      return App.write("Reference cited", (a) => a.post("/references", {
+        project: p.id, kind: v.kind, ref: v.ref, url: v.url || undefined, title: v.title || undefined,
+        ...(what && id ? { [what]: id } : {}),
+      }), { detail: v.ref + " → " + p.id });
+    },
+  });
+}
+function editReference(db, p, l) {
+  const frozen = citationFrozen(db, l);
+  formDialog({
+    title: t("Correct the reference"), kicker: refKindLabel(l.source) + " · " + l.extId,
+    fields: [
+      { key: "ref", label: t("Reference"), required: true, value: l.extId,
+        hint: frozen
+          ? t("This criterion's gate relies on this citation: a new reference is recorded as a new version, and this one is kept as it was.")
+          : t("Correcting the reference clears the reported state — it was about the old one.") },
+      { key: "url", label: t("Web address"), span: 2, value: l.url ?? "", placeholder: "https://…",
+        hint: t("Where a person can look. Stored for people to follow — Meridian never opens it.") },
+      { key: "title", label: t("Title"), span: 2, value: l.title ?? "",
+        hint: t("A readable name for the card. An integration may replace it with the title it reports.") },
+    ],
+    saveLabel: frozen ? t("Cite a new version") : t("Save"),
+    onSave: (v) => App.write(frozen ? "Citation superseded" : "Reference corrected",
+      (a) => a.patch("/references/" + l.id, { ref: v.ref, url: v.url, title: v.title, version: l.version }),
+      { detail: l.extId + " → " + v.ref }),
+  });
+}
+/** Under a criterion: what it cites, by whom, and what it cited before. */
+function criterionCitations(db, c) {
+  const all = (db.extLinks || []).filter((l) => l.criterion === c.id);
+  if (!all.length) return null;
+  const by = (l) => l.linkedByName || l.externalSourceName || t("an integration");
+  return h("div", { class: "xs", style: "margin-top:3px" }, all.map((l) => h("div", {
+      class: l.supersededAt ? "muted" : "", style: l.supersededAt ? "text-decoration:line-through" : null },
+    (REF_GLYPH[l.source] ?? "·") + " " + t("cites") + " " + refKindLabel(l.source) + " " + l.extId +
+    " · " + t("cited by") + " " + by(l) + " · " + fmtDate(l.linkedAt) +
+    (l.supersededAt ? " · " + t("superseded") + " " + fmtDate(l.supersededAt) : "") +
+    (l.state && !l.supersededAt ? " · " + refStateLabel(l.state) + " " + t("as last reported by") + " " + (l.stateSourceName || t("an integration")) : ""))));
 }
 
 function repinSdpLink(db, p, l) {
@@ -6811,8 +6964,11 @@ function criteriaGate(db, p, gate) {
       h("div", { class: "xs muted" },
         c.met ? t("found met by ") + Engine.personName(db, c.reviewedBy) + " · " + fmtDate(c.reviewedOn) : t("not yet found met"),
         c.document ? " · " + ((db.docs.find(d => d.id === c.document) || {}).name || c.document) : "",
-        c.note ? " · " + c.note : "")),
+        c.note ? " · " + c.note : ""),
+      criterionCitations(db, c)),
     h("div", { class: "btn-row", style: "justify-content:flex-end" },
+      mayWrite(p) ? h("button", { class: "btn btn-xs btn-ghost", title: t("Cite a reference"),
+        onClick: () => addReference(db, p, { kind: "commit", target: "criterion:" + c.id }) }, icon("plus", 11)) : null,
       canFind && !c.met ? h("button", { class: "btn btn-xs btn-primary", onClick: () => findCriterionMet(db, p, c) }, t("Found met")) : null,
       canFind && c.met ? h("button", { class: "btn btn-xs btn-ghost", title: t("Reopen"), onClick: () => App.write("Gate criterion reopened",
         (a) => a.patch("/criteria/" + c.id, { met: false, version: c.version }), { detail: c.text }) }, "↺") : null,

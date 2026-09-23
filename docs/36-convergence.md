@@ -301,6 +301,18 @@ contradicts `docs/25` (reversibility).
 
 ### Waves 1–4
 
+#### #17 · DF-11 · REQ-29 · MER-11 · One typed external reference — BUILT, PR as 5.25.0
+
+- **Delivered** (D-36.14): migration 057 on `ext_link`; canonical refs
+  normalised by the server; a state pushed by an integration, never
+  fetched; citation versioning for criteria; the "Where the work is"
+  panel. The SDP refresh no longer treats foreign links as its own.
+- **Measure**: `references.test.js`, 18 tests; F13 enriched. Browser:
+  linked on screen, reported through `/api/v1`, read back as "as last
+  reported by FitAdapt GitHub Action".
+- **Remains**: none. Integrated before #16 so that migrations reach
+  main in number order.
+
 #### REQ-48 · The demonstration book carries value — BUILT, PR as 5.24.0 (with NEW-18, NEW-19, NEW-20)
 
 - **Delivered**:

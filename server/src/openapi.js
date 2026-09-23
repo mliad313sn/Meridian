@@ -231,6 +231,28 @@ const WRITE_DOCS = {
     "as everywhere else. Revising the case does NOT erase a past reconfirmation — it happened, it " +
     "is dated — but it does mean the reconfirmation no longer covers what is written, which the " +
     "read says as `staleSinceReconfirm`."),
+  /* D-36.14 (#17, REQ-29) — a typed external reference; the state is
+     REPORTED here, never fetched by Meridian. */
+  "PUT /api/v1/references/:externalId": {
+    ...upsert("a typed external reference — an issue, a pull request, a commit, a CI run or an artefact", "write:portfolio",
+      "`kind` is issue, pull_request, commit, ci_run or artefact; any other kind is refused (400). `ref` is canonical: " +
+      "`owner/repo#123` for an issue or a pull request, `owner/repo@<sha>` (or the bare sha) for a commit, " +
+      "`owner/repo/runs/<id>` for a CI run, `sha256:<hex>` for an artefact. With `project` it creates your " +
+      "reference, attached to the project or to ONE of `activity`, `raid` or `criterion` (Meridian ids or " +
+      "externalIds you created). **Meridian never fetches a reference and never claims to have verified it**: " +
+      "`state` — open, closed for an issue; open, merged, closed for a pull request; open, passed, failed for a " +
+      "CI run; none for a commit or an artefact — is what YOUR integration reports, stamped `stateAt` (now when " +
+      "omitted), and the screens say \"as last reported by <your integration> at <time>\". A state is the " +
+      "thing's, not one card's: it reaches every live link citing that kind and ref, including links people " +
+      "made on a screen. So a repository's automation that knows only the ref may send `kind`, `ref` and " +
+      "`state` without `project`: that reports, creates nothing, and answers 404 when nothing cites the ref. A " +
+      "report dated before the one held is ignored, and the same report twice writes nothing. `links` lists the " +
+      "references the call reached. REQ-29: once a criterion is found met or its gate is marked done, the " +
+      "reference it cites is a record — changing `ref` or `url` then creates a NEW reference that supersedes " +
+      "the old one (`created: true`, `supersedes` names the old id, which stays readable); it is never edited " +
+      "in place. A reference stays on its project, its target and its kind."),
+    returns: { ...UPSERT_RETURNS, links: "string[]", supersedes: "string" },
+  },
   "PUT /api/v1/decisions/:externalId": upsert("a decision outside a meeting", "write:meetings",
     "Named by `decidedBy` (a person) or `council` (the deciding body). The substance — headline, rationale, " +
     "alternatives, dissent — is immutable: a different substance answers 409 — record a new decision naming " +

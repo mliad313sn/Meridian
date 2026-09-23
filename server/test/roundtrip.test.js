@@ -259,6 +259,25 @@ const ENRICH = [
    VALUES ('XL-1', 'inspection', 'INS-77', ${P1}, (SELECT min(id) FROM activity), ${SITE},
            'Crusher guard inspection', 'Open', 'Inspection', 'High', '2026-09-10', '2026-09-08',
            ${USER}, '2026-08-01T10:00:00Z', '2026-08-02T10:00:00Z', true)`,
+  /* D-36.14 — repository references: a pull request on a stage with the
+     state an integration reported, an issue on a RAID row, and a
+     criterion's commit citation superseded by a second one (REQ-29). */
+  `INSERT INTO ext_link (id, source, ext_id, project_id, activity_id, site_id, title_cache, url, state,
+                        state_at, state_source, linked_by, external_source, external_id)
+   VALUES ('XL-2', 'pull_request', 'fitadapt/app#17', ${P1},
+           (SELECT min(id) FROM activity WHERE project_id = ${P1}), ${SITE}, 'Add a github source',
+           'https://github.com/fitadapt/app/pull/17', 'merged', '2026-08-03T08:00:00Z', 'INT-RT',
+           ${USER}, 'INT-RT', 'EXT-XL2')`,
+  `INSERT INTO ext_link (id, source, ext_id, project_id, raid_id, site_id, title_cache, state, state_at, state_source)
+   VALUES ('XL-3', 'issue', 'fitadapt/app#18', ${P1},
+           (SELECT min(id) FROM raid_item WHERE project_id = ${P1}), ${SITE}, 'Flaky import', 'open',
+           '2026-08-04T08:00:00Z', 'INT-RT')`,
+  `INSERT INTO ext_link (id, source, ext_id, project_id, criterion_id, site_id, url, linked_by, superseded_at)
+   VALUES ('XL-4', 'commit', 'rt365/ledger@abcdef1', ${P1}, 'GC-1', ${SITE},
+           'https://github.com/rt365/ledger/commit/abcdef1', ${USER}, '2026-08-05T09:00:00Z')`,
+  `INSERT INTO ext_link (id, source, ext_id, project_id, criterion_id, site_id, url, linked_by, supersedes)
+   VALUES ('XL-5', 'commit', 'rt365/ledger@abcdef2', ${P1}, 'GC-1', ${SITE},
+           'https://github.com/rt365/ledger/commit/abcdef2', ${USER}, 'XL-4')`,
 
   /* NEW-14 — the meeting register and the RAID reviews. The seed holds
      series, closed meetings with a roll, actions and one room decision;

@@ -178,7 +178,16 @@ export async function loadPortfolio(user, { inactive = false } = {}) {
     inScope(`SELECT * FROM cross_dep WHERE from_project = ANY($1) OR to_project = ANY($1) ORDER BY id`),
     many(`SELECT block_key, lines FROM report_narrative`),
     // SDP federation links (005) — display caches, scoped like all else.
-    inScope(`SELECT * FROM ext_link WHERE project_id = ANY($1) ORDER BY linked_at DESC, id`),
+    /* D-36.14 — and repository references, with the NAME of the
+       integration that last reported a state: the screen says who said
+       so, never that Meridian checked. */
+    inScope(`SELECT l.*, i.name AS state_source_name, x.name AS external_source_name,
+                    u.display_name AS linked_by_name
+               FROM ext_link l
+               LEFT JOIN integration i ON i.id = l.state_source
+               LEFT JOIN integration x ON x.id = l.external_source
+               LEFT JOIN app_user u ON u.id = l.linked_by
+              WHERE l.project_id = ANY($1) ORDER BY l.linked_at DESC, l.id`),
     // What each project promised, and what was measured (008 / V-01).
     inScope(`SELECT * FROM benefit WHERE project_id = ANY($1) ORDER BY project_id, id`),
     // the same thing, at five sites (010 / V-06)
@@ -727,7 +736,21 @@ export async function loadPortfolio(user, { inactive = false } = {}) {
       title: l.title_cache, status: l.status_cache, kind: l.kind_cache,
       risk: l.risk_cache, due: l.due_cache, windowStart: l.window_start,
       linkedBy: l.linked_by, linkedAt: l.linked_at, syncedAt: l.synced_at,
-      stale: l.stale, version: l.row_version,
+      stale: l.stale,
+      /* D-36.14 — a repository reference: `source` is its kind, `extId`
+         its canonical ref. `state` is as last REPORTED by
+         `stateSourceName` at `stateAt`; Meridian never fetched it.
+         `raid`/`criterion` are the other two things it may hang on;
+         `supersedes`/`supersededAt` are a criterion citation's versions
+         (REQ-29). */
+      url: l.url ?? "", state: l.state ?? "", stateAt: l.state_at ?? null,
+      stateSource: l.state_source ?? null, stateSourceName: l.state_source_name ?? null,
+      raid: l.raid_id ?? null, criterion: l.criterion_id ?? null,
+      supersedes: l.supersedes ?? null, supersededAt: l.superseded_at ?? null,
+      externalSource: l.external_source ?? null, externalId: l.external_id ?? null,
+      /* REQ-29 — "what was cited, and by whom": a person, or an integration. */
+      linkedByName: l.linked_by_name ?? null, externalSourceName: l.external_source_name ?? null,
+      version: l.row_version,
     })),
 
     settings,

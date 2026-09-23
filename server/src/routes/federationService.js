@@ -96,11 +96,13 @@ r.get("/links", async (req, res, next) => {
           `SELECT l.source, l.ext_id, l.activity_id, l.project_id, l.title_cache, p.name AS project_name
              FROM ext_link l JOIN project p ON p.id = l.project_id
             WHERE p.site_id = $1 AND NOT p.closed
+              AND l.source IN ('meetings','inspection','report','change')
             ORDER BY l.linked_at DESC`, [site])
       : await many(
           `SELECT l.source, l.ext_id, l.activity_id, l.project_id, l.title_cache, p.name AS project_name
              FROM ext_link l JOIN project p ON p.id = l.project_id
             WHERE NOT p.closed
+              AND l.source IN ('meetings','inspection','report','change')
             ORDER BY l.linked_at DESC`);
     res.json({
       links: rows.map((l) => ({

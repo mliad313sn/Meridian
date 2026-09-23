@@ -54,7 +54,7 @@
     },
     "counterpart": "FitAdapt delivery lead & Meridian champion (PE-14), docs/governance/05-dogfooding-loop.md"
   },
-  "registerVersion": 1,
+  "registerVersion": 2,
   "requests": [
     {
       "id": "DF-01",
@@ -381,13 +381,19 @@
         "WI-11"
       ],
       "title": "Nowhere to attach a GitHub PR or issue (ext_link.source accepts SDP sources only)",
-      "status": "open",
+      "status": "done",
       "priority": "medium",
-      "version": null,
-      "decidedOn": null,
-      "delivered": [],
-      "measure": null,
-      "remaining": "open; campaign waves 1–4 group it with RT365 REQ-29 and KODO MER-11",
+      "version": "5.25.0",
+      "decidedOn": "2026-09-23",
+      "delivered": [
+        "server/migrations/057_one_typed_external_reference.sql",
+        "server/src/references.js",
+        "server/src/routes/references.js — POST/PATCH/DELETE /api/references",
+        "PUT /api/v1/references/:externalId (state reported by an integration, never fetched)",
+        "web: the project's “Where the work is” panel"
+      ],
+      "measure": "server/test/references.test.js (18 tests); F13 round trip carries repository refs and a superseded citation; browser: linked on screen, state pushed through /api/v1, read back",
+      "remaining": null,
       "issue": 17,
       "accepted": null,
       "released": false,
@@ -399,8 +405,15 @@
           "registerVersion": 1,
           "status": "open",
           "note": "issue #17 open on 2026-09-23"
+        },
+        {
+          "at": "2026-09-23",
+          "registerVersion": 2,
+          "status": "done",
+          "note": "Delivered by docs/36 wave 2 (5.25.0)."
         }
-      ]
+      ],
+      "answerToSource": "Closed in 5.25.0 (D-36.14). A project, stage, RAID row or gate criterion can now point at `owner/repo#17`, a commit, a CI run or an artefact digest. Meridian never fetches GitHub: your Action pushes the state to PUT /api/v1/references/<id> (without `project`, it only reports a state for kind + ref, and every link citing that PR follows). What to try: link a module's stage to its PR on the project page, then push `merged` from the Action and reload."
     },
     {
       "id": "DF-12",

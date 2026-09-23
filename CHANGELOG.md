@@ -22,6 +22,50 @@ Nothing yet.
 
 ---
 
+## [5.25.0] — 2026-09-23
+
+**Where the work is: one typed external reference** (D-36.14; FitAdapt
+#17 · DF-11, RT365 REQ-29, KODO MER-11; docs/36 wave 2).
+
+### Added
+
+- **A project, stage, RAID row or gate criterion can point at an issue,
+  pull request, commit, CI run or artefact** by canonical ref
+  (`owner/repo#123`, `owner/repo@sha`, `owner/repo/runs/id`,
+  `sha256:<hex>`). FitAdapt found "nowhere to attach a GitHub PR or
+  issue": `ext_link.source` accepted SDP sources only. Migration 057
+  extends `ext_link` rather than adding a table; KODO's `evidence` (052)
+  still holds the proof.
+- **The state is reported, never fetched.** A named integration pushes
+  it (open, merged, closed, passed, failed) through
+  `PUT /api/v1/references/:externalId`. It reaches every live link
+  citing the same thing, including links made on screen, so a GitHub
+  Action needs no Meridian ids. The screen reads "as last reported by
+  <integration> at <time>"; "verified" appears nowhere. A report older
+  than the one held is ignored, and an identical re-push writes nothing.
+  Meridian makes no outbound call.
+- **A criterion's citation is part of the gate record (REQ-29).** Once
+  the criterion is met or its gate is done, changing the cited ref
+  creates a new version that supersedes the old one. The old one is kept,
+  with who cited it, and is never edited or removed (409).
+- The project page's "Where the work is" panel; session routes
+  `POST`/`PATCH`/`DELETE /api/references` under `project.write`. A
+  person cannot type a state. FR and ES.
+
+### Fixed
+
+- An SDP cache refresh treated every link at the site as SDP's, so it
+  would have marked any non-SDP link stale. It reads SDP's own sources
+  only, as do the SDP read-back and link routes.
+
+### Measure
+
+`references.test.js`, 18 tests; F13 carries four repository rows
+including a superseded citation. Browser: a PR linked on screen, its
+state pushed by the API and read back on screen.
+
+---
+
 ## [5.24.0] — 2026-09-23
 
 **The demonstration book says what it is worth, and the book survives its

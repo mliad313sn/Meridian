@@ -32,6 +32,7 @@ import { packageVersion } from "../env.js";
 import {
   idempotent, assertKnownBody, upsertProject, upsertMilestone, upsertRaid, upsertRaidReview, upsertDecision,
   upsertAction, upsertActivity, upsertWorkItem, upsertCriterion, upsertBenefit, upsertBusinessCase,
+  upsertReferenceV1,
 } from "../v1write.js";
 
 const r = Router();
@@ -234,6 +235,10 @@ r.put("/benefits/:externalId", requireIntegration("write:portfolio"), known(), i
 r.put("/business-case/:externalId", requireIntegration("write:portfolio"), known(), idempotent(), write(upsertBusinessCase));
 /* REQ-51 — a review performed, not a date moved (050). */
 r.put("/raid-reviews/:externalId", requireIntegration("write:portfolio"), known(), idempotent(), write(upsertRaidReview));
+/* D-36.14 — a typed external reference, and the state its repository's
+   automation reports. Meridian never fetches it; this is the door the
+   report comes in by (NOTICE, docs/27 surface C). */
+r.put("/references/:externalId", requireIntegration("write:portfolio"), known(), idempotent(), write(upsertReferenceV1));
 r.put("/decisions/:externalId", requireIntegration("write:meetings"), known(), idempotent(), write(upsertDecision));
 r.put("/actions/:externalId", requireIntegration("write:meetings"), known(), idempotent(), write(upsertAction));
 

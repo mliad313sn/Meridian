@@ -105,7 +105,12 @@ describe("schema and migrations (R2.2, R2.7)", () => {
        /* 056 - PR-04 (D-36.11): each step of a change chain has its own
           signatory, so a signed step records the PERSON beside the
           account it already recorded. No backfill. */
-       "056_each_step_its_own_signatory.sql"]);
+       "056_each_step_its_own_signatory.sql",
+       /* 057 - D-36.14 (#17, REQ-29, MER-11): ext_link gains repository
+          references (issue, pull_request, commit, ci_run, artefact) with
+          a reported state, a RAID row or criterion target, and a
+          citation's supersession. */
+       "057_one_typed_external_reference.sql"]);
     const again = await migrate({ silent: true });
     assert.deepEqual(again, [], "a second run applies nothing");
   });

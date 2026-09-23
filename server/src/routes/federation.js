@@ -159,7 +159,8 @@ r.post("/links", async (req, res, next) => {
               title_cache, status_cache, kind_cache, risk_cache, due_cache, window_start,
               linked_by, synced_at)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,now())
-           ON CONFLICT (source, ext_id, project_id) DO UPDATE SET
+           ON CONFLICT (source, ext_id, project_id)
+             WHERE source IN ('meetings','inspection','report','change') DO UPDATE SET
              activity_id = EXCLUDED.activity_id,
              title_cache = EXCLUDED.title_cache, status_cache = EXCLUDED.status_cache,
              kind_cache = EXCLUDED.kind_cache, risk_cache = EXCLUDED.risk_cache,
@@ -182,7 +183,7 @@ r.post("/links", async (req, res, next) => {
 r.patch("/links/:id", async (req, res, next) => {
   try {
     const l = await one(`SELECT * FROM ext_link WHERE id = $1`, [req.params.id]);
-    if (!l) throw new HttpError(404, "No such link");
+    if (!l || !SOURCES.has(l.source)) throw new HttpError(404, "No such link");
     const p = await visibleProject(l.project_id, req.user);
     gate(req.user, "project.write", { project: p });
     const b = req.body ?? {};
@@ -214,7 +215,9 @@ r.patch("/links/:id", async (req, res, next) => {
 r.delete("/links/:id", async (req, res, next) => {
   try {
     const l = await one(`SELECT * FROM ext_link WHERE id = $1`, [req.params.id]);
-    if (!l) throw new HttpError(404, "No such link");
+    /* D-36.14 — a repository reference is removed by its own route, which
+       knows a frozen citation is never removed (REQ-29). */
+    if (!l || !SOURCES.has(l.source)) throw new HttpError(404, "No such link");
     const p = await visibleProject(l.project_id, req.user);
     gate(req.user, "project.write", { project: p });
     await audited(req.user,
@@ -258,7 +261,10 @@ r.post("/refresh", async (req, res, next) => {
       });
     }
 
-    const links = await many(`SELECT * FROM ext_link WHERE site_id = $1`, [site]);
+    /* D-36.14 — only SDP's own items: a repository reference at the same
+       site is not in SDP's feeds, and must not be marked stale for it. */
+    const links = await many(
+      `SELECT * FROM ext_link WHERE site_id = $1 AND source = ANY($2)`, [site, [...SOURCES]]);
     let refreshed = 0, stale = 0;
     await audited(req.user,
       () => ({ action: "SDP link caches refreshed", entity: "ext_link", entityId: site,

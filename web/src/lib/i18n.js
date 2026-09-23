@@ -2747,6 +2747,85 @@ export const FR = {
     "Remplacer le livre",
   "Book merged":
     "Livre fusionné",
+  /* D-36.14 — typed external references (#17, REQ-29). */
+  "Tracker issue":
+    "Ticket",
+  "Pull request":
+    "Demande de fusion",
+  "Commit":
+    "Commit",
+  "Merged":
+    "Fusionnée",
+  "Passed":
+    "Réussie",
+  "Failed":
+    "Échouée",
+  "stage":
+    "étape",
+  "RAID":
+    "RAID",
+  "criterion":
+    "critère",
+  "project level":
+    "niveau projet",
+  "Project level":
+    "Niveau projet",
+  "Named by its hash — it has no state to report.":
+    "Désigné par son empreinte — il n'a pas d'état à signaler.",
+  "No state reported yet. Meridian does not look it up; an integration reports it.":
+    "Aucun état signalé pour l'instant. Meridian ne va pas le chercher ; une intégration le signale.",
+  "as last reported by":
+    "tel que signalé en dernier par",
+  "an integration":
+    "une intégration",
+  "at":
+    "le",
+  "Part of the gate record — a change cites a new version and keeps this one.":
+    "Fait partie du dossier du jalon — un changement cite une nouvelle version et conserve celle-ci.",
+  "Correct the reference":
+    "Corriger la référence",
+  "Remove the reference":
+    "Retirer la référence",
+  "Where the work is":
+    "Où se trouve le travail",
+  "reference(s)":
+    "référence(s)",
+  "Link a reference":
+    "Lier une référence",
+  "No issue, pull request, commit, CI run or artefact is linked to this project.":
+    "Aucun ticket, demande de fusion, commit, exécution CI ou artefact n'est lié à ce projet.",
+  "What the reference is. Its state, if it has one, is reported by an integration — never typed here.":
+    "Ce qu'est la référence. Son état, s'il en a un, est signalé par une intégration — jamais saisi ici.",
+  "Canonical form: owner/repo#123 for an issue or a pull request, owner/repo@<sha> for a commit, owner/repo/runs/<id> for a CI run, sha256:<digest> for an artefact.":
+    "Forme canonique : owner/repo#123 pour un ticket ou une demande de fusion, owner/repo@<sha> pour un commit, owner/repo/runs/<id> pour une exécution CI, sha256:<empreinte> pour un artefact.",
+  "Attached to":
+    "Rattachée à",
+  "The project, or one stage, RAID row or gate criterion of it.":
+    "Le projet, ou l'une de ses étapes, lignes RAID ou critères de jalon.",
+  "Web address":
+    "Adresse web",
+  "Where a person can look. Stored for people to follow — Meridian never opens it.":
+    "Là où une personne peut aller voir. Conservée pour être suivie par des personnes — Meridian ne l'ouvre jamais.",
+  "Title":
+    "Titre",
+  "A readable name for the card. An integration may replace it with the title it reports.":
+    "Un nom lisible pour la carte. Une intégration peut le remplacer par le titre qu'elle signale.",
+  "Link":
+    "Lier",
+  "This criterion's gate relies on this citation: a new reference is recorded as a new version, and this one is kept as it was.":
+    "Le jalon de ce critère s'appuie sur cette citation : une nouvelle référence est consignée comme une nouvelle version, et celle-ci est conservée telle quelle.",
+  "Correcting the reference clears the reported state — it was about the old one.":
+    "Corriger la référence efface l'état signalé — il portait sur l'ancienne.",
+  "Cite a new version":
+    "Citer une nouvelle version",
+  "cites":
+    "cite",
+  "cited by":
+    "cité par",
+  "superseded":
+    "remplacé",
+  "Cite a reference":
+    "Citer une référence",
 };
 
 /* ── enregistrement des dictionnaires ─────────────────────────────────
