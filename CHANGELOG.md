@@ -47,6 +47,11 @@ Unreleased work sits under `## [Unreleased]` until it is tagged.
   started a second server on the same data directory. It now uses `lsof`
   or `ss` there, sends SIGTERM, waits for the process to exit, and
   refuses to start a second server if the first is still running.
+- **A refused import did not say which row.** The answer was only "One
+  of those values is not in a form the system can read", and nothing
+  reached the log. It now names the table and the id (`… — project
+  PRJ-104`), logs the database's own message, and the transaction still
+  rolls back whole.
 - **A project with no cost baseline reported itself measured and green
   (MER-04).** With a zero budget the earned-value guard still passed, so
   SPI and CPI came out as 1.00 and health read "within tolerance" over a

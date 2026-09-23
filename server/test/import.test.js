@@ -70,6 +70,20 @@ describe("R2.6 · whole-book import", () => {
   });
 });
 
+describe("a refused import says which row", () => {
+  test("the answer names the table and the id, and nothing is half-imported", async () => {
+    const admin = await as("admin");
+    const exported = (await admin.get("/api/admin/export")).body;
+    const before = (await one(`SELECT count(*)::int AS n FROM project`)).n;
+    const bad = structuredClone(exported);
+    bad.projects[1].start = "not a date";
+    const r = await admin.post("/api/admin/import", { db: bad });
+    assert.equal(r.status, 400);
+    assert.match(r.body.error, new RegExp(`project ${bad.projects[1].id}$`));
+    assert.equal((await one(`SELECT count(*)::int AS n FROM project`)).n, before, "the transaction rolled back");
+  });
+});
+
 describe("PGlite data directory", () => {
   test("with nothing configured the book lives where the README says, not in memory", () => {
     assert.equal(resolvePgliteDir({}, {}), DEFAULT_PGLITE_DIR);
