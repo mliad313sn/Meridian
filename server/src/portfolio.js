@@ -534,6 +534,10 @@ export async function loadPortfolio(user, { inactive = false } = {}) {
       deadline: a.deadline ?? null,
       actualStart: a.actual_start ?? null, actualFinish: a.actual_finish ?? null,
       remaining: a.remaining_days ?? null,
+      /* FX-11 (066) — the three-point estimate, in days; null: the
+         planned duration, fixed in every Monte Carlo run. */
+      durOptimistic: numOrNull(a.dur_optimistic), durMostLikely: numOrNull(a.dur_most_likely),
+      durPessimistic: numOrNull(a.dur_pessimistic),
       /* I-5 — qui a mesuré cet avancement, et quand ; vide = saisi ici. */
       progressSource: a.progress_source ?? "", progressAt: a.progress_at ?? null,
       externalSource: a.external_source ?? null, externalId: a.external_id ?? null,
@@ -1078,6 +1082,10 @@ export async function loadBook(user) {
        readers who may read them (scenario.read); nobody else's export
        names them. */
     scenarios: can(user, "scenario.read").ok ? await loadScenarios(db) : [],
+    /* FX-11 — the stored Monte Carlo runs, read-only records, travel
+       with the book like the baselines (and, like them, are not in the
+       bootstrap: the risk fold asks for one project's). */
+    riskRuns: await loadRiskRuns(db.projects.map((p) => p.id)),
   };
 }
 
@@ -1176,6 +1184,34 @@ export async function loadDemandForRanking() {
     raidProbability: d.raid_probability ?? null,
     raidImpact: d.raid_impact ?? null,
   }));
+}
+
+/** A numeric column that may be absent: absent stays null, never 0. */
+function numOrNull(v) { return v === null || v === undefined ? null : Number(v); }
+const isoOf = (v) => (v instanceof Date ? v.toISOString().slice(0, 10) : v ?? null);
+
+/** FX-11 — a stored risk run, as the screen, the export and the print pack read it. */
+export function riskRunRow(x) {
+  return {
+    id: x.id, project: x.project_id,
+    ranAt: x.ran_at instanceof Date ? x.ran_at.toISOString() : x.ran_at,
+    ranBy: x.ran_by ?? null, ranByName: x.ran_by_name ?? "",
+    seed: Number(x.seed), iterations: x.iterations, distribution: x.distribution,
+    statusDate: isoOf(x.status_date), estimated: x.estimated,
+    deterministicFinish: isoOf(x.deterministic_finish),
+    p50: isoOf(x.p50), p80: isoOf(x.p80), p90: isoOf(x.p90),
+    histogram: x.histogram ?? [], criticality: x.criticality ?? {},
+  };
+}
+
+/** The stored runs of these projects, oldest first. */
+export async function loadRiskRuns(projectIds) {
+  if (!projectIds.length) return [];
+  const rows = await many(
+    `SELECT x.*, u.display_name AS ran_by_name
+       FROM risk_run x LEFT JOIN app_user u ON u.id = x.ran_by
+      WHERE x.project_id = ANY($1) ORDER BY x.project_id, x.ran_at, x.id`, [projectIds]);
+  return rows.map(riskRunRow);
 }
 
 /** A single project row with the fields RBAC needs, or null. */

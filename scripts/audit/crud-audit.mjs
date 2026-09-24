@@ -150,6 +150,11 @@ const ENTITIES = {
   baseline_snapshot_row: { c: /post\("\/projects\/:id\/baselines"/,
     u: NA("Read-only once taken, with its snapshot (FX-07)"),
     d: NA("Removed with its project only (ON DELETE CASCADE) — never alone") },
+  /* FX-11 (066) — a stored Monte Carlo run is the record of a computation,
+     seeded so it can be run again; it is never retouched. */
+  risk_run: { c: /post\("\/projects\/:id\/risk-runs"/,
+    u: NA("Read-only once stored (FX-11, 066 refuses a rewrite) — run the simulation again for new numbers"),
+    d: NA("Append-only (FX-11) — a P80 quoted to steering must still be found; removed with its project only") },
 
   ext_link: { c: /post\("\/links"/, u: /patch\("\/links\/:id"/, d: /delete\("\/links\/:id"/ },
   /* I-2 — la mémoire d'idempotence d'une intégration : écrite par le

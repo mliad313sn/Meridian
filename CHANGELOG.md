@@ -22,6 +22,60 @@ Nothing yet.
 
 ---
 
+## [5.34.0] — 2026-09-24
+
+**How sure is the finish, and a report for steering** (FX-11, FX-16;
+docs/41 wave D, migration 066).
+
+### Added
+
+- **FX-11 · Schedule risk (Monte Carlo).** A stage can carry a
+  three-point estimate (optimistic, most likely, pessimistic, in days —
+  working days under a calendar; all three or none, in order). "Schedule
+  risk" on the project view runs a seeded simulation (triangular draws,
+  up to 10,000 runs) that reschedules the plan through the one engine
+  (`schedule()` of 5.29.0, links and calendars included — no second
+  forward pass) and stores the result read-only: seed, runs, who, when,
+  P50 / P80 / P90, the finish-date histogram and each stage's criticality
+  index. The same seed on the same plan gives the same numbers. A run
+  never moves a date (D-41.02). Storing one is `risk.run` (project write
+  scope); reading is `project.read`. `/api/v1` activities accept the
+  three estimates. MS Project has none of this without an add-in.
+- **FX-16 · Schedule report.** The Gantt downloads as a standalone SVG;
+  "Schedule report" prints a pack (browser print to PDF) — Gantt,
+  milestones, negative float, variance to the governed baseline and to a
+  chosen named baseline, and the latest P80 — in English, French or
+  Spanish, with the INTERNAL classification footer. No server renderer,
+  no external service; the Gantt is the screen's own renderer,
+  parameterised.
+
+### Changed
+
+- **The print pack and the risk charts load when opened** (D-41.03):
+  they are split out of the main bundle, which every site downloads over
+  its link. Main bundle 288.77 kB gzip against a cap of 289.70 kB
+  (+15 % of 5.28.0); the pack is 1.71 kB and the charts 2.31 kB, fetched
+  on first use.
+
+### Engine (D-41.01)
+
+With no estimate anywhere — and with estimates everywhere, since only the
+simulator reads them — metrics, roll-up and the seven 5.28.0 keys of the
+critical path equal 5.28.0's.
+
+### Measure
+
+`schedule-risk.test.js`: 19 tests — the triangular inverse (2,4,6) by
+hand, P50/P80/P90 of one stage over 10,000 seeded runs against hand
+figures (4, 5, 5), equal estimates giving the deterministic finish,
+reproducibility, criticality ordering, and no row touched by a run
+(`row_version` included). 10,000 runs on the largest demo project: under
+1 s of CPU. Browser (lazy loading): nothing fetched on opening a project;
+the risk chunk on opening its fold, the report chunk on its button; no
+page error. `npm run verify`: 1144/1144.
+
+---
+
 ## [5.33.0] — 2026-09-24
 
 **Agile hybrid: sprints, velocity, burndown** (FX-14; docs/41 wave C2,

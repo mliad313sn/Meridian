@@ -10,6 +10,8 @@
  *          where rbac says this account may plan the project (`ganttBlock`)
  *   FX-07  named baselines: take one, compare the plan with one, or one
  *          with another (`baselinesFold`)
+ *   FX-16  the same Gantt as a standalone SVG file, and on paper in the
+ *          printable schedule report (`ganttParts`, `ganttSvg`)
  *
  * Every write goes through App.write → the audited routes, with the row's
  * version. Nothing here decides authority: it asks App.can.
@@ -17,7 +19,7 @@
 
 import { h, s, icon, formDialog, table, fold } from "../ui/kit.js";
 import { App } from "../lib/state.js";
-import { api } from "../lib/api.js";
+import { api, saveText } from "../lib/api.js";
 import { t } from "../lib/i18n.js";
 import { Engine, D, iso, days, addDays, fmtDate, fmtMon, pct, wbsRows } from "../../../shared/engine.js";
 
@@ -43,6 +45,15 @@ function live(el, draw) { const f = { el, draw }; redraws.add(f); draw(); return
 function toggleFold(id) { if (folded.has(id)) folded.delete(id); else folded.add(id); redrawAll(); }
 
 /** A fold that keeps its open state when the view is redrawn. */
+
+/* FX-16 — the print pack is loaded when asked for (D-41.03: it is not
+   in the bundle every site downloads on a satellite link). */
+/** The classification line, as the Markdown and CSV exports write it. */
+export function classification(db) {
+  return t("INTERNAL — Meridian IT-PMO schedule report") + " · " + fmtDate(db.statusDate) + " · " +
+    t("issued to") + " " + (App.me?.name ?? "—") + " · " + iso(new Date()) + " · " + t("share inside the group");
+}
+
 export function keptFold(key, title, sub, fill, openByDefault = false) {
   if (!openFolds.has(key)) openFolds.set(key, openByDefault);
   const body = h("div");
@@ -139,35 +150,53 @@ export function ganttFold(db, p) {
       (body) => body.appendChild(ganttBlock(db, p)), true));
 }
 
-function drawGantt(el, db, p) {
+/* FX-16 — the same drawing on paper and in a file. A standalone SVG is
+   read outside the application, where no stylesheet defines the colour
+   tokens: `paint` gives each token its light-theme value there, and the
+   screen keeps reading the live token (and so the reader's theme). */
+const PAPER = {
+  "var(--rule-1)": "#dfe3e8", "var(--muted)": "#5f6873", "var(--color-text)": "#0f1620",
+  "var(--color-accent)": "#1b4f8f", "var(--color-accent-200)": "#d8e6f6", "var(--color-surface)": "#ffffff",
+  "var(--color-neutral-200)": "#eef2f6", "var(--color-neutral-400)": "#bcc7d4",
+  "var(--color-neutral-500)": "#93a1b2", "var(--color-neutral-600)": "#6b7a8d", "var(--sig-red)": "#b42318",
+  "var(--font-ui)": "IBM Plex Sans, Segoe UI, Arial, sans-serif",
+};
+
+/**
+ * The Gantt's two drawings — the stage labels and the chart — for the
+ * screen (`ganttParts(db, p)`: live colours, bars that move where rbac
+ * allows, folding labels) or for paper and file (`{ standalone: true }`:
+ * fixed colours, nothing interactive, `width` the chart's pixel budget).
+ * One renderer: the printable report and the SVG export call this, they
+ * do not draw a Gantt of their own.
+ */
+export function ganttParts(db, p, { standalone = false, width = 1100 } = {}) {
+  const paint = standalone ? (v) => PAPER[v] ?? v : (v) => v;
+  const arrowId = standalone ? "gantt-arrow-paper" : "gantt-arrow";
   const rows = planRows(db, p);
+  if (!rows.length) return null;
   const ms = Engine.milestones(db, p.id);
   const cp = Engine.criticalPath(db, p.id);
   const dates = [p.start, p.finish, db.statusDate,
     ...rows.flatMap((r) => [r.a.start, r.a.end, r.a.baseStart, r.a.baseEnd]),
     ...ms.map((m) => m.date)].filter(Boolean).sort();
-  if (!rows.length) {
-    el.replaceChildren(h("div", { class: "small muted" }, t("No stages to draw yet.")));
-    return;
-  }
   const from = addDays(dates[0], -5), to = addDays(dates[dates.length - 1], 6);
   const span = Math.max(1, days(from, to));
-  const ppd = Math.max(3, Math.min(24, Math.round(1100 / span)));
-  const W = span * ppd;
+  const ppd = standalone ? width / span : Math.max(3, Math.min(24, Math.round(width / span)));
+  const W = Math.ceil(span * ppd);
   const X = (d) => days(from, d) * ppd;
   const lines = [...rows.map((r) => ({ kind: "stage", r })), ...ms.map((m) => ({ kind: "ms", m }))];
   const H = HEAD + lines.length * ROW + 4;
   const yOf = new Map();
   lines.forEach((l, i) => { if (l.kind === "stage") yOf.set(l.r.a.id, HEAD + i * ROW); });
-  const canPlan = mayPlan(p);
 
   /* month grid and labels */
   const grid = [];
   for (let m = D(iso(from).slice(0, 7) + "-01"); m <= D(to); m = new Date(Date.UTC(m.getUTCFullYear(), m.getUTCMonth() + 1, 1))) {
     const x = X(m);
     if (x < 0) continue;
-    grid.push(s("line", { x1: x, x2: x, y1: 0, y2: H, stroke: "var(--rule-1)" }),
-      s("text", { x: x + 4, y: 18, "font-size": 10, fill: "var(--muted)" }, fmtMon(m)));
+    grid.push(s("line", { x1: x, x2: x, y1: 0, y2: H, stroke: paint("var(--rule-1)") }),
+      s("text", { x: x + 4, y: 18, "font-size": 10, fill: paint("var(--muted)") }, fmtMon(m)));
   }
   const status = X(db.statusDate);
 
@@ -178,11 +207,11 @@ function drawGantt(el, db, p) {
     if (l.kind === "ms") {
       const m = l.m, x = X(m.date), c = y + ROW / 2;
       /* <title> is both the tooltip and the accessible name. */
-      bars.push(s("g", { tabindex: 0, role: "img", class: "gantt-ms" },
+      bars.push(s("g", { tabindex: standalone ? null : 0, role: "img", class: "gantt-ms" },
         s("title", null, m.name + " · " + fmtDate(m.date)),
         s("polygon", { points: `${x},${c - 7} ${x + 7},${c} ${x},${c + 7} ${x - 7},${c}`,
-          fill: m.done ? "var(--color-text)" : m.gate ? "var(--color-accent)" : "var(--color-surface)",
-          stroke: m.gate ? "var(--color-accent)" : "var(--color-text)", "stroke-width": 1.5 })));
+          fill: paint(m.done ? "var(--color-text)" : m.gate ? "var(--color-accent)" : "var(--color-surface)"),
+          stroke: paint(m.gate ? "var(--color-accent)" : "var(--color-text)"), "stroke-width": 1.5 })));
       return;
     }
     const r = l.r, a = r.a;
@@ -192,19 +221,20 @@ function drawGantt(el, db, p) {
       (crit ? " · " + t("critical") : "") + (r.summary ? " · " + t("summary") : "");
     const ghost = a.baseStart && a.baseEnd
       ? s("rect", { x: X(a.baseStart), y: y + ROW - 8, width: Math.max(2, X(a.baseEnd) - X(a.baseStart)), height: 4,
-          fill: "var(--color-neutral-400)", opacity: 0.6, class: "gantt-base" })
+          fill: paint("var(--color-neutral-400)"), opacity: 0.6, class: "gantt-base" })
       : null;
+    const ink = paint("var(--color-text)");
     const body = r.summary
-      ? [s("rect", { x: x1, y: y + 7, width: x2 - x1, height: 6, fill: "var(--color-text)" }),
-         s("polygon", { points: `${x1},${y + 13} ${x1 + 6},${y + 13} ${x1},${y + 19}`, fill: "var(--color-text)" }),
-         s("polygon", { points: `${x2},${y + 13} ${x2 - 6},${y + 13} ${x2},${y + 19}`, fill: "var(--color-text)" })]
+      ? [s("rect", { x: x1, y: y + 7, width: x2 - x1, height: 6, fill: ink }),
+         s("polygon", { points: `${x1},${y + 13} ${x1 + 6},${y + 13} ${x1},${y + 19}`, fill: ink }),
+         s("polygon", { points: `${x2},${y + 13} ${x2 - 6},${y + 13} ${x2},${y + 19}`, fill: ink })]
       : [s("rect", { x: x1, y: y + 5, width: x2 - x1, height: 12, rx: 2,
-            fill: crit ? "var(--color-accent-200)" : "var(--color-neutral-200)",
-            stroke: crit ? "var(--color-accent)" : "var(--color-neutral-500)" }),
+            fill: paint(crit ? "var(--color-accent-200)" : "var(--color-neutral-200)"),
+            stroke: paint(crit ? "var(--color-accent)" : "var(--color-neutral-500)") }),
          s("rect", { x: x1, y: y + 5, width: (x2 - x1) * a.pct / 100, height: 12, rx: 2,
-            fill: crit ? "var(--color-accent)" : "var(--color-neutral-600)" })];
-    const mv = movable(p, r);
-    const g = s("g", { tabindex: 0, role: mv ? "button" : "img",
+            fill: paint(crit ? "var(--color-accent)" : "var(--color-neutral-600)") })];
+    const mv = !standalone && movable(p, r);
+    const g = s("g", { tabindex: standalone ? null : 0, role: mv ? "button" : "img",
       "data-stage": a.id, class: "gantt-bar" + (crit ? " crit" : "") + (mv ? " movable" : ""),
       style: mv ? "cursor:ew-resize;touch-action:none" : null },
       s("title", null, label), ...body);
@@ -228,47 +258,92 @@ function drawGantt(el, db, p) {
       const out = fromEnd ? xa + 6 : xa - 6, into = toEnd ? xb + 6 : xb - 6;
       const onPath = cp.critical.has(pre.id) && cp.critical.has(r.a.id);
       arrows.push(s("path", { d: `M${xa},${ya} H${out} V${(ya + yb) / 2} H${into} V${yb} H${xb}`, fill: "none",
-        stroke: onPath ? "var(--color-accent)" : "var(--color-neutral-500)", "stroke-width": onPath ? 1.5 : 1,
-        "marker-end": "url(#gantt-arrow)", "data-link": (ln.type ?? "FS") + (ln.lag ? (ln.lag > 0 ? "+" : "") + ln.lag : "") },
+        stroke: paint(onPath ? "var(--color-accent)" : "var(--color-neutral-500)"), "stroke-width": onPath ? 1.5 : 1,
+        "marker-end": `url(#${arrowId})`, "data-link": (ln.type ?? "FS") + (ln.lag ? (ln.lag > 0 ? "+" : "") + ln.lag : "") },
         s("title", null, pre.name + " → " + r.a.name + " · " + (ln.type ?? "FS") + (ln.lag ? " " + (ln.lag > 0 ? "+" : "") + ln.lag + t("d") : ""))));
     }
   }
 
-  const chart = s("svg", { width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: "group",
-    "aria-label": t("Gantt") + " · " + p.name, style: "display:block;font-family:var(--font-ui)" },
-    s("defs", null, s("marker", { id: "gantt-arrow", viewBox: "0 0 8 8", refX: 7, refY: 4, markerWidth: 7, markerHeight: 7, orient: "auto" },
-      s("path", { d: "M0,0 L8,4 L0,8 z", fill: "var(--color-neutral-600)" }))),
+  const chart = s("svg", { width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: "group", x: standalone ? LABEL : null,
+    "aria-label": t("Gantt") + " · " + p.name, style: "display:block;font-family:" + paint("var(--font-ui)") },
+    s("defs", null, s("marker", { id: arrowId, viewBox: "0 0 8 8", refX: 7, refY: 4, markerWidth: 7, markerHeight: 7, orient: "auto" },
+      s("path", { d: "M0,0 L8,4 L0,8 z", fill: paint("var(--color-neutral-600)") }))),
     ...grid, ...bars.filter(Boolean), ...arrows,
-    s("line", { x1: status, x2: status, y1: HEAD - 6, y2: H, stroke: "var(--sig-red)", "stroke-width": 1.5, "stroke-dasharray": "4 3", class: "gantt-status" }),
-    s("text", { x: status + 3, y: H - 5, "font-size": 9, fill: "var(--sig-red)" }, t("status date") + " " + fmtDate(db.statusDate)));
+    s("line", { x1: status, x2: status, y1: HEAD - 6, y2: H, stroke: paint("var(--sig-red)"), "stroke-width": 1.5, "stroke-dasharray": "4 3", class: "gantt-status" }),
+    s("text", { x: status + 3, y: H - 5, "font-size": 9, fill: paint("var(--sig-red)") }, t("status date") + " " + fmtDate(db.statusDate)));
 
-  const labels = s("svg", { width: LABEL, height: H, style: "display:block;flex:none", role: "presentation" },
+  const labels = s("svg", { width: LABEL, height: H, style: "display:block;flex:none;font-family:" + paint("var(--font-ui)"), role: "presentation" },
     ...lines.map((l, i) => {
       const y = HEAD + i * ROW + 16;
-      if (l.kind === "ms") return s("text", { x: 8, y, "font-size": 11, fill: "var(--muted)" }, "◇ " + cut(l.m.name));
+      if (l.kind === "ms") return s("text", { x: 8, y, "font-size": 11, fill: paint("var(--muted)") }, "◇ " + cut(l.m.name));
       const r = l.r;
       const text = s("text", { x: 8 + r.depth * 12 + (r.summary ? 12 : 0), y, "font-size": 11,
-        "font-weight": r.summary ? 600 : 400, fill: "var(--color-text)" }, r.outline + "  " + cut(r.a.name, r.depth));
-      return r.summary
-        ? s("g", { style: "cursor:pointer", onClick: () => toggleFold(r.a.id) },
-            s("text", { x: 6 + r.depth * 12, y, "font-size": 11, fill: "var(--muted)" }, folded.has(r.a.id) ? "▸" : "▾"), text)
-        : text;
+        "font-weight": r.summary ? 600 : 400, fill: paint("var(--color-text)") }, r.outline + "  " + cut(r.a.name, r.depth));
+      if (!r.summary) return text;
+      const arrow = s("text", { x: 6 + r.depth * 12, y, "font-size": 11, fill: paint("var(--muted)") }, folded.has(r.a.id) ? "▸" : "▾");
+      return standalone ? s("g", null, arrow, text)
+        : s("g", { style: "cursor:pointer", onClick: () => toggleFold(r.a.id) }, arrow, text);
     }));
+  return { chart, labels, status, W, H };
+}
 
+/**
+ * FX-16 — the Gantt as one self-contained SVG: labels and chart side by
+ * side, a heading, and the classification line every export carries.
+ * Opens in a browser, drops into a slide, prints; needs nothing of ours.
+ */
+export function ganttSvg(db, p, { width = 1000, heading = "", footer = "" } = {}) {
+  const g = ganttParts(db, p, { standalone: true, width });
+  if (!g) return null;
+  const top = heading ? 22 : 0, bottom = footer ? 20 : 0;
+  const W = LABEL + g.W, H = top + g.H + bottom;
+  const font = PAPER["var(--font-ui)"];
+  const place = (el, y) => { el.setAttribute("y", y); return el; };
+  g.labels.removeAttribute("style"); g.chart.removeAttribute("style");
+  return s("svg", { width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: "img",
+      "aria-label": t("Gantt") + " · " + p.name, "font-family": font },
+    s("rect", { x: 0, y: 0, width: W, height: H, fill: "#ffffff" }),
+    heading ? s("text", { x: 8, y: 15, "font-size": 12, "font-weight": 600, fill: "#0f1620" }, heading) : null,
+    place(g.labels, top), place(g.chart, top),
+    footer ? s("text", { x: 8, y: H - 6, "font-size": 9, fill: "#5f6873" }, footer) : null);
+}
+
+/** The SVG as a file's text. */
+export const svgText = (el) => '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(el);
+
+function drawGantt(el, db, p) {
+  const g = ganttParts(db, p);
+  if (!g) {
+    el.replaceChildren(h("div", { class: "small muted" }, t("No stages to draw yet.")));
+    return;
+  }
+  const { chart, labels, status } = g;
+  const canPlan = mayPlan(p);
   const scroller = h("div", { style: "overflow-x:auto;flex:1;min-width:0", class: "gantt-scroll",
     onScroll: (e) => scrollAt.set(p.id, e.currentTarget.scrollLeft) }, chart);
   const said = notice && notice.project === p.id && Date.now() - notice.at < 20000 ? notice.text : "";
   notice = null;
   el.replaceChildren(
-    h("div", { class: "xs muted", style: "display:flex;flex-wrap:wrap;gap:14px;margin-bottom:8px" },
+    h("div", { class: "xs muted", style: "display:flex;flex-wrap:wrap;gap:14px;margin-bottom:8px;align-items:center" },
       h("span", { style: "color:var(--color-accent)" }, "▬ " + t("critical path")),
       h("span", null, "▔ " + t("baseline")),
       h("span", { style: "color:var(--sig-red)" }, "┆ " + t("status date")),
-      canPlan ? h("span", null, t("Drag a bar, or focus it and press ← → then Enter.")) : h("span", null, t("Read only."))),
+      canPlan ? h("span", null, t("Drag a bar, or focus it and press ← → then Enter.")) : h("span", null, t("Read only.")),
+      /* FX-16 — the Gantt leaves the application as a file, or on paper. */
+      h("span", { style: "margin-left:auto;display:flex;gap:6px" },
+        h("button", { class: "btn btn-xs", "data-gantt-svg": "", onClick: () => downloadGantt(db, p) }, icon("download", 11), "SVG"),
+        h("button", { class: "btn btn-xs", "data-schedule-report": "", onClick: () => import("./report.js").then((m) => m.scheduleReport(db, p)) },
+          icon("printer", 11), t("Schedule report")))),
     said ? h("div", { class: "small", role: "alert", "data-gantt-notice": "", style: "margin-bottom:8px;padding:7px 10px;border:1px solid var(--sig-red);border-radius:6px;color:var(--sig-red)" }, said) : "",
     h("div", { style: "display:flex;border:1px solid var(--rule-1);border-radius:var(--r)" }, labels, scroller));
   const keep = scrollAt.get(p.id);
   scroller.scrollLeft = keep ?? Math.max(0, status - 240);
+}
+
+function downloadGantt(db, p) {
+  const el = ganttSvg(db, p, { heading: p.id + " · " + p.name + " — " + t("status date") + " " + fmtDate(db.statusDate),
+    footer: classification(db) });
+  if (el) saveText("gantt-" + p.id + "-" + db.statusDate + ".svg", svgText(el), "image/svg+xml");
 }
 
 /** Drag, or arrow keys and Enter: both write through the audited stage route. */

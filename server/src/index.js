@@ -40,6 +40,8 @@ import federationServiceRoutes from "./routes/federationService.js";
 /* docs/41 A2 — the work breakdown and the named baselines. */
 import planRoutes from "./routes/plan.js";
 import scenarioRoutes from "./routes/scenarios.js";
+/* docs/41 FX-11 — the stored Monte Carlo runs of a project. */
+import riskRoutes from "./routes/risk.js";
 import { translate } from "./pgerror.js";
 import { say, localeOf } from "./i18n.js";
 import { liveDemoAccounts, demoRefusal } from "./posture.js";
@@ -228,6 +230,7 @@ export function buildApp() {
   app.use("/api/federation", federationRoutes);
   app.use("/api", portfolioRoutes);
   app.use("/api", planRoutes);
+  app.use("/api", riskRoutes);
   app.use("/api", ladderRoutes);
   app.use("/api", valuePageRoutes);
   /* NEW-04 — requirements, evidence, findings, seats, objections. */
