@@ -478,6 +478,7 @@ carry it. An issue is closed as delivered only when `v5.16.0` exists.
 | D-36.14 | 23/09 | **#17 · DF-11 · REQ-29 · MER-11: one typed external reference.** `ext_link` (the existing link surface) gains repository sources: `issue`, `pull_request`, `commit`, `ci_run` and `artefact`. Each has a canonical `ref` (`owner/repo#123`, a commit SHA, a digest) and a cached state (open, merged, closed, passed, failed) with its time. It can be attached to a project, an activity, a RAID row or a gate criterion. Meridian stores and shows the reference, and **never fetches it or claims to have verified it**. The state is pushed in by an integration through `/api/v1` (NOTICE's promise; docs/27's four surfaces). A gate criterion that cites a commit or checksum keeps that citation: changing it after the gate is a new version, never an edit (REQ-29). | A GitHub connector that polls. Refused: it is an outbound dependency on a vendor's API, which docs/27 refused. A second evidence table. Refused: KODO's `evidence` (052) already holds the proof, and this is the link that says where the work is. | #17, REQ-29 |
 | D-36.15 | 23/09 | **REQ-13 (second half): a standing human act is a RAID dependency that blocks a gate.** RT365's H-nn is a RAID `Dependency` with category "Human act", an owner and a review date (D-33.14), a `gate` it blocks, and an **evidence locator required to close it**: "an action stays until its evidence file exists". While one is open, the gate it blocks does not clear, just as an open veto holds it (MER-06). The refusal names the act and its owner. | A separate register of human acts. Refused: RT365 already syncs them as RAID rows, and a second register would split one queue in two. Informative only, never blocking. Refused: RT365's own table has a "Blocks gate" column, and a gate that clears over an open blocking act is the green nobody earned. | REQ-13 |
 | D-36.16 | 23/09 | **Wave 3 is held.** `docs/23` §5 refusal 1 forbids widening before R2, and R2 is not pronounced: sponsor decisions 1–4 are open (§5). The campaign file lets a wave-3 line through only where a field is actively using it. RT365's last Meridian commit is dated 09/09, fourteen days ago, and no field register names a wave-3 line as blocking. So NEW-11, 13, 17, 21, 22 and 23 stay registered and unbuilt. NEW-19 and NEW-20 are moved to wave 1 under the campaign's own exception: a field uses the replace today (FitAdapt's `bootstrap.mjs`: "the import REPLACES the whole book, meetings included"), and both defects lose or overwrite that field's rows. | Build wave 3 because the defects are small. Refused: the refusal is about the product's breadth before its first real release, not the size of the diff. It is lifted by R2 or by a field asking, and neither has happened. | Wave 3 |
+| D-36.17 | 24/09 | **Wave 3 is reshaped by the Sponsor seat.** D-36.16 held six defects under refusal 1, but that refusal covers new functions, and the owner lifted it for the FX lines. NEW-22 (a deputy's signature breaks D-36.11) and NEW-17 (a merge can leave two active tolerances) are released for building. NEW-11's SMTP half is released too (no screen may promise email before S8/S9). NEW-11 CSV, NEW-12, NEW-13, NEW-21 and NEW-23 stay held. | Keep D-36.16 whole. Refused by the Sponsor: holding correctness while shipping breadth. | Wave 3 |
 | NEW-02 decision pending | 23/09 | **Gate 0 is not decided here.** KODO's own data cannot tell a document filed "for G0" from one "attached to no gate". A rule Meridian picks would be a guess about KODO's intent, so the question is put to KODO in `kodo.json` (MER-01). | Renumber G0 to G1 on import. Refused: it rewrites a field's book on a guess. | NEW-02 |
 | D-36.03 | 23/09 | **C-02 is delivered as a merge of main into the RT365 line, not a commit-by-commit rebase.** The 20 commits keep their SHAs, which `docs/33` cites in about fifty places, including D-33.50 and the register's `source.commit`. The six conflicts are resolved once, in one reviewable merge commit, not up to six times across 20 replays. The line still reaches main through a pull request. | A rebase, as the campaign file says. Refused: it would invalidate every SHA the RT365 record cites, and the campaign's own rule is that a record must stay readable. | C-02 |
 
@@ -529,12 +530,61 @@ The owner can take any of them back by saying so.
 | D-36.S3 | 3 | **Rule:** a unique generated password for a dedicated `meridian` role, not a superuser. It lives only in the service's environment file, never in the repository. It is rotated at every change of operator. | The password, set on the real PostgreSQL server by its operator. | choice taken; **open** until set |
 | D-36.S4 | 4 | **RPO 24 h, RTO 4 h, signed.** Daily backup at 02:15 and a monthly drill (docs/34). A drill older than 45 days is an incident. No second instance: this is an accepted risk, signed here. | G-01's closing measure: one dated, timed restore drill on a machine other than production, from a backup less than 24 h old, ending on health `ok` and an identical `audit_event` count. | **taken**; G-01 closes on the drill |
 | D-36.S5 | 5 | The four policies will be approved by the PO once written against `docs/security-policy-template.md`. | The four texts. Only a template with ⟨placeholders⟩ exists, and nothing unwritten can be approved. | **open** |
-| D-36.S6 | 6 | **Audit trail retained 7 years**, then purged by the scheduled purge (carnet line 20). The legal basis is proposed as the organisation's duty to keep governance evidence. | Confirmation of the legal basis by counsel, together with decision 7. | retention **taken**; legal basis open |
+| D-36.S6 | 6 | **Audit trail retained 7 years**, then purged by the scheduled purge (carnet line 20). The legal basis is proposed as the organisation's duty to keep governance evidence. | Confirmation of the legal basis by counsel, together with decision 7. | finite retention **signed by the Sponsor**; the 7-year figure and the legal basis are **returned to the owner** (Sponsor seat, below) |
 | D-36.S7 | 7 | No site activates individual time tracking before a written legal and social opinion for its country. This is the default already. | The per-country opinions. | **open**, by nature |
 | D-36.S8 | 8 | SMTP and Entra ID are not connected before their two-page third-party sheets exist. | The sheets. | **open** |
 | D-36.S9 | 9 | Follows S8. | The relay. | **open** |
 | D-36.S10 | 10 | **Code-signing certificate: not bought for now.** The binary stays unsigned while it is distributed only internally, and this is accepted in writing here. Buying becomes due before the first distribution outside the organisation. Entra ID follows S8. | The tenant. | certificate **taken**; Entra open |
 | D-36.S11 | R2 | **R2 is not pronounced.** Its four conditions are decisions 1–4 (docs/23 §4.1). The choices behind 1, 3 and 4 are now taken. The facts behind them (named accounts, a set password, the G-01 drill) and all of decision 2 do not exist yet. Pronouncing R2 on choices alone would be the "decision marked taken on inference" this section forbids. Wave 3 therefore stays held (D-36.16). | The four facts above. The GRC committee then pronounces "on finding, without a new session" (docs/23 §4.1). | open |
+
+**Sponsor seat (24/09).** The owner then wrote: "create another team
+member that will play the role of the sponsor with a focus on an
+effective product without any legal implication". The seat is
+`.claude/agents/sponsor.md`, convened with `/sponsor`. From its
+creation, the Sponsor seat signs the product decisions. The PO no longer
+signs its own. **Legal matters are outside that seat, and go back to the
+owner.** At its first sitting (24/09), the Sponsor judged D-36.S1–S11.
+The PO records each verdict as given. Where the PO disagrees, both
+positions are recorded; this time there was no disagreement.
+
+| Line | Sponsor's verdict | Condition the Sponsor set | PO |
+|---|---|---|---|
+| S1 named accounts | signed | real named accounts on the instance | accepts |
+| S2 `documentHosts` | signed (rule) | the owner gives the real GED domains; never a public multi-tenant host | accepts |
+| S3 PostgreSQL role | signed | the operator sets the password | accepts |
+| S4 RPO 24 h / RTO 4 h | **reshaped** | the monthly drill restores on the same cluster (docs/34), and no second instance exists: losing the machine loses the book *and* its backups. S4 now also requires **a daily copy of the dump off the production machine**, and **the G-01 drill on another machine, timed at 4 h or less, repeated at least yearly** | accepts |
+| S5 policies | **outside this seat → owner/counsel** | the approver should not be the drafter | returns it to the owner |
+| S6 retention | **split** | *product, signed:* retention is finite and enforced by the scheduled purge, with the duration as a parameter. *The 7-year figure and its legal basis:* outside this seat → owner/counsel | the 7 years is withdrawn as a PO decision and returns to the owner |
+| S7 time tracking per country | outside this seat → owner/counsel | the default (off) holds | returns it to the owner |
+| S8 third-party sheets | outside this seat → owner/counsel | product cost: no reminders, so no support for adoption | returns it to the owner |
+| S9 SMTP relay | **reshaped** | connect as soon as S8 clears; until then no screen promises email (NEW-11's SMTP half is released from the hold) | accepts |
+| S10 unsigned binary | **reshaped** | not buying now is right, since no field runs the exe. But `release.yml` refuses unsigned installers, and the service runs as LocalSystem. So every internally distributed exe ships with its SHA-256 in the tagged release notes, checked at install. The certificate is bought before any second machine or any external distribution | accepts |
+| S11 R2 | signed (not pronounced) | facts 1–4, then GRC | accepts |
+| D-36.16 wave 3 held | **reshaped** → D-36.17 | refusal 1 (docs/23 §5) covers *new functions*, and the owner lifted it for FX. Holding defects in guarantees the product already claims reverses its purpose | accepts; see D-36.17 |
+
+**The Sponsor's product priorities (signed 24/09).**
+1. **Put 5.37.0 in the fields' hands.** The owner pushes the tags (§5,
+   below). The PO turns KODO MER-12's seed → restart → sign-in into a
+   test, corrects MER-01 (done: kodo.json v7), and re-runs the three
+   field checks on 5.37.0. The manuals come up to 5.37.0 before any new
+   user.
+2. **KODO MER-03**: requirement verification on `/api/v1`, and gate
+   evidence that reads requirements. KODO's words: "None of that is
+   visible in Meridian."
+3. **NEW-22**: a deputy's signature records whom it was for, so the
+   change chain holds D-36.11's guarantee.
+
+Held or dropped: REQ-41's session half (held); REQ-25 and REQ-26 (held
+until R2: refusal 1 genuinely applies); the depth of REQ-05 and REQ-10
+(dropped to docs/26); NEW-11 CSV, NEW-12, NEW-13, NEW-21, NEW-23 (held).
+NEW-25 stays a standing constraint with 0.14 kB of headroom. Nothing
+enforces it but a measure by hand, and that is now said here.
+
+**The Sponsor's biggest effectiveness risk, in its words:** "Meridian
+has shipped nine releases and sixteen feature lines that no field has
+fetched, run or accepted: 0 of 82 lines accepted, no tag since v5.9.0.
+[…] Until a tag is in the fields' hands and they re-run against it,
+every 'done' is a claim, not an outcome."
 
 **What the delegation does not change.** A delegation of sponsor power
 is not a permission of this session. The session still cannot create
