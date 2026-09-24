@@ -55,7 +55,7 @@
     },
     "counterpart": "KODO Product Owner (docs/reports/MERIDIAN_PRODUCT_REPORT.md); no issue filed upstream yet — the report says 'ready to send … as issues'"
   },
-  "registerVersion": 6,
+  "registerVersion": 7,
   "requests": [
     {
       "id": "MER-01",
@@ -74,8 +74,7 @@
       ],
       "measure": "server/test/gate-model.test.js",
       "remaining": [
-        "Gate 0 means « attached to no gate » in Meridian since migration 002; KODO's model numbers its mandate gate 0. Tracked as NEW-02 (docs/36), still undecided on 24/09: until it is decided, number the portfolio model from 1.",
-        "Found on re-reading 5.36.1: server/src/wbs.js#scaffoldProject reads the programme's ladder, else the four defaults — never settings.gates — so a project CREATED in Meridian under no programme ladder is scaffolded with four gate milestones while shared/engine.js#gateModel reads the portfolio's six. A book imported with its own milestones is not affected."
+        "Gate 0 means « attached to no gate » in Meridian since migration 002; KODO's model numbers its mandate gate 0. Tracked as NEW-02 (docs/36), still undecided on 24/09: until it is decided, number the portfolio model from 1."
       ],
       "issue": null,
       "accepted": null,
@@ -100,6 +99,12 @@
           "registerVersion": 6,
           "status": "partial",
           "note": "Re-verified on main 5.36.1: NEW-02 still pending; scaffolding does not read the portfolio model."
+        },
+        {
+          "at": "2026-09-24",
+          "registerVersion": 7,
+          "status": "partial",
+          "note": "The scaffolding defect named on 5.36.1 is fixed in 5.37.0 (NEW-26): a project created under no programme ladder is scaffolded from settings.gates, as the engine governs it (server/test/portfolio-ladder.test.js). Raised by the Sponsor's first sitting."
         }
       ],
       "answerToSource": "\n\nA question back to you (NEW-02, docs/36): since migration 002, gate 0 in Meridian means « attached to no gate », and your model numbers its mandate gate G0. In your book, is a document with gate 0 evidence FOR G0, or unattached? We will not guess. Either renumber your model from 1 in meridian_book.py, or tell us which reading is right and we will make the rule."

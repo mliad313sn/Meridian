@@ -37,6 +37,19 @@ Unreleased work sits under `## [Unreleased]` until it is tagged.
   - the third-party sheets.
 
   **R2 is not pronounced** (D-36.S11). No code change.
+- **A Sponsor seat, distinct from the PO** (`.claude/agents/sponsor.md`,
+  `/sponsor`). It covers product effectiveness only, never legal matters.
+  Its first sitting:
+  - reshaped S4 (off-machine daily copy; yearly drill on another
+    machine), S9 and S10 (a SHA-256 for each internal exe);
+  - returned S5–S8 and the 7-year figure to the owner;
+  - reshaped wave 3 into D-36.17: NEW-22, NEW-17 and NEW-11's SMTP half
+    are released for building;
+  - set three priorities: 5.37.0 in the fields' hands, KODO MER-03, and
+    NEW-22.
+
+  KODO MER-01 is corrected: its "scaffolding never reads settings.gates"
+  was fixed by 5.37.0 (NEW-26).
 
 ---
 
