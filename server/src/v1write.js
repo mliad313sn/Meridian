@@ -1425,6 +1425,9 @@ export const WRITE_BODIES = {
   references: { adopt: "string", project: "string", activity: "string", raid: "string", criterion: "string",
     kind: "string", ref: "string", url: "string", title: "string", state: "string", stateAt: "date-time",
     version: "integer" },
+  /* FX-08 (docs/41) — who works on which stage, at what units. */
+  assignments: { adopt: "string", activity: "string", person: "string", role: "string", units: "integer",
+    work: "number", note: "string", version: "integer" },
 };
 
 /* D-36.14 — the reference contract, speaking the integration's own ids
@@ -1566,5 +1569,93 @@ export async function upsertRaidReview(user, externalId, b) {
       await reprojectNextReview(t, item.id);
       return rv;
     });
+  return stamp(false, existing.id, externalId, out.version);
+}
+
+/**
+ * FX-08 (docs/41, 063) — an assignment through the contract.
+ *
+ * A planning tool that already knows who does what (MS Project, a
+ * resource manager's own system) writes it here under ITS id, exactly as
+ * it writes a stage's progress. `activity` is a Meridian stage id or the
+ * externalId this integration bound to one; `person` an id or the exact
+ * name of an active person; `role` a job role, when the work is known
+ * before the name — one of the two, never both. `units` is 1–200 %;
+ * `work` (person-days) overrides duration × units, and `null` gives the
+ * computed work back. The rules are the screen's (routes/resources.js).
+ */
+export async function upsertAssignment(user, externalId, b) {
+  const source = user.id;
+  let existing = await one(
+    `SELECT * FROM assignment WHERE external_source = $1 AND external_id = $2`, [source, externalId]);
+  let binding = {};
+  if (!existing && b.adopt) {
+    const plan = await planAdoption(user, "assignment", externalId, b.adopt, "assignment");
+    existing = plan.row; binding = plan.binding;
+  }
+  let activityId = existing?.activity_id ?? null;
+  if (b.activity !== undefined) {
+    const a = await one(
+      `SELECT id, project_id FROM activity WHERE id = $1 OR (external_source = $2 AND external_id = $1)`,
+      [String(b.activity), source]);
+    if (!a) bad(`No such stage: ${b.activity} — send a Meridian activity id, or an externalId you bound`);
+    if (existing && a.id !== existing.activity_id) {
+      bad(`Assignment ${externalId} is on ${existing.activity_id}; an assignment stays on its stage — record a new one`);
+    }
+    activityId = a.id;
+  }
+  if (!activityId) bad("An assignment needs activity — a Meridian activity id, or an externalId you bound");
+  const units = b.units === undefined ? undefined : Math.round(Number(b.units));
+  if (units !== undefined && (!Number.isFinite(units) || units < 1 || units > 200)) bad("units is a whole percentage from 1 to 200");
+  let work;
+  if (b.work !== undefined) {
+    if (b.work === null || b.work === "") work = null;
+    else {
+      work = Number(b.work);
+      if (!Number.isFinite(work) || work < 0) bad("work is a number of person-days, 0 or more — or null to compute it");
+    }
+  }
+  let person, role;
+  if (b.person !== undefined || b.role !== undefined) {
+    const p = b.person ? await resolvePerson(b.person, "person") : null;
+    const r = text(b.role, 120, "role") || "";
+    if (p && r) bad("An assignment names a person OR a role — not both");
+    if (!p && !r) bad("An assignment names a person or a role");
+    person = p; role = p ? "" : r;
+  }
+  const note = text(b.note, 2000, "note");
+
+  if (!existing) {
+    if (person === undefined) bad("An assignment names a person or a role");
+    let id = null;
+    await audited(user,
+      () => ({ action: "Assignment added", entity: "assignment", entityId: id,
+               detail: `${person ?? role} on ${activityId} at ${units ?? 100}% — from ${user.displayName} (${externalId})` }),
+      async (t) => {
+        id = await allocateId(t, "ASG", { pad: 3 });
+        await t.query(
+          `INSERT INTO assignment (id, activity_id, person_id, role_label, units, work_days, note,
+                                   external_source, external_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+          [id, activityId, person, role, units ?? 100, work ?? null, note ?? "", source, externalId]);
+      });
+    return stamp(true, id, externalId, 1);
+  }
+  let patch = {};
+  if (person !== undefined) { patch.person_id = person; patch.role_label = role; }
+  if (units !== undefined) patch.units = units;
+  if (work !== undefined) patch.work_days = work;
+  if (note !== undefined) patch.note = note;
+  patch = { ...changedOnly(patch, existing), ...binding };
+  if (!Object.keys(patch).length) return stamp(false, existing.id, externalId, existing.row_version);
+  const version = sentVersion(b);
+  const out = await audited(user,
+    { action: "Assignment updated", entity: "assignment", entityId: existing.id,
+      detail: `${existing.activity_id} — from ${user.displayName} (${externalId})`,
+      before: { person: existing.person_id, role: existing.role_label, units: existing.units, work: existing.work_days },
+      after: { person: patch.person_id ?? existing.person_id, role: patch.role_label ?? existing.role_label,
+               units: patch.units ?? existing.units,
+               work: "work_days" in patch ? patch.work_days : existing.work_days } },
+    async (t) => writeRow(t, "assignment", existing.id, version, patch, "assignment"));
   return stamp(false, existing.id, externalId, out.version);
 }

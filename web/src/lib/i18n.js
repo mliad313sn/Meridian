@@ -83,6 +83,11 @@ export function t(s) {
    FRAGMENTS by pattern, leaving the numbers alone. Applied to composed
    notes and to server-composed agenda text at render time. */
 export const FRAG = [
+  /* docs/41 FX-09 — why the leveler moved an activity, composed around
+     its float, rank and predecessor. First, like every precise pattern. */
+  [/Within total float \((-?\d+) d\)/g, "Dans la marge totale ($1 j)"],
+  [/Delayed: lower priority \(rank (\w+), float (-?\d+) d\)/g, "Retardée : priorité plus basse (rang $1, marge $2 j)"],
+  [/Pushed by its predecessor /g, "Poussée par sa prédécesseure "],
   /* D-36.15 — the refusal of a gate held by a human act, composed around
      the act's id, title and owner. First: generic words below would eat
      it before it is recognised. */
@@ -3019,6 +3024,57 @@ export const FR = {
     "Ven",
   "Sat":
     "Sam",
+  /* docs/41 wave B — resources and costs (FX-08, FX-09, FX-10). */
+  "d": "j",
+  "away": "absent",
+  "Load against effective availability": "Charge face à la disponibilité réelle",
+  "Propose leveling": "Proposer un nivellement",
+  "Over-allocation": "Surcharge",
+  "person(s) over their availability": "personne(s) au-delà de leur disponibilité",
+  "Leveling proposal": "Proposition de nivellement",
+  "Activity": "Activité",
+  "Nothing to propose": "Rien à proposer",
+  "finish": "fin",
+  "over-allocated week(s)": "semaine(s) en surcharge",
+  "Leveling applied": "Nivellement appliqué",
+  "Apply selected moves": "Appliquer la sélection",
+  "Units": "Unités",
+  "Work": "Travail",
+  "Planned cost": "Coût planifié",
+  "Assignments": "Affectations",
+  "Assign": "Affecter",
+  "No assignments yet": "Aucune affectation",
+  "Assignment removed": "Affectation retirée",
+  "A person or a role, never both.": "Une personne ou un rôle, jamais les deux.",
+  "Units (%)": "Unités (%)",
+  "50 = half-time, 200 = two people.": "50 = mi-temps, 200 = deux personnes.",
+  "Work (person-days)": "Travail (jours-personne)",
+  "Empty = duration × units.": "Vide = durée × unités.",
+  "Assignment updated": "Affectation mise à jour",
+  "Assignment added": "Affectation ajoutée",
+  "Day rate": "Taux journalier",
+  "Rates": "Taux",
+  "Add rate": "Ajouter un taux",
+  "No rates yet": "Aucun taux",
+  "Rate removed": "Taux retiré",
+  "Whole units of the currency.": "En unités entières de la devise.",
+  "Rate updated": "Taux mis à jour",
+  "Rate set": "Taux posé",
+  "Estimate at completion, three ways": "Estimation à terminaison, trois méthodes",
+  "Nothing measured": "Rien de mesuré",
+  "Method": "Méthode",
+  "work ÷ available FTE, absences deducted": "travail ÷ ETP disponible, absences déduites",
+  "Nothing has moved yet.": "Rien n'a encore bougé.",
+  "* typed work": "* travail saisi",
+  "Shifts, conditions.": "Postes, conditions.",
+  "person › role › directory": "personne › rôle › annuaire",
+  "Per unit, in the reporting currency.": "Par unité, en devise de reporting.",
+  "Its source (contract).": "Sa source (contrat).",
+  "too early to measure": "trop tôt pour mesurer",
+  "no costed assignment": "aucune affectation chiffrée",
+  "a rate is missing": "un taux manque",
+  "not every activity is costed": "toutes les activités ne sont pas chiffrées",
+  "Pushed by a predecessor": "Poussée par une prédécesseure",
 };
 
 /* ── enregistrement des dictionnaires ─────────────────────────────────

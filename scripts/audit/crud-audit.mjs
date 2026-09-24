@@ -235,6 +235,11 @@ const ENTITIES = {
   event_delivery: { c: NA("Written by the outbound queue, one row per event and subscriber (events.js)"),
     u: NA("Its state is what the receiver got — editing it by hand would lie to the integrator"),
     d: NA("Removed with its integration (ON DELETE CASCADE)") },
+  /* docs/41 wave B (063) — who works on which activity, and the price of
+     a day. Both corrected in place and withdrawn when entered in error;
+     routes in server/src/routes/resources.js. */
+  assignment: { c: /post\("\/assignments"/, u: /patch\("\/assignments\/:id"/, d: /delete\("\/assignments\/:id"/ },
+  rate: { c: /post\("\/rates"/, u: /patch\("\/rates\/:id"/, d: /delete\("\/rates\/:id"/ },
   usage_daily: { c: NA("Counted by the server (A-08) — a measure of use is never typed"),
     u: NA("A count is not corrected by hand — it is what was counted"),
     d: NA("An aggregate with no person in it; nothing to withdraw") },

@@ -132,7 +132,13 @@ describe("schema and migrations (R2.2, R2.7)", () => {
           of its project (no cycle, a summary carries no link); FX-07,
           named baselines, read-only once taken, eleven at most. 061 and
           063-065 are reserved for the other waves of docs/41 section 4. */
-       "062_a_plan_has_a_shape.sql"]);
+       "062_a_plan_has_a_shape.sql",
+       /* 063 - docs/41 wave B (FX-08, FX-10): an assignment (an activity,
+          a person or a role, units 1-200, an optional typed work) and a
+          rate table (a person or a role, a day rate in a currency, its
+          effective dates). 061, 062, 064 and 065 are reserved for the
+          other waves of the functional committee. */
+       "063_who_does_the_work_and_what_it_costs.sql"]);
     const again = await migrate({ silent: true });
     assert.deepEqual(again, [], "a second run applies nothing");
   });

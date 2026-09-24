@@ -58,6 +58,8 @@ import { ganttFold, planTree, wbsName, moveStage, baselinesFold, keptFold } from
 /* NEW-04 — KODO's registers: requirements, evidence, findings, seats,
    objections, and what a decision costs to reverse. */
 import { assuranceFolds, objectionsFor, decisionFields, decisionFacts } from "./registers.js";
+/* docs/41 wave B — load, assignments, rates, leveling, EAC three ways. */
+import { loadSection, assignmentsSection, ratesSection, costSection, overallocationItem } from "./resources.js";
 import { accessPanel, directoryPanel, referencePanel, federationPanel, notificationsPanel, importPanel, continuityPanel, integrationsPanel, invalidateAdmin } from "./administration.js";
 import { stageScheduleFields, stageScheduleBody, stageScheduleCols, scheduleSignals, scheduleAlarm, projectScheduleFields, projectScheduleBody, calendarsPanel } from "./schedule.js";
 
@@ -312,6 +314,10 @@ Views.portfolio = (db) => {
      de bord de programme les appelle correctement depuis toujours ;
      cette vue-ci ne la passait simplement pas. */
   const decisions = Engine.decisions(db, list);
+  /* FX-08 — over effective availability is owed an answer too: an item
+     beside the engine's list, which is not changed. */
+  const overItem = overallocationItem(db, list);
+  if (overItem) decisions.push(overItem);
   const rail = h("aside", { class: "sec" },
     sectionHead(t("Decisions owed"), decisions.length + " open"),
     h("div", { style: "margin-bottom:22px" }, decisions.length ? decisions.slice(0, 6).map(d =>
@@ -4865,7 +4871,9 @@ Views.budget = (db) => {
           { color: "var(--color-neutral-500)", label: "Planned value" },
           { color: "var(--color-text)", label: "Earned value" },
           { color: "var(--color-accent)", label: "Actual cost · today" },
-        ])),
+        ]),
+        h("div", { style: "height:26px" }), h("hr", { class: "hr" }), h("div", { style: "height:18px" }),
+        costSection(db, list)),
       h("aside", { class: "sec" },
         sectionHead("Where the overrun sits"),
         h("div", { style: "margin-bottom:20px" }, rows.filter(m => m.vac < -0.01).sort((a, b) => a.vac - b.vac).slice(0, 5).map(m =>
@@ -5284,7 +5292,8 @@ Views.resources = (db) => {
           h("span", { class: "strong warn" }, over.length + " people are over the ceiling for two consecutive weeks or more: "),
           over.map(o => o.person.name).join(", "),
           h("div", { class: "xs muted", style: "margin-top:6px" },
-            db.settings.capacityAlerts ? "Capacity alerts are on — resource managers are notified." : "Capacity alerts are off. Turn them on in administration to notify resource managers.")) : null),
+            db.settings.capacityAlerts ? "Capacity alerts are on — resource managers are notified." : "Capacity alerts are off. Turn them on in administration to notify resource managers.")) : null,
+        loadSection(db), assignmentsSection(db)),
       h("aside", { class: "sec" },
         sectionHead("Demand by project", "full-time equivalents",
           /* R-03 — the actual, beside the plan: one number a week. */
@@ -5342,7 +5351,8 @@ Views.resources = (db) => {
             h("div", { style: "flex:1;min-width:0" },
               h("div", { class: "strong small" }, p.name),
               h("div", { class: "xs muted" }, p.role + " · " + (Engine.site(db, p.site) || {}).city)))) :
-          h("div", { class: "small muted" }, "Everyone in the directory is on something.")))));
+          h("div", { class: "small muted" }, "Everyone in the directory is on something.")),
+        h("div", { style: "height:18px" }), ratesSection(db))));
 };
 
 function personDetail(db, person, cell) {

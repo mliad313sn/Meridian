@@ -87,6 +87,10 @@ const KEEP_TABLES = new Set([
 const TABLES = [
   "event_delivery", "notification_subscription", "notification",
   "timesheet", "person_absence", "commitment",
+  /* FX-08/FX-10 (063) — content of the book: who works on which activity,
+     and what a day of a person or a role costs. Before the activity and
+     the person they hang on. */
+  "assignment", "rate",
   /* KODO (052, MER-05/06/07/11) — content, like the registers beside
      them: a dissent before the decision it objects to, a finding before
      the evidence that closes it and the requirement it cites, a seat's

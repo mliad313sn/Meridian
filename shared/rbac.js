@@ -112,6 +112,15 @@ export const ACTIONS = [
      `project.baseline`: that one moves the governed reference and the
      variance steering reads; a snapshot moves nothing. See its `case`. */
   "baseline.snapshot",
+  /* FX-09 (docs/41, D-41.02) : APPLIQUER un nivellement. Le calcul ne
+     demande rien — il propose et n'écrit pas. L'application déplace des
+     activités, et chacune reste la question qu'elle était : le compte
+     peut-il écrire le planning de CE projet. Nommée à part pour que la
+     piste et le refus disent « nivellement », et pour que le jour où le
+     nivellement demandera un autre niveau, ce soit une ligne ici.
+     FX-10 : la table de TAUX. Un prix de jour est de l'argent de groupe,
+     comme la ligne de coût (A5) : voir GROUP_ONLY_WRITES. */
+  "schedule.level", "rate.write",
   // system
   "user.manage", "settings.write", "data.export", "data.import",
 ];
@@ -166,6 +175,11 @@ const GROUP_ONLY_WRITES = new Set([
   /* FX-02 — a working calendar moves the dates of every project that
      uses it, across sites and programmes at once. */
   "calendar.manage",
+  /* FX-10 — a day rate prices every planned cost in every programme. It
+     is the group's money, like the ledger it will be compared with (A5):
+     a site lead who set the rate of their own people would set the cost
+     of their own plan. */
+  "rate.write",
 ]);
 
 /** Admin-only, full stop. */
@@ -651,6 +665,11 @@ export function can(user, action, resource = {}) {
        scope. This is the latent trap the V-02 work named and that
        `data.import` still carries. */
     case "lesson.adopt":
+    /* FX-10 — a rate names a person or a role, never a project: there is
+       no project to check, and GROUP_ONLY_WRITES has already established
+       the level. Without this case the project-scoped default would
+       refuse it to everybody — the trap `data.import` paid for. */
+    case "rate.write":
       /* Portfolio-wide: there is no project to check, and the
          GROUP_ONLY_WRITES test above has already established group level
          or admin. Without this case it would fall to the project-scoped
@@ -677,6 +696,13 @@ export function can(user, action, resource = {}) {
         ? allow()
         : deny("project is outside your authority — you can read it, and raise a concern on it if it lands on your site");
     }
+
+    /* FX-09 — applying a leveling moves activities of a project, one by
+       one: the same authority as moving them by hand (schedule.write). A
+       leveling cannot move what the account could not move itself — S9's
+       guard in docs/41: nivellement ≠ autorité. */
+    case "schedule.level":
+      return canWriteProject(user, resource.project) ? allow() : outsideProject(user, resource.project);
 
     /* REQ-46 — le registre RAID a DEUX portées, et une seule était dite
        ici. Une ligne rattachée à un projet est une écriture de projet

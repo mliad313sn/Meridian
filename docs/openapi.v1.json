@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Meridian IT-PMO",
-    "version": "5.30.0",
+    "version": "5.31.0",
     "summary": "Read a governed project portfolio, and the trail of how it got that way",
     "description": "The surface other systems read. It is versioned in the path: the day the shape has to change it becomes /api/v2, so that nobody has to guess. Authentication is a key issued per connected system, carrying explicit scopes; the product never stores the key itself, only its fingerprint.\n\nWrites arrived with the first real integrator (RT365, docs/33): PUT by your own identifier on projects, milestones, register items, stage progress, work items, decisions and actions, under two write scopes, with an optional Idempotency-Key. A scope is only published once a route honours it: declaring one earlier would advertise a door that does not exist and imply it is guarded.",
     "license": {
@@ -323,6 +323,156 @@
                     "items": {
                       "type": "object"
                     }
+                  },
+                  "version": {
+                    "type": "integer"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The document described above",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "contract": {
+                      "type": "string"
+                    },
+                    "generatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "externalId": {
+                      "type": "string"
+                    },
+                    "created": {
+                      "type": "boolean"
+                    },
+                    "version": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created — the row did not exist for this externalId",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "contract": {
+                      "type": "string"
+                    },
+                    "generatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "externalId": {
+                      "type": "string"
+                    },
+                    "created": {
+                      "type": "boolean"
+                    },
+                    "version": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body breaks a rule the screens enforce too; the message says which"
+          },
+          "401": {
+            "description": "No key, an unknown key, or a revoked key — the three are indistinguishable on purpose"
+          },
+          "403": {
+            "description": "The key is live but does not carry the scope this route requires"
+          },
+          "409": {
+            "description": "A stale version, an immutable decision, or a meeting that is not open"
+          },
+          "422": {
+            "description": "Idempotency-Key reused with a different request"
+          }
+        }
+      }
+    },
+    "/api/v1/assignments/{externalId}": {
+      "put": {
+        "summary": "Create or update an assignment — a person or a role on a stage, at a number of units, keyed by your own identifier",
+        "description": "Creates the an assignment — a person or a role on a stage, at a number of units when nothing carries this externalId for your integration, updates it otherwise. The identity is (integration, externalId): two connected systems may both say \"E01\" without colliding. `version` is optional — when sent it is asserted (409 if stale); when omitted your system is the master of this row and the last write wins. Optional `Idempotency-Key` header: the same key with the same body replays the recorded answer (Idempotent-Replayed: true); the same key with another body is refused (422) — one key names ONE request, not a run. `adopt: \"<Meridian id>\"` binds your externalId to a row that already exists (created on a screen, or scaffolded) instead of creating another. A field this collection does not declare is REFUSED (400) and nothing is written or audited: the properties below are the whole of what a body may carry (REQ-19). The same business rules as the screens apply. `activity` is a Meridian stage id or an externalId you bound with /activities; an assignment stays on its stage. `person` (an id or the exact name of an active person) OR `role` (a job role, when the work is known before the name) — one of the two, never both. `units` is a whole percentage from 1 to 200 (100 = a full day every day of the stage; default 100). Work is computed as the stage's duration × units unless `work` (person-days) is sent, which then wins; `work: null` gives the computed figure back. The weekly load that flags over-allocation reads these, against each person's effective availability and dated absences; a stage's planned cost is its assignments × the rate table (FX-10).",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scope": "write:portfolio",
+        "parameters": [
+          {
+            "name": "externalId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "Your own identifier for this row — stable across runs, unique within your integration"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "One key names ONE request. The same key with the same body replays the recorded answer (response header Idempotent-Replayed: true); the same key with a different body is refused (422)."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "adopt": {
+                    "type": "string"
+                  },
+                  "activity": {
+                    "type": "string"
+                  },
+                  "person": {
+                    "type": "string"
+                  },
+                  "role": {
+                    "type": "string"
+                  },
+                  "units": {
+                    "type": "integer"
+                  },
+                  "work": {
+                    "type": "number"
+                  },
+                  "note": {
+                    "type": "string"
                   },
                   "version": {
                     "type": "integer"

@@ -34,6 +34,7 @@ import ladderRoutes from "./routes/ladder.js";
 import valuePageRoutes from "./routes/valuepage.js";
 import registerRoutes from "./routes/registers.js";
 import referenceRoutes from "./routes/references.js";
+import resourceRoutes from "./routes/resources.js";
 import federationServiceRoutes from "./routes/federationService.js";
 /* docs/41 A2 — the work breakdown and the named baselines. */
 import planRoutes from "./routes/plan.js";
@@ -231,6 +232,8 @@ export function buildApp() {
   app.use("/api", registerRoutes);
   /* D-36.14 — typed external references (issue, PR, commit, CI run, artefact). */
   app.use("/api", referenceRoutes);
+  /* docs/41 wave B — assignments, rates, leveling (FX-08/09/10). */
+  app.use("/api", resourceRoutes);
   app.use("/api/import", importRoutes);
   app.use("/api/meetings", meetingRoutes);
   app.use("/api/admin", adminRoutes);

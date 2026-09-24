@@ -263,6 +263,15 @@ const WRITE_DOCS = {
       "in place. A reference stays on its project, its target and its kind."),
     returns: { ...UPSERT_RETURNS, links: "string[]", supersedes: "string" },
   },
+  /* FX-08 (docs/41) — who works on which stage. */
+  "PUT /api/v1/assignments/:externalId": upsert("an assignment — a person or a role on a stage, at a number of units", "write:portfolio",
+    "`activity` is a Meridian stage id or an externalId you bound with /activities; an assignment stays on its " +
+    "stage. `person` (an id or the exact name of an active person) OR `role` (a job role, when the work is " +
+    "known before the name) — one of the two, never both. `units` is a whole percentage from 1 to 200 (100 = " +
+    "a full day every day of the stage; default 100). Work is computed as the stage's duration × units unless " +
+    "`work` (person-days) is sent, which then wins; `work: null` gives the computed figure back. The weekly " +
+    "load that flags over-allocation reads these, against each person's effective availability and dated " +
+    "absences; a stage's planned cost is its assignments × the rate table (FX-10)."),
   "PUT /api/v1/decisions/:externalId": upsert("a decision outside a meeting", "write:meetings",
     "Named by `decidedBy` (a person) or `council` (the deciding body). The substance — headline, rationale, " +
     "alternatives, dissent — is immutable: a different substance answers 409 — record a new decision naming " +
