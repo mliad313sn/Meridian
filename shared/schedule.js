@@ -38,6 +38,27 @@
  * Indices are days from `origin` — calendar days without a calendar,
  * working days with one. Durations and lags are counted in the same unit.
  *
+ * ── FX-15 · several calendars in one run (a programme) ───────────────
+ *
+ *   schedule(acts, { calendars, statusDates })
+ *
+ *   calendars   { [id]: calendar | null } — each activity on its own
+ *               calendar (its project's). When given, `calendar` is not read.
+ *   statusDates { [id]: ISO | null } — each activity's status date (its
+ *               project's); an id not named reads `statusDate`.
+ *
+ * The same two passes, not a copy of them. Each activity's es/ef/ls/lf,
+ * float and free float are in ITS OWN working days (from the shared
+ * `origin`); a link is read across by date — the predecessor's finish (or
+ * start) is a day, and the successor counts from the next of its own
+ * working days, its lag in its own working days. `projEnd` is then the
+ * calendar-day index of the latest finish, and `dates` gives every index
+ * as an ISO date. With every activity on one calendar the numbers are
+ * those of `{ calendar }` (a test says so).
+ *
+ *   driving     { [id]: [pred id] } — the links that set each start (with
+ *               or without `calendars`), for walking a critical chain back.
+ *
  * ── D-41.01 ──────────────────────────────────────────────────────────
  *
  * Every link FS with lag 0, no calendar, no constraint, no deadline, no
@@ -133,50 +154,85 @@ export function topo(acts) {
   return out;
 }
 
-export function schedule(acts, { calendar = null, statusDate = null } = {}) {
+export function schedule(acts, { calendar = null, statusDate = null, calendars = null, statusDates = null } = {}) {
   const byId = Object.fromEntries(acts.map(a => [a.id, a]));
   const es = {}, ef = {}, ls = {}, lf = {};
   const empty = { es, ef, ls, lf, float: {}, freeFloat: {}, critical: new Set(), negative: [], missed: [],
-    late: [], projEnd: 0, origin: null, dates: {}, calendar: calendar ?? null };
+    late: [], projEnd: 0, origin: null, dates: {}, calendar: calendar ?? null, driving: {} };
   if (!acts.length) return empty;
 
   const originT = Math.min(...acts.map(a => T(a.start)));
   const origin = ISO(originT);
   const c = clock(originT, calendar);
-  const sd = statusDate ? c.idx(statusDate) : null;
+  /* FX-15 — one clock per activity when `calendars` is given (a programme:
+     each project on its own calendar). Without it every activity reads the
+     one clock `c` and every conversion below is the identity, so the
+     passes compute exactly what they computed before (D-41.01). */
+  const multi = !!calendars;
+  const clocks = new Map();
+  const ck = !multi ? () => c : (a) => {
+    const cal = calendars[a.id] ?? null;
+    if (!clocks.has(cal)) clocks.set(cal, clock(originT, cal));
+    return clocks.get(cal);
+  };
+  /* The shared axis of a multi-calendar run is the calendar day from `origin`.
+     W: a calendar-day index → a's working index (the next working day at or after it);
+     S: a's working index → the calendar day that carries it (a start);
+     F: a's working index → the day after the last working day before it (a finish). */
+  const cd = (d) => Math.round((T(d) - originT) / DAY);
+  const W = (a, i) => ck(a).idx(ISO(originT + i * DAY));
+  const S = (a, k) => cd(ck(a).startOf(k));
+  const F = (a, k) => cd(ck(a).finishOf(k));
+  /* A bound stated in x's working days, read in a's: the latest day on
+     which x still reads k, counted in a's working days. */
+  const across = multi ? (a, x, k) => W(a, S(x, k)) : (a, x, k) => k;
+  /* where a predecessor starts and finishes, in a's working days */
+  const gF = (p) => (ef[p.id] === es[p.id] ? S(p, es[p.id]) : F(p, ef[p.id]));
+  const preS = multi ? (a, id) => W(a, S(byId[id], es[id])) : (a, id) => es[id];
+  const preF = multi ? (a, id) => W(a, gF(byId[id])) : (a, id) => ef[id];
+  const statusOf = multi && statusDates
+    ? (a) => (statusDates[a.id] !== undefined ? statusDates[a.id] : statusDate) : () => statusDate;
+  const sdOf = (a) => { const d = statusOf(a); return d ? ck(a).idx(d) : null; };
   const dur = (a) => Number.isFinite(a.duration) ? Math.max(0, Math.round(a.duration))
-    : Math.max(1, c.span(a.start, a.end));
+    : Math.max(1, ck(a).span(a.start, a.end));
   const cType = (a) => (a.constraint && CONSTRAINT_TYPES.includes(a.constraint.type) && a.constraint.type !== "ASAP" && a.constraint.date)
     ? a.constraint.type : null;
-  const cIdx = (a) => c.idx(a.constraint.date);
+  const cIdx = (a) => ck(a).idx(a.constraint.date);
   const actualStartOf = (a) => a.actualStart ?? (a.actualFinish ? a.start : null);
   const complete = (a) => !!a.actualFinish;
   const started = (a) => !!actualStartOf(a) || Number(a.pct) > 0;
   const links = Object.fromEntries(acts.map(a => [a.id, linksOf(a).filter(l => byId[l.pred])]));
   const succs = Object.fromEntries(acts.map(a => [a.id, []]));
   acts.forEach(a => links[a.id].forEach(l => succs[l.pred].push({ succ: a.id, type: l.type, lag: l.lag })));
+  const driving = {};
 
   /* ── forward pass ─────────────────────────────────────────────── */
   const order = topo(acts);
   order.forEach(a => {
     const d = dur(a);
     const as = actualStartOf(a);
+    const sd = sdOf(a);
+    driving[a.id] = [];
     if (as) {
-      es[a.id] = c.idx(as);
-      if (complete(a)) ef[a.id] = Math.max(es[a.id], c.idx(a.actualFinish));
+      es[a.id] = ck(a).idx(as);
+      if (complete(a)) ef[a.id] = Math.max(es[a.id], ck(a).idx(a.actualFinish));
       else if (a.remaining != null && sd != null) ef[a.id] = Math.max(es[a.id], sd) + Math.max(0, Number(a.remaining));
       else ef[a.id] = es[a.id] + d;
       return;
     }
     const ps = links[a.id];
-    let s = ps.length ? Math.max(...ps.map(l => {
+    const cand = ps.map(l => {
       switch (l.type) {
-        case "SS": return es[l.pred] + l.lag;
-        case "FF": return ef[l.pred] + l.lag - d;
-        case "SF": return es[l.pred] + l.lag - d;
-        default:   return ef[l.pred] + l.lag;
+        case "SS": return preS(a, l.pred) + l.lag;
+        case "FF": return preF(a, l.pred) + l.lag - d;
+        case "SF": return preS(a, l.pred) + l.lag - d;
+        default:   return preF(a, l.pred) + l.lag;
       }
-    })) : c.idx(a.start);
+    });
+    let s = ps.length ? Math.max(...cand) : ck(a).idx(a.start);
+    /* FX-15 — the links that set this start (before any constraint), so a
+       chain can be walked back along them. Read only: it moves nothing. */
+    driving[a.id] = ps.filter((l, i) => cand[i] === s).map(l => l.pred);
     const ct = cType(a);
     if (ct === "SNET") s = Math.max(s, cIdx(a));
     else if (ct === "FNET") s = Math.max(s, cIdx(a) - d);
@@ -188,7 +244,11 @@ export function schedule(acts, { calendar = null, statusDate = null } = {}) {
     ef[a.id] = s + (started(a) && a.remaining != null && sd != null
       ? Math.max(0, Math.max(s, sd) - s + Number(a.remaining)) : d);
   });
-  const projEnd = Math.max(...acts.map(a => ef[a.id]));
+  /* One clock: the latest early finish, in its units. Several: the latest
+     finish on the shared calendar-day axis, read in each activity's own
+     working days where it bounds that activity. */
+  const projEnd = multi ? Math.max(...acts.map(a => gF(a))) : Math.max(...acts.map(a => ef[a.id]));
+  const endOf = multi ? (a) => W(a, projEnd) : () => projEnd;
 
   /* ── backward pass ────────────────────────────────────────────── */
   [...order].reverse().forEach(a => {
@@ -196,21 +256,22 @@ export function schedule(acts, { calendar = null, statusDate = null } = {}) {
     if (complete(a)) { ls[a.id] = es[a.id]; lf[a.id] = ef[a.id]; return; }
     const ss = succs[a.id];
     let f = ss.length ? Math.min(...ss.map(x => {
+      const X = byId[x.succ];
       switch (x.type) {
-        case "SS": return ls[x.succ] - x.lag + span;
-        case "FF": return lf[x.succ] - x.lag;
-        case "SF": return lf[x.succ] - x.lag + span;
-        default:   return ls[x.succ] - x.lag;
+        case "SS": return across(a, X, ls[x.succ] - x.lag) + span;
+        case "FF": return across(a, X, lf[x.succ] - x.lag);
+        case "SF": return across(a, X, lf[x.succ] - x.lag) + span;
+        default:   return across(a, X, ls[x.succ] - x.lag);
       }
-    })) : projEnd;
+    })) : endOf(a);
     /* An SS or SF predecessor can finish after its successor, so it is
        bounded by the project end as well. With FS/0 links the successor
        bound is already ≤ projEnd and this changes nothing (D-41.01). */
-    f = Math.min(f, projEnd);
+    f = Math.min(f, endOf(a));
     const ct = cType(a);
     if (ct === "SNLT" || ct === "MSO") f = Math.min(f, cIdx(a) + span);
     else if (ct === "FNLT" || ct === "MFO") f = Math.min(f, cIdx(a));
-    if (a.deadline) f = Math.min(f, c.idx(a.deadline));
+    if (a.deadline) f = Math.min(f, ck(a).idx(a.deadline));
     lf[a.id] = f;
     ls[a.id] = f - span;
   });
@@ -220,31 +281,35 @@ export function schedule(acts, { calendar = null, statusDate = null } = {}) {
   acts.forEach(a => {
     const ss = succs[a.id];
     const room = ss.length ? Math.min(...ss.map(x => {
+      const X = byId[x.succ];
       switch (x.type) {
-        case "SS": return es[x.succ] - x.lag - es[a.id];
-        case "FF": return ef[x.succ] - x.lag - ef[a.id];
-        case "SF": return ef[x.succ] - x.lag - es[a.id];
-        default:   return es[x.succ] - x.lag - ef[a.id];
+        case "SS": return across(a, X, es[x.succ] - x.lag) - es[a.id];
+        case "FF": return across(a, X, ef[x.succ] - x.lag) - ef[a.id];
+        case "SF": return across(a, X, ef[x.succ] - x.lag) - es[a.id];
+        default:   return across(a, X, es[x.succ] - x.lag) - ef[a.id];
       }
-    })) : projEnd - ef[a.id];
+    })) : endOf(a) - ef[a.id];
     freeFloat[a.id] = complete(a) ? 0 : Math.max(0, Math.min(room, float[a.id]));
   });
 
   const open = acts.filter(a => !complete(a));
   const dates = {};
   acts.forEach(a => {
-    dates[a.id] = { es: c.startOf(es[a.id]), ef: c.finishOf(ef[a.id]), ls: c.startOf(ls[a.id]), lf: c.finishOf(lf[a.id]) };
+    const k = ck(a);
+    dates[a.id] = { es: k.startOf(es[a.id]), ef: k.finishOf(ef[a.id]), ls: k.startOf(ls[a.id]), lf: k.finishOf(lf[a.id]) };
   });
   return {
     es, ef, ls, lf, float, freeFloat,
     critical: new Set(open.filter(a => float[a.id] <= 0).map(a => a.id)),
     negative: open.filter(a => float[a.id] < 0).map(a => a.id),
-    missed: open.concat(acts.filter(complete)).filter(a => a.deadline && ef[a.id] > c.idx(a.deadline)).map(a => a.id),
+    missed: open.concat(acts.filter(complete)).filter(a => a.deadline && ef[a.id] > ck(a).idx(a.deadline)).map(a => a.id),
     /* late: should have started, or should have finished, by the status
        date — a stage reported at 100 % is done even without an actual finish */
-    late: statusDate ? open.filter(a => !(Number(a.pct) >= 100) &&
-      ((!started(a) && T(a.start) < T(statusDate)) || T(a.end) < T(statusDate))).map(a => a.id) : [],
-    projEnd, origin, dates, calendar: calendar ?? null,
+    late: open.filter(a => {
+      const sd = statusOf(a);
+      return sd && !(Number(a.pct) >= 100) && ((!started(a) && T(a.start) < T(sd)) || T(a.end) < T(sd));
+    }).map(a => a.id),
+    projEnd, origin, dates, calendar: calendar ?? null, driving,
   };
 }
 

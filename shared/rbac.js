@@ -135,6 +135,11 @@ export const ACTIONS = [
   /* FX-11 (docs/41) — STORING a Monte Carlo run of a project's schedule.
      Reading the runs is `project.read`. See its `case`. */
   "risk.run",
+  /* FX-15 (docs/41) — writing a link BETWEEN two projects (its type, its
+     lag, its wording, adding or removing it). A link is a commitment of
+     both plans, so it asks for the planning authority of both. See its
+     `case`. */
+  "crossdep.write",
   // system
   "user.manage", "settings.write", "data.export", "data.import",
 ];
@@ -935,6 +940,22 @@ export function can(user, action, resource = {}) {
       return canWriteProject(user, resource.project)
         ? allow()
         : outsideProject(user, resource.project);
+
+    /* FX-15 — a cross-project link binds two plans: the successor's dates
+       now follow the predecessor's, and the predecessor's float is spent
+       by the successor. So both sides are checked, each with the same
+       authority as moving its stages (schedule.write), and the refusal
+       names the side that is not the caller's. A site lead of one side
+       cannot bind the other: that is S9's guard in docs/41 §3 FX-15
+       (« l'autorité est vérifiée des deux côtés du lien »). */
+    case "crossdep.write": {
+      const { from, to } = resource;
+      if (!from || !to) return deny("a cross-project link names two projects — both are needed to decide");
+      const not = [from, to].find((p) => !canWriteProject(user, p));
+      return not
+        ? deny(`you cannot plan ${not.id} — a link binds both projects, so it needs planning authority over each end; ask whoever plans ${not.id}`)
+        : allow();
+    }
 
     default:
       // Every remaining write is project-scoped.

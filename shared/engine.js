@@ -474,6 +474,10 @@ export const Engine = {
     const out = [];
     (db.crossDeps ?? []).forEach(cd => {
       if (!ids.has(cd.from) || !ids.has(cd.to)) return;
+      /* FX-15 — as within a project (depBreaches): only a finish-to-start
+         link says "after it ends"; an SS, FF or SF successor overlaps its
+         feeder by design. A link written before 067 has no type: FS. */
+      if (cd.type && cd.type !== "FS") return;
       const fromActs = Engine.activities(db, cd.from).filter(a => a.stage === cd.fromStage);
       const toActs   = Engine.activities(db, cd.to).filter(a => a.stage === cd.toStage);
       if (!fromActs.length || !toActs.length) return;
@@ -491,6 +495,11 @@ export const Engine = {
     });
     return out;
   },
+
+  /* FX-15 — the programme master schedule (`programmeSchedule`) and the
+     leaves a cross-project link names (`stageLeaves`) are in
+     shared/programme.js: only the master schedule reads them, and it is
+     loaded on first use (D-41.03). */
 
   /* ── gates ──────────────────────────────────────────────────────── */
   /* R-01 — evidence is an approved document THAT POINTS AT SOMETHING.

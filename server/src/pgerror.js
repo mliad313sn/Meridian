@@ -15,6 +15,8 @@ const CONSTRAINT_MESSAGES = {
   allocation_dates_ordered: "An allocation cannot end before it starts",
   dep_not_self: "A stage cannot depend on itself",
   cross_dep_not_self: "A project cannot depend on itself",
+  cross_dep_type_known: "A cross-project link is FS, SS, FF or SF",
+  cross_dep_lag_bounded: "A cross-project lag is between -3650 and 3650 days",
   grant_target_exclusive: "A grant names one programme, one site or one project, never two",
   /* D-36.12 (058) — a review grant names a programme or a project. */
   grant_review_scope: "A review grant names a programme or a project; a write grant names a programme or a site",

@@ -154,7 +154,12 @@ describe("schema and migrations (R2.2, R2.7)", () => {
           Carlo run (risk_run) - seeded, signed, read-only once stored,
           never moving a date (D-41.02). 064, 065, 067 and 068 are held
           by the other lines of the functional committee. */
-       "066_how_sure_is_the_finish.sql"]);
+       "066_how_sure_is_the_finish.sql",
+       /* 067 - docs/41 wave D (FX-15): a cross-project link is typed
+          (FS/SS/FF/SF, default FS) with a lag (default 0) and carries a
+          row_version. 064-066 are reserved for the other lines of the
+          functional committee. */
+       "067_a_programme_has_one_schedule.sql"]);
     const again = await migrate({ silent: true });
     assert.deepEqual(again, [], "a second run applies nothing");
   });

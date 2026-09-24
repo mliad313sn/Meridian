@@ -414,6 +414,11 @@ const ENRICH = [
   `UPDATE activity SET constraint_type = 'SNET', constraint_date = '2026-03-02', deadline = '2026-12-31',
           actual_start = start_date, actual_finish = start_date + 3, remaining_days = 4
     WHERE id = (SELECT min(id) FROM activity)`,
+  /* FX-15 (067) — a typed cross-project link with a lag: start-to-start
+     three days, the case the programme master schedule exists for; and a
+     finish-to-finish with a lead, so a negative lag travels too. */
+  `UPDATE cross_dep SET type = 'SS', lag_days = 3 WHERE id = (SELECT min(id) FROM cross_dep)`,
+  `UPDATE cross_dep SET type = 'FF', lag_days = -2 WHERE id = (SELECT max(id) FROM cross_dep)`,
   /* docs/41 wave B (063) — an assignment of a named person with a typed
      work and a contract identity, one of a role with the work computed
      (null must come back null, not 0), and a rate by person in another
