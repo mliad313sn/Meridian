@@ -270,6 +270,7 @@ contradicts `docs/25` (reversibility).
 | NEW-23 | After a grant is added from the grants dialog, the accounts list does not redraw until the page is reloaded. The grant is saved. Pre-existing; found building #16. | 3 |
 | NEW-24 | **BUILT (5.28.1).** The export read requirements, evidence and findings only for visible projects, so a row with no project (KODO's FR-M20/M21 requirements) was imported, stored, left out of the next export, and erased by a replace of it without `erased` counting it. Found by the field re-run of 23/09. | 1 |
 | NEW-25 | The main client bundle is at the D-41.03 cap after docs/41: 289.69 kB gzip against 289.70 kB. Four screens already load on first use (print pack, risk charts, Scenarios, master schedule, MS Project import dialog). Anything added to the main chunk must first move something else out. | 3 |
+| NEW-26 | **BUILT (5.37.0).** A project created in the app was scaffolded from its programme's ladder, else the default four, and ignored the portfolio model (`settings.gates`, MER-01) that the engine governs it by. A KODO project was born with G1–G4 on a portfolio that reviews G0–G6. Scaffold and the MS Project import dialog now read programme → portfolio → default, as `Engine.gates` does. `portfolio-ladder.test.js` fails on 5.36.1. Found by the committee's re-read of the field books. | 1 |
 | NEW-09 | On SIGTERM the process exits before PGlite closes (`claimBook` calls `process.exit` first). **BUILT (5.20.2)**. Corrected diagnosis: the leftover `postmaster.pid` is PGlite 0.2.x behaviour even after a clean close; the defect was the unclosed book. `shutdown.test.js` fails on 5.20.1. | 1 |
 | NEW-10 | Saving a programme's gate ladder from the screen drops `loopsTo` and `scope` (D-36.02 holds in the engine and the validator, not in the form). **BUILT (5.20.2)**: optional `loops to N` and scope columns; seen in the browser. | 1 |
 | NEW-11 | Administration's notifications panel still names SMTP, and the CSV import panel is French in every language. | 3 |
@@ -519,7 +520,13 @@ Every register line stays `released: false` until its tag exists
 | v5.18.3 | 1a597bd | v5.24.0 | 3838ea0 |
 | v5.19.0 | 8d9b946 | v5.25.0 | fcadb98 |
 | v5.20.0 | 11bc923 | v5.26.0 | cd372fd |
-| v5.27.0 | 086f7cc | v5.28.0 | the squash of PR #37 |
+| v5.27.0 | 086f7cc | v5.28.0 | d2aef07 |
+| v5.28.1 | d47e72c | v5.29.0 | 62388d5 |
+| v5.30.0 | 055f8b7 | v5.31.0 | da3c38c |
+| v5.32.0 | 8385530 | v5.33.0 | 8a589ed |
+| v5.34.0 | 4a5288c | v5.35.0 | 8301858 |
+| v5.36.0 | 0687333 | v5.36.1 | e3a2b42 |
+| v5.37.0 | the squash of the 5.37.0 PR | | |
 
 ```sh
 git fetch origin main

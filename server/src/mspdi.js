@@ -406,7 +406,7 @@ export function toMspdi(db, projectId, { baselines = [], now = null } = {}) {
   let asgUid = 0;
   const assignments = asgs.map((x) => {
     const a = byId.get(x.activity);
-    const w = assignmentWork(x, a);
+    const w = assignmentWork(x, a, cal);   // FX-08 bis — on the working days of the calendar exported with it
     return el("Assignment", [
       el("UID", ++asgUid), el("TaskUID", uidOf.get(x.activity)),
       el("ResourceUID", resUid.get(x.person ? "P:" + x.person : "R:" + x.role)),
@@ -785,7 +785,8 @@ export function resolveImport(plan, ctx) {
         : R("blocking", "calendarNeedsAuthority", calendar.name));
     }
   }
-  const clk = clock(tasks[0]?.start ?? "2000-01-01", wanted && key !== "none" ? { workdays: wanted.workdays, holidays: wanted.holidays } : null);
+  const workCal = wanted && key !== "none" ? { workdays: wanted.workdays, holidays: wanted.holidays } : null;
+  const clk = clock(tasks[0]?.start ?? "2000-01-01", workCal);
   const workdays = (t) => (t.end > t.start ? Math.max(0, clk.span(t.start, t.end)) : 0);
 
   /* ── which tasks are stages, summaries, milestones ─────────────── */
@@ -976,7 +977,10 @@ export function resolveImport(plan, ctx) {
     let units = Math.round(x.units * 100);
     if (units < 1 || units > 200) { report.push(R("approximated", "unitsClamped", tname)); units = Math.max(1, Math.min(200, units)); }
     const a = actByKey.get(x.task);
-    const computed = workingDuration(a.start, a.end) * units / 100;
+    /* FX-08 bis — the work Meridian will compute on the project's calendar
+       (the one resolved above), so a file whose Work is duration × units
+       comes in as computed, not as typed. */
+    const computed = workingDuration(a.start, a.end, workCal) * units / 100;
     const typed = x.workMinutes === null ? null : Math.round(x.workMinutes / mpd * 100) / 100;
     asgs.push({ actKey: x.task, person: who.person, role: who.role, units,
       work: typed === null || Math.abs(typed - computed) < 0.01 ? null : typed, note: x.note.slice(0, 500) });

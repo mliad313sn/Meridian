@@ -66,13 +66,14 @@ Stated here rather than discovered later:
   for field, and gate F13 proves it on every build. To move a whole
   instance, use the database backup (`npm run backup`, proven with
   `npm run restore-drill`).
-- **Five registers have no screen yet.** Requirements, evidence, review
-  findings, governance seats and objections arrive only by importing a
-  book (NEW-04). Everything else in
+- **Every register has a screen** since 5.22.0 (NEW-04): requirements,
+  evidence and findings on the project, seats in Meetings, objections on
+  the decision they object to. Everything else in
   [`docs/38`](docs/38-user-manual.md) is walked and works, or says where
   it does not.
-- **No release since 5.9.0 is tagged yet.** 5.9.1, 5.16.0, 5.17.0 and
-  5.18.x are merged on `main`; the tags wait on a maintainer.
+- **No release since 5.9.0 is tagged yet.** 5.9.1 through 5.37.0 are
+  merged on `main`; the tags wait on a maintainer (the commands are in
+  [`docs/36`](docs/36-convergence.md) §5).
 
 You are getting the source, an archive format that gets all your data
 back out (`npm run restore`), and a build that fails on fourteen static

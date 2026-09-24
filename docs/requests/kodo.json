@@ -55,7 +55,7 @@
     },
     "counterpart": "KODO Product Owner (docs/reports/MERIDIAN_PRODUCT_REPORT.md); no issue filed upstream yet — the report says 'ready to send … as issues'"
   },
-  "registerVersion": 5,
+  "registerVersion": 6,
   "requests": [
     {
       "id": "MER-01",
@@ -74,7 +74,8 @@
       ],
       "measure": "server/test/gate-model.test.js",
       "remaining": [
-        "Gate 0 means « attached to no gate » in Meridian since migration 002; KODO's model numbers its mandate gate 0. Tracked as NEW-02 (docs/36): until it is decided, number the portfolio model from 1."
+        "Gate 0 means « attached to no gate » in Meridian since migration 002; KODO's model numbers its mandate gate 0. Tracked as NEW-02 (docs/36), still undecided on 24/09: until it is decided, number the portfolio model from 1.",
+        "Found on re-reading 5.36.1: server/src/wbs.js#scaffoldProject reads the programme's ladder, else the four defaults — never settings.gates — so a project CREATED in Meridian under no programme ladder is scaffolded with four gate milestones while shared/engine.js#gateModel reads the portfolio's six. A book imported with its own milestones is not affected."
       ],
       "issue": null,
       "accepted": null,
@@ -93,6 +94,12 @@
           "registerVersion": 2,
           "status": "partial",
           "note": "Built on claude/dynamic-gates-and-requirements (19/09), converged onto main by docs/36 C-03 as 5.17.0; migrations renumbered 034/035 → 051/052 before any main or tag applied them."
+        },
+        {
+          "at": "2026-09-24",
+          "registerVersion": 6,
+          "status": "partial",
+          "note": "Re-verified on main 5.36.1: NEW-02 still pending; scaffolding does not read the portfolio model."
         }
       ],
       "answerToSource": "\n\nA question back to you (NEW-02, docs/36): since migration 002, gate 0 in Meridian means « attached to no gate », and your model numbers its mandate gate G0. In your book, is a document with gate 0 evidence FOR G0, or unattached? We will not guess. Either renumber your model from 1 in meridian_book.py, or tell us which reading is right and we will make the rule."
@@ -154,7 +161,9 @@
       ],
       "measure": "server/test/registers.test.js (28 tests) · browser walk, 40 checks across four roles",
       "remaining": [
-        "No CI endpoint to post a verification result (an idempotent contract PUT), no bulk requirement import, and gate evidence does not yet read requirements."
+        "No CI endpoint to post a verification result: /api/v1 has no requirement collection (server/src/routes/v1.js). PUT /api/v1/references/:externalId (5.25.0, D-36.14) is NOT that: it reports the state of an issue, PR, commit, CI run or artefact onto an ext_link whose target is a project, stage, RAID row or gate criterion (057: ext_link_one_target); it cannot target a requirement and never sets requirement.status or verified_by.",
+        "No bulk requirement import outside the book: the CSV importer (server/src/routes/importcsv.js) takes projects, people and milestones only.",
+        "Gate evidence does not read requirements: shared/engine.js has no reference to them."
       ],
       "issue": null,
       "accepted": null,
@@ -179,6 +188,12 @@
           "registerVersion": 3,
           "status": "partial",
           "note": "Write routes and screens delivered by docs/36 NEW-04 (5.22.0)."
+        },
+        {
+          "at": "2026-09-24",
+          "registerVersion": 6,
+          "status": "partial",
+          "note": "Re-verified on main 5.36.1: the typed references of 5.25.0 are not a verification endpoint; all three items remain."
         }
       ]
     },
@@ -193,12 +208,12 @@
       "version": "5.9.1",
       "decidedOn": "2026-09-23",
       "delivered": [
-        "shared/engine.js (measurable requires bac > 0; progress falls back to weight × pct)"
+        "shared/engine.js (measurable requires bac > 0; progress falls back to weight × pct)",
+        "D-36.01 on main since 5.16.0: with no budget SPI and CPI are null and health is N « Nothing measured — no budget » (shared/engine.js:375)"
       ],
       "measure": "server/test/engine.test.js",
       "remaining": [
-        "D-36.01 (docs/36): on main after C-02 the rule becomes RT365's REQ-33 — SPI/CPI null and health N, not 5.9.1's G 'No cost baseline'",
-        "the 'right answer' — a declared unit of value (items, sites) for EVM — is not built anywhere",
+        "the 'right answer' — a declared unit of value (items, sites) for EVM — is not built anywhere (currencyUnit, D-36.04, names the unit of money, not a non-monetary unit of value)",
         "not in a tag: v5.9.1 is not on the remote"
       ],
       "answerToSource": "Patch 0001's engine.js hunk is on main (5.9.1, ported in 63b85e7).",
@@ -213,6 +228,12 @@
           "registerVersion": 1,
           "status": "done",
           "note": "fixed on main 5.9.1 (63b85e7, PR #14) and by RT365's REQ-33 on the RT365 line"
+        },
+        {
+          "at": "2026-09-24",
+          "registerVersion": 6,
+          "status": "done",
+          "note": "D-36.01 reached main in 5.16.0; server/test/engine.test.js « a project with no cost baseline (MER-04) » asserts null and N."
         }
       ]
     },
@@ -378,7 +399,7 @@
       ],
       "measure": "server/test/governance.test.js — describe « MER-08 »",
       "remaining": [
-        "Item 3 — a published JSON Schema for the book, checked in CI — is on no branch."
+        "Item 3 — a published JSON Schema for the book, checked in CI — is not on main 5.36.1: the only JSON Schema in the tree is docs/requests/register.schema.json, and .github/workflows/verify.yml checks no book schema."
       ],
       "issue": null,
       "accepted": null,
@@ -397,6 +418,12 @@
           "registerVersion": 2,
           "status": "partial",
           "note": "Built on claude/dynamic-gates-and-requirements (19/09), converged onto main by docs/36 C-03 as 5.17.0; migrations renumbered 034/035 → 051/052 before any main or tag applied them."
+        },
+        {
+          "at": "2026-09-24",
+          "registerVersion": 6,
+          "status": "partial",
+          "note": "Re-verified on main 5.36.1: item 3 still missing."
         }
       ],
       "answerToSource": "Dry run and merge mode are on main in 5.17.0. Note for your README: the import route is POST /api/admin/import — /api/v1/admin/import (delivery/meridian/README.md:41) and /api/v1/book/import (tools/meridian_book.py:11) do not exist on any branch."
@@ -458,7 +485,7 @@
       ],
       "measure": "server/test/registers.test.js (28 tests) · browser walk, 40 checks across four roles",
       "remaining": [
-        "A per-gate series does not yet get an agenda built from the gate's outstanding evidence."
+        "A per-gate series does not yet get an agenda built from the gate's outstanding evidence: shared/meetings.js#buildAgenda never reads the series' gate, and its « Gate decisions due » section is drawn only for a monthly series, so a per_gate series gets the weekly-shaped agenda."
       ],
       "issue": null,
       "accepted": null,
@@ -483,6 +510,12 @@
           "registerVersion": 3,
           "status": "partial",
           "note": "Write routes and screens delivered by docs/36 NEW-04 (5.22.0)."
+        },
+        {
+          "at": "2026-09-24",
+          "registerVersion": 6,
+          "status": "partial",
+          "note": "Re-verified on main 5.36.1: per_gate is stored and validated (routes/meetings.js), the agenda does not read it."
         }
       ]
     },
@@ -548,20 +581,20 @@
       "status": "partial",
       "priority": "highest",
       "effort": "S",
-      "version": "5.9.1",
+      "version": "5.16.0",
       "decidedOn": "2026-09-23",
       "delivered": [
         "server/src/db.js#DEFAULT_PGLITE_DIR",
-        "server/src/db.js#resolvePgliteDir"
+        "server/src/db.js#resolvePgliteDir",
+        "server/src/env.js#pgliteDirFor (the one resolution rule since 5.16.0)",
+        "server/src/index.js (item 3: at boot the server prints « book: <directory> », or « ! book: IN MEMORY (MERIDIAN_EPHEMERAL=1) … », before migrating — on main since 5.16.0)"
       ],
-      "measure": "server/test/import.test.js (\"with nothing configured the book lives where the README says, not in memory\")",
+      "measure": "server/test/import.test.js (\"with nothing configured the book lives where the README says, not in memory\") · server/test/firsthour.test.js (\"/api/health dit quand le livre est en mémoire\"); the boot line itself has no test",
       "remaining": [
-        "fix item 1–2 (default store on disk, directory created) are on main in 5.9.1 (PR #14, same defect as FitAdapt DF-03)",
-        "fix item 3 (log the resolved store at boot) not found on main",
-        "fix item 4 (seed → restart → administrator can still sign in) not found as a test on main",
-        "not in a tag: v5.9.1 is not on the remote"
+        "fix item 4 (seed → restart → administrator can still sign in) is not a test on main 5.36.1: server/test/shutdown.test.js opens and closes an on-disk book, but nothing seeds, restarts and signs in",
+        "not in a tag: no tag past v5.9.0 is on the remote"
       ],
-      "answerToSource": "delivery/meridian/export/README.md:50-52 (mkdir + PGLITE_DIR) is no longer needed on main 5.9.1.",
+      "answerToSource": "delivery/meridian/export/README.md:50-52 (mkdir + PGLITE_DIR) is no longer needed on main. Item 3 is on main since 5.16.0: at boot the server prints where the book lives (« book: server/.data/pgdata »), or says in so many words that it is IN MEMORY, and /api/health says so too. What to try: `npm run dev` and read the line that begins « book: ». Item 4, the seed → restart → sign-in test, is still owed.",
       "issue": null,
       "accepted": null,
       "released": false,
@@ -573,6 +606,12 @@
           "registerVersion": 1,
           "status": "partial",
           "note": "read on main 6d8eddf; fixed by PR #14 for DF-03"
+        },
+        {
+          "at": "2026-09-24",
+          "registerVersion": 6,
+          "status": "partial",
+          "note": "Item 3 found on main (server/src/index.js, since 5.16.0); item 4 still has no test."
         }
       ]
     },
