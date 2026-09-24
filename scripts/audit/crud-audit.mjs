@@ -138,6 +138,14 @@ const ENTITIES = {
     d: NA("Removing it would leave the portfolio with no order; the way back is to restore the shipped weights") },
   audit_event: { c: NA("Written by audited(), never by a route"), u: NA("Append-only (R6.2)"),
     d: NA("Append-only (R6.2)") },
+  /* FX-07 (062) — a named baseline is a photograph of the plan: taken,
+     compared, never retouched. Correcting one is taking another. */
+  baseline_snapshot: { c: /post\("\/projects\/:id\/baselines"/,
+    u: NA("Read-only once taken (FX-07, 062 refuses a rewrite) — a new plan is a new named baseline"),
+    d: NA("Append-only (FX-07) — eleven at most, and a comparison must still find the one it was made against") },
+  baseline_snapshot_row: { c: /post\("\/projects\/:id\/baselines"/,
+    u: NA("Read-only once taken, with its snapshot (FX-07)"),
+    d: NA("Removed with its project only (ON DELETE CASCADE) — never alone") },
 
   ext_link: { c: /post\("\/links"/, u: /patch\("\/links\/:id"/, d: /delete\("\/links\/:id"/ },
   /* I-2 — la mémoire d'idempotence d'une intégration : écrite par le

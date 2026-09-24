@@ -45,6 +45,8 @@ const PORTFOLIO_TABLES = [
   "report_narrative", "work_item", "document", "allocation",
   "change_step", "change_request", "raid_item", "cost_line", "milestone",
   "requirement",
+  /* FX-07 — a snapshot's rows before the snapshot, both before the project. */
+  "baseline_snapshot_row", "baseline_snapshot",
   "cross_dep", "activity_dep", "activity", "project",
   "programme", "person", "site",
   /* FX-02 (061) — after the projects and sites that name them. */
@@ -71,6 +73,7 @@ export const BOOK_TABLES = {
   narrative: "report_narrative", calendars: "work_calendar",
   meetingSeries: "meeting_series", meetings: "meeting_occurrence", decisions: "meeting_decision",
   actions: "meeting_action", raidReviews: "raid_review",
+  baselines: "baseline_snapshot",
 };
 
 /** Does the file carry at least one row of this list? */
@@ -398,6 +401,10 @@ export async function importBook(book, user, opts = {}) {
          /* FX-02 / FX-04 (061) — its own calendar and status date */
          clean(p.calendar), clean(p.statusDate)]);
     }
+    /* FX-05 — a summary's own weight and progress are stored as zero: the
+       book carries them computed from its children, and they are computed
+       again on the way out. */
+    const wbsParents = new Set((book.activities ?? []).map((a) => a.parentId).filter(Boolean));
     for (const a of book.activities ?? []) {
       await t.query(
         `INSERT INTO activity (id, project_id, name, stage, start_date, end_date,
@@ -409,7 +416,8 @@ export async function importBook(book, user, opts = {}) {
                  $17,$18,$19,$20,$21,$22)`,
         [a.id, a.project, a.name, int(a.stage), a.start, a.end,
          a.baseStart ?? a.start, a.baseEnd ?? a.end,
-         Number(a.weight ?? 0), Math.max(0, Math.min(100, int(a.pct))), clean(a.owner),
+         wbsParents.has(a.id) ? 0 : Number(a.weight ?? 0),
+         wbsParents.has(a.id) ? 0 : Math.max(0, Math.min(100, int(a.pct))), clean(a.owner),
          /* NEW-05 — who measured this progress, and when (I-5): without
             it a figure pushed by the site's scheduler reads as typed here. */
          a.progressSource ?? "", clean(a.progressAt), origin(a.origin),
@@ -451,6 +459,39 @@ export async function importBook(book, user, opts = {}) {
                              WHERE from_project = $1 AND from_stage = $2
                                AND to_project = $3 AND to_stage = $4)`,
         edge);
+    }
+    /* FX-05 — the tree, once every stage exists, so a child listed before
+       its parent still finds it. The database refuses a parent in another
+       project, a cycle, and a summary with links (062), and the refusal
+       names the stage. A merge first lifts the parents the file no longer
+       gives, so a re-shaped tree never passes through a false cycle. */
+    if (mode === "merge") {
+      for (const a of book.activities ?? []) {
+        await t.query(
+          `UPDATE activity SET parent_id = NULL${bump("activity", ["parent_id"], ["NULL::text"])}
+            WHERE id = $1 AND parent_id IS DISTINCT FROM $2::text`, [a.id, clean(a.parentId)]);
+      }
+    }
+    for (const a of book.activities ?? []) {
+      if (!a.parentId) continue;
+      await t.query(
+        `UPDATE activity SET parent_id = $2::text${bump("activity", ["parent_id"], ["$2::text"])}
+          WHERE id = $1`, [a.id, a.parentId]);
+    }
+    /* FX-07 — the named baselines, as they were taken. Read-only: a merge
+       that brings a snapshot back unchanged passes, one that would
+       rewrite it is refused by the database (062). */
+    for (const b of book.baselines ?? []) {
+      await t.query(
+        `INSERT INTO baseline_snapshot (id, project_id, name, taken_at, taken_by, reason)
+         VALUES ($1,$2,$3,$4,${USER(5)},$6)`,
+        [b.id, b.project, b.name, b.takenAt ?? new Date().toISOString(), clean(b.takenBy), b.reason ?? ""]);
+      for (const r of b.rows ?? []) {
+        await t.query(
+          `INSERT INTO baseline_snapshot_row (snapshot_id, activity_id, name, parent_id, start_date, end_date, weight)
+           VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING`,
+          [b.id, r.activity, r.name ?? "", clean(r.parent), r.start, r.end, Number(r.weight ?? 0)]);
+      }
     }
     for (const m of book.milestones ?? []) {
       await t.query(
@@ -1347,7 +1388,9 @@ export async function importBook(book, user, opts = {}) {
                      "tolerances", "exceptions", "businessCases", "caseReconfirmations",
                      "lessons", "criteria", "stakeholders", "comms", "extLinks",
                      // NEW-14 — the meeting register and the RAID reviews
-                     "meetingSeries", "meetings", "decisions", "actions", "raidReviews"]) {
+                     "meetingSeries", "meetings", "decisions", "actions", "raidReviews",
+                     // FX-07 — the named baselines
+                     "baselines"]) {
       counts[k] = (book[k] ?? []).length;
     }
 
@@ -1382,6 +1425,8 @@ export async function importBook(book, user, opts = {}) {
          counter for either to fall behind. */
       ["DEC","meeting_decision","id ~ '^DEC-[0-9]+$'"],["ACT","meeting_action","id ~ '^ACT-[0-9]+$'"],
       ["RVW","raid_review","id ~ '^RVW-[0-9]+$'"],
+      // FX-07 — a named baseline mints its id from BSL
+      ["BSL","baseline_snapshot","id ~ '^BSL-[0-9]+$'"],
     ]) {
       await t.query(
         `INSERT INTO id_counter (prefix, next_value)

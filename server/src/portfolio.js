@@ -17,6 +17,7 @@
 
 import { many, one } from "./db.js";
 import { can, canSeeProject, projectScopeSql } from "../../shared/rbac.js";
+import { rollupWbs } from "../../shared/engine.js";
 
 export const M = 1_000_000;
 /** Exact whole units (what the ledger holds) → millions (what is read). */
@@ -455,8 +456,13 @@ export async function loadPortfolio(user, { inactive = false } = {}) {
       version: b.row_version,
     })),
 
-    activities: activities.map((a) => ({
+    /* FX-05 — each stage names its parent; a summary's dates, weight and
+       progress are computed from its children here, once, so every
+       screen and the export read the same figures (`rollupWbs`). A book
+       with no parent anywhere is served unchanged. */
+    activities: rollupWbs(activities.map((a) => ({
       id: a.id, project: a.project_id, name: a.name, stage: a.stage,
+      parentId: a.parent_id ?? null,
       start: a.start_date, end: a.end_date, baseStart: a.base_start, baseEnd: a.base_end,
       weight: Number(a.weight), pct: a.pct, owner: a.owner_id,
       deps: depsByActivity.get(a.id) ?? [],
@@ -472,7 +478,7 @@ export async function loadPortfolio(user, { inactive = false } = {}) {
       progressSource: a.progress_source ?? "", progressAt: a.progress_at ?? null,
       externalSource: a.external_source ?? null, externalId: a.external_id ?? null,
       origin: a.origin ?? "local", version: a.row_version,
-    })),
+    }))),
 
     milestones: milestones.map((m) => ({
       id: m.id, project: m.project_id, name: m.name, date: m.due_date,
@@ -981,7 +987,42 @@ export async function loadBook(user) {
     ...db,
     ...meetings,
     objections: db.objections.filter((o) => decisions.has(o.decision)),
+    /* FX-07 — the named baselines travel with the book. They are not in
+       the bootstrap (a screen asks for one project's when it opens them:
+       eleven copies of a plan are no weight for a satellite link). */
+    baselines: await loadBaselines(db.projects.map((p) => p.id)),
   };
+}
+
+/**
+ * FX-07 — the named baselines of these projects, oldest first, each with
+ * its stages as they stood. Read-only by construction (062).
+ */
+export async function loadBaselines(projectIds) {
+  if (!projectIds.length) return [];
+  const heads = await many(
+    `SELECT b.*, u.display_name AS taken_by_name
+       FROM baseline_snapshot b LEFT JOIN app_user u ON u.id = b.taken_by
+      WHERE b.project_id = ANY($1) ORDER BY b.project_id, b.taken_at, b.id`, [projectIds]);
+  if (!heads.length) return [];
+  const rows = await many(
+    `SELECT * FROM baseline_snapshot_row WHERE snapshot_id = ANY($1)
+      ORDER BY snapshot_id, start_date, activity_id`, [heads.map((b) => b.id)]);
+  const bySnap = new Map();
+  for (const r of rows) {
+    if (!bySnap.has(r.snapshot_id)) bySnap.set(r.snapshot_id, []);
+    bySnap.get(r.snapshot_id).push({
+      activity: r.activity_id, name: r.name, parent: r.parent_id ?? null,
+      start: r.start_date, end: r.end_date, weight: Number(r.weight),
+    });
+  }
+  return heads.map((b) => ({
+    id: b.id, project: b.project_id, name: b.name,
+    takenAt: b.taken_at instanceof Date ? b.taken_at.toISOString() : b.taken_at,
+    takenBy: b.taken_by ?? null, takenByName: b.taken_by_name ?? "",
+    reason: b.reason ?? "",
+    rows: bySnap.get(b.id) ?? [],
+  }));
 }
 
 /** A single project row with the fields RBAC needs, or null. */

@@ -1016,6 +1016,10 @@ export async function upsertActivity(user, externalId, b) {
     if (b.pct === undefined) return stamp(true, a.id, externalId, existing.row_version);
   }
   let patch = {};
+  /* FX-05 — a summary's progress is computed from its children. */
+  if (b.pct !== undefined && await one(`SELECT 1 AS x FROM activity WHERE parent_id = $1 LIMIT 1`, [existing.id])) {
+    throw new HttpError(409, `Stage ${existing.id} is a summary — its progress is computed from the stages under it; report theirs`);
+  }
   if (b.pct !== undefined) {
     const n = Math.round(Number(b.pct));
     if (!Number.isFinite(n) || n < 0 || n > 100) bad("pct is a whole number from 0 to 100");

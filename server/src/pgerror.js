@@ -40,6 +40,11 @@ const CONSTRAINT_MESSAGES = {
   site_place_has_timezone:
     "A place needs a timezone (UTC offset and zone name) — only a team may have none",
   site_kind_known: "A site is a place or a team",
+  /* FX-05 / FX-07 (062) */
+  activity_parent_not_self: "A stage cannot roll up into itself",
+  baseline_snapshot_named: "A baseline needs a name",
+  baseline_snapshot_name_uniq: "This project already has a baseline of that name — baselines are never overwritten",
+  baseline_row_dates_ordered: "A stage cannot end before it starts",
 };
 
 /** Which table a foreign key points at, in words. */
@@ -110,6 +115,12 @@ export function translate(err) {
          routes refuse first, in the same words; this is the import's and
          any other path's answer. */
       if (/^A team is not a place:/.test(text)) return { status: 400, message: text };
+      /* FX-05 / FX-07 (062) — the breakdown's shape and a snapshot's
+         immutability, held by the database for the import and any
+         other path. The routes refuse first, in the same words. */
+      if (/^(Work breakdown|Baseline snapshot):/.test(text)) {
+        return { status: 400, message: text.replace(/^(Work breakdown|Baseline snapshot):\s*/, "") };
+      }
       return null;
     }
     case "40001": // serialization_failure

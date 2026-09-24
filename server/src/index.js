@@ -35,6 +35,8 @@ import valuePageRoutes from "./routes/valuepage.js";
 import registerRoutes from "./routes/registers.js";
 import referenceRoutes from "./routes/references.js";
 import federationServiceRoutes from "./routes/federationService.js";
+/* docs/41 A2 — the work breakdown and the named baselines. */
+import planRoutes from "./routes/plan.js";
 import { translate } from "./pgerror.js";
 import { say, localeOf } from "./i18n.js";
 import { liveDemoAccounts, demoRefusal } from "./posture.js";
@@ -222,6 +224,7 @@ export function buildApp() {
   app.use("/api", requirePasswordChanged());
   app.use("/api/federation", federationRoutes);
   app.use("/api", portfolioRoutes);
+  app.use("/api", planRoutes);
   app.use("/api", ladderRoutes);
   app.use("/api", valuePageRoutes);
   /* NEW-04 — requirements, evidence, findings, seats, objections. */

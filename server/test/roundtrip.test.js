@@ -184,6 +184,21 @@ const ENRICH = [
   `UPDATE activity SET progress_source = 'probe', progress_at = '2026-08-20T08:30:00Z', origin = 'sdp',
           external_source = 'INT-RT', external_id = 'EXT-A1'
     WHERE id = (SELECT min(id) FROM activity)`,
+  /* FX-05 (062) — a three-level breakdown: a summary over a summary over
+     a stage. The summaries are stored with no weight and no progress of
+     their own and with the window their child shows, which is what the
+     book carries for them and what the import stores back. */
+  `INSERT INTO activity (id, project_id, name, stage, start_date, end_date, base_start, base_end, weight, pct)
+   VALUES ('RT-W1', ${P1}, 'Round-trip summary', 90, '2026-03-02', '2026-03-20', '2026-03-02', '2026-03-20', 0, 0)`,
+  `INSERT INTO activity (id, project_id, name, stage, start_date, end_date, base_start, base_end, weight, pct, parent_id)
+   VALUES ('RT-W2', ${P1}, 'Round-trip sub-summary', 91, '2026-03-02', '2026-03-20', '2026-03-02', '2026-03-20', 0, 0, 'RT-W1')`,
+  `INSERT INTO activity (id, project_id, name, stage, start_date, end_date, base_start, base_end, weight, pct, parent_id)
+   VALUES ('RT-W3', ${P1}, 'Round-trip work package', 92, '2026-03-02', '2026-03-20', '2026-03-02', '2026-03-20', 0.02, 30, 'RT-W2')`,
+  /* FX-07 (062) — a named baseline, with a row that names its parent. */
+  `INSERT INTO baseline_snapshot (id, project_id, name, taken_at, taken_by, reason)
+   VALUES ('BSL-901', ${P1}, 'Approved plan', '2026-08-01T09:00:00Z', ${USER}, 'Gate 2 sign-off')`,
+  `INSERT INTO baseline_snapshot_row (snapshot_id, activity_id, name, parent_id, start_date, end_date, weight)
+   SELECT 'BSL-901', id, name, parent_id, start_date, end_date, weight FROM activity WHERE project_id = ${P1}`,
   `UPDATE change_request SET raised_by_user = ${USER} WHERE id = (SELECT min(id) FROM change_request)`,
   `UPDATE document SET probe_state = 'ok', probed_at = '2026-08-21T06:00:00Z'
     WHERE id = (SELECT min(id) FROM document)`,

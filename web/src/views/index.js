@@ -53,6 +53,8 @@ import {
 } from "../../../shared/prioritise.js";
 
 import { meetingsView, invalidateMeetings } from "./meetings.js";
+/* docs/41 A2 — the breakdown (FX-05), the Gantt (FX-06), named baselines (FX-07). */
+import { ganttFold, planTree, wbsName, moveStage, baselinesFold, keptFold } from "./gantt.js";
 /* NEW-04 — KODO's registers: requirements, evidence, findings, seats,
    objections, and what a decision costs to reverse. */
 import { assuranceFolds, objectionsFor, decisionFields, decisionFacts } from "./registers.js";
@@ -1401,36 +1403,44 @@ Views.project = (db) => {
     fold(t("Plant & rollout"),
       (p.plantImpact ?? "none") === "none" ? t("business systems only") : t(IMPACT_LABEL[p.plantImpact]),
       false, plantBlock(db, p)),
-    fold(t("Stage plan"),
+    /* FX-05 — kept open across the redraw that follows each stage edit. */
+    keptFold("plan:" + p.id, t("Stage plan"),
       acts.length + t(" stages") + " · " + cp.critical.size + t(" on the critical path"),
-      scheduleAlarm(cp), scheduleSignals(db, p, cp),
+      /* FX-03/04 — the schedule's alarms lead the plan, and open the fold
+         the first time they appear. */
+      (b) => b.append(scheduleSignals(db, p, cp),
       sectionHead("Stage plan", acts.length + " stages · " + cp.critical.size + " on the critical path",
         may("schedule.write", p) && !fromSdp(p)
           ? h("button", { class: "btn btn-sm", onClick: () => addActivity(db, p, acts) }, icon("plus", 12), "Stage")
           : null),
-      stagePlanTable()));
+      stagePlanTable()), scheduleAlarm(cp)),
+    /* FX-07 — named snapshots of this plan, and the comparison. */
+    baselinesFold(db, p));
 
+  /* FX-05 — the plan is a tree: outline numbers, folding summaries. A
+     summary's weight, window and progress are computed (gantt.js), so it
+     is moved or renamed here, never edited as a stage. */
   function stagePlanTable() {
-    return table({
-      cols: [
-        { key: "n", label: "Stage", get: a => h("div", null,
-            h("span", { class: "strong small" }, a.name),
-            cp.critical.has(a.id) ? h("span", { class: "tag tag-accent", style: "margin-left:7px" }, "critical") : null) },
-        { key: "w", label: "Weight", align: "r", get: a => h("span", { class: "mono small" }, pct(a.weight)) },
-        { key: "s", label: "Window", get: a => h("span", { class: "mono small" }, fmtDate(a.start) + " → " + fmtDate(a.end)) },
-        { key: "f", label: "Float", align: "r", get: a => h("span", { class: "mono small" }, (cp.float[a.id] || 0) + "d") },
-        ...stageScheduleCols(cp),
-        { key: "p", label: "Progress", width: "110px", get: a => h("div", null,
-            h("div", { class: "bar-lbl mono" }, h("span", null, a.pct + "%")),
-            meter(a.pct / 100, cp.critical.has(a.id) ? "var(--color-accent)" : "var(--color-text)", "thin")) },
-        { key: "e", label: "", align: "r", get: a => may("schedule.write", p) && a.origin !== "sdp"
+    return planTree(db, p, [
+        { key: "n", label: "Stage", get: r => wbsName(r,
+            cp.critical.has(r.a.id) ? h("span", { class: "tag tag-accent", style: "margin-left:7px" }, "critical") : null) },
+        { key: "w", label: "Weight", align: "r", get: r => h("span", { class: "mono small" + (r.summary ? " muted" : "") }, pct(r.a.weight)) },
+        { key: "s", label: "Window", get: r => h("span", { class: "mono small" }, fmtDate(r.a.start) + " → " + fmtDate(r.a.end)) },
+        { key: "f", label: "Float", align: "r", get: r => r.summary ? null : h("span", { class: "mono small" }, (cp.float[r.a.id] || 0) + "d") },
+        /* FX-04 — free float and the schedule flags; a summary has neither. */
+        ...stageScheduleCols(cp).map((c) => ({ ...c, get: r => r.summary ? null : c.get(r.a) })),
+        { key: "p", label: "Progress", width: "110px", get: r => h("div", null,
+            h("div", { class: "bar-lbl mono" }, h("span", null, r.a.pct + "%")),
+            meter(r.a.pct / 100, cp.critical.has(r.a.id) ? "var(--color-accent)" : "var(--color-text)", "thin")) },
+        { key: "e", label: "", align: "r", get: r => may("schedule.write", p) && r.a.origin !== "sdp"
             ? h("div", { class: "btn-row" },
-                h("button", { class: "btn btn-xs", onClick: () => editActivity(db, a) }, "Edit"),
-                h("button", { class: "btn btn-xs btn-ghost", title: "Remove this stage",
-                  onClick: () => removeActivity(db, a) }, icon("trash", 11)))
+                r.summary ? null : h("button", { class: "btn btn-xs", onClick: () => editActivity(db, r.a) }, "Edit"),
+                h("button", { class: "btn btn-xs btn-ghost", title: t("Move in the breakdown"),
+                  onClick: () => moveStage(db, r.a) }, "⇥"),
+                r.summary ? null : h("button", { class: "btn btn-xs btn-ghost", title: "Remove this stage",
+                  onClick: () => removeActivity(db, r.a) }, icon("trash", 11)))
             : null },
-      ], rows: acts,
-    });
+      ]);
   }
 
   const rail = h("aside", { class: "sec" },
@@ -1487,7 +1497,7 @@ Views.project = (db) => {
     h("div", { style: "height:22px" }),
     referencesPanel(db, p));
 
-  return h("div", null, head, stats, h("div", { class: "split" }, left, rail));
+  return h("div", null, head, stats, ganttFold(db, p), h("div", { class: "split" }, left, rail));
 };
 
 /* ── SDP operations panel (federation, ADR-5/6/11) ────────────────────
