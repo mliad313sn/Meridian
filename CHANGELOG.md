@@ -18,6 +18,26 @@ Unreleased work sits under `## [Unreleased]` until it is tagged.
 
 ## [Unreleased]
 
+### Documentation
+
+- **The sponsor's power is delegated to the Product Owner** (owner, 24/09:
+  "i delegate all my power of sponsor to PO"). docs/36 §5 records
+  D-36.S0…S11. Taken as choices:
+  - the rules for named accounts and the PostgreSQL credential;
+  - RPO 24 h / RTO 4 h;
+  - 7-year audit-trail retention;
+  - no code-signing purchase for internal distribution.
+
+  Still open, because they need facts no delegation creates:
+  - the real GED domains;
+  - the accounts and the password on a real instance;
+  - the G-01 drill;
+  - the four policies;
+  - counsel's opinions;
+  - the third-party sheets.
+
+  **R2 is not pronounced** (D-36.S11). No code change.
+
 ---
 
 ## [5.37.0] — 2026-09-24
