@@ -18,7 +18,42 @@ Unreleased work sits under `## [Unreleased]` until it is tagged.
 
 ## [Unreleased]
 
-Nothing yet.
+**5.36.1 — a sync's first run records what it sends, and its second
+writes nothing** (FitAdapt field return, session 2: DF-13, DF-14). PATCH.
+
+### Fixed
+
+- **DF-13 · The call that binds a stage dropped everything but `pct`.**
+  `PUT /api/v1/activities/:externalId` with `activity` (the binding) and
+  `actualStart`, `actualFinish`, `remaining`, `links`, `name` or a
+  constraint, but no `pct`, answered **201** and wrote only the binding:
+  the early return was written when `pct` was the only thing the body
+  could carry, and FX-04 (5.29.0) added the actuals after it. The same
+  body sent again was then applied, so a repository sync's first run
+  recorded no actual start for a stage under way, and its second run
+  did — found when FitAdapt's `drive.mjs` marked M10 in progress and
+  Meridian showed it not started. The binding call now applies the rest
+  of the body like any later call. The body is validated first, against
+  the stage as it stands, so a refused call still leaves no binding
+  behind; a `version`, if sent, is the one read before the binding.
+- **DF-14 · An unchanged re-send rewrote the stage.** Every other upsert
+  of `v1write.js` writes only what moves (5.12.0: "a re-run that changes
+  nothing now writes nothing"); this one rewrote the name, the actuals
+  and the links on every call, so each unchanged sync run added a new
+  `row_version` and a "Stage updated" audit row per stage, and a screen
+  holding the stage got a 409 for nothing. It now filters through
+  `changedOnly` and compares the links with the ones held. A progress
+  figure is one measurement: it is the same report only when the figure,
+  its source and its stated `measuredAt` are all the same; a figure
+  re-sent without `measuredAt` is still a new measurement, taken now, as
+  before.
+
+### Measure
+
+`schedule-engine.test.js`: one test, failing on 5.36.0 at its first
+assertion (the actual start sent with the binding reads null) and, with
+DF-13 alone fixed, at the re-send (version 4 → 5). No other test changed;
+`shared/engine.js` is not touched.
 
 ---
 

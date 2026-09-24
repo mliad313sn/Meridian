@@ -994,6 +994,7 @@ export async function upsertAction(user, externalId, b) {
 
 export async function upsertActivity(user, externalId, b) {
   const source = user.id;
+  let bound = false;
   let existing = await one(
     `SELECT * FROM activity WHERE external_source = $1 AND external_id = $2`, [source, externalId]);
   if (!existing) {
@@ -1013,6 +1014,21 @@ export async function upsertActivity(user, externalId, b) {
       throw new HttpError(409, `Stage ${a.id}'s progress is measured from the points of its work items — ` +
         "push the items' points and columns instead, or have the project turn that option off");
     }
+    /* DF-13 (FitAdapt, 5.36.0) — the binding call used to return here
+       unless it carried `pct`, answering 201 while dropping the actuals,
+       remaining days, links and name it was sent (FX-04 added them to the
+       body after this return was written). The rest of the body is now
+       applied below, like any later call. It is validated FIRST, against
+       the stage as it stands, so that a refused call still leaves no
+       binding behind; a version, if sent, is the one the caller read
+       before the binding. */
+    const sent = sentVersion(b);
+    if (sent !== undefined && sent !== a.row_version) {
+      throw new HttpError(409, "The version you sent is stale — read the activity again");
+    }
+    if (b.name !== undefined) text(b.name, 300, "name");
+    trackingPatch(b, a);
+    if (b.links !== undefined) await linksFor(a, b.links);
     await audited(user,
       { action: "Stage linked", entity: "activity", entityId: a.id,
         detail: `${a.name} ↔ ${user.displayName} (${externalId})` },
@@ -1020,7 +1036,8 @@ export async function upsertActivity(user, externalId, b) {
         `UPDATE activity SET external_source = $2, external_id = $3, row_version = row_version + 1 WHERE id = $1`,
         [a.id, source, externalId]));
     existing = await one(`SELECT * FROM activity WHERE id = $1`, [a.id]);
-    if (b.pct === undefined) return stamp(true, a.id, externalId, existing.row_version);
+    bound = true;
+    if (sent !== undefined) b = { ...b, version: existing.row_version };
   }
   let patch = {};
   /* FX-05 — a summary's progress is computed from its children. */
@@ -1051,8 +1068,30 @@ export async function upsertActivity(user, externalId, b) {
      started and finished, what remains, the date it must hold, and the
      typed links it plans with. Same checks as the screen (schedwrite.js). */
   Object.assign(patch, trackingPatch(b, existing));
-  const links = b.links !== undefined ? await linksFor(existing, b.links) : null;
-  if (!Object.keys(patch).length && !links) return stamp(false, existing.id, externalId, existing.row_version);
+  let links = b.links !== undefined ? await linksFor(existing, b.links) : null;
+  /* DF-14 (FitAdapt, 5.36.0) — a re-send that changes nothing writes
+     nothing, the rule every other upsert of this file keeps (5.12.0).
+     This one rewrote the name, actuals and links on every call: a new
+     version and a "Stage updated" audit row per unchanged sync run. The
+     progress triple is one measurement: it is the same report only when
+     the figure, its source AND its stated time are the same — a figure
+     re-sent without `measuredAt` is still a new measurement taken now. */
+  if (patch.pct !== undefined) {
+    const heldAt = existing.progress_at ? new Date(existing.progress_at).toISOString() : null;
+    const sameReport = Number(existing.pct) === patch.pct && existing.progress_source === patch.progress_source &&
+      b.measuredAt !== undefined && b.measuredAt !== null && b.measuredAt !== "" && heldAt === patch.progress_at;
+    if (sameReport) { delete patch.pct; delete patch.progress_source; delete patch.progress_at; }
+  }
+  const progress = patch.pct !== undefined ? { pct: patch.pct, progress_source: patch.progress_source, progress_at: patch.progress_at } : {};
+  patch = { ...changedOnly(patch, existing), ...progress };
+  if (links) {
+    const held = await many(
+      `SELECT predecessor_id AS pred, type, lag_days AS lag FROM activity_dep WHERE activity_id = $1 ORDER BY predecessor_id`,
+      [existing.id]);
+    const key = (ls) => JSON.stringify([...ls].map((l) => [l.pred, l.type, Number(l.lag)]).sort());
+    if (key(held) === key(links)) links = null;
+  }
+  if (!Object.keys(patch).length && !links) return stamp(bound, existing.id, externalId, existing.row_version);
   const version = sentVersion(b);
   const out = await audited(user,
     { action: patch.pct !== undefined ? "Progress reported" : "Stage updated", entity: "activity", entityId: existing.id,
@@ -1083,7 +1122,7 @@ export async function upsertActivity(user, externalId, b) {
       }
       return rv;
     });
-  return stamp(false, existing.id, externalId, out.version);
+  return stamp(bound, existing.id, externalId, out.version);
 }
 
 /* ── éléments de travail ───────────────────────────────────────────── */
