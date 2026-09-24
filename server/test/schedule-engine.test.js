@@ -446,4 +446,49 @@ describe("FX-01…FX-04 · written through the routes", () => {
     const unknown = await put("/api/v1/activities/P6-4", { lagDays: 3 });
     assert.equal(unknown.status, 400, "a field the contract does not declare is refused");
   });
+
+  /* FitAdapt DF-13 (field return on 5.36.0): the call that BINDS an
+     external id to a stage answered 201 and silently dropped everything
+     but `pct` — actual start and finish, remaining, links, name. The early
+     return predated FX-04; the same body sent a second time was then
+     applied, so a sync's first run wrote nothing of what it was given and
+     its second run wrote it all. */
+  test("/api/v1 · the call that binds a stage also records what it carries (DF-13), and a re-send writes nothing (DF-14)", async () => {
+    const admin = await as("admin");
+    const key = (await admin.post("/api/admin/integrations",
+      { name: "Repo sync", scopes: "read:portfolio,write:portfolio", purpose: "test" })).body.key;
+    const c = client();
+    const put = (path, body) => c.put(path, body, { "X-API-Key": key });
+    const a2 = acts[1];
+    const body = { activity: a2.id, actualStart: a2.start, remaining: 3, name: a2.name + " (tracked)" };
+    const first = await put("/api/v1/activities/REPO-2", body);
+    assert.equal(first.status, 201, first.text);
+    assert.equal(first.body.created, true);
+    const b = act(await fresh(), a2.id);
+    assert.equal(b.actualStart, a2.start, "the actual start sent with the binding is recorded");
+    assert.equal(b.remaining, 3, "and the remaining days");
+    assert.equal(b.name, a2.name + " (tracked)", "and the name");
+    /* DF-14 — the same body again is the same report: nothing moves. It
+       used to write a new version and a "Stage updated" row every time. */
+    const again = await put("/api/v1/activities/REPO-2", body);
+    assert.equal(again.status, 200, again.text);
+    assert.equal(again.body.created, false);
+    assert.equal(act(await fresh(), a2.id).version, b.version, "an unchanged re-send writes nothing");
+    // a measurement with its own time is the same measurement when re-sent …
+    const m = { pct: 40, source: "repo", measuredAt: "2026-03-05T10:00:00.000Z" };
+    const r1 = await put("/api/v1/activities/REPO-2", m);
+    assert.equal(r1.status, 200, r1.text);
+    const r2 = await put("/api/v1/activities/REPO-2", m);
+    assert.equal(r2.body.version, r1.body.version, "the same figure, source and time is the same report");
+    // … but a figure re-sent without a time is a new measurement, taken now
+    const r3 = await put("/api/v1/activities/REPO-2", { pct: 40, source: "repo" });
+    assert.ok(r3.body.version > r2.body.version, "no measuredAt: measured again, now");
+    // binding alone still answers created and changes nothing but the link
+    const a3 = act(await fresh(), acts[2].id);
+    const bare = await put("/api/v1/activities/REPO-3", { activity: a3.id });
+    assert.equal(bare.status, 201, bare.text);
+    const a3after = act(await fresh(), a3.id);
+    assert.equal(a3after.actualStart, a3.actualStart);
+    assert.equal(a3after.name, a3.name);
+  });
 });
