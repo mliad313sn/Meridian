@@ -132,6 +132,9 @@ export const ACTIONS = [
      each change it performs is then held to the action that change would
      need on its own. See the `case`s for the level and its reason. */
   "scenario.read", "scenario.write", "scenario.apply",
+  /* FX-11 (docs/41) — STORING a Monte Carlo run of a project's schedule.
+     Reading the runs is `project.read`. See its `case`. */
+  "risk.run",
   // system
   "user.manage", "settings.write", "data.export", "data.import",
 ];
@@ -917,6 +920,18 @@ export function can(user, action, resource = {}) {
        project write: a site-governed project at the site, a group project
        inside a granted programme. */
     case "iteration.write":
+      return canWriteProject(user, resource.project)
+        ? allow()
+        : outsideProject(user, resource.project);
+
+    /* FX-11 — a risk run computes and moves nothing (D-41.02): every date
+       stays where it was. But STORING one is a write — a dated, signed
+       record that the steering committee will quote ("P80 is 12 March")
+       and the status pack prints. So it is the authority of whoever runs
+       the plan: project write scope, like a named baseline. A reader may
+       read every stored run of a project it sees (`project.read`) and
+       cannot fill the project's record with runs of its own. */
+    case "risk.run":
       return canWriteProject(user, resource.project)
         ? allow()
         : outsideProject(user, resource.project);

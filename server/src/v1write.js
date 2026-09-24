@@ -1515,7 +1515,9 @@ export const WRITE_BODIES = {
      replaced whole (Meridian activity ids of the same project). */
   activities: { activity: "string", pct: "integer", source: "string", measuredAt: "date-time", name: "string",
     actualStart: "date", actualFinish: "date", remaining: "integer", constraintType: "string",
-    constraintDate: "date", deadline: "date", links: "object[]", version: "integer" },
+    constraintDate: "date", deadline: "date", links: "object[]",
+    /* FX-11 (066) — the three-point estimate in days, all three or none (null clears). */
+    durOptimistic: "number", durMostLikely: "number", durPessimistic: "number", version: "integer" },
   /* FX-14 — `iteration` (a sprint: Meridian id or yours, "" for the
      backlog) and `activity` (the stage it delivers); `points` may be null. */
   workitems: { project: "string", title: "string", column: "string", assignee: "string", points: "integer",

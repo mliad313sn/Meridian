@@ -182,7 +182,8 @@ const ENRICH = [
           closed_on = '2026-05-02', closure_evidence = 'docs/evidence/H-03.md@a1b2c3d'
     WHERE id = (SELECT min(id) FROM raid_item WHERE kind = 'Dependency' AND project_id IS NOT NULL)`,
   `UPDATE activity SET progress_source = 'probe', progress_at = '2026-08-20T08:30:00Z', origin = 'sdp',
-          external_source = 'INT-RT', external_id = 'EXT-A1'
+          external_source = 'INT-RT', external_id = 'EXT-A1',
+          dur_optimistic = 3.5, dur_most_likely = 5, dur_pessimistic = 9
     WHERE id = (SELECT min(id) FROM activity)`,
   /* FX-05 (062) — a three-level breakdown: a summary over a summary over
      a stage. The summaries are stored with no weight and no progress of
@@ -199,6 +200,14 @@ const ENRICH = [
    VALUES ('BSL-901', ${P1}, 'Approved plan', '2026-08-01T09:00:00Z', ${USER}, 'Gate 2 sign-off')`,
   `INSERT INTO baseline_snapshot_row (snapshot_id, activity_id, name, parent_id, start_date, end_date, weight)
    SELECT 'BSL-901', id, name, parent_id, start_date, end_date, weight FROM activity WHERE project_id = ${P1}`,
+  /* FX-11 (066) — a stored Monte Carlo run: every column given a value
+     that is not its default, the histogram and the criticality included. */
+  `INSERT INTO risk_run (id, project_id, ran_at, ran_by, seed, iterations, distribution, status_date, estimated,
+                         deterministic_finish, p50, p80, p90, histogram, criticality)
+   VALUES ('MCR-901', ${P1}, '2026-08-02T10:15:00Z', ${USER}, 20260802, 5000, 'triangular', '2026-08-01', 3,
+           '2026-12-01', '2026-12-09', '2026-12-18', '2026-12-24',
+           '[["2026-12-01", 1200], ["2026-12-09", 2600], ["2026-12-24", 1200]]',
+           '{"RT-W3": 0.8125, "RT-X": 0}')`,
   `UPDATE change_request SET raised_by_user = ${USER} WHERE id = (SELECT min(id) FROM change_request)`,
   `UPDATE document SET probe_state = 'ok', probed_at = '2026-08-21T06:00:00Z'
     WHERE id = (SELECT min(id) FROM document)`,

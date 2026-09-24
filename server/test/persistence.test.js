@@ -148,7 +148,13 @@ describe("schema and migrations (R2.2, R2.7)", () => {
           one records what it delivered), a work item's sprint, stage
           and done moment, points that may be unestimated, and a stage's
           option to measure its progress from its items (off). */
-       "065_a_sprint_is_dated_and_closes.sql"]);
+       "065_a_sprint_is_dated_and_closes.sql",
+       /* 066 - docs/41 FX-11 and FX-16: three-point duration estimates
+          on a stage (all three or none, in order), and the stored Monte
+          Carlo run (risk_run) - seeded, signed, read-only once stored,
+          never moving a date (D-41.02). 064, 065, 067 and 068 are held
+          by the other lines of the functional committee. */
+       "066_how_sure_is_the_finish.sql"]);
     const again = await migrate({ silent: true });
     assert.deepEqual(again, [], "a second run applies nothing");
   });

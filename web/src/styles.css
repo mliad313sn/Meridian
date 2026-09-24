@@ -612,6 +612,31 @@ textarea.input{resize:vertical;min-height:70px;line-height:1.55}
 }
 .print-only{display:none}
 
+/* FX-16 — the printable schedule report. The pack is in the page only
+   while the print dialog is open, and on paper it is the only thing: the
+   application around it is not printed. Landscape, black on white. */
+.print-pack{display:none}
+@page schedule-pack{size:A4 landscape;margin:11mm}
+@media print{
+  body.printing-pack>*:not(.print-pack){display:none!important}
+  body.printing-pack .print-pack{display:block;page:schedule-pack;color:#000;background:#fff;
+    font:9pt/1.35 "IBM Plex Sans","Segoe UI",Arial,sans-serif}
+  .print-pack h1{font-size:15pt;margin:2px 0 6px}
+  .print-pack h2{font-size:10.5pt;margin:0 0 4px;break-after:avoid}
+  .print-pack .pp-kicker{font-size:8pt;text-transform:uppercase;letter-spacing:.06em;color:#444}
+  .print-pack .pp-keys{display:flex;flex-wrap:wrap;gap:4px 18px;margin-bottom:8px}
+  .print-pack .pp-p80{font-weight:600}
+  .print-pack .pp-gantt{margin:6px 0 10px;break-inside:avoid}
+  .print-pack .pp-gantt>svg{display:block;width:100%;height:auto}
+  .print-pack .pp-sec{margin-top:10px;break-inside:avoid}
+  .print-pack table{width:100%;border-collapse:collapse}
+  .print-pack th,.print-pack td{border-bottom:1px solid #bbb;padding:3px 5px;text-align:left;vertical-align:top}
+  .print-pack thead{display:table-header-group}
+  .print-pack tr{break-inside:avoid}
+  .print-pack .pp-none{color:#444;margin:0}
+  .print-pack .pp-foot{margin-top:12px;padding-top:4px;border-top:1px solid #000;font-size:7.5pt}
+}
+
 /* ── responsive ───────────────────────────────────────────────────── */
 @media (max-width:1180px){
   .split{grid-template-columns:1fr}

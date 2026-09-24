@@ -223,7 +223,10 @@ const WRITE_DOCS = {
     "`actualStart`, `actualFinish` and `remaining` (days from the project status date), a date constraint " +
     "(`constraintType` ASAP, SNET, SNLT, FNET, FNLT, MSO or MFO, with `constraintDate`), a `deadline`, and " +
     "`links` — the predecessor list [{ pred, type FS|SS|FF|SF, lag days, negative for a lead }], Meridian " +
-    "stage ids of the same project, replaced whole and refused if it closes a loop (FX-01…FX-04)."),
+    "stage ids of the same project, replaced whole and refused if it closes a loop (FX-01…FX-04). " +
+    "`durOptimistic`, `durMostLikely` and `durPessimistic` are the stage's three-point estimate in days " +
+    "(working days under a calendar), all three or none, optimistic ≤ most likely ≤ pessimistic; null clears " +
+    "them. They feed the Monte Carlo schedule risk run (FX-11) and move no date."),
   "PUT /api/v1/workitems/:externalId": upsert("a work item on the board", "write:portfolio",
     "`column` is a column id or name; `assignee` an id or exact name. `points` is a whole number, zero or " +
     "more, or null for an item nobody has estimated (a negative number is refused). `iteration` plans it in " +

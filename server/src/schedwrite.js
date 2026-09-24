@@ -6,6 +6,7 @@
  *   linksFor       a typed predecessor list — same project, no self, no
  *                  duplicate, no loop
  *   trackingPatch  constraint, deadline, actuals and remaining, as columns
+ *                  — and the three-point estimate (FX-11, estimatePatch)
  *   calendarRef    a calendar a project or a site may name
  *   bumpVersion    the row_version assertion for a write whose substance
  *                  lives in another table (the link list, the holidays)
@@ -113,7 +114,35 @@ export function trackingPatch(b, a) {
       patch.remaining_days = n;
     }
   }
+  Object.assign(patch, estimatePatch(b, a));
   return patch;
+}
+
+/**
+ * FX-11 (066) — the three-point estimate, in days. All three or none:
+ * `null` (or three empties) clears it, and the stage keeps its planned
+ * duration in every Monte Carlo run. A partial write keeps the stored
+ * values of the keys it does not name, and the whole must still hold
+ * optimistic ≤ most likely ≤ pessimistic. The database says the same.
+ */
+export const ESTIMATE_KEYS = [["durOptimistic", "dur_optimistic"], ["durMostLikely", "dur_most_likely"],
+  ["durPessimistic", "dur_pessimistic"]];
+export function estimatePatch(b, a) {
+  if (!ESTIMATE_KEYS.some(([k]) => b[k] !== undefined)) return {};
+  const blank = (v) => v === null || v === "";
+  const vals = ESTIMATE_KEYS.map(([k, col]) => {
+    const v = b[k] !== undefined ? b[k] : a[col];
+    if (v === undefined || blank(v)) return null;
+    const n = Number(v);
+    if (!Number.isFinite(n) || n < 0 || n > 3650) bad(`${k} is a number of days, zero or more, within ten years`);
+    return Math.round(n * 10) / 10;
+  });
+  const set = vals.filter((v) => v !== null).length;
+  if (set === 0) return { dur_optimistic: null, dur_most_likely: null, dur_pessimistic: null };
+  if (set < 3) bad("A three-point estimate needs all three durations — optimistic, most likely and pessimistic — or none");
+  const [o, m, p] = vals;
+  if (!(o <= m && m <= p)) bad("A three-point estimate reads optimistic ≤ most likely ≤ pessimistic");
+  return { dur_optimistic: o, dur_most_likely: m, dur_pessimistic: p };
 }
 
 /** A calendar a project or a site may name: an existing one, or none. */

@@ -61,6 +61,8 @@ import { scenariosView } from "./scenarios.js";
 import {
   sprintSelect, inSprint, sprintPanel, itemPlanningFields, itemPlanningBody, stageProgressField, stageProgressBody,
 } from "./sprints.js";
+/* docs/41 FX-11 — three-point estimates and the Monte Carlo fold. */
+import { riskFold, estimateFields, estimateBody } from "./risk.js";
 /* NEW-04 — KODO's registers: requirements, evidence, findings, seats,
    objections, and what a decision costs to reverse. */
 import { assuranceFolds, objectionsFor, decisionFields, decisionFacts } from "./registers.js";
@@ -1427,7 +1429,9 @@ Views.project = (db) => {
           : null),
       stagePlanTable()), scheduleAlarm(cp)),
     /* FX-07 — named snapshots of this plan, and the comparison. */
-    baselinesFold(db, p));
+    baselinesFold(db, p),
+    /* FX-11 — how sure the finish is: P50/P80/P90 and criticality. */
+    riskFold(db, p));
 
   /* FX-05 — the plan is a tree: outline numbers, folding summaries. A
      summary's weight, window and progress are computed (gantt.js), so it
@@ -1974,11 +1978,12 @@ function editActivity(db, a) {
       stageProgressField(a),
       { key: "owner", label: "Owner", type: "select", value: a.owner, options: db.people.map(x => ({ value: x.id, label: x.name })) },
       ...stageScheduleFields(db, a),
+      ...estimateFields(a),
     ],
     saveLabel: "Save stage",
     onSave: (v) => App.write("Stage updated", (x) => x.patch("/activities/" + a.id, {
       name: v.name, start: v.start, end: v.end, owner: v.owner, ...stageProgressBody(a, v),
-      ...stageScheduleBody(v, a, db), version: a.version,
+      ...stageScheduleBody(v, a, db), ...estimateBody(v, a), version: a.version,
     }), { detail: v.name }),
   });
 }

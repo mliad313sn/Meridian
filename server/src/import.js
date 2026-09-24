@@ -56,6 +56,8 @@ const PORTFOLIO_TABLES = [
   "requirement",
   /* FX-07 — a snapshot's rows before the snapshot, both before the project. */
   "baseline_snapshot_row", "baseline_snapshot",
+  /* FX-11 (066) — a stored risk run, before its project. */
+  "risk_run",
   "cross_dep", "activity_dep", "activity", "project",
   "programme", "person", "site",
   /* FX-02 (061) — after the projects and sites that name them. */
@@ -82,7 +84,7 @@ export const BOOK_TABLES = {
   narrative: "report_narrative", calendars: "work_calendar",
   meetingSeries: "meeting_series", meetings: "meeting_occurrence", decisions: "meeting_decision",
   actions: "meeting_action", raidReviews: "raid_review",
-  baselines: "baseline_snapshot",
+  baselines: "baseline_snapshot", riskRuns: "risk_run",
   assignments: "assignment", rates: "rate",
   scenarios: "scenario",
 };
@@ -423,9 +425,10 @@ export async function importBook(book, user, opts = {}) {
                                progress_source, progress_at, origin, external_source, external_id,
                                constraint_type, constraint_date, deadline,
                                actual_start, actual_finish, remaining_days,
-                               progress_from_items)
+                               progress_from_items,
+                               dur_optimistic, dur_most_likely, dur_pessimistic)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,${INTEGRATION(15)},$16,
-                 $17,$18,$19,$20,$21,$22,$23)`,
+                 $17,$18,$19,$20,$21,$22,$23,$24,$25,$26)`,
         [a.id, a.project, a.name, int(a.stage), a.start, a.end,
          a.baseStart ?? a.start, a.baseEnd ?? a.end,
          /* FX-14 — `pct` in the book is what the engine reads, which for
@@ -443,7 +446,9 @@ export async function importBook(book, user, opts = {}) {
          a.constraint?.type && a.constraint.type !== "ASAP" ? clean(a.constraint.date) : null,
          clean(a.deadline), clean(a.actualStart), clean(a.actualFinish), intOrNull(a.remaining),
          // FX-14 — the hybrid option, off unless the book says on
-         a.progressFromItems === true]);
+         a.progressFromItems === true,
+         /* FX-11 (066) — the three-point estimate; absent stays absent */
+         num(a.durOptimistic), num(a.durMostLikely), num(a.durPessimistic)]);
     }
     // dependencies second, so both ends exist
     for (const a of book.activities ?? []) {
@@ -510,6 +515,19 @@ export async function importBook(book, user, opts = {}) {
            VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING`,
           [b.id, r.activity, r.name ?? "", clean(r.parent), r.start, r.end, Number(r.weight ?? 0)]);
       }
+    }
+    /* FX-11 — the stored Monte Carlo runs, as they were run. Read-only:
+       a merge that brings one back unchanged passes, one that would
+       rewrite it is refused by the database (066). */
+    for (const x of book.riskRuns ?? []) {
+      await t.query(
+        `INSERT INTO risk_run (id, project_id, ran_at, ran_by, seed, iterations, distribution, status_date,
+                               estimated, deterministic_finish, p50, p80, p90, histogram, criticality)
+         VALUES ($1,$2,$3,${USER(4)},$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,$15::jsonb)`,
+        [x.id, x.project, x.ranAt ?? new Date().toISOString(), clean(x.ranBy), int(x.seed, 1), int(x.iterations, 1),
+         x.distribution ?? "triangular", clean(x.statusDate), int(x.estimated), clean(x.deterministicFinish),
+         clean(x.p50), clean(x.p80), clean(x.p90),
+         JSON.stringify(x.histogram ?? []), JSON.stringify(x.criticality ?? {})]);
     }
     for (const m of book.milestones ?? []) {
       await t.query(
@@ -1527,6 +1545,8 @@ export async function importBook(book, user, opts = {}) {
       ["RVW","raid_review","id ~ '^RVW-[0-9]+$'"],
       // FX-07 — a named baseline mints its id from BSL
       ["BSL","baseline_snapshot","id ~ '^BSL-[0-9]+$'"],
+      // FX-11 — a stored risk run mints its id from MCR (RSK is the RAID register's)
+      ["MCR","risk_run","id ~ '^MCR-[0-9]+$'"],
       // FX-08/FX-10 (063)
       ["ASG","assignment","id ~ '^ASG-[0-9]+$'"],["RATE","rate","id ~ '^RATE-[0-9]+$'"],
       // FX-12 (064) — a scenario and its changes

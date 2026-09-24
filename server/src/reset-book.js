@@ -128,6 +128,8 @@ const TABLES = [
   /* FX-07 (062) : les références nommées d'un projet sont du contenu du
      projet, vidées avec lui — les lignes avant l'instantané. */
   "baseline_snapshot_row", "baseline_snapshot",
+  /* FX-11 (066) : les tirages de risque stockés, contenu du projet. */
+  "risk_run",
   "cross_dep", "activity_dep", "activity", "ext_link",
   "site_window", "rollout_wave", "project",
   "access_grant", "programme", "person", "site",
