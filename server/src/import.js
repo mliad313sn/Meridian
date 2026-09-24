@@ -31,6 +31,9 @@ const PORTFOLIO_TABLES = [
      link before the activity it points at. */
   "case_reconfirmation", "business_case", "project_exception", "project_tolerance",
   "gate_criterion", "ext_link", "benefit", "rollout_wave", "commitment", "timesheet",
+  /* FX-08/FX-10 (063) — an assignment before its activity and person, a
+     rate before its person. */
+  "assignment", "rate",
   "lesson", "stakeholder", "comms_plan", "person_absence", "site_window",
   /* NEW-14 — the meeting register is book data now: an objection before
      the decision it objects to, and a review before the RAID item it
@@ -74,6 +77,7 @@ export const BOOK_TABLES = {
   meetingSeries: "meeting_series", meetings: "meeting_occurrence", decisions: "meeting_decision",
   actions: "meeting_action", raidReviews: "raid_review",
   baselines: "baseline_snapshot",
+  assignments: "assignment", rates: "rate",
 };
 
 /** Does the file carry at least one row of this list? */
@@ -1215,6 +1219,28 @@ export async function importBook(book, user, opts = {}) {
                SET days = EXCLUDED.days, entered_by = EXCLUDED.entered_by, ${TIMESHEET_BUMP}`,
         hasId ? [int(x.id), ...row] : row);
     }
+    /* FX-10 (063) — the rate table: a person OR a role, a day rate in
+       whole units of its currency (never scaled by `money` — it is a
+       price of a day, not a sum in millions), the fx posed on the line. */
+    for (const x of book.rates ?? []) {
+      await t.query(
+        `INSERT INTO rate (id, person_id, role_label, day_rate, currency, fx_rate,
+                           effective_from, effective_to, note)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        [x.id, clean(x.person), x.person ? "" : (x.role ?? ""), Math.max(0, num(x.dayRate) ?? 0),
+         x.currency ?? "USD", num(x.fx) > 0 ? num(x.fx) : 1, x.from, clean(x.to), x.note ?? ""]);
+    }
+    /* FX-08 (063) — who works on which activity. Units 1–200 as the
+       screen; `work: null` stays null (computed), it does not become 0. */
+    for (const x of book.assignments ?? []) {
+      await t.query(
+        `INSERT INTO assignment (id, activity_id, person_id, role_label, units, work_days, note,
+                                 external_source, external_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,${INTEGRATION(8)},$9)`,
+        [x.id, x.activity, clean(x.person), x.person ? "" : (x.role ?? ""),
+         Math.max(1, Math.min(200, int(x.units, 100))), num(x.work), x.note ?? "",
+         clean(x.externalSource), clean(x.externalId)]);
+    }
     /* Only the ACTIVE tolerance is exported (the serialiser says why), so
        it comes back active. An exception may cite a tolerance that has
        since been superseded and is not in the file: the pointer is kept
@@ -1390,7 +1416,9 @@ export async function importBook(book, user, opts = {}) {
                      // NEW-14 — the meeting register and the RAID reviews
                      "meetingSeries", "meetings", "decisions", "actions", "raidReviews",
                      // FX-07 — the named baselines
-                     "baselines"]) {
+                     "baselines",
+                     // FX-08/FX-10 — assignments and rates
+                     "assignments", "rates"]) {
       counts[k] = (book[k] ?? []).length;
     }
 
@@ -1427,6 +1455,8 @@ export async function importBook(book, user, opts = {}) {
       ["RVW","raid_review","id ~ '^RVW-[0-9]+$'"],
       // FX-07 — a named baseline mints its id from BSL
       ["BSL","baseline_snapshot","id ~ '^BSL-[0-9]+$'"],
+      // FX-08/FX-10 (063)
+      ["ASG","assignment","id ~ '^ASG-[0-9]+$'"],["RATE","rate","id ~ '^RATE-[0-9]+$'"],
     ]) {
       await t.query(
         `INSERT INTO id_counter (prefix, next_value)

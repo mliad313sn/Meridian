@@ -32,7 +32,7 @@ import { packageVersion } from "../env.js";
 import {
   idempotent, assertKnownBody, upsertProject, upsertMilestone, upsertRaid, upsertRaidReview, upsertDecision,
   upsertAction, upsertActivity, upsertWorkItem, upsertCriterion, upsertBenefit, upsertBusinessCase,
-  upsertReferenceV1,
+  upsertReferenceV1, upsertAssignment,
 } from "../v1write.js";
 
 const r = Router();
@@ -239,6 +239,8 @@ r.put("/raid-reviews/:externalId", requireIntegration("write:portfolio"), known(
    automation reports. Meridian never fetches it; this is the door the
    report comes in by (NOTICE, docs/27 surface C). */
 r.put("/references/:externalId", requireIntegration("write:portfolio"), known(), idempotent(), write(upsertReferenceV1));
+/* FX-08 (docs/41) — who works on which stage, keyed by the planning tool's own id. */
+r.put("/assignments/:externalId", requireIntegration("write:portfolio"), known(), idempotent(), write(upsertAssignment));
 r.put("/decisions/:externalId", requireIntegration("write:meetings"), known(), idempotent(), write(upsertDecision));
 r.put("/actions/:externalId", requireIntegration("write:meetings"), known(), idempotent(), write(upsertAction));
 

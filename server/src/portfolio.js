@@ -136,6 +136,10 @@ export async function loadPortfolio(user, { inactive = false } = {}) {
     many(`SELECT * FROM work_calendar ORDER BY name, id`),
     many(`SELECT * FROM work_calendar_exception ORDER BY calendar_id, on_date`),
   ]);
+  /* FX-10 (063) — the price of a day, by person or by role. Reference
+     data like the directory it prices (a person's `rate` is already read
+     by everyone), so not scoped by project. */
+  const rateRows = await many(`SELECT * FROM rate ORDER BY effective_from, id`);
 
   const projectRows = await many(
     `SELECT p.* FROM project p WHERE ${scope.sql} ORDER BY p.name, p.id`,
@@ -164,6 +168,7 @@ export async function loadPortfolio(user, { inactive = false } = {}) {
     benefits, waves, commitments, timesheets, lessonRows, tolerances, exceptions, caseRows, criterionRows,
     stakeholderRows, commsRows, reconfirmRows,
     evidenceRows, findingRows, seatRows, seatConflicts, objectionRows,
+    assignmentRows,
   ] = await Promise.all([
     inScope(`SELECT * FROM activity WHERE project_id = ANY($1) ORDER BY project_id, stage, id`),
     inScope(`SELECT d.* FROM activity_dep d JOIN activity a ON a.id = d.activity_id
@@ -254,6 +259,10 @@ export async function loadPortfolio(user, { inactive = false } = {}) {
     many(`SELECT * FROM seat_conflict ORDER BY seat_id, other_id`),
     /* MER-07 — le registre des dissensions. */
     many(`SELECT * FROM decision_objection ORDER BY raised_on DESC, id`),
+    /* FX-08 (063) — who works on which activity, scoped by the activity's
+       project like the activity itself. */
+    inScope(`SELECT s.* FROM assignment s JOIN activity a ON a.id = s.activity_id
+              WHERE a.project_id = ANY($1) ORDER BY s.id`),
   ]);
 
   /* La longueur d'échelle déclarée par chaque programme, lue une fois :
@@ -712,6 +721,28 @@ export async function loadPortfolio(user, { inactive = false } = {}) {
     })),
 
     allocations: allocations.map(allocationOut),
+
+    /* FX-08 (063) — an activity, a person OR a role, units in % (1–200),
+       and a typed work that overrides duration × units when present
+       (`work: null` = computed; shared/resources.js computes it). */
+    assignments: assignmentRows.map((x) => ({
+      id: x.id, activity: x.activity_id, person: x.person_id ?? null,
+      role: x.role_label || null, units: x.units,
+      work: x.work_days === null || x.work_days === undefined ? null : Number(x.work_days),
+      note: x.note ?? "",
+      externalSource: x.external_source ?? null, externalId: x.external_id ?? null,
+      version: x.row_version,
+    })),
+
+    /* FX-10 (063) — the rate table. `dayRate` is in whole units of
+       `currency` (like the directory's day rate), `fx` the reporting-
+       currency rate posed on the line, `to: null` open-ended. */
+    rates: rateRows.map((x) => ({
+      id: x.id, person: x.person_id ?? null, role: x.role_label || null,
+      dayRate: Number(x.day_rate), currency: x.currency, fx: Number(x.fx_rate),
+      from: x.effective_from, to: x.effective_to ?? null, note: x.note ?? "",
+      version: x.row_version,
+    })),
 
     docs: docs
       .filter((d) => !d.project_id || idSet.has(d.project_id))

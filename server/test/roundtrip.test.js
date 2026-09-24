@@ -386,6 +386,19 @@ const ENRICH = [
   `UPDATE activity SET constraint_type = 'SNET', constraint_date = '2026-03-02', deadline = '2026-12-31',
           actual_start = start_date, actual_finish = start_date + 3, remaining_days = 4
     WHERE id = (SELECT min(id) FROM activity)`,
+  /* docs/41 wave B (063) — an assignment of a named person with a typed
+     work and a contract identity, one of a role with the work computed
+     (null must come back null, not 0), and a rate by person in another
+     currency with an end date beside one by role, open-ended. */
+  `INSERT INTO assignment (id, activity_id, person_id, role_label, units, work_days, note,
+                          external_source, external_id)
+   VALUES ('ASG-901', (SELECT min(id) FROM activity), ${PE1}, '', 60, 7.5, 'Night shift only',
+           'INT-RT', 'EXT-ASG1'),
+          ('ASG-902', (SELECT min(id) FROM activity), NULL, 'Welder', 150, NULL, '', NULL, NULL)`,
+  `INSERT INTO rate (id, person_id, role_label, day_rate, currency, fx_rate, effective_from,
+                    effective_to, note)
+   VALUES ('RATE-901', ${PE1}, '', 1250.5, 'EUR', 1.08, '2026-01-01', '2026-12-31', 'Framework contract 2026'),
+          ('RATE-902', NULL, 'Welder', 480, 'USD', 1, '2026-03-01', NULL, '')`,
 ];
 
 describe("F13 · export → import → export", () => {

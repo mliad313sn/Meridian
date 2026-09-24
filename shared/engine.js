@@ -1351,14 +1351,22 @@ export const Engine = {
 };
 
 /* FX-01…FX-04 — the fields the scheduler reads, defaulted where absent.
-   Set in place and only when missing, so a serialised book keeps what it
-   carries and a hand-built one gains FS/0 and nulls. */
+   A row that already carries them is returned as it is; a hand-built one
+   gets a copy with FS/0 and nulls (see below). */
 function schedFields(a) {
-  if (a.links === undefined) a.links = (a.deps || []).map(pred => ({ pred, type: "FS", lag: 0 }));
+  /* A computation never writes the book it is given (D-41.02): a row
+     that already carries every field is returned as it is; one that
+     lacks some gets a COPY with FS/0 and nulls. Found when 5.31.0's
+     leveler proved it copies what it shifts and writes nothing. */
+  const missing = a.links === undefined ||
+    ["constraint", "deadline", "actualStart", "actualFinish", "remaining"].some((k) => a[k] === undefined);
+  if (!missing) return a;
+  const out = { ...a };
+  if (out.links === undefined) out.links = (out.deps || []).map(pred => ({ pred, type: "FS", lag: 0 }));
   for (const k of ["constraint", "deadline", "actualStart", "actualFinish", "remaining"]) {
-    if (a[k] === undefined) a[k] = null;
+    if (out[k] === undefined) out[k] = null;
   }
-  return a;
+  return out;
 }
 
 export default Engine;

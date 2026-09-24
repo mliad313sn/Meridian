@@ -383,9 +383,9 @@ car elle lit les types, calendriers et hiérarchies des vagues A.
 | FX-05 | **construite** | 5.30.0 | `plan-shape.test.js` ; arbre, récapitulatives calculées, pas de double comptage ; égalité 5.28.0 prouvée |
 | FX-06 | **construite** | 5.30.0 | `plan-shape.test.js` ; Gantt SVG, glisser et clavier, 409 honnête ; égalité 5.28.0 prouvée |
 | FX-07 | **construite** | 5.30.0 | `plan-shape.test.js` ; 11 références nommées, lecture seule, comparaison ; égalité 5.28.0 prouvée |
-| FX-08 | ouverte | | |
-| FX-09 | ouverte | | |
-| FX-10 | ouverte | | |
+| FX-08 | **construite** | 5.31.0 | `resources.test.js` ; affectations, charge hebdomadaire, surallocation ; **FX-08 bis ouverte** : le travail compte encore des jours calendaires |
+| FX-09 | **construite** | 5.31.0 | `resources.test.js` ; proposition sans écriture (prouvé), application auditée tout ou rien |
+| FX-10 | **construite** | 5.31.0 | `resources.test.js` ; taux, courbe en S, EAC ×3 nommées, TCPI |
 | FX-11 | ouverte | | |
 | FX-12 | ouverte | | |
 | FX-13 | ouverte | | |

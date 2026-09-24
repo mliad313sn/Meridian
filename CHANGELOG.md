@@ -22,6 +22,69 @@ Nothing yet.
 
 ---
 
+## [5.31.0] — 2026-09-24
+
+**Who does the work, and what it costs: assignments, leveling, EAC**
+(FX-08…FX-10; docs/41 wave B, migration 063).
+
+### Added
+
+- **FX-08 · Assignments and over-allocation.** An activity is assigned to
+  a person or a role at 1–200 % units; work is duration × units unless a
+  work is typed. Each person's weekly load across all projects is measured
+  against their effective availability (rotation and leave), capped by
+  dated absences; over-allocation is flagged on the Resources view and
+  among the decisions owed. A project allocation still counts until the
+  person has an assignment on that project, so nothing counts twice.
+- **FX-09 · Leveling, proposed and never imposed (D-41.02).** Moves within
+  float first, then delays of lower-priority work (project rank, float,
+  id); a move is accepted only if it lowers the total excess of everyone
+  it shifts. Only unstarted, non-synced activities the account may edit
+  move. The proposal writes nothing (proved: audit rows and row versions
+  unchanged). An authorised person applies the moves they tick, each an
+  audited activity update under its version, all or nothing
+  (`schedule.level`).
+- **FX-10 · Rates, S-curve and EAC.** A rate table by person or role,
+  currency and effective dates (group level, `rate.write`) prices planned
+  cost day by day. The Budget view shows the S-curve (BCWS/BCWP/ACWP) and
+  the EAC three ways, each named by its formula (BAC/CPI,
+  AC+(BAC−EV)/(CPI×SPI), bottom-up AC+ETC), with TCPI to BAC and to EAC.
+  Bottom-up is null unless all remaining work is costed. MER-04: no
+  budget, nothing measured.
+- `PUT /api/v1/assignments/:externalId`; export, import and F13 carry
+  assignments and rates.
+
+### Fixed
+
+- **5.29.0's `Engine.activities` wrote into the book it was given.** On a
+  hand-built book (one without the 5.29.0 fields), it filled `links` and
+  the tracking fields into the caller's own rows. A book served by the
+  product already carries them, so no screen was affected; the leveler's
+  "computes on a copy, writes nothing" test found it. Such a row now gets
+  a copy.
+
+### Known limit
+
+Work and weekly load count calendar days; they do not yet read the
+working calendars of 5.29.0 (FX-08 bis, docs/41).
+
+### Engine (D-41.01)
+
+`shared/engine.js` is not modified by this line. `Engine.capacity` is
+left as it was, because its numbers feed the existing alert; the new
+`resourceLoad()` is the measure that uses effective availability.
+
+### Measure
+
+`resources.test.js`: 21 tests with hand-worked cases (0.5 FTE on
+rotation at 2 × 60 % = 240 %; EAC 0.125 / 0.14375 / 0.11, TCPI 1.2 / 0.8;
+a leveling move inside float, a delay, a move refused for overloading a
+second person). Browser: load heat, a proposal applied with one audit row
+per move, the three EACs and the S-curve, FR and ES, a viewer without
+controls. Bundle 272.75 kB gzip (cap ≈ 289.7 kB). `npm run verify`: 1077/1077.
+
+---
+
 ## [5.30.0] — 2026-09-24
 
 **A plan has a shape and a memory: WBS, Gantt, named baselines**

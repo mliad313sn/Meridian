@@ -519,6 +519,8 @@ function phaseFor(p, today) {
 
 async function wipe() {
   const tables = [
+    // FX-10 (063) — a role's rate hangs on no person, so no cascade takes it
+    "assignment", "rate",
     "meeting_action", "meeting_decision", "meeting_attendance", "agenda_item",
     "meeting_occurrence", "meeting_series",
     "report_narrative", "work_item", "board_column", "document", "allocation",
