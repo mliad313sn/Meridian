@@ -122,7 +122,12 @@ describe("schema and migrations (R2.2, R2.7)", () => {
        /* 060 - docs/36 D-36.13 (#18): a site is a place or a team. A
           team's timezone may be NULL (a place's may not, by CHECK), and
           no plant window or rollout wave can land at a team. */
-       "060_a_team_is_located_nowhere.sql"]);
+       "060_a_team_is_located_nowhere.sql",
+       /* 061 - docs/41 wave A1 (FX-01…FX-04): typed links with lag,
+          working calendars, date constraints and deadlines, actuals,
+          remaining days and a project status date. Every default is the
+          5.28.0 behaviour (D-41.01). */
+       "061_the_schedule_engine.sql"]);
     const again = await migrate({ silent: true });
     assert.deepEqual(again, [], "a second run applies nothing");
   });

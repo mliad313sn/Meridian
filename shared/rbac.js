@@ -105,6 +105,9 @@ export const ACTIONS = [
        objection.resolve  answering an objection */
   "assurance.write", "waiver.grant", "seat.manage",
   "objection.raise", "objection.own", "objection.resolve",
+  /* FX-02 (docs/41) : les calendriers ouvrés — quels jours on travaille,
+     quels jours fériés. Voir le `case` plus bas pour le niveau. */
+  "calendar.manage",
   // system
   "user.manage", "settings.write", "data.export", "data.import",
 ];
@@ -156,6 +159,9 @@ const GROUP_ONLY_WRITES = new Set([
      KODO's rule has it: an unresolved objection goes to the product
      owner, not back to whoever took the decision. */
   "objection.resolve",
+  /* FX-02 — a working calendar moves the dates of every project that
+     uses it, across sites and programmes at once. */
+  "calendar.manage",
 ]);
 
 /** Admin-only, full stop. */
@@ -740,6 +746,20 @@ export function can(user, action, resource = {}) {
        who sits on a committee is governance, not machine configuration —
        the reasoning priority.weighting gives. */
     case "seat.manage":
+      return allow();
+
+    /* calendar.manage (FX-02) — portfolio-wide: a calendar names no
+       project, so it needs its own case or the project-scoped default
+       would refuse it to everyone (the data.import trap). Group level,
+       already established by GROUP_ONLY_WRITES; admin returned earlier.
+       Why not site level: one calendar is inherited by every project of
+       a site and possibly by the whole group (the default), and a
+       holiday added to it moves every date computed on it — including
+       group-governed projects a site lead only reads. Why not
+       administrator-only: which days a site works is planning, not
+       machine configuration. A site lead still chooses which existing
+       calendar their own project uses (project.write). */
+    case "calendar.manage":
       return allow();
 
     /* objection.raise — consent governance runs on the reasoned

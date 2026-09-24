@@ -219,7 +219,11 @@ const WRITE_DOCS = {
   "PUT /api/v1/activities/:externalId": upsert("the link to a schedule stage, and its measured progress", "write:portfolio",
     "Stages are not created by integrations — the plan belongs to the project. The first call binds " +
     "your id to an existing stage (`activity`); every call may carry `pct`, stamped with `source` and " +
-    "`measuredAt` so earned value reads measured, not typed, progress (I-5)."),
+    "`measuredAt` so earned value reads measured, not typed, progress (I-5). A scheduler also reports " +
+    "`actualStart`, `actualFinish` and `remaining` (days from the project status date), a date constraint " +
+    "(`constraintType` ASAP, SNET, SNLT, FNET, FNLT, MSO or MFO, with `constraintDate`), a `deadline`, and " +
+    "`links` — the predecessor list [{ pred, type FS|SS|FF|SF, lag days, negative for a lead }], Meridian " +
+    "stage ids of the same project, replaced whole and refused if it closes a loop (FX-01…FX-04)."),
   "PUT /api/v1/workitems/:externalId": upsert("a work item on the board", "write:portfolio",
     "`column` is a column id or name; `assignee` an id or exact name."),
   "PUT /api/v1/criteria/:externalId": upsert("a gate criterion", "write:portfolio",

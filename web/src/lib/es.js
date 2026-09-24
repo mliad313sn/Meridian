@@ -2777,6 +2777,92 @@ export const ES = {
     " equipo no se muestra: un equipo es una unidad de entrega sin ubicación, así que no tiene reloj, ni solapamiento horario, ni calendario de planta. ",
   " teams are not shown: a team is a delivery unit with no location, so it has no clock, no overlap and no plant calendar. ":
     " equipos no se muestran: un equipo es una unidad de entrega sin ubicación, así que no tiene reloj, ni solapamiento horario, ni calendario de planta. ",
+  /* FX-01…FX-04 (docs/41, 061) — el motor de planificación: vínculos tipados,
+     calendarios laborales, restricciones, reales. */
+  "Unknown or repeated predecessor":
+    "Predecesor desconocido o repetido",
+  "Predecessors":
+    "Predecesores",
+  "Code, then type and lag in days: A2 SS+3. FS is the default; negative is a lead.":
+    "Código, luego tipo y desfase en días: A2 SS+3. FS por defecto; negativo = adelanto.",
+  "Date constraint":
+    "Restricción de fecha",
+  "SNET/SNLT start no earlier/later than, FNET/FNLT finish, MSO/MFO must start/finish on. Never moves your dates: an unmet one shows as negative float.":
+    "SNET/SNLT inicio no antes/después de, FNET/FNLT fin, MSO/MFO inicio/fin obligatorio. Nunca mueve sus fechas: si no se cumple, da holgura negativa.",
+  "Constraint date":
+    "Fecha de restricción",
+  "Required unless ASAP.":
+    "Obligatoria salvo ASAP.",
+  "Deadline":
+    "Fecha límite",
+  "Missing it is flagged; it never moves the plan.":
+    "Incumplirla se señala; nunca mueve el plan.",
+  "Actual start":
+    "Inicio real",
+  "When the work really began; the stage is then scheduled from its actuals.":
+    "Cuándo empezó de verdad; la etapa se calcula entonces con sus reales.",
+  "Actual finish":
+    "Fin real",
+  "When the work really ended — after the actual start.":
+    "Cuándo terminó de verdad — después del inicio real.",
+  "Remaining (days)":
+    "Restante (días)",
+  "Counted from the status date. Empty: the planned duration.":
+    "Contado desde la fecha de estado. Vacío: la duración prevista.",
+  "Free float":
+    "Holgura libre",
+  "Negative float":
+    "Holgura negativa",
+  "Late":
+    "Con retraso",
+  "Working calendar":
+    "Calendario laboral",
+  "Calendar days":
+    "Días naturales",
+  "Status date":
+    "Fecha de estado",
+  "Inherited":
+    "Heredado",
+  "Durations and lags count its working days. Inherited: the site's, else the group default, else calendar days.":
+    "Duraciones y desfases cuentan sus días laborables. Heredado: el del sitio, si no el del grupo, si no días naturales.",
+  "Schedule and earned value are measured at it. Empty: the portfolio's.":
+    "El plan y el valor ganado se miden en ella. Vacío: la de la cartera.",
+  "The site, country or roster it describes.":
+    "El sitio, el país o la rotación que describe.",
+  "Non-working days":
+    "Días no laborables",
+  "One per line: YYYY-MM-DD, then a label.":
+    "Uno por línea: AAAA-MM-DD y una etiqueta.",
+  "Group default":
+    "Predeterminado del grupo",
+  "For every project whose site names none. One default only.":
+    "Para todo proyecto cuyo sitio no indica ninguno. Uno solo.",
+  "The agreement or roster these days come from.":
+    "El acuerdo o la rotación de donde vienen estos días.",
+  "Working calendars":
+    "Calendarios laborales",
+  "Without one, a project counts calendar days.":
+    "Sin calendario, un proyecto cuenta días naturales.",
+  "Working days":
+    "Días laborables",
+  "Used by":
+    "Usado por",
+  "Refused while a project or a site uses it.":
+    "Se rechaza mientras lo use un proyecto o un sitio.",
+  "Sun":
+    "Dom",
+  "Mon":
+    "Lun",
+  "Tue":
+    "Mar",
+  "Wed":
+    "Mié",
+  "Thu":
+    "Jue",
+  "Fri":
+    "Vie",
+  "Sat":
+    "Sáb",
 };
 
 /* ── fragments composés autour de nombres vivants (R-15) ────────────── */

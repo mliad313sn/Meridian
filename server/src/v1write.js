@@ -48,6 +48,7 @@ import { assertPlantWindow } from "./plant.js";
 import { isEvidenceLocator, EVIDENCE_REFUSAL, humanActRefusal } from "./evidence.js";
 import { assertCaseReconfirmed } from "./value.js";
 import { canRatifyDecision } from "../../shared/rbac.js";
+import { linksFor, linkLabel, trackingPatch } from "./schedwrite.js";
 import { reprojectNextReview } from "./raidreview.js";
 import { upsertReference } from "./references.js";
 
@@ -1029,15 +1030,41 @@ export async function upsertActivity(user, externalId, b) {
     } else patch.progress_at = new Date().toISOString();
   }
   if (b.name !== undefined) patch.name = text(b.name, 300, "name");
-  if (!Object.keys(patch).length) return stamp(false, existing.id, externalId, existing.row_version);
+  /* FX-01…FX-04 (061) — a scheduler also reports when the work actually
+     started and finished, what remains, the date it must hold, and the
+     typed links it plans with. Same checks as the screen (schedwrite.js). */
+  Object.assign(patch, trackingPatch(b, existing));
+  const links = b.links !== undefined ? await linksFor(existing, b.links) : null;
+  if (!Object.keys(patch).length && !links) return stamp(false, existing.id, externalId, existing.row_version);
   const version = sentVersion(b);
   const out = await audited(user,
     { action: patch.pct !== undefined ? "Progress reported" : "Stage updated", entity: "activity", entityId: existing.id,
-      detail: (patch.pct !== undefined ? `${existing.name} → ${patch.pct}% ` : existing.name) + `— from ${user.displayName} (${externalId})`,
+      detail: (patch.pct !== undefined ? `${existing.name} → ${patch.pct}% ` : existing.name) +
+        (links ? ` · predecessors ${links.map(linkLabel).join(", ") || "none"} ` : "") +
+        `— from ${user.displayName} (${externalId})`,
       before: patch.pct !== undefined ? { pct: existing.pct } : undefined,
       after: patch.pct !== undefined ? { pct: patch.pct, source: patch.progress_source } : undefined },
     async (t) => {
-      return writeRow(t, "activity", existing.id, version, patch, "activity");
+      const rv = Object.keys(patch).length
+        ? await writeRow(t, "activity", existing.id, version, patch, "activity")
+        : await (async () => {
+            /* the links alone: the stage's version still moves, under the one sent */
+            const r2 = await t.query(
+              `UPDATE activity SET row_version = row_version + 1
+                WHERE id = $1 AND ($2::int IS NULL OR row_version = $2) RETURNING row_version`,
+              [existing.id, version ?? null]);
+            if (!r2.rows.length) throw new HttpError(409, "The version you sent is stale — read the activity again");
+            return { ok: true, version: r2.rows[0].row_version };
+          })();
+      if (links) {
+        await t.query(`DELETE FROM activity_dep WHERE activity_id = $1`, [existing.id]);
+        for (const l of links) {
+          await t.query(
+            `INSERT INTO activity_dep (activity_id, predecessor_id, type, lag_days) VALUES ($1,$2,$3,$4)`,
+            [existing.id, l.pred, l.type, l.lag]);
+        }
+      }
+      return rv;
     });
   return stamp(false, existing.id, externalId, out.version);
 }
@@ -1369,7 +1396,13 @@ export const WRITE_BODIES = {
     status: "string", ratifiedBy: "string", ratifiedOn: "date", version: "integer" },
   actions: { adopt: "string", title: "string", detail: "string", owner: "string", project: "string", dueDate: "date",
     status: "string", occurrence: "string", series: "string", version: "integer" },
-  activities: { activity: "string", pct: "integer", source: "string", measuredAt: "date-time", name: "string", version: "integer" },
+  /* FX-01…FX-04 (061) — actuals, remaining days, a date constraint
+     (constraintType ASAP|SNET|SNLT|FNET|FNLT|MSO|MFO with constraintDate),
+     a deadline, and the typed predecessor list [{ pred, type, lag }]
+     replaced whole (Meridian activity ids of the same project). */
+  activities: { activity: "string", pct: "integer", source: "string", measuredAt: "date-time", name: "string",
+    actualStart: "date", actualFinish: "date", remaining: "integer", constraintType: "string",
+    constraintDate: "date", deadline: "date", links: "object[]", version: "integer" },
   workitems: { project: "string", title: "string", column: "string", assignee: "string", points: "integer",
     priority: "string", version: "integer" },
   /* REQ-20 (V-1) — la valeur, aux mêmes règles que la livraison. */

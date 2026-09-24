@@ -47,6 +47,8 @@ const PORTFOLIO_TABLES = [
   "requirement",
   "cross_dep", "activity_dep", "activity", "project",
   "programme", "person", "site",
+  /* FX-02 (061) — after the projects and sites that name them. */
+  "work_calendar_exception", "work_calendar",
 ];
 
 /* NEW-20 — which table each list of the book fills. A replace deletes
@@ -66,7 +68,7 @@ export const BOOK_TABLES = {
   exceptions: "project_exception", businessCases: "business_case",
   caseReconfirmations: "case_reconfirmation", lessons: "lesson", criteria: "gate_criterion",
   stakeholders: "stakeholder", comms: "comms_plan", extLinks: "ext_link",
-  narrative: "report_narrative",
+  narrative: "report_narrative", calendars: "work_calendar",
   meetingSeries: "meeting_series", meetings: "meeting_occurrence", decisions: "meeting_decision",
   actions: "meeting_action", raidReviews: "raid_review",
 };
@@ -270,6 +272,24 @@ export async function importBook(book, user, opts = {}) {
     const bump = (table, cols, next) => (mode === "merge" ? ", " + bumpIfChanged(table, cols, next) : "");
 
     /* ── reference ────────────────────────────────────────────────── */
+    /* FX-02 (061) — calendars first: sites and projects name them. Their
+       dated non-working days are the calendar's list, replaced whole (in
+       a merge too — the file states the whole list). */
+    for (const c of book.calendars ?? []) {
+      /* one group default: the file's wins over the one this database held */
+      if (c.isDefault === true) {
+        await t.query(`UPDATE work_calendar SET is_default = false WHERE is_default AND id <> $1`, [c.id]);
+      }
+      await t.query(
+        `INSERT INTO work_calendar (id, name, work_days, is_default, note) VALUES ($1,$2,$3,$4,$5)`,
+        [c.id, c.name, Math.min(127, Math.max(1, int(c.workdays, 62))), c.isDefault === true, c.note ?? ""]);
+      await t.query(`DELETE FROM work_calendar_exception WHERE calendar_id = $1`, [c.id]);
+      for (const h of c.holidays ?? []) {
+        await t.query(
+          `INSERT INTO work_calendar_exception (calendar_id, on_date, label) VALUES ($1,$2,$3)`,
+          [c.id, typeof h === "string" ? h : h.date, (typeof h === "string" ? "" : h.label) ?? ""]);
+      }
+    }
     for (const s of book.sites ?? []) {
       /* D-36.13 (060) — a team comes back a team, with no timezone if it
          had none. A book written before 060 carries no kind: every site
@@ -278,8 +298,8 @@ export async function importBook(book, user, opts = {}) {
       await t.query(
         `INSERT INTO site (id, city, region, tz_offset, tz_name, headcount, fte, charter,
                            country, legal_entity, link_mbps, link_kind, readiness, readiness_note,
-                           active, kind)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+                           active, kind, calendar_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
         [s.id, s.city, s.region ?? "",
          team ? num(s.tz) : Number(s.tz ?? 0),
          team ? (s.tzName || null) : (s.tzName ?? "UTC"),
@@ -290,7 +310,9 @@ export async function importBook(book, user, opts = {}) {
          s.readinessNote ?? "",
          /* NEW-18 — the book carries inactive rows too; absent means
             active, which is what every older file meant. */
-         s.active !== false, team ? "team" : "place"]);
+         s.active !== false, team ? "team" : "place",
+         /* FX-02 — the calendar its projects inherit */
+         clean(s.calendar)]);
     }
     for (const p of book.people ?? []) {
       await t.query(
@@ -340,10 +362,10 @@ export async function importBook(book, user, opts = {}) {
             date_basis, condition, sponsor_id, acceptance_criteria,
             plant_impact, moc_ref, moc_approved_on, moc_approved_label,
             fit_score, value_score, risk_score, effort_score, rank_seq,
-            external_source, external_id)
+            external_source, external_id, calendar_id, status_date)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,
                  $20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,
-                 $38,$39,$40,$41,$42,${INTEGRATION(43)},$44)`,
+                 $38,$39,$40,$41,$42,${INTEGRATION(43)},$44,$45,$46)`,
         [p.id, p.name, p.programme, p.site,
          p.governanceLevel === "group" ? "group" : "site",
          clean(p.pm), p.method ?? "Hybrid",
@@ -372,28 +394,43 @@ export async function importBook(book, user, opts = {}) {
          p.mocRef ?? "", clean(p.mocApprovedOn), p.mocApprovedBy ?? "",
          intOrNull(p.fit), intOrNull(p.value), intOrNull(p.risk), intOrNull(p.effort),
          intOrNull(p.rank),
-         clean(p.externalSource), clean(p.externalId)]);
+         clean(p.externalSource), clean(p.externalId),
+         /* FX-02 / FX-04 (061) — its own calendar and status date */
+         clean(p.calendar), clean(p.statusDate)]);
     }
     for (const a of book.activities ?? []) {
       await t.query(
         `INSERT INTO activity (id, project_id, name, stage, start_date, end_date,
                                base_start, base_end, weight, pct, owner_id,
-                               progress_source, progress_at, origin, external_source, external_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,${INTEGRATION(15)},$16)`,
+                               progress_source, progress_at, origin, external_source, external_id,
+                               constraint_type, constraint_date, deadline,
+                               actual_start, actual_finish, remaining_days)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,${INTEGRATION(15)},$16,
+                 $17,$18,$19,$20,$21,$22)`,
         [a.id, a.project, a.name, int(a.stage), a.start, a.end,
          a.baseStart ?? a.start, a.baseEnd ?? a.end,
          Number(a.weight ?? 0), Math.max(0, Math.min(100, int(a.pct))), clean(a.owner),
          /* NEW-05 — who measured this progress, and when (I-5): without
             it a figure pushed by the site's scheduler reads as typed here. */
          a.progressSource ?? "", clean(a.progressAt), origin(a.origin),
-         clean(a.externalSource), clean(a.externalId)]);
+         clean(a.externalSource), clean(a.externalId),
+         /* FX-03 / FX-04 (061) — a constraint is { type, date }; none is ASAP */
+         a.constraint?.type && a.constraint.type !== "ASAP" ? a.constraint.type : "ASAP",
+         a.constraint?.type && a.constraint.type !== "ASAP" ? clean(a.constraint.date) : null,
+         clean(a.deadline), clean(a.actualStart), clean(a.actualFinish), intOrNull(a.remaining)]);
     }
     // dependencies second, so both ends exist
     for (const a of book.activities ?? []) {
+      /* FX-01 — typed where the file types them (`links`), FS/0 for the
+         rest: a book older than 061 carries `deps` only. A merge restates
+         the type and lag of a link that is already drawn. */
+      const typed = new Map((a.links ?? []).map((l) => [l.pred, l]));
       for (const dep of a.deps ?? []) {
+        const l = typed.get(dep);
         await t.query(
-          `INSERT INTO activity_dep (activity_id, predecessor_id) VALUES ($1,$2)
-           ON CONFLICT DO NOTHING`, [a.id, dep]);
+          `INSERT INTO activity_dep (activity_id, predecessor_id, type, lag_days) VALUES ($1,$2,$3,$4)
+           ON CONFLICT (activity_id, predecessor_id) DO UPDATE SET type = EXCLUDED.type, lag_days = EXCLUDED.lag_days`,
+          [a.id, dep, ["FS", "SS", "FF", "SF"].includes(l?.type) ? l.type : "FS", int(l?.lag)]);
       }
     }
     for (const c of book.crossDeps ?? []) {

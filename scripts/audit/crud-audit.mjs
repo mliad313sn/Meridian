@@ -62,6 +62,11 @@ const ENTITIES = {
   activity: { c: /post\("\/activities"/, u: /patch\("\/activities\/:id"/, d: /delete\("\/activities\/:id"/ },
   activity_dep: { c: /post\("\/activities"/, u: NA("Edited by replacing the stage's dependency list"),
     d: NA("Removed with its stage") },
+  /* FX-02 (061) — a working calendar, and its dated non-working days,
+     which are the calendar's list: replaced whole by its PATCH. */
+  work_calendar: { c: /post\("\/calendars"/, u: /patch\("\/calendars\/:id"/, d: /delete\("\/calendars\/:id"/ },
+  work_calendar_exception: { c: /patch\("\/calendars\/:id"/, u: NA("Edited by replacing the calendar's list of non-working days"),
+    d: NA("Removed from the calendar's list, or with its calendar") },
   cross_dep: { c: /post\("\/crossdeps"/, u: NA("A link has no attributes to change — remove and re-create"),
     d: /delete\("\/crossdeps\/:id"/ },
   milestone: { c: /post\("\/milestones"/, u: /patch\("\/milestones\/:id"/, d: /delete\("\/milestones\/:id"/ },

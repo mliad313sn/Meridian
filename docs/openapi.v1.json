@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Meridian IT-PMO",
-    "version": "5.28.1",
+    "version": "5.29.0",
     "summary": "Read a governed project portfolio, and the trail of how it got that way",
     "description": "The surface other systems read. It is versioned in the path: the day the shape has to change it becomes /api/v2, so that nobody has to guess. Authentication is a key issued per connected system, carrying explicit scopes; the product never stores the key itself, only its fingerprint.\n\nWrites arrived with the first real integrator (RT365, docs/33): PUT by your own identifier on projects, milestones, register items, stage progress, work items, decisions and actions, under two write scopes, with an optional Idempotency-Key. A scope is only published once a route honours it: declaring one earlier would advertise a door that does not exist and imply it is guarded.",
     "license": {
@@ -244,7 +244,7 @@
     "/api/v1/activities/{externalId}": {
       "put": {
         "summary": "Create or update the link to a schedule stage, and its measured progress, keyed by your own identifier",
-        "description": "Creates the the link to a schedule stage, and its measured progress when nothing carries this externalId for your integration, updates it otherwise. The identity is (integration, externalId): two connected systems may both say \"E01\" without colliding. `version` is optional — when sent it is asserted (409 if stale); when omitted your system is the master of this row and the last write wins. Optional `Idempotency-Key` header: the same key with the same body replays the recorded answer (Idempotent-Replayed: true); the same key with another body is refused (422) — one key names ONE request, not a run. `adopt: \"<Meridian id>\"` binds your externalId to a row that already exists (created on a screen, or scaffolded) instead of creating another. A field this collection does not declare is REFUSED (400) and nothing is written or audited: the properties below are the whole of what a body may carry (REQ-19). The same business rules as the screens apply. Stages are not created by integrations — the plan belongs to the project. The first call binds your id to an existing stage (`activity`); every call may carry `pct`, stamped with `source` and `measuredAt` so earned value reads measured, not typed, progress (I-5).",
+        "description": "Creates the the link to a schedule stage, and its measured progress when nothing carries this externalId for your integration, updates it otherwise. The identity is (integration, externalId): two connected systems may both say \"E01\" without colliding. `version` is optional — when sent it is asserted (409 if stale); when omitted your system is the master of this row and the last write wins. Optional `Idempotency-Key` header: the same key with the same body replays the recorded answer (Idempotent-Replayed: true); the same key with another body is refused (422) — one key names ONE request, not a run. `adopt: \"<Meridian id>\"` binds your externalId to a row that already exists (created on a screen, or scaffolded) instead of creating another. A field this collection does not declare is REFUSED (400) and nothing is written or audited: the properties below are the whole of what a body may carry (REQ-19). The same business rules as the screens apply. Stages are not created by integrations — the plan belongs to the project. The first call binds your id to an existing stage (`activity`); every call may carry `pct`, stamped with `source` and `measuredAt` so earned value reads measured, not typed, progress (I-5). A scheduler also reports `actualStart`, `actualFinish` and `remaining` (days from the project status date), a date constraint (`constraintType` ASAP, SNET, SNLT, FNET, FNLT, MSO or MFO, with `constraintDate`), a `deadline`, and `links` — the predecessor list [{ pred, type FS|SS|FF|SF, lag days, negative for a lead }], Meridian stage ids of the same project, replaced whole and refused if it closes a loop (FX-01…FX-04).",
         "security": [
           {
             "apiKey": []
@@ -295,6 +295,34 @@
                   },
                   "name": {
                     "type": "string"
+                  },
+                  "actualStart": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "actualFinish": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "remaining": {
+                    "type": "integer"
+                  },
+                  "constraintType": {
+                    "type": "string"
+                  },
+                  "constraintDate": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "deadline": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "links": {
+                    "type": "array",
+                    "items": {
+                      "type": "object"
+                    }
                   },
                   "version": {
                     "type": "integer"

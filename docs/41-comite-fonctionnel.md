@@ -376,10 +376,10 @@ car elle lit les types, calendriers et hiérarchies des vagues A.
 
 | Ligne | État | Version | Mesure |
 |---|---|---|---|
-| FX-01 | ouverte | | |
-| FX-02 | ouverte | | |
-| FX-03 | ouverte | | |
-| FX-04 | ouverte | | |
+| FX-01 | **construite** | 5.29.0 | `schedule-engine.test.js` (35) ; typed links with lag, MS Project notation ; égalité 5.28.0 prouvée |
+| FX-02 | **construite** | 5.29.0 | `schedule-engine.test.js` (35) ; calendars, project → site → group → none ; égalité 5.28.0 prouvée |
+| FX-03 | **construite** | 5.29.0 | `schedule-engine.test.js` (35) ; constraints bound the passes, violations as negative float ; égalité 5.28.0 prouvée |
+| FX-04 | **construite** | 5.29.0 | `schedule-engine.test.js` (35) ; actuals, status date, free float ; égalité 5.28.0 prouvée |
 | FX-05 | ouverte | | |
 | FX-06 | ouverte | | |
 | FX-07 | ouverte | | |
