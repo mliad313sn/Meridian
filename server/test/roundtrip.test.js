@@ -204,6 +204,25 @@ const ENRICH = [
     WHERE id = (SELECT min(id) FROM document)`,
   `UPDATE work_item SET external_source = 'INT-RT', external_id = 'EXT-W1'
     WHERE id = (SELECT min(id) FROM work_item)`,
+  /* FX-14 (065) — a closed sprint (with what it delivered, the day it
+     closed and the tracker that pushed it) and an active one; an item
+     planned in each, one Done with the moment it got there, one nobody
+     has estimated, both delivering a stage whose progress is measured
+     from their points. */
+  `INSERT INTO iteration (id, project_id, name, starts_on, ends_on, goal, state, done_points, closed_on,
+                         external_source, external_id)
+   VALUES ('IT-901', ${P1}, 'Sprint 6', '2026-08-03', '2026-08-14', 'Retry storm contained', 'closed', 21,
+           '2026-08-14', 'INT-RT', 'EXT-IT6'),
+          ('IT-902', ${P1}, 'Sprint 7', '2026-08-17', '2026-08-28', 'Cut-over rehearsal', 'active', NULL, NULL,
+           NULL, NULL)`,
+  `UPDATE work_item SET iteration_id = 'IT-901', column_id = 'done', done_at = '2026-08-12T15:30:00Z',
+          activity_id = (SELECT min(id) FROM activity WHERE project_id = ${P1})
+    WHERE id = (SELECT min(id) FROM work_item WHERE project_id = ${P1})`,
+  `UPDATE work_item SET iteration_id = 'IT-902', points = NULL,
+          activity_id = (SELECT min(id) FROM activity WHERE project_id = ${P1})
+    WHERE id = (SELECT max(id) FROM work_item WHERE project_id = ${P1})`,
+  `UPDATE activity SET progress_from_items = true
+    WHERE id = (SELECT min(id) FROM activity WHERE project_id = ${P1})`,
 
   /* The governance registers (MER-03/05/06/11) — empty in the seed. */
   `INSERT INTO requirement (id, project_id, statement, source, priority, verification, verified_by,

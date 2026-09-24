@@ -143,7 +143,12 @@ describe("schema and migrations (R2.2, R2.7)", () => {
           of what-if changes (scenario, scenario_change) that never writes
           the live book; a decision of the register may name the scenario
           it promotes (meeting_decision.scenario_id). */
-       "064_what_if_is_not_what_is.sql"]);
+       "064_what_if_is_not_what_is.sql",
+       /* 065 - docs/41 FX-14: sprints (one active per project, a closed
+          one records what it delivered), a work item's sprint, stage
+          and done moment, points that may be unestimated, and a stage's
+          option to measure its progress from its items (off). */
+       "065_a_sprint_is_dated_and_closes.sql"]);
     const again = await migrate({ silent: true });
     assert.deepEqual(again, [], "a second run applies nothing");
   });

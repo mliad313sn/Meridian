@@ -57,6 +57,10 @@ import { meetingsView, invalidateMeetings } from "./meetings.js";
 import { ganttFold, planTree, wbsName, moveStage, baselinesFold, keptFold } from "./gantt.js";
 /* FX-12 — portfolio scenarios: what-if copies, compared, never written. */
 import { scenariosView } from "./scenarios.js";
+/* FX-14 — the board's sprints: filter, planning, charts, velocity. */
+import {
+  sprintSelect, inSprint, sprintPanel, itemPlanningFields, itemPlanningBody, stageProgressField, stageProgressBody,
+} from "./sprints.js";
 /* NEW-04 — KODO's registers: requirements, evidence, findings, seats,
    objections, and what a decision costs to reverse. */
 import { assuranceFolds, objectionsFor, decisionFields, decisionFacts } from "./registers.js";
@@ -1967,12 +1971,13 @@ function editActivity(db, a) {
         validate: (v, st) => D(v) <= D(st.start) ? "End must fall after the start" : "" },
       { hint: t("The share of the work actually done — every schedule index is computed from this one number."),
         key: "pct", label: "Progress (%)", type: "number", min: 0, max: 100, value: a.pct },
+      stageProgressField(a),
       { key: "owner", label: "Owner", type: "select", value: a.owner, options: db.people.map(x => ({ value: x.id, label: x.name })) },
       ...stageScheduleFields(db, a),
     ],
     saveLabel: "Save stage",
     onSave: (v) => App.write("Stage updated", (x) => x.patch("/activities/" + a.id, {
-      name: v.name, start: v.start, end: v.end, pct: +v.pct, owner: v.owner,
+      name: v.name, start: v.start, end: v.end, owner: v.owner, ...stageProgressBody(a, v),
       ...stageScheduleBody(v, a, db), version: a.version,
     }), { detail: v.name }),
   });
@@ -2538,7 +2543,8 @@ Views.board = (db) => {
   const boardProjects = App.ui.boardProject === "all" ? scoped : scoped.filter(p => p.id === App.ui.boardProject);
   const ids = boardProjects.map(p => p.id);
   const filter = { assignee: App.ui.boardAssignee || null };
-  const all = db.items.filter(i => ids.includes(i.project) && (!filter.assignee || i.assignee === filter.assignee));
+  const all = db.items.filter(i => ids.includes(i.project) && (!filter.assignee || i.assignee === filter.assignee) &&
+    (App.ui.boardProject === "all" || inSprint(i)));
 
   const wipBreaches = db.columns.filter(c => c.wip > 0 && all.filter(i => i.column === c.id).length > c.wip);
   const donePts = sum(all.filter(i => i.column === "done"), i => i.points);
@@ -2547,10 +2553,11 @@ Views.board = (db) => {
   const controls = h("div", { class: "sec-tight band", style: "display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap" },
     selectField("Board", App.ui.boardProject,
       [{ value: "all", label: "All projects in scope" }].concat(scoped.map(p => ({ value: p.id, label: p.id + " · " + p.name }))),
-      v => App.set({ boardProject: v }), "260px"),
+      v => App.set({ boardProject: v, boardSprint: "" }), "260px"),
     selectField("Assignee", App.ui.boardAssignee,
       [{ value: "", label: "Everyone" }].concat(uniq(all.map(i => i.assignee)).filter(Boolean).map(a => ({ value: a, label: Engine.personName(db, a) }))),
       v => App.set({ boardAssignee: v }), "180px"),
+    App.ui.boardProject === "all" ? null : sprintSelect(db, App.ui.boardProject),
     h("div", { style: "flex:1" }),
     h("div", { style: "text-align:left" },
       h("div", { class: "kicker" }, "Work in this view"),
@@ -2619,7 +2626,8 @@ Views.board = (db) => {
         h("span", { class: "small muted" }, "of " + totalPts)),
       meter(totalPts ? donePts / totalPts : 0, "var(--color-text)", "thin")));
 
-  return h("div", null, controls, banner, stats, board);
+  return h("div", null, controls, banner, stats, board,
+    sprintPanel(db, App.ui.boardProject === "all" ? null : App.ui.boardProject));
 };
 
 function moveItem(db, itemId, colId) {
@@ -2648,10 +2656,12 @@ function itemFields(db, it, defaultProject) {
       options: db.projects.map(p => ({ value: p.id, label: p.id + " · " + p.name })) },
     { key: "assignee", label: "Assignee", type: "select", value: it ? it.assignee : db.people[0].id,
       options: db.people.map(p => ({ value: p.id, label: p.name + " — " + p.role })) },
-    { key: "points", label: "Points", type: "number", min: 1, max: 21, value: it ? it.points : 3 },
+    { key: "points", label: "Points", type: "number", min: 0, max: 100, value: it ? it.points ?? "" : 3,
+      hint: t("Empty means nobody has estimated it — it then counts in no sprint chart.") },
     { key: "priority", label: "Priority", type: "select", value: it ? it.priority : "P2", options: ["P1", "P2", "P3"] },
     { key: "column", label: "Column", type: "select", value: it ? it.column : "backlog",
       options: db.columns.map(c => ({ value: c.id, label: c.name })), span: 2 },
+    ...itemPlanningFields(db, it, defaultProject),
   ];
 }
 
@@ -2662,7 +2672,8 @@ function newItem(db, defaultProject) {
     saveLabel: "Add item",
     onSave: (v) => App.write("Work item added", (a) => a.post("/workitems", {
       project: v.project, column: v.column, title: v.title,
-      assignee: v.assignee, points: +v.points, priority: v.priority,
+      assignee: v.assignee, points: v.points === "" ? null : +v.points, priority: v.priority,
+      ...itemPlanningBody(v),
     }), { detail: v.title }),
   });
 }
@@ -2677,7 +2688,8 @@ function editItem(db, it) {
     } }, icon("trash", 12), "Delete item"),
     onSave: (v) => App.write("Work item updated", (a) => a.patch("/workitems/" + it.id, {
       project: v.project, column: v.column, title: v.title, assignee: v.assignee,
-      points: +v.points, priority: v.priority, version: it.version,
+      points: v.points === "" || v.points === null ? null : +v.points, priority: v.priority,
+      ...itemPlanningBody(v), version: it.version,
     }), { detail: v.title }),
   });
 }

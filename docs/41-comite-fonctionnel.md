@@ -389,7 +389,7 @@ car elle lit les types, calendriers et hiérarchies des vagues A.
 | FX-11 | ouverte | | |
 | FX-12 | **construite** | 5.32.0 | `scenarios.test.js` ; copie isolée, comparaison par le moteur, application par décision ratifiée ; aucune écriture prouvée |
 | FX-13 | ouverte | | |
-| FX-14 | ouverte | | |
+| FX-14 | **construite** | 5.33.0 | `agile.test.js` (24) ; sprints, vélocité, burndown/burnup, avancement hybride sur le même chemin |
 | FX-15 | ouverte | | |
 | FX-16 | ouverte | | |
 

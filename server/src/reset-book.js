@@ -103,7 +103,10 @@ const TABLES = [
   /* FX-12 (064) — a what-if copy is demonstration content like the
      register that decides on it: cleared, after the decisions naming it. */
   "scenario_change", "scenario",
-  "report_narrative", "work_item", "gate_criterion", "stakeholder", "comms_plan", "document", "allocation",
+  "report_narrative", "work_item",
+  /* FX-14 (065) : un sprint après les éléments qui y sont planifiés. */
+  "iteration",
+  "gate_criterion", "stakeholder", "comms_plan", "document", "allocation",
   "change_step", "change_request",
   /* REQ-22 (042) : les reconfirmations AVANT le cas qu'elles confirment.
      Trouvée par le contrôle de classe ajouté avec la 048, pas par un

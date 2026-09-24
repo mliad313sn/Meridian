@@ -22,6 +22,56 @@ Nothing yet.
 
 ---
 
+## [5.33.0] — 2026-09-24
+
+**Agile hybrid: sprints, velocity, burndown** (FX-14; docs/41 wave C2,
+migration 065).
+
+### Added
+
+- **Sprints.** Dated sprints per project (planned → active → closed, at
+  most one active, held by the database). Items are planned into them
+  with points (empty = not estimated). A close says where unfinished items
+  go (backlog or a planned sprint) and records the points delivered; a
+  closed sprint is a record, never edited.
+- **Charts, drawn by hand in SVG.** Burndown with its ideal line, burnup
+  (scope vs done) and velocity (average of the last three closed sprints).
+  Days without data are left blank, never interpolated; items done on an
+  unrecorded day are named.
+- **Hybrid option.** A stage may measure its progress from its items'
+  points (done ÷ total), feeding the same percentage earned value already
+  reads — no second rule. Off by default; while on, a typed % is refused
+  (409) on the screen and on `/api/v1/activities`.
+- `iteration.write` in `shared/rbac.js` (project write scope);
+  `PUT /api/v1/iterations/:externalId` (an identical close sent twice
+  writes nothing) and `iteration` / `activity` on `PUT /api/v1/workitems`.
+  Export, import and F13 carry sprints and the new fields.
+
+### Changed
+
+- `work_item.points` may now be empty (not estimated); the default stays
+  1, so existing write paths write what they wrote. A negative or
+  unreadable `points` on `PUT /api/v1/workitems` is refused with 400
+  instead of being floored to 0.
+- `done_at` is back-filled from the audit trail (the last "Work item
+  moved" into Done); an item with no such event keeps no date rather than
+  an invented one.
+
+### Engine (D-41.01)
+
+With the option off, metrics, roll-up and critical path on the seeded
+book equal 5.28.0's; with it on, only that stage's percentage moves.
+
+### Measure
+
+`agile.test.js`: 24 tests (velocity 20/25/30 → 25; burndown 10, 5, 5, 2
+with its ideal 10, 7.5, 5, 2.5, 0; hybrid 5 of 8 points → 63 %). Browser:
+a sprint planned, started and closed; the board filtered by sprint; the
+stage measured from its items at 19 %, back to 83 % when turned off;
+FR and ES; a viewer without controls. Bundle 284.94 kB gzip. `npm run verify`: 1125/1125.
+
+---
+
 ## [5.32.0] — 2026-09-24
 
 **What if — portfolio scenarios that never write the book** (FX-12;

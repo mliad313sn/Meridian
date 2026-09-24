@@ -45,6 +45,15 @@ const CONSTRAINT_MESSAGES = {
   baseline_snapshot_named: "A baseline needs a name",
   baseline_snapshot_name_uniq: "This project already has a baseline of that name — baselines are never overwritten",
   baseline_row_dates_ordered: "A stage cannot end before it starts",
+  /* FX-14 (065) — sprints. The routes refuse first, in these words; the
+     database is the last line for the import and any other path. */
+  iteration_one_active_per_project:
+    "This project already has an active sprint — close it before starting another",
+  iteration_dates_ordered: "A sprint cannot end before it starts",
+  iteration_state_known: "A sprint is planned, active or closed",
+  iteration_closed_is_measured: "A closed sprint records the points it delivered and the day it closed",
+  iteration_done_points_not_negative: "A sprint cannot deliver a negative number of points",
+  work_item_points_not_negative: "Points are a whole number, zero or more — or empty when not estimated",
 };
 
 /** Which table a foreign key points at, in words. */
@@ -63,6 +72,7 @@ const FK_TARGETS = {
   user_id: "user account",
   series_id: "meeting series",
   occurrence_id: "meeting",
+  iteration_id: "sprint",
 };
 
 /**

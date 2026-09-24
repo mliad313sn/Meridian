@@ -225,7 +225,19 @@ const WRITE_DOCS = {
     "`links` — the predecessor list [{ pred, type FS|SS|FF|SF, lag days, negative for a lead }], Meridian " +
     "stage ids of the same project, replaced whole and refused if it closes a loop (FX-01…FX-04)."),
   "PUT /api/v1/workitems/:externalId": upsert("a work item on the board", "write:portfolio",
-    "`column` is a column id or name; `assignee` an id or exact name."),
+    "`column` is a column id or name; `assignee` an id or exact name. `points` is a whole number, zero or " +
+    "more, or null for an item nobody has estimated (a negative number is refused). `iteration` plans it in " +
+    "a sprint of the same project (a Meridian id or an externalId you gave the sprint; \"\" or \"backlog\" " +
+    "for the backlog) — a closed sprint takes no new item. `activity` names the stage it delivers, on the " +
+    "same project: a stage whose progress is measured from its items reads its physical % from their points " +
+    "(FX-14). Moving it into Done stamps when; moving it out clears it."),
+  "PUT /api/v1/iterations/:externalId": upsert("a sprint", "write:portfolio",
+    "A sprint of one `project`, dated `start` → `end`, with an optional `goal`. `state` is planned (the default) " +
+    "or active — one active sprint per project, so starting a second one is refused until the first is " +
+    "closed. `state: \"closed\"` closes it, and then `unfinished` is required: \"backlog\" or a planned sprint of " +
+    "the same project (a Meridian id or yours) — where the items not Done go. The close records the points " +
+    "the sprint delivered, which velocity reads; a closed sprint is a record and is not edited again (409), " +
+    "though the same close sent twice writes nothing. Plan items into a sprint on /workitems (`iteration`)."),
   "PUT /api/v1/criteria/:externalId": upsert("a gate criterion", "write:portfolio",
     "A sentence posed in advance on (project, gate — within the programme's ladder). `met: true` needs " +
     "`reviewedBy`, a named person who does not own the `document` cited; the gate is ready only when every " +
