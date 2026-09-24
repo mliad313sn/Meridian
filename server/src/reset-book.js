@@ -118,6 +118,9 @@ const TABLES = [
   "cross_dep", "activity_dep", "activity", "ext_link",
   "site_window", "rollout_wave", "project",
   "access_grant", "programme", "person", "site",
+  /* FX-02 (061) — working calendars are book data (the export carries
+     them), after the sites and projects that name them. */
+  "work_calendar_exception", "work_calendar",
   "usage_daily",
 ];
 

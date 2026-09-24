@@ -22,6 +22,52 @@ Nothing yet.
 
 ---
 
+## [5.29.0] — 2026-09-24
+
+**The schedule engine: typed links, working calendars, constraints and
+actuals** (FX-01…FX-04; docs/41 wave A1, migration 061).
+
+### Added
+
+- **FX-01 · Typed links with lag.** Links are FS, SS, FF or SF with a lag
+  in days; a negative lag is a lead. Entered in MS Project notation
+  (`A1, A2 SS+3, A3 FF-2`). A loop, a self-link or a stage of another
+  project is refused with 400.
+- **FX-02 · Working calendars.** Working weekdays and dated holidays. A
+  project uses its own calendar, else its site's, else the group default,
+  else calendar days as before. Managed at group level
+  (`calendar.manage` in `shared/rbac.js`); a calendar in use cannot be
+  deleted (409 naming who uses it). The Calendars panel sits on Locations.
+- **FX-03 · Constraints and deadlines** (ASAP, SNET, SNLT, FNET, FNLT,
+  MSO, MFO). They bound the forward and backward passes and never rewrite
+  a date: a violation shows as negative float, in a banner on the stage
+  plan and as a "Schedule" item among the decisions owed.
+- **FX-04 · Actuals and free float.** Actual start and finish, remaining
+  days, a project status date; earned value measured at that date;
+  activities late against it flagged; free float beside total float.
+- The engine is the pure `shared/schedule.js`, which `Engine.criticalPath`
+  delegates to; its `schedule()` takes duration overrides for the Monte
+  Carlo line (FX-11). `/api/v1/activities` accepts actuals, constraints,
+  deadlines and typed links. Export, import and F13 carry every new field.
+
+### Engine (D-05, D-41.01)
+
+A book that uses none of this computes exactly as 5.28.0: `metrics` for
+every project, `roll`, `criticalPath`, `decisions` and `depBreaches` are
+deep-equal on the whole demonstration book against a frozen copy of the
+5.28.0 engine (`server/test/fixtures/engine-5.28.0.js`).
+
+### Measure
+
+`schedule-engine.test.js`: 35 tests with hand-worked examples for every
+link type, lag and lead, a calendar with a weekend and a holiday, each
+constraint, free float, actuals and status-date earned value. Browser: a
+calendar with two holidays, typed links, a missed deadline surfaced in
+the banner, a loop refused in the dialog, FR and ES. Client bundle
+251.91 → 258.75 kB gzip (+6.84 kB). `npm run verify`: 1040/1040.
+
+---
+
 ## [5.28.1] — 2026-09-23
 
 **A row that names no project survives the round trip** (NEW-24; found by

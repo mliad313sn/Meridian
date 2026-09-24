@@ -780,6 +780,12 @@ r.patch("/sites/:id", async (req, res, next) => {
     /* A-12 — le référent du site : quelqu'un de l'annuaire, nommé, que
        l'aide affiche avant de proposer le groupe. */
     if (b.champion !== undefined) patch.champion_id = b.champion || null;
+    /* FX-02 (061) — the working calendar the site's projects inherit. */
+    if (b.calendar !== undefined) {
+      const cal = b.calendar ? await one(`SELECT id FROM work_calendar WHERE id = $1`, [String(b.calendar)]) : null;
+      if (b.calendar && !cal) throw new HttpError(400, `No such calendar: ${b.calendar}`);
+      patch.calendar_id = cal ? cal.id : null;
+    }
     if (b.active !== undefined) patch.active = !!b.active;
     /* V-07 — a site is a link and a state of readiness, not only a clock.
        These are what a rollout plan actually depends on. */

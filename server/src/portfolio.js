@@ -129,6 +129,12 @@ export async function loadPortfolio(user, { inactive = false } = {}) {
   ]);
   // absences and deputies (015 / R-02) — a people fact, like the calendar
   const absences = await many(`SELECT * FROM person_absence ORDER BY starts_on, id`);
+  /* FX-02 (061) — the working calendars. A group fact, like the plant
+     windows: a holiday at a site is a fact for everyone planning there. */
+  const [calendarRows, calendarDays] = await Promise.all([
+    many(`SELECT * FROM work_calendar ORDER BY name, id`),
+    many(`SELECT * FROM work_calendar_exception ORDER BY calendar_id, on_date`),
+  ]);
 
   const projectRows = await many(
     `SELECT p.* FROM project p WHERE ${scope.sql} ORDER BY p.name, p.id`,
@@ -273,9 +279,15 @@ export async function loadPortfolio(user, { inactive = false } = {}) {
   }
 
   const depsByActivity = new Map();
+  const linksByActivity = new Map();
   for (const d of deps) {
     if (!depsByActivity.has(d.activity_id)) depsByActivity.set(d.activity_id, []);
     depsByActivity.get(d.activity_id).push(d.predecessor_id);
+    /* FX-01 — the same list, typed. `deps` stays as it was (the contract
+       every reader of 5.28.0 knows); `links` says FS/SS/FF/SF and lag. */
+    if (!linksByActivity.has(d.activity_id)) linksByActivity.set(d.activity_id, []);
+    linksByActivity.get(d.activity_id).push({
+      pred: d.predecessor_id, type: d.type ?? "FS", lag: Number(d.lag_days ?? 0) });
   }
   const stepsByCr = new Map();
   for (const s of stepRows) {
@@ -327,8 +339,19 @@ export async function loadPortfolio(user, { inactive = false } = {}) {
       readinessNote: s.readiness_note ?? "",
       /* A-12 — la personne du site qu'on appelle en premier. */
       champion: s.champion_id ?? null,
+      // FX-02 — the calendar its projects inherit
+      calendar: s.calendar_id ?? null,
       active: s.active !== false,
       version: s.row_version,
+    })),
+
+    /* FX-02 — working calendars: weekday mask and dated non-working days. */
+    calendars: calendarRows.map((c) => ({
+      id: c.id, name: c.name, workdays: Number(c.work_days), isDefault: c.is_default === true,
+      note: c.note ?? "",
+      holidays: calendarDays.filter((x) => x.calendar_id === c.id)
+        .map((x) => ({ date: x.on_date, label: x.label ?? "" })),
+      version: c.row_version,
     })),
 
     /* The plant's calendar (V-03). Site-wide, so it is not scoped by
@@ -408,6 +431,10 @@ export async function loadPortfolio(user, { inactive = false } = {}) {
       rank: p.rank_seq ?? null,
       /* I-2 — d'où vient cette ligne, quand un système branché l'a créée. */
       externalSource: p.external_source ?? null, externalId: p.external_id ?? null,
+      /* FX-02 / FX-04 — its own calendar (null: inherited) and the date
+         its schedule and earned value are measured at (null: the
+         portfolio's, as before 061). */
+      calendar: p.calendar_id ?? null, statusDate: p.status_date ?? null,
       version: p.row_version,
     })),
 
@@ -433,6 +460,14 @@ export async function loadPortfolio(user, { inactive = false } = {}) {
       start: a.start_date, end: a.end_date, baseStart: a.base_start, baseEnd: a.base_end,
       weight: Number(a.weight), pct: a.pct, owner: a.owner_id,
       deps: depsByActivity.get(a.id) ?? [],
+      /* FX-01 / FX-03 / FX-04 (061) — typed links, the date constraint
+         (null for ASAP), the deadline, the actuals and what remains. */
+      links: linksByActivity.get(a.id) ?? [],
+      constraint: a.constraint_type && a.constraint_type !== "ASAP"
+        ? { type: a.constraint_type, date: a.constraint_date } : null,
+      deadline: a.deadline ?? null,
+      actualStart: a.actual_start ?? null, actualFinish: a.actual_finish ?? null,
+      remaining: a.remaining_days ?? null,
       /* I-5 — qui a mesuré cet avancement, et quand ; vide = saisi ici. */
       progressSource: a.progress_source ?? "", progressAt: a.progress_at ?? null,
       externalSource: a.external_source ?? null, externalId: a.external_id ?? null,

@@ -14,11 +14,6 @@
  * roll-up — is the original arithmetic.
  */
 
-/* FX-01…FX-04 (docs/41) — the critical path is computed by the pure
-   scheduler in ./schedule.js, which reproduces the 5.28.0 pass exactly
-   when every link is FS/0 and nothing else is set (D-41.01). */
-import { schedule } from "./schedule.js";
-
 /* ── dates ────────────────────────────────────────────────────────── */
 export const DAY = 86400000;
 export const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -187,19 +182,14 @@ export const Engine = {
   project: (db, id) => db.projects.find(p => p.id === id) || null,
   site: (db, id) => db.sites.find(s => s.id === id) || null,
   programme: (db, id) => db.programmes.find(p => p.id === id) || null,
-  /* FX-01…FX-04 — every activity also carries its typed links and its
-     tracking fields; a book written before 061 (or a hand-built one)
-     reads as FS/0 with nothing set. `deps` is unchanged. */
-  activities: (db, id) => db.activities.filter(a => a.project === id).sort(by("start")).map(schedFields),
+  activities: (db, id) => db.activities.filter(a => a.project === id).sort(by("start")),
   milestones: (db, id) => db.milestones.filter(m => m.project === id).sort(by("date")),
 
   /* ── earned value ───────────────────────────────────────────────── */
   metrics(db, projectId) {
     const p = Engine.project(db, projectId);
     if (!p) return null;
-    /* FX-04 — earned value at the PROJECT's status date when one is set;
-       without it, the portfolio's, exactly as before. */
-    const today = p.statusDate || db.statusDate;
+    const today = db.statusDate;
     const acts = Engine.activities(db, projectId);
     const bac = p.budget;
 
@@ -314,22 +304,26 @@ export const Engine = {
   /* ── critical path ──────────────────────────────────────────────── */
   criticalPath(db, projectId) {
     const acts = Engine.activities(db, projectId);
-    const p = Engine.project(db, projectId);
-    const cal = Engine.calendarFor(db, p);
-    const r = schedule(acts, { calendar: cal, statusDate: (p && p.statusDate) || null });
-    return { critical: r.critical, float: r.float, projEnd: r.projEnd, es: r.es, ef: r.ef, ls: r.ls, lf: r.lf,
-      freeFloat: r.freeFloat, negative: r.negative, calendar: cal ? cal.id : null,
-      missed: r.missed, late: r.late, dates: r.dates, origin: r.origin };
-  },
+    const byId = Object.fromEntries(acts.map(a => [a.id, a]));
+    const es = {}, ef = {}, ls = {}, lf = {};
+    const dur = a => Math.max(1, days(a.start, a.end));
+    const origin = acts.length ? Math.min(...acts.map(a => D(a.start).getTime())) : 0;
+    const toDay = t => Math.round((t - origin) / DAY);
 
-  /* FX-02 — the working calendar a project is scheduled on: its own, else
-     its site's, else the group default, else none (calendar days). */
-  calendarFor(db, p) {
-    if (!p) return null;
-    const cals = db.calendars || [];
-    if (!cals.length) return null;
-    const find = (id) => (id ? cals.find(c => c.id === id) : null);
-    return find(p.calendar) || find((Engine.site(db, p.site) || {}).calendar) || cals.find(c => c.isDefault) || null;
+    const order = Engine.topo(acts);
+    order.forEach(a => {
+      const preds = a.deps.map(d => byId[d]).filter(Boolean);
+      es[a.id] = preds.length ? Math.max(...preds.map(p => ef[p.id])) : toDay(D(a.start).getTime());
+      ef[a.id] = es[a.id] + dur(a);
+    });
+    const projEnd = acts.length ? Math.max(...acts.map(a => ef[a.id])) : 0;
+    [...order].reverse().forEach(a => {
+      const succs = acts.filter(x => x.deps.includes(a.id));
+      lf[a.id] = succs.length ? Math.min(...succs.map(s => ls[s.id])) : projEnd;
+      ls[a.id] = lf[a.id] - dur(a);
+    });
+    const float = {}; acts.forEach(a => { float[a.id] = ls[a.id] - es[a.id]; });
+    return { critical: new Set(acts.filter(a => float[a.id] <= 0).map(a => a.id)), float, projEnd, es, ef, ls, lf };
   },
 
   topo(acts) {
@@ -356,10 +350,6 @@ export const Engine = {
     acts.forEach(a => a.deps.forEach(d => {
       const pre = byId[d];
       if (!pre) return;
-      /* FX-01 — only a finish-to-start link says "after it ends"; an SS or
-         FF successor overlaps its predecessor by design. */
-      const typed = (a.links || []).find(l => l.pred === d);
-      if (typed && typed.type && typed.type !== "FS") return;
       const now = days(pre.end, a.start);
       const agreed = (pre.baseEnd && a.baseStart) ? days(pre.baseEnd, a.baseStart) : 0;
       if (now < Math.min(0, agreed) - 5)
@@ -1191,21 +1181,6 @@ export const Engine = {
         route: "#/meetings", entity: "decision_objection", entityId: o.id });
     });
 
-    /* FX-03 — a missed deadline or a violated constraint, named. Absent
-       unless one is set: a book without them adds nothing here. */
-    list.forEach(p => {
-      if (p.closed) return;
-      const acts = Engine.activities(db, p.id);
-      if (!acts.some(a => a.deadline || a.constraint)) return;
-      const cp = Engine.criticalPath(db, p.id);
-      const bad = acts.filter(a => cp.negative.includes(a.id) || cp.missed.includes(a.id));
-      if (!bad.length) return;
-      out.push({ kind: "Schedule", title: bad.map(a => a.name).slice(0, 3).join(", ") + " · " + p.name,
-        meta: cp.missed.length ? cp.missed.length + " deadline(s) missed"
-          : "negative float " + Math.min(...bad.map(a => cp.float[a.id])) + "d",
-        urgent: cp.missed.length > 0, route: "#/project/" + p.id, entity: "project", entityId: p.id });
-    });
-
     if (db.settings.capacityAlerts) {
       const over = Engine.overAllocated(db, 8);
       if (over.length) out.push({ kind: "Resourcing",
@@ -1255,16 +1230,5 @@ export const Engine = {
     return out;
   },
 };
-
-/* FX-01…FX-04 — the fields the scheduler reads, defaulted where absent.
-   Set in place and only when missing, so a serialised book keeps what it
-   carries and a hand-built one gains FS/0 and nulls. */
-function schedFields(a) {
-  if (a.links === undefined) a.links = (a.deps || []).map(pred => ({ pred, type: "FS", lag: 0 }));
-  for (const k of ["constraint", "deadline", "actualStart", "actualFinish", "remaining"]) {
-    if (a[k] === undefined) a[k] = null;
-  }
-  return a;
-}
 
 export default Engine;

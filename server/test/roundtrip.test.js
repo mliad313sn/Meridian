@@ -354,6 +354,23 @@ const ENRICH = [
                                   state, resolution, raised_by)
    VALUES ('OBJ-901', 'DEC-901', 'SE-901', 'safety', 'Night work on live plant needs a permit',
            '2026-07-15', '2026-07-22', 'resolved', 'Permit-to-work added to the plan', ${PE1})`,
+
+  /* FX-01…FX-04 (061) — the schedule engine's inputs, none of which the
+     seed sets (D-41.01): a working calendar with a holiday, made the
+     group default and named by a site and a project; a project status
+     date; a typed link with lag; a constraint, a deadline, actuals and
+     remaining days on a stage. */
+  `INSERT INTO work_calendar (id, name, work_days, is_default, note)
+   VALUES ('CAL-901', 'Probe site calendar', 62, true, 'Monday to Friday, local holidays')`,
+  `INSERT INTO work_calendar_exception (calendar_id, on_date, label) VALUES ('CAL-901', '2026-12-25', 'Christmas')`,
+  `UPDATE site SET calendar_id = 'CAL-901' WHERE id = ${SITE}`,
+  `UPDATE project SET calendar_id = 'CAL-901', status_date = '2026-08-20' WHERE id = ${P1}`,
+  `UPDATE activity_dep SET type = 'SS', lag_days = -2
+    WHERE (activity_id, predecessor_id) = (SELECT activity_id, predecessor_id FROM activity_dep
+                                             ORDER BY activity_id, predecessor_id LIMIT 1)`,
+  `UPDATE activity SET constraint_type = 'SNET', constraint_date = '2026-03-02', deadline = '2026-12-31',
+          actual_start = start_date, actual_finish = start_date + 3, remaining_days = 4
+    WHERE id = (SELECT min(id) FROM activity)`,
 ];
 
 describe("F13 · export → import → export", () => {

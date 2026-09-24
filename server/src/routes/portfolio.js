@@ -25,6 +25,7 @@ import { sweepExceptions } from "../exceptions.js";
 import { isEvidenceLocator, EVIDENCE_REFUSAL, humanActRefusal } from "../evidence.js";
 import { assertCaseReconfirmed, deltaAgainst, reconfirmationsFor } from "../value.js";
 import { prioritise, INPUTS } from "../../../shared/prioritise.js";
+import { linksFor, linkLabel, trackingPatch, bumpVersion, calendarRef } from "../schedwrite.js";
 
 
 const r = Router();
@@ -308,6 +309,11 @@ r.patch("/projects/:id", async (req, res, next) => {
     if (b.acceptanceCriteria !== undefined) {
       patch.acceptance_criteria = String(b.acceptanceCriteria ?? "").slice(0, 4000);
     }
+    /* FX-02 / FX-04 (061) — the working calendar (empty: inherit) and the
+       date the schedule and earned value are measured at (empty: the
+       portfolio's). Both are the project's own business: project.write. */
+    if (b.calendar !== undefined) patch.calendar_id = await calendarRef(b.calendar);
+    if (b.statusDate !== undefined) patch.status_date = isoDay(b.statusDate, "statusDate");
 
     /* Moving the window re-stretches the activities but leaves the
        baseline alone: re-planning is not re-baselining, and merging the
@@ -515,10 +521,36 @@ r.patch("/activities/:id", async (req, res, next) => {
     if (b.end !== undefined) patch.end_date = b.end;
     if (b.pct !== undefined) patch.pct = Math.max(0, Math.min(100, Math.round(num(b.pct))));
     if (b.owner !== undefined) patch.owner_id = b.owner || null;
+    /* FX-03 / FX-04 (061) — the constraint, the deadline, the actuals. */
+    Object.assign(patch, trackingPatch(b, a));
+    /* FX-01 — the predecessor list, typed, replaced whole. */
+    const links = b.links !== undefined ? await linksFor(a, b.links) : null;
+    const before = links ? await many(
+      `SELECT predecessor_id AS pred, type, lag_days AS lag FROM activity_dep
+        WHERE activity_id = $1 ORDER BY predecessor_id`, [a.id]) : null;
+    if (!links && !Object.keys(patch).length) bad("Nothing recognisable to change — check the field names");
 
     const out = await audited(req.user,
-      { action: "Activity updated", entity: "activity", entityId: a.id, detail: b.name ?? a.name },
-      async (t) => conflict(await updateVersioned(t, "activity", a.id, requiredVersion(b, "stage"), patch)));
+      links
+        ? { action: "Activity updated", entity: "activity", entityId: a.id,
+            detail: (b.name ?? a.name) + " · predecessors " + (links.map(linkLabel).join(", ") || "none"),
+            before: { links: before }, after: { links } }
+        : { action: "Activity updated", entity: "activity", entityId: a.id, detail: b.name ?? a.name },
+      async (t) => {
+        const version = requiredVersion(b, "stage");
+        const rv = Object.keys(patch).length
+          ? conflict(await updateVersioned(t, "activity", a.id, version, patch))
+          : conflict(await bumpVersion(t, "activity", a.id, version));
+        if (links) {
+          await t.query(`DELETE FROM activity_dep WHERE activity_id = $1`, [a.id]);
+          for (const l of links) {
+            await t.query(
+              `INSERT INTO activity_dep (activity_id, predecessor_id, type, lag_days) VALUES ($1,$2,$3,$4)`,
+              [a.id, l.pred, l.type, l.lag]);
+          }
+        }
+        return rv;
+      });
     res.json({ version: out.version });
   } catch (e) { next(e); }
 });
@@ -776,6 +808,8 @@ r.post("/activities", async (req, res, next) => {
        project's earned value out of nothing. */
     const weight = Math.max(0, Math.min(0.9, num(b.weight, 0.05)));
     const scale = 1 - weight;
+    const typedLinks = b.links !== undefined
+      ? await linksFor({ id, project_id: p.id }, b.links) : [];
 
     await audited(req.user,
       { action: "Stage added", entity: "activity", entityId: id, detail: b.name },
@@ -797,6 +831,14 @@ r.post("/activities", async (req, res, next) => {
           await t.query(
             `INSERT INTO activity_dep (activity_id, predecessor_id) VALUES ($1,$2)
              ON CONFLICT DO NOTHING`, [id, dep]);
+        }
+        /* FX-01 — or typed: [{ pred, type, lag }]. A new stage has no
+           successor yet, so it cannot close a loop. */
+        for (const l of typedLinks) {
+          await t.query(
+            `INSERT INTO activity_dep (activity_id, predecessor_id, type, lag_days) VALUES ($1,$2,$3,$4)
+             ON CONFLICT (activity_id, predecessor_id) DO UPDATE SET type = EXCLUDED.type, lag_days = EXCLUDED.lag_days`,
+            [id, l.pred, l.type, l.lag]);
         }
       });
     res.status(201).json({ id });
@@ -4325,6 +4367,121 @@ r.post("/decisions/:id/ratify", async (req, res, next) => {
       async (t) => conflict(await updateVersioned(t, "meeting_decision", d.id,
         requiredVersion(b, "decision"), { status: "Ratified", ratified_by: ratifier, ratified_on: on })));
     res.json({ ok: true, id: d.id, version: out.version ?? null });
+  } catch (e) { next(e); }
+});
+
+/* ── FX-01…FX-04 (061) · the schedule engine's inputs ─────────────── */
+
+/* FX-02 — working calendars. `calendar.manage` (shared/rbac.js) decides
+   who; the list of dated non-working days is replaced whole, under the
+   calendar's own row_version. */
+function calendarBody(b, { creating }) {
+  const patch = {};
+  if (b.name !== undefined || creating) {
+    const name = String(b.name ?? "").trim().slice(0, 120);
+    if (!name) bad("A calendar needs a name");
+    patch.name = name;
+  }
+  if (b.workdays !== undefined || creating) {
+    const m = b.workdays === undefined ? 62 : Number(b.workdays);
+    if (!Number.isInteger(m) || m < 1 || m > 127) bad("A calendar works at least one weekday (workdays is a mask from 1 to 127; Monday–Friday is 62)");
+    patch.work_days = m;
+  }
+  if (b.isDefault !== undefined) patch.is_default = !!b.isDefault;
+  if (b.note !== undefined) patch.note = String(b.note ?? "").slice(0, 1000);
+  let holidays = null;
+  if (b.holidays !== undefined) {
+    if (!Array.isArray(b.holidays)) bad("holidays is a list of { date, label }");
+    if (b.holidays.length > 1000) bad("At most 1000 dated non-working days per calendar");
+    const seen = new Set();
+    holidays = b.holidays.map((h) => {
+      const date = isoDay(typeof h === "string" ? h : h?.date, "a holiday date");
+      if (!date) bad("Each non-working day needs a date");
+      if (seen.has(date)) bad(`${date} is listed twice`);
+      seen.add(date);
+      return { date, label: String((typeof h === "string" ? "" : h?.label) ?? "").slice(0, 120) };
+    });
+  }
+  return { patch, holidays };
+}
+
+async function writeHolidays(t, id, holidays) {
+  await t.query(`DELETE FROM work_calendar_exception WHERE calendar_id = $1`, [id]);
+  for (const h of holidays) {
+    await t.query(
+      `INSERT INTO work_calendar_exception (calendar_id, on_date, label) VALUES ($1,$2,$3)`,
+      [id, h.date, h.label]);
+  }
+}
+
+r.post("/calendars", async (req, res, next) => {
+  try {
+    gate(req.user, "calendar.manage", {});
+    const b = req.body ?? {};
+    const { patch, holidays } = calendarBody(b, { creating: true });
+    let id = null;
+    await audited(req.user,
+      () => ({ action: "Calendar created", entity: "work_calendar", entityId: id,
+               detail: `${patch.name} · ${(holidays ?? []).length} non-working day(s)` + (patch.is_default ? " · group default" : "") }),
+      async (t) => {
+        id = await allocateId(t, "CAL");
+        if (patch.is_default) await t.query(`UPDATE work_calendar SET is_default = false, row_version = row_version + 1 WHERE is_default`);
+        await t.query(
+          `INSERT INTO work_calendar (id, name, work_days, is_default, note) VALUES ($1,$2,$3,$4,$5)`,
+          [id, patch.name, patch.work_days, !!patch.is_default, patch.note ?? ""]);
+        if (holidays) await writeHolidays(t, id, holidays);
+      });
+    res.status(201).json({ id });
+  } catch (e) { next(e); }
+});
+
+r.patch("/calendars/:id", async (req, res, next) => {
+  try {
+    gate(req.user, "calendar.manage", {});
+    const c = await one(`SELECT * FROM work_calendar WHERE id = $1`, [req.params.id]);
+    if (!c) throw new HttpError(404, "No such calendar");
+    const b = req.body ?? {};
+    const { patch, holidays } = calendarBody(b, { creating: false });
+    if (!Object.keys(patch).length && !holidays) bad("Nothing recognisable to change — check the field names");
+    const out = await audited(req.user,
+      { action: "Calendar updated", entity: "work_calendar", entityId: c.id,
+        detail: (patch.name ?? c.name) + (holidays ? ` · ${holidays.length} non-working day(s)` : "") +
+          (patch.work_days !== undefined && patch.work_days !== c.work_days ? ` · weekdays ${c.work_days} → ${patch.work_days}` : ""),
+        before: { work_days: c.work_days, is_default: c.is_default }, after: { ...patch } },
+      async (t) => {
+        const version = requiredVersion(b, "calendar");
+        if (patch.is_default) {
+          await t.query(`UPDATE work_calendar SET is_default = false, row_version = row_version + 1 WHERE is_default AND id <> $1`, [c.id]);
+        }
+        const rv = Object.keys(patch).length
+          ? conflict(await updateVersioned(t, "work_calendar", c.id, version, patch))
+          : conflict(await bumpVersion(t, "work_calendar", c.id, version));
+        if (holidays) await writeHolidays(t, c.id, holidays);
+        return rv;
+      });
+    res.json({ version: out.version });
+  } catch (e) { next(e); }
+});
+
+r.delete("/calendars/:id", async (req, res, next) => {
+  try {
+    gate(req.user, "calendar.manage", {});
+    const c = await one(`SELECT * FROM work_calendar WHERE id = $1`, [req.params.id]);
+    if (!c) throw new HttpError(404, "No such calendar");
+    /* In use, it stays: a schedule does not change because a calendar
+       disappeared from under it. Say who uses it. */
+    const users = await many(
+      `SELECT id FROM project WHERE calendar_id = $1 UNION ALL SELECT id FROM site WHERE calendar_id = $1 ORDER BY 1`, [c.id]);
+    if (users.length) {
+      throw new HttpError(409, `${c.name} is used by ${users.map((u) => u.id).slice(0, 8).join(", ")}` +
+        (users.length > 8 ? ` and ${users.length - 8} more` : "") + " — give them another calendar first");
+    }
+    const days = await many(`SELECT on_date, label FROM work_calendar_exception WHERE calendar_id = $1 ORDER BY on_date`, [c.id]);
+    await audited(req.user,
+      { action: "Calendar removed", entity: "work_calendar", entityId: c.id, detail: c.name,
+        before: { name: c.name, work_days: c.work_days, is_default: c.is_default, note: c.note, holidays: days } },
+      async (t) => t.query(`DELETE FROM work_calendar WHERE id = $1`, [c.id]));
+    res.json({ ok: true });
   } catch (e) { next(e); }
 });
 

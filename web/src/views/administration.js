@@ -23,6 +23,7 @@ import { t } from "../lib/i18n.js";
 import { Engine, fmtDate, money, uniq, GATES, parseGateLadder, formatGateLadder } from "../../../shared/engine.js";
 import { isTeam, placesOf, teamsOf } from "../../../shared/sitekind.js";
 import { unitLabel } from "../lib/units.js";
+import { siteCalendarField } from "./schedule.js";
 
 /* Fetched on demand; invalidated by every write below. */
 const state = { users: null, loading: false, q: "", tab: "accounts" };
@@ -785,6 +786,8 @@ function siteDialog(db, s) {
       { key: "fte", label: "FTE", type: "number", min: 0, value: s ? s.fte : 0 },
       { key: "charter", label: "What this site does", type: "textarea", rows: 2, span: 2,
         value: s ? s.role : "" },
+      /* FX-02 — the calendar this site's projects inherit when they name none. */
+      ...(s ? [siteCalendarField(db, s)] : []),
     ],
     saveLabel: s ? (team ? t("Save team") : "Save site") : t("Add"),
     onSave: (v) => {
@@ -798,6 +801,7 @@ function siteDialog(db, s) {
               city: v.city, region: v.region, country: v.country, legalEntity: v.legalEntity,
               tz, tzName,
               headcount: Number(v.headcount), fte: Number(v.fte), charter: v.charter,
+              calendar: v.calendar || null,
               version: s.version })
           : a.post("/admin/sites", {
               id: v.id, kind: v.kind, city: v.city, region: v.region, country: v.country, legalEntity: v.legalEntity,

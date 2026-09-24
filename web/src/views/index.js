@@ -57,6 +57,7 @@ import { meetingsView, invalidateMeetings } from "./meetings.js";
    objections, and what a decision costs to reverse. */
 import { assuranceFolds, objectionsFor, decisionFields, decisionFacts } from "./registers.js";
 import { accessPanel, directoryPanel, referencePanel, federationPanel, notificationsPanel, importPanel, continuityPanel, integrationsPanel, invalidateAdmin } from "./administration.js";
+import { stageScheduleFields, stageScheduleBody, stageScheduleCols, scheduleSignals, scheduleAlarm, projectScheduleFields, projectScheduleBody, calendarsPanel } from "./schedule.js";
 
 export const Views = {};
 
@@ -1105,7 +1106,7 @@ export async function showRelevantLessons(projectId) {
 
 function editProject(db, p) {
   formDialog({
-    title: "Edit project", kicker: p.id, wide: true, fields: projectFields(db, p), saveLabel: "Save changes",
+    title: "Edit project", kicker: p.id, wide: true, fields: projectFields(db, p).concat(projectScheduleFields(db, p)), saveLabel: "Save changes",
     onSave: (v) => App.write("Project updated", (a) => a.patch("/projects/" + p.id, {
       name: v.name, programme: v.programme, site: v.site,
       governanceLevel: v.governanceLevel, pm: v.pm, method: v.method,
@@ -1113,6 +1114,7 @@ function editProject(db, p) {
       contingency: +v.contingency || 0, desc: v.desc,
       dateBasis: v.dateBasis, condition: v.condition,
       sponsor: v.sponsor || null, acceptanceCriteria: v.acceptanceCriteria,
+      ...projectScheduleBody(v),
       version: p.version,
     }), { detail: p.id + " · " + v.name }),
   });
@@ -1401,7 +1403,7 @@ Views.project = (db) => {
       false, plantBlock(db, p)),
     fold(t("Stage plan"),
       acts.length + t(" stages") + " · " + cp.critical.size + t(" on the critical path"),
-      false,
+      scheduleAlarm(cp), scheduleSignals(db, p, cp),
       sectionHead("Stage plan", acts.length + " stages · " + cp.critical.size + " on the critical path",
         may("schedule.write", p) && !fromSdp(p)
           ? h("button", { class: "btn btn-sm", onClick: () => addActivity(db, p, acts) }, icon("plus", 12), "Stage")
@@ -1417,6 +1419,7 @@ Views.project = (db) => {
         { key: "w", label: "Weight", align: "r", get: a => h("span", { class: "mono small" }, pct(a.weight)) },
         { key: "s", label: "Window", get: a => h("span", { class: "mono small" }, fmtDate(a.start) + " → " + fmtDate(a.end)) },
         { key: "f", label: "Float", align: "r", get: a => h("span", { class: "mono small" }, (cp.float[a.id] || 0) + "d") },
+        ...stageScheduleCols(cp),
         { key: "p", label: "Progress", width: "110px", get: a => h("div", null,
             h("div", { class: "bar-lbl mono" }, h("span", null, a.pct + "%")),
             meter(a.pct / 100, cp.critical.has(a.id) ? "var(--color-accent)" : "var(--color-text)", "thin")) },
@@ -1947,10 +1950,12 @@ function editActivity(db, a) {
       { hint: t("The share of the work actually done — every schedule index is computed from this one number."),
         key: "pct", label: "Progress (%)", type: "number", min: 0, max: 100, value: a.pct },
       { key: "owner", label: "Owner", type: "select", value: a.owner, options: db.people.map(x => ({ value: x.id, label: x.name })) },
+      ...stageScheduleFields(db, a),
     ],
     saveLabel: "Save stage",
     onSave: (v) => App.write("Stage updated", (x) => x.patch("/activities/" + a.id, {
-      name: v.name, start: v.start, end: v.end, pct: +v.pct, owner: v.owner, version: a.version,
+      name: v.name, start: v.start, end: v.end, pct: +v.pct, owner: v.owner,
+      ...stageScheduleBody(v, a, db), version: a.version,
     }), { detail: v.name }),
   });
 }
@@ -6542,6 +6547,8 @@ Views.locations = (db) => {
           teams.map(x => x.city).join(" · ")) : null,
         h("div", { style: "height:26px" }), h("hr", { class: "hr" }), h("div", { style: "height:18px" }),
         windowsBlock(db),
+        /* FX-02 — the working calendars sites and projects are scheduled on */
+        h("div", { style: "height:26px" }), calendarsPanel(db),
 
         h("div", { style: "height:26px" }), h("hr", { class: "hr" }), h("div", { style: "height:18px" }),
         sectionHead("Working-hour overlap", "09:00–17:30 local, both ends"),
