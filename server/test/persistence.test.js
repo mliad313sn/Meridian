@@ -127,7 +127,12 @@ describe("schema and migrations (R2.2, R2.7)", () => {
           working calendars, date constraints and deadlines, actuals,
           remaining days and a project status date. Every default is the
           5.28.0 behaviour (D-41.01). */
-       "061_the_schedule_engine.sql"]);
+       "061_the_schedule_engine.sql",
+       /* 062 - docs/41 wave A2: FX-05, a stage may name a parent stage
+          of its project (no cycle, a summary carries no link); FX-07,
+          named baselines, read-only once taken, eleven at most. 061 and
+          063-065 are reserved for the other waves of docs/41 section 4. */
+       "062_a_plan_has_a_shape.sql"]);
     const again = await migrate({ silent: true });
     assert.deepEqual(again, [], "a second run applies nothing");
   });

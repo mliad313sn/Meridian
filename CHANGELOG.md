@@ -22,6 +22,51 @@ Nothing yet.
 
 ---
 
+## [5.30.0] — 2026-09-24
+
+**A plan has a shape and a memory: WBS, Gantt, named baselines**
+(FX-05…FX-07; docs/41 wave A2, migration 062).
+
+### Added
+
+- **FX-05 · Work breakdown.** A stage may roll up into another stage of
+  its project. A summary's dates, weight and progress are computed from
+  its children and never entered; it carries no link and no weight of its
+  own, so earned value is never counted twice (proved by test). Stages
+  are numbered 1, 1.1, 1.1.2 and fold. Triggers enforce same project, no
+  cycle, and no link on a summary on every write path, import included.
+  `PATCH /api/activities/:id/parent` (schedule authority, audited,
+  versioned); a stage's weight passes to its first child.
+- **FX-06 · Gantt.** A hand-drawn SVG Gantt on the project view, with no
+  library: bars and progress, milestone and gate diamonds, arrows for
+  FS/SS/FF/SF links (5.29.0), the critical path, the baseline ghost bar
+  and the status date, with folding. A bar moves by dragging, or with
+  ← → then Enter, through the audited stage route and its version, and
+  only where the account may plan the project; a stale version is
+  refused, said, and the bar returns.
+- **FX-07 · Named baselines.** Up to eleven per project, read-only once
+  taken (the database refuses an update), compared stage by stage with
+  the plan or with each other. Taking one never moves the governed
+  baseline, which only change control moves (new action
+  `baseline.snapshot`, project write authority).
+- Export, import and F13 carry the tree and the baselines.
+
+### Engine (D-41.01)
+
+With no parent set anywhere, metrics, roll-up, curve, dependency breaches
+and the seven 5.28.0 keys of the critical path equal 5.28.0's, against a
+frozen copy of that engine. The critical path's new keys from 5.29.0 are
+additive by contract; the A2 proof compares the original keys.
+
+### Measure
+
+`plan-shape.test.js`: 16 tests (hand-worked roll-ups, three-level
+numbering, no double counting on engine and route). Browser: drag,
+stale-version refusal, keyboard move, folding, baselines taken and
+compared, four roles. Bundle +6.98 kB gzip (265.60 kB with A1). `npm run verify`: 1056/1056.
+
+---
+
 ## [5.29.0] — 2026-09-24
 
 **The schedule engine: typed links, working calendars, constraints and

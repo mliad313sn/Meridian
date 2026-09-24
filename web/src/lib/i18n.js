@@ -19,6 +19,7 @@
  */
 
 import { ES, ES_FRAG } from "./es.js";
+import { PLAN_FR } from "./i18n-plan.js";
 
 const KEY = "meridian-lang";
 
@@ -164,6 +165,7 @@ export function tData(s) {
 /* ── the dictionary ─────────────────────────────────────────────────── */
 
 export const FR = {
+  ...PLAN_FR,   // docs/41 A2 — the breakdown, the Gantt, named baselines
   "Some business cases state no expected cost, so their spend is in no comparison either":
     "Certains cas d'affaire n'énoncent aucun coût attendu : leur dépense n'entre dans aucune comparaison non plus",
   "benefit-review": "revue de bénéfice",

@@ -514,6 +514,11 @@ r.patch("/activities/:id", async (req, res, next) => {
     gate(req.user, "schedule.write", { project: p });
     assertLocalOrigin(a, "stage");
     const b = req.body ?? {};
+    /* FX-05 — a summary's window and progress are its children's. */
+    if ((b.start !== undefined || b.end !== undefined || b.pct !== undefined) &&
+        await one(`SELECT 1 AS x FROM activity WHERE parent_id = $1 LIMIT 1`, [a.id])) {
+      bad(`${a.name} is a summary stage — its dates and progress are computed from the stages under it; change those instead`);
+    }
 
     const patch = {};
     if (b.name !== undefined) patch.name = b.name;
@@ -854,6 +859,10 @@ r.delete("/activities/:id", async (req, res, next) => {
     assertLocalOrigin(a, "stage");
     if (a.pct > 0) {
       throw new HttpError(409, "That stage has reported progress — set it to 0% first if it really is being removed");
+    }
+    /* FX-05 — a summary goes when its children have gone or moved. */
+    if (await one(`SELECT 1 AS x FROM activity WHERE parent_id = $1 LIMIT 1`, [a.id])) {
+      throw new HttpError(409, "That stage is a summary — move or remove the stages under it first");
     }
     const rest = await many(
       `SELECT id, weight FROM activity WHERE project_id = $1 AND id <> $2`, [p.id, a.id]);

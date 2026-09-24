@@ -108,6 +108,10 @@ export const ACTIONS = [
   /* FX-02 (docs/41) : les calendriers ouvrés — quels jours on travaille,
      quels jours fériés. Voir le `case` plus bas pour le niveau. */
   "calendar.manage",
+  /* FX-07 (docs/41) — taking a NAMED snapshot of a project's plan. Not
+     `project.baseline`: that one moves the governed reference and the
+     variance steering reads; a snapshot moves nothing. See its `case`. */
+  "baseline.snapshot",
   // system
   "user.manage", "settings.write", "data.export", "data.import",
 ];
@@ -812,6 +816,18 @@ export function can(user, action, resource = {}) {
         return deny("you took the decision this objection is against — someone else answers it; ask your programme office");
       }
       return allow();
+
+    /* FX-07 — a named baseline is a photograph of the plan, taken by
+       whoever runs the plan. It is deliberately NOT group-only like
+       `project.baseline`: a snapshot never touches base_start/base_end,
+       so it cannot erase a variance or move a committed date — only the
+       change chain does that. It is read-only once taken, and the trail
+       names who took it and why. Project write authority, therefore,
+       and nothing less: a reader cannot fill a project's eleven slots. */
+    case "baseline.snapshot":
+      return canWriteProject(user, resource.project)
+        ? allow()
+        : outsideProject(user, resource.project);
 
     default:
       // Every remaining write is project-scoped.

@@ -18,7 +18,10 @@
  * entrée ES fait échouer la construction comme pour le FR.
  */
 
+import { PLAN_ES } from "./i18n-plan.js";
+
 export const ES = {
+  ...PLAN_ES,   // docs/41 A2 — the breakdown, the Gantt, named baselines
   "Some business cases state no expected cost, so their spend is in no comparison either":
     "Algunos casos de negocio no declaran coste previsto, así que su gasto tampoco entra en ninguna comparación",
   "benefit-review": "revisión de beneficio",

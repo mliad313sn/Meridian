@@ -115,6 +115,9 @@ const TABLES = [
      service qu'il rend. */
   "raid_review",
   "cost_line", "raid_item", "milestone",
+  /* FX-07 (062) : les références nommées d'un projet sont du contenu du
+     projet, vidées avec lui — les lignes avant l'instantané. */
+  "baseline_snapshot_row", "baseline_snapshot",
   "cross_dep", "activity_dep", "activity", "ext_link",
   "site_window", "rollout_wave", "project",
   "access_grant", "programme", "person", "site",

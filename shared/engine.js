@@ -174,6 +174,90 @@ export const LESSON_CATEGORIES = ["Scope", "Schedule", "Cost", "Risk", "Quality"
 export const DOC_TYPES = ["Charter","Business case","Design","Assurance","Quality","Operations","Compliance","Closure","Finance"];
 export const RAG_LABEL = { G: "Green", A: "Amber", R: "Red", N: "Not measured" };
 
+/* ── FX-05 · the work breakdown ───────────────────────────────────── */
+/** The stages no other stage names as its parent. The same array, untouched,
+    when no stage has a parent — so a flat book is read as before (D-41.01). */
+export function leavesOf(acts) {
+  if (!acts.some(a => a.parentId)) return acts;
+  const parents = new Set(acts.map(a => a.parentId).filter(Boolean));
+  return acts.filter(a => !parents.has(a.id));
+}
+
+/**
+ * The work breakdown of one project's stages, in outline order.
+ *
+ * One row per stage: `{ a, depth, outline, summary, kids, leaves }`. For a
+ * summary, `a` is a copy of the stage whose figures are COMPUTED from its
+ * children, never read from what is stored:
+ *   start / baseStart = the earliest child's; end / baseEnd = the latest;
+ *   weight = the sum of its leaves' weights;
+ *   pct    = its leaves' progress weighted by their weights (by their
+ *            durations when every weight is zero), rounded like a stored %;
+ *   deps   = none — a summary carries no link of its own.
+ * Siblings are numbered in stage order (`stage`, then id): 1, 1.1, 1.1.2.
+ * A parent outside the list is read as no parent; a cycle (which the
+ * database refuses) is broken rather than looped on.
+ */
+export function wbsRows(acts) {
+  const byId = new Map(acts.map(a => [a.id, a]));
+  const order = (x, y) => (x.stage - y.stage) || (x.id > y.id ? 1 : x.id < y.id ? -1 : 0);
+  const kids = new Map();
+  const roots = [];
+  for (const a of acts) {
+    const p = a.parentId && a.parentId !== a.id ? byId.get(a.parentId) : null;
+    if (p) { if (!kids.has(p.id)) kids.set(p.id, []); kids.get(p.id).push(a); }
+    else roots.push(a);
+  }
+  const out = [];
+  const seen = new Set();
+  const walk = (a, depth, outline) => {
+    if (seen.has(a.id)) return null;
+    seen.add(a.id);
+    const row = { a, depth, outline, summary: false, kids: [], leaves: [a] };
+    out.push(row);
+    const children = (kids.get(a.id) ?? []).slice().sort(order);
+    const done = children.map((c, i) => walk(c, depth + 1, outline + "." + (i + 1))).filter(Boolean);
+    if (done.length) {
+      const leaves = done.flatMap(r => r.leaves);
+      const first = (k) => done.map(r => r.a[k]).filter(Boolean).sort()[0] ?? a[k];
+      const last = (k) => done.map(r => r.a[k]).filter(Boolean).sort().pop() ?? a[k];
+      const w = sum(leaves, l => Number(l.weight) || 0);
+      const span = (l) => Math.max(1, days(l.start, l.end));
+      const progress = w > 0
+        ? sum(leaves, l => (Number(l.weight) || 0) * l.pct) / w
+        : sum(leaves, l => span(l) * l.pct) / Math.max(1, sum(leaves, span));
+      row.a = { ...a, start: first("start"), end: last("end"), baseStart: first("baseStart"),
+        baseEnd: last("baseEnd"), weight: +w.toFixed(4), pct: Math.round(progress), deps: [] };
+      row.summary = true;
+      row.leaves = leaves;
+      row.kids = done.map(r => r.a.id);
+    }
+    return row;
+  };
+  roots.slice().sort(order).forEach((a, i) => walk(a, 0, String(i + 1)));
+  /* A stage caught in a cycle has no root to be reached from: it is
+     listed at the top level rather than lost. */
+  let n = roots.length;
+  acts.filter(a => !seen.has(a.id)).sort(order).forEach(a => walk(a, 0, String(++n)));
+  return out;
+}
+
+/** Every stage, with each summary's figures computed from its children.
+    The same array when no stage has a parent (D-41.01). */
+export function rollupWbs(acts) {
+  if (!acts.some(a => a.parentId)) return acts;
+  const byProject = new Map();
+  for (const a of acts) {
+    if (!byProject.has(a.project)) byProject.set(a.project, []);
+    byProject.get(a.project).push(a);
+  }
+  const derived = new Map();
+  for (const list of byProject.values()) {
+    for (const r of wbsRows(list)) if (r.summary) derived.set(r.a.id, r.a);
+  }
+  return acts.map(a => derived.get(a.id) ?? a);
+}
+
 /* ═══════════════════════════════════════════════════════════════════
    The engine proper. `db` is the in-memory portfolio the API serves:
    the same field names the v4 build used.
@@ -187,11 +271,21 @@ export const Engine = {
   project: (db, id) => db.projects.find(p => p.id === id) || null,
   site: (db, id) => db.sites.find(s => s.id === id) || null,
   programme: (db, id) => db.programmes.find(p => p.id === id) || null,
-  /* FX-01…FX-04 — every activity also carries its typed links and its
-     tracking fields; a book written before 061 (or a hand-built one)
-     reads as FS/0 with nothing set. `deps` is unchanged. */
-  activities: (db, id) => db.activities.filter(a => a.project === id).sort(by("start")).map(schedFields),
+  /* FX-05 — the stages that CARRY the numbers: the leaves of the work
+     breakdown. A summary stage (one another stage names as its parent)
+     is computed from its children and carries no weight and no link of
+     its own, so earned value, the critical path and every roll-up read
+     the leaves only — nothing is counted twice. FX-01…FX-04 — every leaf
+     also carries its typed links and tracking fields; a book written
+     before 061 (or a hand-built one) reads as FS/0 with nothing set.
+     With no parent and no link type anywhere, this is exactly what
+     5.28.0 returned (D-41.01). */
+  activities: (db, id) => leavesOf(db.activities.filter(a => a.project === id)).sort(by("start")).map(schedFields),
   milestones: (db, id) => db.milestones.filter(m => m.project === id).sort(by("date")),
+  /* FX-05 — the project's stages as a tree, summaries included, in
+     outline order. For display and for the plan; numbers read the
+     leaves, through `activities` above. */
+  wbs: (db, id) => wbsRows(db.activities.filter(a => a.project === id)),
 
   /* ── earned value ───────────────────────────────────────────────── */
   metrics(db, projectId) {
@@ -1231,7 +1325,7 @@ export const Engine = {
 
   curve(db, projects) {
     const ids = projects.map(p => p.id);
-    const acts = db.activities.filter(a => ids.includes(a.project));
+    const acts = leavesOf(db.activities.filter(a => ids.includes(a.project)));   // FX-05
     if (!acts.length) return [];
     const from = monthKey(projects.reduce((a, p) => D(p.start) < D(a) ? p.start : a, projects[0].start));
     const to = monthKey(projects.reduce((a, p) => D(p.finish) > D(a) ? p.finish : a, projects[0].finish));
