@@ -27,6 +27,7 @@ import portfolioRoutes from "./routes/portfolio.js";
 import meetingRoutes from "./routes/meetings.js";
 import adminRoutes from "./routes/admin.js";
 import importRoutes from "./routes/importcsv.js";
+import mspdiRoutes from "./routes/mspdi.js";
 import federationRoutes from "./routes/federation.js";
 import v1Routes from "./routes/v1.js";
 import signalsRoutes from "./routes/signals.js";
@@ -243,6 +244,8 @@ export function buildApp() {
   app.use("/api", scenarioRoutes);
   /* FX-14 (docs/41) — sprints: plan, start, close. */
   app.use("/api", iterationRoutes);
+  /* FX-13 — MS Project in (POST /import/mspdi) and out (GET /projects/:id/mspdi). */
+  app.use("/api", mspdiRoutes);
   app.use("/api/import", importRoutes);
   app.use("/api/meetings", meetingRoutes);
   app.use("/api/admin", adminRoutes);

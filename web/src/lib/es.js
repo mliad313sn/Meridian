@@ -20,10 +20,12 @@
 
 import { PLAN_ES } from "./i18n-plan.js";
 import { RISK_ES } from "./i18n-risk.js";
+import { MSP_ES } from "./i18n-msproject.js";
 
 export const ES = {
   ...PLAN_ES,   // docs/41 A2 — the breakdown, the Gantt, named baselines
   ...RISK_ES,   // docs/41 FX-11 / FX-16 — schedule risk, the printable report
+  ...MSP_ES,    // docs/41 D — MS Project in and out (FX-13)
   "Some business cases state no expected cost, so their spend is in no comparison either":
     "Algunos casos de negocio no declaran coste previsto, así que su gasto tampoco entra en ninguna comparación",
   "benefit-review": "revisión de beneficio",

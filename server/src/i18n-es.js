@@ -14,7 +14,10 @@
  * d'abord, préfixes ensuite pour les messages qui portent des données.
  */
 
+import { MSPDI_ES, MSPDI_ES_PREFIX } from "./i18n-mspdi.js";
+
 export const ES = {
+  ...MSPDI_ES,   // FX-13 — the MS Project import report
   /* REQ-30 — los dos «no hay nada» de la página de valor. */
   "No such reporting period": "Ese periodo de informe no existe",
   "No value page was stored for that reporting period":
@@ -165,6 +168,7 @@ const ES_NOTIFY = {
 Object.assign(ES, ES_NOTIFY);
 
 export const ES_PREFIX = [
+  ...MSPDI_ES_PREFIX,
   /* REQ-30 — les deux refus de la page de valeur. Préfixe traduit,
      données (la période, les deux dates) laissées telles quelles. */
   ["A value page is already stored for this reporting period, and what was reported is a record rather than a working copy. To correct it, close a new period that restates this one and store the value page against that, so the restatement is itself on the record: ",
