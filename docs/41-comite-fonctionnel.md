@@ -383,7 +383,7 @@ car elle lit les types, calendriers et hiérarchies des vagues A.
 | FX-05 | **construite** | 5.30.0 | `plan-shape.test.js` ; arbre, récapitulatives calculées, pas de double comptage ; égalité 5.28.0 prouvée |
 | FX-06 | **construite** | 5.30.0 | `plan-shape.test.js` ; Gantt SVG, glisser et clavier, 409 honnête ; égalité 5.28.0 prouvée |
 | FX-07 | **construite** | 5.30.0 | `plan-shape.test.js` ; 11 références nommées, lecture seule, comparaison ; égalité 5.28.0 prouvée |
-| FX-08 | **construite** | 5.31.0 | `resources.test.js` ; affectations, charge hebdomadaire, surallocation ; **FX-08 bis ouverte** : le travail compte encore des jours calendaires |
+| FX-08 | **construite** | 5.31.0 | `resources.test.js` ; affectations, charge hebdomadaire, surallocation ; **FX-08 bis construite (5.37.0)** : le travail, la charge, le coût et le nivellement comptent les jours ouvrés du calendrier du projet (`resources-calendar.test.js`, preuve contre `resources-5.36.0.js` figé) |
 | FX-09 | **construite** | 5.31.0 | `resources.test.js` ; proposition sans écriture (prouvé), application auditée tout ou rien |
 | FX-10 | **construite** | 5.31.0 | `resources.test.js` ; taux, courbe en S, EAC ×3 nommées, TCPI |
 | FX-11 | **construite** | 5.34.0 | `schedule-risk.test.js` (19) ; triangulaire, graine, P50/P80/P90, criticité ; par le moteur unique ; aucune date déplacée |
@@ -398,10 +398,11 @@ car elle lit les types, calendriers et hiérarchies des vagues A.
 (`npm run verify` vert, test « avant / après » contre le moteur 5.28.0
 figé) et exercée dans un navigateur. Restent ouvertes :
 
-- **FX-08 bis** — le travail et la charge des ressources comptent encore
-  des jours calendaires, pas les calendriers ouvrés de FX-02.
+- ~~FX-08 bis~~ — **construite en 5.37.0** : le travail et la charge
+  des ressources comptent les jours ouvrés de FX-02.
 - **NEW-25** (docs/36) — le paquet principal est à son plafond
-  (289,69 / 289,70 ko gzip) : toute addition doit d'abord déplacer un
+  (289,69 / 289,70 ko gzip ; 5.37.0 le ramène à 289,56 en chargeant
+  à l'usage les formulaires d'affectation) : toute addition doit d'abord déplacer un
   écran vers un morceau chargé à l'usage.
 - **R2 n'est pas prononcée, et aucune étiquette n'existe au-delà de
   v5.9.0.** Ces fonctions sont construites, pas autorisées à porter du

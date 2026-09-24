@@ -17,13 +17,13 @@
  * satellite link (S6's weight budget, D-41.03).
  */
 
-import { h, dialog, formDialog, table, sectionHead, emptyState, tag, selectField, curveChart, legend, fold } from "../ui/kit.js";
+import { h, dialog, table, sectionHead, emptyState, tag, selectField, curveChart, legend, fold } from "../ui/kit.js";
 import { App, go, reportError } from "../lib/state.js";
 import { api } from "../lib/api.js";
 import { t, tData } from "../lib/i18n.js";
 import { Engine, fmtDate, isoWeek, money, signedMoney, idx } from "../../../shared/engine.js";
 import {
-  resourceLoad, assignmentWork, plannedCost, forecasts, overallocationSignal,
+  resourceLoad, assignmentWork, plannedCost, forecasts, overallocationSignal, calendarOf,
 } from "../../../shared/resources.js";
 
 const WEEKS = 10;
@@ -43,6 +43,8 @@ const canAssign = (db, x) => App.can("allocation.write",
 const d1 = (v) => (Math.round(v * 10) / 10) + " " + t("d");
 const m3 = (v) => money(v, 3);
 const who = (db, x) => x.person ? Engine.personName(db, x.person) : tag(t("Role") + " · " + x.role, "tag-out");
+/* The two forms load on first use (NEW-25: the main bundle is at its cap). */
+const edit = (name, db, x) => import("./resources-edit.js").then((m) => m[name](db, x), reportError);
 const xBtn = (onClick) => h("button", { class: "btn btn-xs btn-ghost", "aria-label": t("Remove"), onClick }, "×");
 
 /* ── FX-08 · load against effective availability ─────────────────── */
@@ -138,8 +140,9 @@ export function assignmentsSection(db) {
     { key: "w", label: t("Who"), get: (x) => who(db, x) },
     { key: "u", label: t("Units"), align: "r", get: (x) => x.units + "%" },
     { key: "k", label: t("Work"), align: "r", get: (x) => {
-        const w = assignmentWork(x, acts.get(x.activity));
-        return d1(w.work) + (w.overridden ? " *" : "");
+        const a = acts.get(x.activity), w = assignmentWork(x, a, calendarOf(db, a));
+        /* FX-08 bis — wholly on days off: its work lands on no day */
+        return h("span", null, d1(w.work) + (w.overridden ? " *" : "") + (w.offCalendar ? " " : ""), w.offCalendar ? tag(t("Non-working days"), "tag-amber") : null);
       } },
     { key: "c", label: t("Planned cost"), align: "r", get: (x) => {
         const pc = plannedCost({ ...db, assignments: [x] }, acts.get(x.activity));
@@ -147,12 +150,12 @@ export function assignmentsSection(db) {
       } },
     { key: "x", label: "", align: "r", get: (x) => !canAssign(db, x) ? null
         : h("div", { class: "btn-row", style: "justify-content:flex-end" },
-          h("button", { class: "btn btn-xs", onClick: () => editAssignment(db, x) }, t("Edit")),
+          h("button", { class: "btn btn-xs", onClick: () => edit("editAssignment", db, x) }, t("Edit")),
           xBtn(() => removeAssignment(db, x))) },
   ];
   return h("section", { class: "sec", style: "margin-top:26px" },
     sectionHead(t("Assignments"), t("* typed work"),
-      canAdd ? h("button", { class: "btn btn-sm", onClick: () => editAssignment(db, null) }, t("Assign")) : null),
+      canAdd ? h("button", { class: "btn btn-sm", onClick: () => edit("editAssignment", db, null) }, t("Assign")) : null),
     list.length ? table({ cols, rows: list })
       : emptyState(t("No assignments yet"), ""));
 }
@@ -160,38 +163,6 @@ export function assignmentsSection(db) {
 function removeAssignment(db, x) {
   return App.write(t("Assignment removed"), (a) => a.del("/assignments/" + x.id),
     { touch: ["assignments"], detail: x.activity });
-}
-
-function editAssignment(db, x) {
-  const ids = new Set(db.projects.filter((p) => App.can("allocation.write", { project: row(p) })).map((p) => p.id));
-  const activities = db.activities.filter((a) => ids.has(a.project));
-  const fields = [
-    ...(x ? [] : [{ key: "activity", label: t("Activity"), type: "select", required: true, span: 2,
-      options: [{ value: "", label: "—" }, ...activities.map((a) => ({ value: a.id, label: a.project + " · " + a.name }))] }]),
-    { key: "person", label: t("Person"), type: "select", value: x?.person ?? "",
-      options: [{ value: "", label: "—" }, ...db.people.filter((p) => p.active !== false).map((p) => ({ value: p.id, label: p.name }))] },
-    { key: "role", label: t("Role"), value: x?.role ?? "", hint: t("A person or a role, never both.") },
-    { key: "units", label: t("Units (%)"), type: "number", min: 1, max: 200, step: 5, required: true, value: x?.units ?? 100,
-      hint: t("50 = half-time, 200 = two people.") },
-    { key: "work", label: t("Work (person-days)"), type: "number", min: 0, step: 0.5, value: x?.work ?? "",
-      hint: t("Empty = duration × units.") },
-    { key: "note", label: t("Note"), type: "textarea", span: 2, value: x?.note ?? "", advanced: true,
-      hint: t("Shifts, conditions.") },
-  ];
-  formDialog({
-    title: x ? t("Edit") : t("Assign"), kicker: x ? x.activity : "", fields, saveLabel: t("Save"),
-    onSave: (v) => {
-      const role = String(v.role ?? "").trim();
-      if (!v.person === !role) { App.lastWriteError = new Error(t("A person or a role, never both.")); return false; }
-      const body = { person: v.person || null, role: v.person ? null : role, units: +v.units,
-        work: v.work === "" || v.work == null ? null : +v.work, note: v.note ?? "" };
-      return x
-        ? App.write(t("Assignment updated"), (a) => a.patch("/assignments/" + x.id, { ...body, version: x.version }),
-            { touch: ["assignments"], rethrow: true })
-        : App.write(t("Assignment added"), (a) => a.post("/assignments", { ...body, activity: v.activity }),
-            { touch: ["assignments"], rethrow: true });
-    },
-  });
 }
 
 /* ── FX-10 · rates ───────────────────────────────────────────────── */
@@ -205,43 +176,16 @@ export function ratesSection(db) {
     { key: "d", label: t("From"), get: (r) => fmtDate(r.from) + " → " + (r.to ? fmtDate(r.to) : "…") },
     { key: "x", label: "", align: "r", get: (r) => !may ? null
         : h("div", { class: "btn-row", style: "justify-content:flex-end" },
-          h("button", { class: "btn btn-xs", onClick: () => editRate(db, r) }, t("Edit")),
+          h("button", { class: "btn btn-xs", onClick: () => edit("editRate", db, r) }, t("Edit")),
           xBtn(() => removeRate(r))) },
   ];
   return fold(t("Rates"), t("person › role › directory"), false,
-    may ? h("button", { class: "btn btn-sm", style: "margin-bottom:8px", onClick: () => editRate(db, null) }, t("Add rate")) : null,
+    may ? h("button", { class: "btn btn-sm", style: "margin-bottom:8px", onClick: () => edit("editRate", db, null) }, t("Add rate")) : null,
     rates.length ? table({ cols, rows: rates }) : emptyState(t("No rates yet"), ""));
 }
 
 function removeRate(r) {
   return App.write(t("Rate removed"), (a) => a.del("/rates/" + r.id), { touch: ["rates"], detail: r.id });
-}
-
-function editRate(db, r) {
-  formDialog({
-    title: r ? t("Edit") : t("Add rate"), kicker: t("Rates"), saveLabel: t("Save"),
-    fields: [
-      { key: "person", label: t("Person"), type: "select", value: r?.person ?? "",
-        options: [{ value: "", label: "—" }, ...db.people.map((p) => ({ value: p.id, label: p.name }))] },
-      { key: "role", label: t("Role"), value: r?.role ?? "", hint: t("A person or a role, never both.") },
-      { key: "dayRate", label: t("Day rate"), type: "number", min: 0, step: 10, required: true, value: r?.dayRate ?? "",
-        hint: t("Whole units of the currency.") },
-      { key: "currency", label: t("Currency"), value: r?.currency ?? "USD" },
-      { key: "fx", label: "FX", type: "number", min: 0, step: 0.0001, value: r?.fx ?? 1, advanced: true,
-        hint: t("Per unit, in the reporting currency.") },
-      { key: "from", label: t("From"), type: "date", required: true, value: r?.from ?? App.db.statusDate },
-      { key: "to", label: t("To"), type: "date", value: r?.to ?? "" },
-      { key: "note", label: t("Note"), type: "textarea", span: 2, value: r?.note ?? "", advanced: true,
-        hint: t("Its source (contract).") },
-    ],
-    onSave: (v) => {
-      const body = { person: v.person || null, role: v.person ? null : String(v.role ?? "").trim(), dayRate: +v.dayRate,
-        currency: v.currency, fx: +v.fx || 1, from: v.from, to: v.to || null, note: v.note ?? "" };
-      return r
-        ? App.write(t("Rate updated"), (a) => a.patch("/rates/" + r.id, { ...body, version: r.version }), { touch: ["rates"], rethrow: true })
-        : App.write(t("Rate set"), (a) => a.post("/rates", body), { touch: ["rates"], rethrow: true });
-    },
-  });
 }
 
 /* ── FX-10 · the S-curve and the three EACs ──────────────────────── */
@@ -260,7 +204,8 @@ export function costSection(db, list) {
      it in three words, which is all a row has room for. */
   const early = t("too early to measure");
   const whyOf = (m) => m.key !== "bottomUp" ? early
-    : f.gap === "none" ? t("no costed assignment") : f.gap === "partial" ? t("not every activity is costed") : t("a rate is missing");
+    : f.gap === "none" ? t("no costed assignment") : f.gap === "partial" ? t("not every activity is costed")
+    : f.gap === "calendar" ? t("Non-working days") : t("a rate is missing");
   return h("div", null, head,
     table({ cols: [
       { key: "m", label: t("Method"), get: (m) => h("span", { class: "mono small" }, m.label) },

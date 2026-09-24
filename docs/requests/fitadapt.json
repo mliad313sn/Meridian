@@ -54,7 +54,7 @@
     },
     "counterpart": "FitAdapt delivery lead & Meridian champion (PE-14), docs/governance/05-dogfooding-loop.md"
   },
-  "registerVersion": 5,
+  "registerVersion": 6,
   "requests": [
     {
       "id": "DF-01",
@@ -231,7 +231,7 @@
         "server/test/engine.test.js"
       ],
       "measure": "server/test/engine.test.js",
-      "remaining": "not in a tag: v5.9.1 is not on the remote; D-36.01 changes the no-budget health from G to N once C-02 reaches main",
+      "remaining": "not in a tag: v5.9.1 is not on the remote. D-36.01 reached main in 5.16.0: with no budget the health is N (« Nothing measured — no budget »), no longer 5.9.1's G.",
       "answerToSource": "DF-06 can move from 'Fix in review' to 'Fixed on main (5.9.1, PR #14)'; close WI-06 once the v5.9.1 tag exists.",
       "issue": 14,
       "accepted": null,
@@ -244,6 +244,12 @@
           "registerVersion": 1,
           "status": "done",
           "note": "PR #14 merged to main in 6d8eddf on 2026-09-23 (C-01)"
+        },
+        {
+          "at": "2026-09-24",
+          "registerVersion": 6,
+          "status": "done",
+          "note": "D-36.01 is on main since 5.16.0 (server/test/engine.test.js, MER-04 describe)."
         }
       ]
     },
@@ -323,11 +329,11 @@
       "decidedOn": "2026-09-23",
       "delivered": [
         "PR #14 merged (5.9.1 on main)",
-        "docs/36 C-02, C-03, C-04: every line is on main (5.16.0–5.28.1), one PR each (#19–#38)"
+        "docs/36 C-02, C-03, C-04: every line is on main (5.16.0–5.28.1), one PR each (#19–#38); main has carried every release since, up to 5.36.1"
       ],
       "measure": null,
       "remaining": [
-        "No version tag carries any of it: the newest tag on the remote is v5.9.0 (docs/36 §5 lists the 20 owed)."
+        "No version tag carries any of it: the newest tag on the remote is v5.9.0 (checked 24/09); main is 5.36.1."
       ],
       "answerToSource": "Everything this line names is on main since 23/09; only the tags are missing. Two things your bootstrap needs now: (1) since 5.17.0 an import is refused without \"currencyUnit\" in the book header (D-36.04) — your book's budgets are all 0, so add \"currencyUnit\": \"units\" to build-book.mjs; (2) DF-10, DF-11 and DF-12 are built (5.26.0, 5.25.0, 5.28.0): the 'Distributed team' site and the PO approving on a member's behalf can be retired.",
       "issue": 15,
@@ -347,6 +353,12 @@
           "registerVersion": 5,
           "status": "partial",
           "note": "Field re-run of 5.28.0: bootstrap refused on currencyUnit, never told to FitAdapt until now; remaining narrowed to the tags."
+        },
+        {
+          "at": "2026-09-24",
+          "registerVersion": 6,
+          "status": "partial",
+          "note": "Re-verified 24/09: main is 5.36.1, the newest remote tag is still v5.9.0."
         }
       ]
     },
@@ -470,6 +482,66 @@
         }
       ],
       "answerToSource": "Closed in 5.28.0 (D-36.13). Administration → Sites → “Add site or team”: choose Team and leave the timezone empty. A team is governed exactly like a site (grants, site-governed projects, its own weekly), and it is located nowhere: no timezone, not on Locations, no plant window or rollout wave. What to try: turn “Distributed team” into one team per squad (a site with no window or wave can change kind), and grant each squad lead on their own team."
+    },
+    {
+      "id": "DF-13",
+      "origin": [
+        "DF-13"
+      ],
+      "title": "The call that binds a stage drops everything but pct",
+      "status": "done",
+      "priority": "high",
+      "version": "5.36.1",
+      "decidedOn": "2026-09-24",
+      "measure": "server/test/schedule-engine.test.js (one test, failing on 5.36.0 at its first assertion and, with DF-13 alone fixed, at the re-send)",
+      "remaining": null,
+      "issue": null,
+      "accepted": null,
+      "released": false,
+      "delivered": [
+        "server/src/v1write.js — the binding call applies the rest of the body (actuals, remaining, links, name, constraint)"
+      ],
+      "observed": "drive.mjs marked M10 in progress; Meridian showed it not started after the first sync run, and started after the second.",
+      "observedAt": "pmo/meridian/dogfood-log.md (session 2, DF-13)",
+      "history": [
+        {
+          "at": "2026-09-24",
+          "registerVersion": 6,
+          "status": "done",
+          "note": "Built as 5.36.1 (PR #48)."
+        }
+      ],
+      "answerToSource": "Fixed in 5.36.1. PUT /api/v1/activities/:externalId with the binding now also applies actualStart, actualFinish, remaining, links, name and constraint on the same call, so a sync's first run records what it sends. What to try: run drive.mjs once against a fresh book and check M10 shows its actual start."
+    },
+    {
+      "id": "DF-14",
+      "origin": [
+        "DF-14"
+      ],
+      "title": "An unchanged re-send rewrites the stage",
+      "status": "done",
+      "priority": "high",
+      "version": "5.36.1",
+      "decidedOn": "2026-09-24",
+      "measure": "server/test/schedule-engine.test.js (one test, failing on 5.36.0 at its first assertion and, with DF-13 alone fixed, at the re-send)",
+      "remaining": null,
+      "issue": null,
+      "accepted": null,
+      "released": false,
+      "delivered": [
+        "server/src/v1write.js — changedOnly on the stage upsert; links compared with those held"
+      ],
+      "observed": "Each unchanged sync run added a row_version and a \"Stage updated\" audit row per stage.",
+      "observedAt": "pmo/meridian/dogfood-log.md (session 2, DF-14)",
+      "history": [
+        {
+          "at": "2026-09-24",
+          "registerVersion": 6,
+          "status": "done",
+          "note": "Built as 5.36.1 (PR #48)."
+        }
+      ],
+      "answerToSource": "Fixed in 5.36.1. An unchanged re-send writes nothing: no new version, no audit row, no 409 for a screen holding the stage. A progress figure re-sent without measuredAt is still a new measurement, taken now. What to try: run drive.mjs twice and check the audit trail holds one row per real change."
     }
   ]
 }

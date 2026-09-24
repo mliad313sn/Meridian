@@ -18,6 +18,64 @@ Unreleased work sits under `## [Unreleased]` until it is tagged.
 
 ## [Unreleased]
 
+---
+
+## [5.37.0] — 2026-09-24
+
+**Work lands on working days** (FX-08 bis, the last open line of
+docs/41), **a new project is born on the ladder that governs it**
+(NEW-26), and the field registers reconciled with main. MINOR; no
+migration.
+
+### Added
+
+- **FX-08 bis · Work lands on working days.** When a project has a
+  working calendar (its own, else its site's, else the group default,
+  resolved as the CPM does), resource work, the weekly load,
+  over-allocation, planned cost by day and month, the S-curve, the
+  bottom-up EAC and the leveler count only its working days, with the
+  same `clock` as the schedule. A 5-working-day activity over a weekend
+  spreads its work over 5 days, not 7, and 100 % across a working week
+  reads 1.0 FTE. A leveled activity starts on a working day and keeps its
+  working duration; float is read in working days. An activity lying
+  entirely on non-working days is flagged "Non-working days": never
+  divided by zero, and its cost is not presented as a price. MS Project
+  Work, in and out, follows the same calendar. Without a calendar every
+  figure is exactly 5.36's, proved against a frozen copy of the 5.36.0
+  module on the seeded book (`resources-calendar.test.js`). Known limit:
+  dated absences still count over seven days.
+
+### Fixed
+
+- **NEW-26 · A new project ignored the portfolio's gate ladder.**
+  Scaffolding read the programme's ladder, else the default four, while
+  the engine governs a project whose programme declares none by the
+  portfolio model (`settings.gates`, MER-01). A KODO project created in
+  the app was born with G1–G4 milestones on a portfolio that reviews from
+  G0. Creation and the MS Project import dialog now resolve programme →
+  portfolio → default, as `Engine.gates` does. `portfolio-ladder.test.js`
+  fails on 5.36.1.
+
+### Changed
+
+- The assignment and rate forms load on first use (main bundle
+  289.69 → 289.56 kB gzip; NEW-25 keeps a little headroom).
+- `mspdi.test.js` "assignments": two rows of the MS Project 2016 fixture
+  (Panel fabrication, Software configuration) now import as computed
+  work, because 160 h and 32 h match their working-day durations; the
+  test asserts the computed work equals the file's Work. Not weaker: the
+  same rows are compared field by field, and typed work that differs is
+  still kept (round-trip test, ASG-FX1).
+- Records: README (every register has a screen; tags owed through
+  5.37.0), docs/36 (NEW-26, tag table with commits), docs/41 §5 (FX-08
+  bis built), registers (REQ-24 and REQ-27 done, REQ-41 back to partial —
+  its session half is not built —, DF-13 and DF-14 recorded, five lines
+  narrowed).
+
+---
+
+## [5.36.1] — 2026-09-24
+
 **5.36.1 — a sync's first run records what it sends, and its second
 writes nothing** (FitAdapt field return, session 2: DF-13, DF-14). PATCH.
 

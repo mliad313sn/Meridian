@@ -40,8 +40,7 @@ import { audited, record } from "../audit.js";
 import { HttpError } from "../auth.js";
 import { say, localeOf } from "../i18n.js";
 import { loadPortfolio, loadBaselines, projectFor, fromM } from "../portfolio.js";
-import { scaffoldProject } from "../wbs.js";
-import { GATES, normaliseGateModel } from "../../../shared/engine.js";
+import { scaffoldProject, resolveLadder } from "../wbs.js";
 import { toMspdi, readMspdi, resolveImport } from "../mspdi.js";
 
 const r = Router();
@@ -75,7 +74,7 @@ r.get("/projects/:id/mspdi", async (req, res, next) => {
     (PGlite is one connection: a module-level query from inside a
     transaction waits for it, forever — routes/portfolio.js says why). */
 async function importContext(user, programme, site) {
-  const [people, calRows, calDays, siteRow, dflt, prog] = await Promise.all([
+  const [people, calRows, calDays, siteRow, dflt, prog, portfolioGates] = await Promise.all([
     many(`SELECT p.id, p.name, (SELECT min(lower(u.email)) FROM app_user u WHERE u.person_id = p.id) AS email
             FROM person p WHERE p.active ORDER BY p.id`),
     many(`SELECT id, name, work_days FROM work_calendar ORDER BY id`),
@@ -83,17 +82,15 @@ async function importContext(user, programme, site) {
     one(`SELECT calendar_id FROM site WHERE id = $1`, [site]),
     one(`SELECT id FROM work_calendar WHERE is_default`),
     one(`SELECT gate_model FROM programme WHERE id = $1`, [programme]),
+    one(`SELECT value FROM app_setting WHERE key = 'gates'`),
   ]);
   const calendars = calRows.map((c) => ({
     id: c.id, name: c.name, workdays: Number(c.work_days),
     holidays: calDays.filter((d) => d.calendar_id === c.id).map((d) => String(d.on_date).slice(0, 10)),
   }));
   const inheritedId = siteRow?.calendar_id ?? dflt?.id ?? null;
-  let ladder = GATES;
-  try {
-    const m = prog?.gate_model;
-    ladder = normaliseGateModel(typeof m === "string" ? JSON.parse(m) : m) ?? GATES;
-  } catch { ladder = GATES; }
+  /* NEW-26 — the ladder the create will write, programme then portfolio. */
+  const ladder = resolveLadder(prog?.gate_model, portfolioGates?.value);
   return {
     people, calendars, ladder,
     inherited: calendars.find((c) => c.id === inheritedId) ?? null,

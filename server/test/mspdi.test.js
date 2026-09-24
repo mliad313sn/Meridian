@@ -33,6 +33,7 @@ import {
   LINK_OUT, REPORT_DETAIL,
 } from "../src/mspdi.js";
 import { Engine } from "../../shared/engine.js";
+import { assignmentWork, calendarOf } from "../../shared/resources.js";
 import { MSPDI_FR, MSPDI_ES } from "../src/i18n-mspdi.js";
 
 const FIXTURE = readFileSync(new URL("./fixtures/ms-project-2016.xml", import.meta.url), "utf8");
@@ -292,16 +293,35 @@ describe("FX-13 · an MS Project 2016 file comes in", () => {
     assert.equal(ms.filter(([n]) => n === "Gate 3 — Readiness").length, 1, "no duplicate of the gate");
   });
 
-  test("assignments: by e-mail, by name, a generic resource as a role; work kept where it differs", () => {
-    const acts = new Map(db.activities.filter((a) => a.project === id).map((a) => [a.id, a.name]));
-    const asg = db.assignments.filter((x) => acts.has(x.activity))
-      .map((x) => [acts.get(x.activity), x.person, x.role, x.units, x.work, x.note]).sort();
+  /* FX-08 bis changed this test. Until 5.36.x the work of an assignment
+     counted CALENDAR days, so MS Project's own duration × units (10 working
+     days × 2 = 160 h) read as "≠ 12 calendar days × 2" and came in as a
+     typed override. Work now counts the project calendar's working days, as
+     MS Project does, so every Work in this file IS duration × units and
+     comes in computed (null) — and the last three assertions prove the
+     figure is the file's, to the hour. Not weaker: the same rows are
+     compared field by field, the figures are still checked (through the
+     computation instead of a stored override), and "typed work kept where
+     it differs" is still proved by the round trip below (ASG-FX1, 7.5 d at
+     60 %: `before.assignments.some((x) => x.work !== null)` and the
+     assignments compared after). */
+  test("assignments: by e-mail, by name, a generic resource as a role; work computed on working days where it is duration × units", () => {
+    const acts = new Map(db.activities.filter((a) => a.project === id).map((a) => [a.id, a]));
+    const mine = db.assignments.filter((x) => acts.has(x.activity));
+    const asg = mine.map((x) => [acts.get(x.activity).name, x.person, x.role, x.units, x.work, x.note]).sort();
     assert.deepEqual(asg, [
-      ["Detailed design", "PE-19", null, 100, null, ""],                   // Silva, G. — by e-mail; 40 h = computed
+      ["Detailed design", "PE-19", null, 100, null, ""],                   // Silva, G. — by e-mail; 40 h = 5 wd × 1
       ["Factory acceptance test (réception usine)", null, "Contractor Z", 100, null, ""],
-      ["Panel fabrication", null, "Electrician", 200, 20, "Two-person crew"], // 160 h = 20 d ≠ 12 d × 2
-      ["Software configuration", "PE-03", null, 50, 4, ""],                // S. Ibarra — by name
+      ["Panel fabrication", null, "Electrician", 200, null, "Two-person crew"], // 160 h = 20 d = 10 wd × 2
+      ["Software configuration", "PE-03", null, 50, null, ""],             // S. Ibarra — by name; 32 h = 8 wd × 0.5
     ]);
+    const work = Object.fromEntries(mine.map((x) => {
+      const a = acts.get(x.activity);
+      return [a.name, assignmentWork(x, a, calendarOf(db, a)).work];
+    }));
+    assert.equal(work["Detailed design"], 5, "40 h");
+    assert.equal(work["Panel fabrication"], 20, "160 h");
+    assert.equal(work["Software configuration"], 4, "32 h");
   });
 
   test("Baseline 0 is the governed baseline; Baseline 1 a named baseline", async () => {
