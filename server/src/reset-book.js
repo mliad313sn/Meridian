@@ -100,6 +100,9 @@ const TABLES = [
   "seat_conflict", "seat",
   "meeting_action", "meeting_decision", "meeting_attendance", "agenda_item",
   "meeting_occurrence", "meeting_series",
+  /* FX-12 (064) — a what-if copy is demonstration content like the
+     register that decides on it: cleared, after the decisions naming it. */
+  "scenario_change", "scenario",
   "report_narrative", "work_item", "gate_criterion", "stakeholder", "comms_plan", "document", "allocation",
   "change_step", "change_request",
   /* REQ-22 (042) : les reconfirmations AVANT le cas qu'elles confirment.

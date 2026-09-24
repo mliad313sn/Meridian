@@ -3075,6 +3075,91 @@ export const FR = {
   "a rate is missing": "un taux manque",
   "not every activity is costed": "toutes les activités ne sont pas chiffrées",
   "Pushed by a predecessor": "Poussée par une prédécesseure",
+  /* FX-12 (docs/41) — portfolio scenarios. */
+  "Scenarios":
+    "Scénarios",
+  "Portfolio scenarios":
+    "Scénarios de portefeuille",
+  "Scenarios are the group's what-if copies of the portfolio; they never change the live book.":
+    "Les scénarios sont les copies « et si » du portefeuille, au niveau groupe ; ils ne modifient jamais le livre réel.",
+  "what-if copies of the portfolio, never written to the live book":
+    "copies « et si » du portefeuille, jamais écrites dans le livre réel",
+  "New scenario":
+    "Nouveau scénario",
+  "Scenario":
+    "Scénario",
+  "Created":
+    "Créé",
+  "No scenario yet — draft one to ask what if, without touching the live book.":
+    "Aucun scénario — rédigez-en un pour poser « et si », sans toucher au livre réel.",
+  "Propose for decision":
+    "Proposer à la décision",
+  "Apply to the live book":
+    "Appliquer au livre réel",
+  "Change":
+    "Changement",
+  "No change yet.":
+    "Aucun changement.",
+  "The question it asks, in a few words.":
+    "La question qu'il pose, en quelques mots.",
+  "Why it is asked — for whoever reads the comparison.":
+    "Pourquoi la question est posée — pour qui lira la comparaison.",
+  "Scenario saved":
+    "Scénario enregistré",
+  "If the project changes before the scenario is applied, applying it is refused.":
+    "Si le projet change avant l'application du scénario, l'application est refusée.",
+  "Weeks":
+    "Semaines",
+  "+ defers, − accelerates. Only work after the status date moves; the baseline never does.":
+    "+ reporte, − accélère. Seul le travail après la date d'état bouge ; la référence jamais.",
+  "In millions — the new total, not an increment.":
+    "En millions — le nouveau total, pas un incrément.",
+  "Weight":
+    "Poids",
+  "Spend stops at what is spent; future allocations and benefits are released.":
+    "La dépense s'arrête à ce qui est dépensé ; affectations et bénéfices futurs sont libérés.",
+  "What this change assumes.":
+    "Ce que ce changement suppose.",
+  "Recorded in the decision register; the scenario is frozen as decided.":
+    "Consignée au registre des décisions ; le scénario est figé tel que décidé.",
+  "Someone else ratifies it: not the decider, not the recorder, not the scenario's author.":
+    "Quelqu'un d'autre la ratifie : ni le décideur, ni qui l'enregistre, ni l'auteur du scénario.",
+  "Each change becomes its own audited write, under the version it was drafted against.":
+    "Chaque changement devient une écriture auditée distincte, contre la version sur laquelle il a été rédigé.",
+  "Scenario applied":
+    "Scénario appliqué",
+  "Live and scenario, side by side":
+    "Réel et scénario, côte à côte",
+  "Show all":
+    "Tout afficher",
+  "Above the line":
+    "Au-dessus de la ligne",
+  "Capacity":
+    "Capacité",
+  "Defer or accelerate":
+    "Reporter ou accélérer",
+  "BAC":
+    "BAC",
+  "EAC":
+    "EAC",
+  "Expected benefit":
+    "Bénéfice attendu",
+  "Peak FTE":
+    "Pic d'ETP",
+  "Last finish":
+    "Dernière fin",
+  "Pool":
+    "Vivier",
+  "Room in the envelope":
+    "Marge dans l'enveloppe",
+  "Applied":
+    "Appliqué",
+  "scenarios are the group's working copies of the portfolio — ask your programme office for the one you need":
+    "les scénarios sont les copies de travail du portefeuille au niveau groupe — demandez à votre bureau de programme celui dont vous avez besoin",
+  "no decision in the register names this scenario — propose it for decision, and have the decision ratified, before it can reach the live book":
+    "aucune décision du registre ne nomme ce scénario — proposez-le à la décision et faites ratifier cette décision avant qu'il puisse atteindre le livre réel",
+  "the scenario's author ratified the decision that promotes it — someone independent of the scenario ratifies it":
+    "l'auteur du scénario a ratifié la décision qui le promeut — une personne indépendante du scénario la ratifie",
 };
 
 /* ── enregistrement des dictionnaires ─────────────────────────────────

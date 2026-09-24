@@ -399,6 +399,21 @@ const ENRICH = [
                     effective_to, note)
    VALUES ('RATE-901', ${PE1}, '', 1250.5, 'EUR', 1.08, '2026-01-01', '2026-12-31', 'Framework contract 2026'),
           ('RATE-902', NULL, 'Welder', 480, 'USD', 1, '2026-03-01', NULL, '')`,
+  /* FX-12 (064) — a scenario of every kind of change, applied under the
+     decision that names it, and a second one still in draft. Every
+     exported column given a value, the decision's link included. */
+  `INSERT INTO scenario (id, name, note, status, created_by, created_on, applied_by, applied_on)
+   VALUES ('SCN-901', 'Defer the core a quarter', 'Round-trip probe', 'Applied', ${USER}, '2026-07-01',
+           ${USER}, '2026-07-20'),
+          ('SCN-902', 'Draft what-if', '', 'Draft', ${USER}, '2026-07-02', NULL, NULL)`,
+  `INSERT INTO scenario_change (id, scenario_id, seq, kind, project_id, weeks, amount, weight_input,
+                               weight, base_version, base_value, note)
+   VALUES ('SCC-901', 'SCN-901', 0, 'shift', ${P1}, 13, NULL, NULL, NULL, 4, NULL, 'A quarter later'),
+          ('SCC-902', 'SCN-901', 1, 'budget', ${P1}, NULL, 2500000, NULL, NULL, 4, NULL, ''),
+          ('SCC-903', 'SCN-901', 2, 'envelope', NULL, NULL, 30000000, NULL, NULL, NULL, 25000000, ''),
+          ('SCC-904', 'SCN-901', 3, 'weight', NULL, NULL, NULL, 'value', 60, 1, NULL, ''),
+          ('SCC-905', 'SCN-902', 0, 'cancel', ${P1}, NULL, NULL, NULL, NULL, 4, NULL, '')`,
+  `UPDATE meeting_decision SET scenario_id = 'SCN-901' WHERE id = 'DEC-901'`,
 ];
 
 describe("F13 · export → import → export", () => {

@@ -121,12 +121,21 @@ export const ACTIONS = [
      FX-10 : la table de TAUX. Un prix de jour est de l'argent de groupe,
      comme la ligne de coût (A5) : voir GROUP_ONLY_WRITES. */
   "schedule.level", "rate.write",
+  /* FX-12 (docs/41) — portfolio scenarios. READING one, WRITING one (a
+     named set of what-if changes that never touches the live book,
+     D-41.02) and APPLYING one to the live book. Three actions, not one,
+     because the third is the only one that changes anything real: it is
+     reached through a ratified decision (`canApplyScenario` below), and
+     each change it performs is then held to the action that change would
+     need on its own. See the `case`s for the level and its reason. */
+  "scenario.read", "scenario.write", "scenario.apply",
   // system
   "user.manage", "settings.write", "data.export", "data.import",
 ];
 
 const READ_ACTIONS = new Set([
   "portfolio.read", "project.read", "meeting.read", "audit.read", "data.export",
+  "scenario.read",
 ]);
 
 /** Writes a site-level grant may never perform, whatever the project. */
@@ -180,6 +189,13 @@ const GROUP_ONLY_WRITES = new Set([
      a site lead who set the rate of their own people would set the cost
      of their own plan. */
   "rate.write",
+  /* FX-12 — a scenario moves the group's levers: the envelope, the
+     ranking weights, any project in any programme. It is the room's
+     working copy of the portfolio, and a site does not draft the group's
+     arbitrage any more than it sets the weighting (priority.weighting).
+     Applying one is group work for the same reason, and more: see
+     canApplyScenario. */
+  "scenario.write", "scenario.apply",
 ]);
 
 /** Admin-only, full stop. */
@@ -438,6 +454,13 @@ export function can(user, action, resource = {}) {
       return canSeeProject(user, resource.project)
         ? allow()
         : deny("project is outside your scope — ask an administrator for a grant on its site or programme");
+    }
+    /* FX-12 — a scenario names projects in every programme and the
+       levers of the whole portfolio (envelope, weights). It is read where
+       it is written: at group level. A site or a viewer reads the live
+       book, which is the only one that binds anybody. */
+    if (action === "scenario.read") {
+      return user.role === "group" ? allow() : deny("scenarios are the group's working copies of the portfolio — ask your programme office for the one you need");
     }
     if (action === "meeting.read") {
       return canSeeScope(user, resource.scope) ? allow() : deny("meeting is outside your scope — its minutes are shared by whoever chairs it");
@@ -739,6 +762,32 @@ export function can(user, action, resource = {}) {
       }
       return canWriteProject(user, resource.project) ? allow() : outsideProject(user, resource.project);
 
+    /* FX-12 — WRITING a scenario. Group level (GROUP_ONLY_WRITES above),
+       and — the decision this `case` records — at GROUP level, not within
+       the author's programme grant. The reason is what a scenario is: an
+       arbitrage BETWEEN programmes. Its levers are portfolio-wide (the
+       capex envelope, the ranking weights) and its point is to move one
+       programme's project to make room for another's. Bounded by the
+       author's own programmes, it could only ask questions whose answer
+       does not matter. The control against abuse is not the scope, it is
+       D-41.02: writing a scenario changes nothing real, ever. What does
+       change something — applying it — is scenario.apply, below, and it
+       is held to every change's OWN authority, programme by programme.
+
+       Nor is a scenario its author's alone: two people of the programme
+       office working on the same what-if is the normal case, and
+       `row_version` keeps them from overwriting each other. */
+    case "scenario.write":
+      return allow();
+
+    /* FX-12 — APPLYING a scenario. The level is group (above). The rest
+       is not a question of level and is not answered here alone: the
+       route asks canApplyScenario, which holds the ratified decision, its
+       independence and each change's own action — for an administrator
+       too. */
+    case "scenario.apply":
+      return allow();
+
     case "raid.write":
       if (!resource.project) {
         return user.role === "group"
@@ -936,6 +985,71 @@ export function canRatifyDecision({ ratifier, decidedBy, recorderPerson } = {}) 
     return { ok: false, why: "the account that recorded this decision does not also ratify it" };
   }
   return { ok: true };
+}
+
+/**
+ * FX-12 (docs/41) — the actions each kind of scenario change needs on its
+ * own. Applying a scenario is not a way round them: a change the account
+ * could not make by hand, it cannot make by scenario either (S9's rule
+ * for leveling, FX-09, applied here first).
+ */
+export const SCENARIO_CHANGE_ACTIONS = {
+  shift: ["project.write", "schedule.write", "allocation.write", "benefit.write"],
+  cancel: ["project.write", "allocation.write", "benefit.write"],
+  budget: ["project.write"],
+  envelope: ["settings.write"],
+  weight: ["priority.weighting"],
+};
+
+/**
+ * FX-12 — may this account apply this scenario to the live book?
+ *
+ * D-41.02: nothing computed writes the book; an authorised human applies
+ * it. For a scenario that human is not enough on their own, because a
+ * scenario can move the envelope and a dozen projects at once. So:
+ *
+ *   1. scenario.apply — group level;
+ *   2. a DECISION in the register names the scenario, and it is RATIFIED
+ *      (REQ-50). No decision, or one still proposed: refused, 409 — the
+ *      state is wrong, not the person;
+ *   3. that ratification was independent (REQ-49's canRatifyDecision on
+ *      the stored ratifier: not the decider, not the person behind the
+ *      account that recorded it) AND not given by the scenario's author —
+ *      whoever drafted the what-if does not also wave it through. The
+ *      person APPLYING may be the author: the second pair of eyes is the
+ *      ratifier's, as for a change request's raiser and approver;
+ *   4. every change is held to its own action (SCENARIO_CHANGE_ACTIONS)
+ *      on its own project.
+ *
+ * Returns { ok, why, code } — `code` is the HTTP answer a route gives.
+ * Holds for an administrator too: independence is not a level.
+ */
+export function canApplyScenario(user, {
+  decision = null, recorderPerson = null, authorPerson = null, changes = [],
+} = {}) {
+  const level = can(user, "scenario.apply");
+  if (!level.ok) return { ...level, code: 403 };
+  if (!decision) {
+    return { ok: false, code: 409, why: "no decision in the register names this scenario — propose it for decision, and have the decision ratified, before it can reach the live book" };
+  }
+  if (decision.status !== "Ratified") {
+    return { ok: false, code: 409, why: `decision ${decision.id} is ${decision.status} — a scenario reaches the live book only through a ratified decision` };
+  }
+  const v = canRatifyDecision({ ratifier: decision.ratifiedBy || null, decidedBy: decision.decidedBy ?? null, recorderPerson });
+  if (!v.ok) return { ok: false, code: 403, why: `decision ${decision.id} was not independently ratified — ${v.why}` };
+  if (authorPerson && decision.ratifiedBy === authorPerson) {
+    return { ok: false, code: 403, why: "the scenario's author ratified the decision that promotes it — someone independent of the scenario ratifies it" };
+  }
+  for (const c of changes) {
+    for (const action of SCENARIO_CHANGE_ACTIONS[c.kind] ?? []) {
+      const r = can(user, action, { project: c.project ?? undefined });
+      if (!r.ok) {
+        return { ok: false, code: 403,
+          why: `change ${c.id} (${c.kind}${c.project ? " " + c.project.id : ""}) needs ${action} — ${r.why}` };
+      }
+    }
+  }
+  return { ok: true, why: "", code: 200 };
 }
 
 export function require$(action, resolve) {

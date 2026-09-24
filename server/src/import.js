@@ -42,6 +42,9 @@ const PORTFOLIO_TABLES = [
   "decision_objection",
   "meeting_action", "meeting_decision", "meeting_attendance", "agenda_item",
   "meeting_occurrence", "meeting_series",
+  /* FX-12 (064) — a decision may name a scenario, so the scenario goes
+     after the register; a change names a project, so before it. */
+  "scenario_change", "scenario",
   "raid_review",
   "seat_conflict", "seat",
   "finding", "evidence",
@@ -78,6 +81,7 @@ export const BOOK_TABLES = {
   actions: "meeting_action", raidReviews: "raid_review",
   baselines: "baseline_snapshot",
   assignments: "assignment", rates: "rate",
+  scenarios: "scenario",
 };
 
 /** Does the file carry at least one row of this list? */
@@ -850,6 +854,39 @@ export async function importBook(book, user, opts = {}) {
         [d.id, String(d.expectedSeat)]);
     }
 
+    /* ── FX-12 (064) · the scenarios ──────────────────────────────────
+       After the projects their changes name, before the decisions that
+       may name them. A restore, not an edit: a scenario comes back in the
+       state it left (a Proposed one stays frozen, an Applied one stays a
+       record), and a change keeps the version it was written against —
+       which, after a replace, no live row holds any more (NEW-19), so an
+       imported Proposed scenario cannot be applied over a book it was not
+       drafted on. The accounts it names are pointers the file cannot
+       vouch for (USER). */
+    const KINDS = ["shift", "cancel", "budget", "envelope", "weight"];
+    for (const s of book.scenarios ?? []) {
+      const status = ["Draft", "Proposed", "Applied", "Withdrawn"].includes(s.status) ? s.status : "Draft";
+      await t.query(
+        `INSERT INTO scenario (id, name, note, status, created_by, created_on, applied_by, applied_on)
+         VALUES ($1,$2,$3,$4,${USER(5)},COALESCE($6::date, CURRENT_DATE),${USER(7)},$8)`,
+        [s.id, String(s.name ?? s.id), s.note ?? "", status, clean(s.createdBy), clean(s.createdOn),
+         clean(s.appliedBy),
+         status === "Applied" ? (clean(s.appliedOn) ?? new Date().toISOString().slice(0, 10)) : null]);
+      for (const [i, c] of (s.changes ?? []).entries()) {
+        if (!KINDS.includes(c.kind)) {
+          rejects.push({ table: "scenario_change", id: c.id, reason: `"${c.kind}" is not a kind of scenario change` });
+          continue;
+        }
+        await t.query(
+          `INSERT INTO scenario_change (id, scenario_id, seq, kind, project_id, weeks, amount, weight_input,
+                                        weight, base_version, base_value, note)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+          [c.id, s.id, int(c.seq, i), c.kind, clean(c.project), intOrNull(c.weeks),
+           num(c.amount) === null ? null : money(c.amount), clean(c.input), intOrNull(c.weight),
+           intOrNull(c.baseVersion), num(c.baseValue) === null ? null : money(c.baseValue), c.note ?? ""]);
+      }
+    }
+
     /* ── NEW-14 · the meeting register and the RAID reviews ───────────
        The export wrote none of them and a replace import deletes every
        meeting table, so an export → import erased the governance record:
@@ -1035,10 +1072,10 @@ export async function importBook(book, user, opts = {}) {
            (id, occurrence_id, headline, rationale, alternatives, dissent, project_id, cr_id, raid_id,
             milestone_id, decided_by, decided_on, council, recorded_by, recorded_at, referred_to_scope,
             reversal_cost, source_evidence_id, evidence_uri, provenance, status, ratified_by,
-            ratified_on, external_source, external_id)
+            ratified_on, external_source, external_id, scenario_id)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,${USER(14)},COALESCE($15::timestamptz, now()),
                  $16,$17,(SELECT id FROM evidence WHERE id = $18),$19,$20,$21,$22,$23,
-                 ${INTEGRATION(24)},$25)`,
+                 ${INTEGRATION(24)},$25,(SELECT id FROM scenario WHERE id = $26))`,
         [d.id, row.occurrence_id, row.headline, row.rationale, row.alternatives, row.dissent,
          row.project_id, clean(d.cr), clean(d.raid), clean(d.milestone), row.decided_by,
          row.decided_on, row.council, clean(d.recordedBy), clean(d.recordedAt),
@@ -1047,7 +1084,9 @@ export async function importBook(book, user, opts = {}) {
          clean(d.sourceEvidence), d.evidenceUri ?? "", d.provenance ?? "", status, d.ratifiedBy ?? "",
          // a proposed decision has not been ratified on any day (049's CHECK)
          status === "Ratified" ? clean(d.ratifiedOn) : null,
-         clean(d.externalSource), clean(d.externalId)]);
+         clean(d.externalSource), clean(d.externalId),
+         // FX-12 — the scenario it promotes, kept only if it came in above
+         clean(d.scenario)]);
       written.add(d.id);
     }
     /* A decision's links to other decisions second, so both ends exist.
@@ -1418,7 +1457,9 @@ export async function importBook(book, user, opts = {}) {
                      // FX-07 — the named baselines
                      "baselines",
                      // FX-08/FX-10 — assignments and rates
-                     "assignments", "rates"]) {
+                     "assignments", "rates",
+                     // FX-12 — the group's what-if copies
+                     "scenarios"]) {
       counts[k] = (book[k] ?? []).length;
     }
 
@@ -1457,6 +1498,8 @@ export async function importBook(book, user, opts = {}) {
       ["BSL","baseline_snapshot","id ~ '^BSL-[0-9]+$'"],
       // FX-08/FX-10 (063)
       ["ASG","assignment","id ~ '^ASG-[0-9]+$'"],["RATE","rate","id ~ '^RATE-[0-9]+$'"],
+      // FX-12 (064) — a scenario and its changes
+      ["SCN","scenario","id ~ '^SCN-[0-9]+$'"],["SCC","scenario_change","id ~ '^SCC-[0-9]+$'"],
     ]) {
       await t.query(
         `INSERT INTO id_counter (prefix, next_value)

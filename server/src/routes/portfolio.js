@@ -15,7 +15,7 @@ import { reprojectNextReview } from "../raidreview.js";
 import { can, canSeeProject, canRatifyDecision } from "../../../shared/rbac.js";
 import { audited, readAudit, record } from "../audit.js";
 import { HttpError, grantsOut } from "../auth.js";
-import { loadPortfolio, projectFor, fromM, toM, loadSettings, loadWeighting } from "../portfolio.js";
+import { loadPortfolio, projectFor, fromM, toM, loadSettings, loadWeighting, loadDemandForRanking } from "../portfolio.js";
 import { adoptionBySite } from "../adoption.js";
 import { Engine, GATES, PHASES, LESSON_CATEGORIES, iso, addDays, days, D } from "../../../shared/engine.js";
 import { scaffoldProject, reschedule, phaseFor } from "../wbs.js";
@@ -2126,8 +2126,7 @@ async function rankingFor(user, horizonDays) {
      not scoped by project: it names at most a programme and a site, and
      `portfolio.read` is the action that governs it, exactly as
      `GET /demand` above already does. */
-  const demandRows = await many(
-    `SELECT * FROM demand WHERE status IN ('New','Triaged','Approved')`);
+  const demand = await loadDemandForRanking();
   const weighting = await loadWeighting();
 
   return prioritise({
@@ -2142,17 +2141,9 @@ async function rankingFor(user, horizonDays) {
     cases: db.businessCases,
     raid: db.raid,
     allocations: db.allocations,
-    demand: demandRows.map((d) => ({
-      id: d.id, title: d.title, programme: d.programme_id, site: d.site_id,
-      status: d.status,
-      estCost: d.est_cost === null || d.est_cost === undefined ? null : toM(d.est_cost),
-      expectedBenefit: d.expected_benefit === null || d.expected_benefit === undefined
-        ? null : toM(d.expected_benefit),
-      valueConfidence: d.value_confidence ?? null,
-      estFte: d.est_fte === null || d.est_fte === undefined ? null : Number(d.est_fte),
-      raidProbability: d.raid_probability ?? null,
-      raidImpact: d.raid_impact ?? null,
-    })),
+    /* FX-12 — the funnel is read by portfolio.js, once, for this route
+       and for the scenario comparison, so both rank the same requests. */
+    demand,
   });
 }
 
@@ -3957,7 +3948,7 @@ r.get("/decisions/log", async (req, res, next) => {
               d.referred_to_scope, d.project_id, d.cr_id, d.raid_id, d.milestone_id, d.supersedes,
               COALESCE(o.meets_on, d.decided_on) AS decided_on, d.external_source, d.external_id,
               d.council, d.evidence_uri, d.provenance, d.status, d.ratified_by, d.ratified_on,
-              d.row_version, ru.person_id AS recorded_by_person,
+              d.row_version, ru.person_id AS recorded_by_person, d.scenario_id,
               d.reversal_cost, d.supersedes_id, d.source_evidence_id,
               s.name AS series_name, s.scope_kind, pe.name AS decided_by_name
          FROM meeting_decision d
@@ -3993,6 +3984,8 @@ r.get("/decisions/log", async (req, res, next) => {
         /* REQ-50 — what the screen needs to draw « Ratify » only for
            someone the rule would let through. */
         recordedByPerson: d.recorded_by_person ?? null, version: d.row_version,
+        /* FX-12 — the scenario this decision promotes, if any. */
+        scenario: d.scenario_id ?? null,
       })),
     });
   } catch (e) { next(e); }
@@ -4312,11 +4305,29 @@ r.post("/decisions", async (req, res, next) => {
         recorderPerson: req.user.personId ?? null });
       if (!verdict.ok) throw new HttpError(403, verdict.why);
     }
+    /* FX-12 (064) — the one door from a scenario to the live book is a
+       decision that NAMES it. It is a portfolio decision (a scenario
+       moves several projects and the group's levers), so it names no
+       project. Recording it freezes the scenario — Draft becomes
+       Proposed in the same transaction — so what is ratified is what
+       will be applied: a scenario edited after its decision would be a
+       different proposition under the same signature. */
+    let scenario = null;
+    if (b.scenarioId !== undefined && b.scenarioId !== null && b.scenarioId !== "") {
+      if (p) bad("A decision on a scenario is a portfolio decision — it names the scenario, not a project");
+      gate(req.user, "scenario.read");
+      scenario = await one(`SELECT id, status, row_version FROM scenario WHERE id = $1`, [String(b.scenarioId)]);
+      if (!scenario) bad("No such scenario");
+      if (!["Draft", "Proposed"].includes(scenario.status)) {
+        throw new HttpError(409, `Scenario ${scenario.id} is ${scenario.status} — a decision can no longer promote it`);
+      }
+    }
 
     let id = null;
     await audited(req.user,
       () => ({ action: "Decision recorded", entity: "meeting_decision", entityId: id,
-               detail: String(b.headline).slice(0, 300) + (supersedes ? " — supersedes " + supersedes : "") }),
+               detail: String(b.headline).slice(0, 300) + (supersedes ? " — supersedes " + supersedes : "") +
+                 (scenario ? " — scenario " + scenario.id : "") }),
       async (t) => {
         id = await allocateId(t, "DEC", { pad: 3 });
         await t.query(
@@ -4324,15 +4335,21 @@ r.post("/decisions", async (req, res, next) => {
              (id, occurrence_id, headline, rationale, alternatives, dissent, project_id, cr_id,
               raid_id, milestone_id, supersedes, decided_by, decided_on, recorded_by,
               council, evidence_uri, provenance, status, ratified_by, ratified_on,
-              supersedes_id, reversal_cost, source_evidence_id)
-           VALUES ($1,NULL,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$10,$20,$21)`,
+              supersedes_id, reversal_cost, source_evidence_id, scenario_id)
+           VALUES ($1,NULL,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$10,$20,$21,$22)`,
           [id, String(b.headline).slice(0, 1000), String(b.rationale ?? "").slice(0, 4000),
            String(b.alternatives ?? "").slice(0, 4000), String(b.dissent ?? "").slice(0, 2000),
            p?.id ?? null, crId, raidId, msId, supersedes, who?.id ?? null, on, req.user.id,
            council, evidence, String(b.provenance ?? "").slice(0, 200),
            status, ratifier ?? "",
            status === "Ratified" ? ratifiedOn : null,
-           b.reversalCost || null, sourceEvidence]);
+           b.reversalCost || null, sourceEvidence, scenario?.id ?? null]);
+        if (scenario?.status === "Draft") {
+          conflict(await updateVersioned(t, "scenario", scenario.id, scenario.row_version, { status: "Proposed" }));
+          await record(t, req.user, { action: "Scenario proposed", entity: "scenario", entityId: scenario.id,
+            detail: `${scenario.id} frozen for decision ${id}`,
+            before: { status: "Draft" }, after: { status: "Proposed", decision: id } });
+        }
       });
     res.status(201).json({ id });
   } catch (e) { next(e); }

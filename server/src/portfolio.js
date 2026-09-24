@@ -978,6 +978,8 @@ export async function loadMeetingBook(user, db) {
       evidenceUri: d.evidence_uri ?? "", provenance: d.provenance ?? "",
       status: d.status ?? "Ratified", ratifiedBy: d.ratified_by ?? "", ratifiedOn: d.ratified_on ?? null,
       externalSource: d.external_source ?? null, externalId: d.external_id ?? null,
+      /* FX-12 (064) — the scenario this decision promotes, if any. */
+      scenario: d.scenario_id ?? null,
       version: d.row_version,
     })),
 
@@ -1022,6 +1024,10 @@ export async function loadBook(user) {
        the bootstrap (a screen asks for one project's when it opens them:
        eleven copies of a plan are no weight for a satellite link). */
     baselines: await loadBaselines(db.projects.map((p) => p.id)),
+    /* FX-12 — the group's what-if copies travel with the book for the
+       readers who may read them (scenario.read); nobody else's export
+       names them. */
+    scenarios: can(user, "scenario.read").ok ? await loadScenarios(db) : [],
   };
 }
 
@@ -1053,6 +1059,72 @@ export async function loadBaselines(projectIds) {
     takenBy: b.taken_by ?? null, takenByName: b.taken_by_name ?? "",
     reason: b.reason ?? "",
     rows: bySnap.get(b.id) ?? [],
+  }));
+}
+
+/* ── FX-12 (064) · portfolio scenarios ─────────────────────────────────
+   One shape for the screen, the contract and the book, as for an
+   allocation (allocationOut). Money in millions like every amount the
+   serialiser writes; `baseVersion` / `baseValue` are what the live row
+   was when the change was written — applying asserts them. */
+export const scenarioChangeOut = (c) => ({
+  id: c.id, seq: c.seq, kind: c.kind, project: c.project_id ?? null,
+  weeks: c.weeks ?? null,
+  amount: c.amount === null || c.amount === undefined ? null : toM(c.amount),
+  input: c.weight_input ?? null, weight: c.weight ?? null,
+  baseVersion: c.base_version ?? null,
+  baseValue: c.base_value === null || c.base_value === undefined ? null : toM(c.base_value),
+  note: c.note ?? "", version: c.row_version,
+});
+export const scenarioOut = (s, changes = []) => ({
+  id: s.id, name: s.name, note: s.note ?? "", status: s.status,
+  createdBy: s.created_by ?? null, createdOn: s.created_on ?? null,
+  appliedBy: s.applied_by ?? null, appliedOn: s.applied_on ?? null,
+  version: s.row_version,
+  changes: changes.map(scenarioChangeOut),
+});
+
+/**
+ * Every scenario, with its changes in order. A change on a project this
+ * reader cannot see is left out, like every out-of-scope row (R1.10) —
+ * the readers of scenarios are group level and see every project, so
+ * this is a belt, not a filter anyone meets.
+ */
+export async function loadScenarios(db, { id = null } = {}) {
+  const rows = id
+    ? await many(`SELECT * FROM scenario WHERE id = $1`, [id])
+    : await many(`SELECT * FROM scenario ORDER BY created_on DESC, id DESC`);
+  if (!rows.length) return [];
+  const changes = await many(
+    `SELECT * FROM scenario_change WHERE scenario_id = ANY($1) ORDER BY scenario_id, seq, id`,
+    [rows.map((r) => r.id)]);
+  const visible = new Set((db?.projects ?? []).map((p) => p.id));
+  const of = new Map();
+  for (const c of changes) {
+    if (c.project_id && db && !visible.has(c.project_id)) continue;
+    if (!of.has(c.scenario_id)) of.set(c.scenario_id, []);
+    of.get(c.scenario_id).push(c);
+  }
+  return rows.map((s) => scenarioOut(s, of.get(s.id) ?? []));
+}
+
+/**
+ * The open requests in the shape shared/prioritise.js ranks — read once
+ * here, for the ranking route and for the scenario comparison, so the
+ * two rank the same funnel.
+ */
+export async function loadDemandForRanking() {
+  const rows = await many(`SELECT * FROM demand WHERE status IN ('New','Triaged','Approved')`);
+  return rows.map((d) => ({
+    id: d.id, title: d.title, programme: d.programme_id, site: d.site_id,
+    status: d.status,
+    estCost: d.est_cost === null || d.est_cost === undefined ? null : toM(d.est_cost),
+    expectedBenefit: d.expected_benefit === null || d.expected_benefit === undefined
+      ? null : toM(d.expected_benefit),
+    valueConfidence: d.value_confidence ?? null,
+    estFte: d.est_fte === null || d.est_fte === undefined ? null : Number(d.est_fte),
+    raidProbability: d.raid_probability ?? null,
+    raidImpact: d.raid_impact ?? null,
   }));
 }
 

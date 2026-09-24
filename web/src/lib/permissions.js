@@ -13,7 +13,7 @@
 
 import {
   can as rawCan, canWriteProject as rawWrite, canSeeProject as rawSee,
-  canWriteScope as rawScope, ACTIONS, ROLES,
+  canWriteScope as rawScope, canApplyScenario as rawApply, ACTIONS, ROLES,
 } from "../../../shared/rbac.js";
 
 function adapt(me) {
@@ -47,4 +47,7 @@ export const can = (me, action, resource) => rawCan(adapt(me), action, resource)
 export const canWriteProject = (me, project) => rawWrite(adapt(me), project);
 export const canSeeProject = (me, project) => rawSee(adapt(me), project);
 export const canWriteScope = (me, scope) => rawScope(adapt(me), scope);
+/* FX-12 — the promotion rule, so the Scenarios view says why « Apply »
+   would be refused in the words the server would use. */
+export const canApplyScenario = (me, args) => rawApply(adapt(me), args);
 export { ACTIONS, ROLES };

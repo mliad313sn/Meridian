@@ -114,6 +114,16 @@ export const ES = {
   "Something went wrong on the server": "Se produjo un error en el servidor",
   "Entra sign-on is not configured on this instance":
     "El acceso con Entra no está configurado en esta instancia",
+  /* FX-12 (docs/41) — escenarios de cartera. */
+  "scenarios are the group's working copies of the portfolio — ask your programme office for the one you need":
+    "los escenarios son copias de trabajo de la cartera a nivel de grupo — pida a su oficina de programa el que necesite",
+  "no decision in the register names this scenario — propose it for decision, and have the decision ratified, before it can reach the live book":
+    "ninguna decisión del registro nombra este escenario — propóngalo a decisión y haga ratificar esa decisión antes de que pueda llegar al libro real",
+  "the scenario's author ratified the decision that promotes it — someone independent of the scenario ratifies it":
+    "el autor del escenario ratificó la decisión que lo promueve — la ratifica una persona independiente del escenario",
+  "A scenario needs a name — the question it asks, in a few words":
+    "Un escenario necesita un nombre — la pregunta que plantea, en pocas palabras",
+  "No such scenario": "Escenario no encontrado",
 };
 
 /** Prefix matches, for messages that carry data after a fixed opening. */

@@ -387,7 +387,7 @@ car elle lit les types, calendriers et hiérarchies des vagues A.
 | FX-09 | **construite** | 5.31.0 | `resources.test.js` ; proposition sans écriture (prouvé), application auditée tout ou rien |
 | FX-10 | **construite** | 5.31.0 | `resources.test.js` ; taux, courbe en S, EAC ×3 nommées, TCPI |
 | FX-11 | ouverte | | |
-| FX-12 | ouverte | | |
+| FX-12 | **construite** | 5.32.0 | `scenarios.test.js` ; copie isolée, comparaison par le moteur, application par décision ratifiée ; aucune écriture prouvée |
 | FX-13 | ouverte | | |
 | FX-14 | ouverte | | |
 | FX-15 | ouverte | | |
