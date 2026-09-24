@@ -22,6 +22,61 @@ Nothing yet.
 
 ---
 
+## [5.35.0] — 2026-09-24
+
+**MS Project in and out** (FX-13; docs/41 wave D; no schema change).
+
+### Added
+
+- **Export to MS Project (.xml, MSPDI 2003+).** Tasks with their outline
+  (from the work breakdown), dates to the day, working-time durations,
+  typed links with lag (0 FF, 1 FS, 2 SF, 3 SS), constraints, deadlines,
+  actuals and remaining work, the working calendar with its holidays,
+  people and roles as resources with their assignments, the governed
+  baseline as Baseline 0 and named baselines as Baseline 1–10.
+  `GET /api/projects/:id/mspdi` (`project.read` and `data.export`; noted
+  in the trail as a consultation).
+- **Import an MS Project plan as a new project.** A dry run comes first;
+  its report names every element ignored or approximated — elapsed
+  durations, as-late-as-possible, material and cost resources, rates,
+  task and resource calendars, links on summaries or milestones,
+  inactive tasks, gates marked complete (a gate passes on its evidence in
+  Meridian, not by a file) — before anything is written. Summary tasks
+  become parents; a milestone bearing a gate's name dates that gate;
+  resources match by e-mail then name, else become roles. One audited
+  transaction of new rows. The import asks what creating a project by
+  hand asks (`project.create`), plus `calendar.manage` only when it must
+  create a calendar Meridian does not have. `POST /api/import/mspdi`
+  (`dryRun`). The report is translated on the server (FR, ES).
+- A dependency-free MSPDI writer and a tolerant parser (namespaces,
+  entities, CDATA; a DOCTYPE's entities are never expanded, with depth
+  and size limits).
+
+### Changed
+
+- **Screens loaded on first use (D-41.03):** the MS Project import
+  dialog (1.82 kB gzip) and the Scenarios view (3.74 kB, group and
+  admin) join the print pack and the risk charts. Main bundle 287.41 kB
+  against the 289.70 kB cap. The F8 gate preloads lazy views
+  (`preloadViews`), so every screen is still drawn for every role.
+
+### Measure
+
+`mspdi.test.js`: 27 tests — dates by hand ([2 Mar, 7 Mar) ↔ Start
+08:00 / Finish 6 Mar 17:00), `PT40H0M0S` for five working days, SS+2d as
+Type 3 / LinkLag 9600; a hand-written MS Project 2016-shaped file
+asserted field by field with its exact report; and a round trip in the
+F13 family: an enriched project to MSPDI and back gives the same tree,
+links, constraints, actuals, calendar, assignments, baselines and engine
+numbers, with only the named losses (baseline metadata, gates not
+passed); a second trip is a fixed point. Browser: PRJ-101 exported and
+re-imported; the Gantt identical but for the two passed gates. Lazy
+loading in the browser: nothing fetched on the portfolio; Scenarios and
+the import dialog fetched on first use; no page error. `npm run verify`:
+1171/1171.
+
+---
+
 ## [5.34.0] — 2026-09-24
 
 **How sure is the finish, and a report for steering** (FX-11, FX-16;

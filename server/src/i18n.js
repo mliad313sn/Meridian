@@ -22,8 +22,10 @@
  */
 
 import { ES, ES_PREFIX } from "./i18n-es.js";
+import { MSPDI_FR, MSPDI_FR_PREFIX } from "./i18n-mspdi.js";
 
 const FR = {
+  ...MSPDI_FR,   // FX-13 — the MS Project import report
   /* REQ-30 — les deux « rien ici » de la page de valeur. */
   "No such reporting period": "Cette période de rapport n'existe pas",
   "No value page was stored for that reporting period":
@@ -175,6 +177,7 @@ const FR_NOTIFY = {
 Object.assign(FR, FR_NOTIFY);
 
 const FR_PREFIX = [
+  ...MSPDI_FR_PREFIX,
   /* REQ-30 — les deux refus de la page de valeur. Préfixe traduit,
      données (la période, les deux dates) laissées telles quelles. */
   ["A value page is already stored for this reporting period, and what was reported is a record rather than a working copy. To correct it, close a new period that restates this one and store the value page against that, so the restatement is itself on the record: ",

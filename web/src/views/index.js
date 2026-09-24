@@ -55,14 +55,13 @@ import {
 import { meetingsView, invalidateMeetings } from "./meetings.js";
 /* docs/41 A2 — the breakdown (FX-05), the Gantt (FX-06), named baselines (FX-07). */
 import { ganttFold, planTree, wbsName, moveStage, baselinesFold, keptFold } from "./gantt.js";
-/* FX-12 — portfolio scenarios: what-if copies, compared, never written. */
-import { scenariosView } from "./scenarios.js";
 /* FX-14 — the board's sprints: filter, planning, charts, velocity. */
 import {
   sprintSelect, inSprint, sprintPanel, itemPlanningFields, itemPlanningBody, stageProgressField, stageProgressBody,
 } from "./sprints.js";
 /* docs/41 FX-11 — three-point estimates and the Monte Carlo fold. */
 import { riskFold, estimateFields, estimateBody } from "./risk.js";
+import { exportButton, importButton } from "./msproject.js";
 /* NEW-04 — KODO's registers: requirements, evidence, findings, seats,
    objections, and what a decision costs to reverse. */
 import { assuranceFolds, objectionsFor, decisionFields, decisionFacts } from "./registers.js";
@@ -309,6 +308,8 @@ Views.portfolio = (db) => {
   const register = h("section", { class: "l sec" },
     sectionHead(t("Project register"), App.scopeLabel(),
       h("button", { class: "btn btn-sm", onClick: () => exportCSV(rows) }, icon("download", 12), "CSV"),
+      /* FX-13 — an MS Project plan becomes a new project, report first. */
+      importButton(db),
       primaryAction("portfolio", db)),
     sortableTable({ cols, rows, onRow: r => go("#/project/" + r.p.id),
       empty: { title: t("No projects match this scope"), body: t("Widen the programme, site or health filter in the header.") } }));
@@ -1203,6 +1204,8 @@ Views.project = (db) => {
       /* V-15 — everything about this project, as at a date, as one file. */
       h("button", { class: "btn btn-sm", title: t("Everything on the record for this project, as at a date"),
         onClick: () => evidencePack(db, p) }, t("Evidence pack")),
+      /* FX-13 — the plan as MS Project reads it (MSPDI). */
+      exportButton(p),
       mayWrite(p) && !fromSdp(p)
         ? h("button", { class: "btn btn-sm", onClick: () => setHealth(db, p) }, t("Set status"))
         : null,
@@ -6788,6 +6791,8 @@ Views.admin = (db) => {
 
       h("div", { style: "height:24px" }), h("hr", { class: "hr" }), h("div", { style: "height:18px" }),
       importPanel(),
+      /* FX-13 — beside the spreadsheet import, the MS Project one. */
+      h("div", { class: "btn-row", style: "margin-top:12px" }, importButton(db)),
 
       h("div", { style: "height:24px" }), h("hr", { class: "hr" }), h("div", { style: "height:18px" }),
       notificationsPanel(),
@@ -6967,7 +6972,19 @@ function resetAll() {
 
 /* ── Meetings (D-04) ──────────────────────────────────────────────── */
 Views.meetings = (db) => meetingsView(db);
-Views.scenarios = (db) => scenariosView(db);
+/* FX-12 — portfolio scenarios: what-if copies, compared, never written.
+   Group and admin only, so loaded on first visit (D-41.03: the bundle
+   every site downloads stays under its cap). The gate that draws every
+   view (F8) preloads it, so it is still drawn for every role. */
+let scenariosModule = null;
+export async function preloadViews() { scenariosModule = await import("./scenarios.js"); }
+Views.scenarios = (db) => {
+  if (scenariosModule) return scenariosModule.scenariosView(db);
+  const host = h("div", { class: "small muted" }, "…");
+  import("./scenarios.js").then((m) => { scenariosModule = m; host.replaceWith(m.scenariosView(db)); },
+    (e) => host.replaceChildren(String(e?.message ?? e)));
+  return host;
+};
 
 /* ── header actions ───────────────────────────────────────────────────
    R7.3 — a control the account has no authority for is absent, not

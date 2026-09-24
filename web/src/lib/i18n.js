@@ -21,6 +21,7 @@
 import { ES, ES_FRAG } from "./es.js";
 import { PLAN_FR } from "./i18n-plan.js";
 import { RISK_FR } from "./i18n-risk.js";
+import { MSP_FR } from "./i18n-msproject.js";
 
 const KEY = "meridian-lang";
 
@@ -173,6 +174,7 @@ export function tData(s) {
 export const FR = {
   ...PLAN_FR,   // docs/41 A2 — the breakdown, the Gantt, named baselines
   ...RISK_FR,   // docs/41 FX-11 / FX-16 — schedule risk, the printable report
+  ...MSP_FR,    // docs/41 D — MS Project in and out (FX-13)
   "Some business cases state no expected cost, so their spend is in no comparison either":
     "Certains cas d'affaire n'énoncent aucun coût attendu : leur dépense n'entre dans aucune comparaison non plus",
   "benefit-review": "revue de bénéfice",

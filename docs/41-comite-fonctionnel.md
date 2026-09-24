@@ -388,7 +388,7 @@ car elle lit les types, calendriers et hiérarchies des vagues A.
 | FX-10 | **construite** | 5.31.0 | `resources.test.js` ; taux, courbe en S, EAC ×3 nommées, TCPI |
 | FX-11 | **construite** | 5.34.0 | `schedule-risk.test.js` (19) ; triangulaire, graine, P50/P80/P90, criticité ; par le moteur unique ; aucune date déplacée |
 | FX-12 | **construite** | 5.32.0 | `scenarios.test.js` ; copie isolée, comparaison par le moteur, application par décision ratifiée ; aucune écriture prouvée |
-| FX-13 | ouverte | | |
+| FX-13 | **construite** | 5.35.0 | `mspdi.test.js` (27) ; export/import MSPDI, rapport des pertes, aller-retour F13 (pertes nommées seulement) |
 | FX-14 | **construite** | 5.33.0 | `agile.test.js` (24) ; sprints, vélocité, burndown/burnup, avancement hybride sur le même chemin |
 | FX-15 | ouverte | | |
 | FX-16 | **construite** | 5.34.0 | SVG autonome et pack imprimable (EN/FR/ES, pied INTERNE) ; chargé à la demande |

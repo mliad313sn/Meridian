@@ -71,7 +71,10 @@ const base = `http://127.0.0.1:${server.address().port}`;
 /* Importés après le DOM : ces modules touchent `localStorage` et
    `document` dès leur évaluation. */
 const { App, NAV, TITLES, ROUTES, ROUTE_ROLES } = await import("../../web/src/lib/state.js");
-const { VIEWS } = await import("../../web/src/views/index.js");
+const { VIEWS, preloadViews } = await import("../../web/src/views/index.js");
+/* Views loaded on first visit in the browser (D-41.03) are loaded here
+   before drawing, so every screen is still drawn for every role. */
+await preloadViews?.();
 
 const { ROLES: RBAC_ROLES } = await import("../../shared/rbac.js");
 const { MANUAL, firstStepsFor } = await import("../../web/src/ui/guide.js");

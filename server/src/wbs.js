@@ -105,8 +105,11 @@ export function reschedule(project, existing) {
  * time, which is exactly how a create endpoint starts showing up in the
  * slow query log. It is now five multi-row inserts.
  */
-export async function scaffoldProject(t, project) {
-  const acts = activitiesFor(project);
+export async function scaffoldProject(t, project, { template = true } = {}) {
+  /* FX-13 — a plan imported from MS Project brings its own stages: the
+     gates, their evidence and the PM's allocation come with the project
+     as always, the method's template stages do not. */
+  const acts = template ? activitiesFor(project) : [];
   const owner = project.pm ?? null;
   /* I-3 — the programme's ladder, read inside the caller's transaction. */
   const prog = project.programme
