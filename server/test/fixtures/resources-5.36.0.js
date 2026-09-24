@@ -1,3 +1,8 @@
+/* FROZEN — `git show 0687333:shared/resources.js` (5.36.0), with its one
+ * import repointed at shared/engine.js. FX-08 bis
+ * (server/test/resources-calendar.test.js) runs it beside the live module on
+ * the seeded book: with no working calendar anywhere, every figure must be
+ * the same (D-41.01). Never edit. */
 /**
  * RESOURCES AND COSTS — docs/41 wave B: FX-08, FX-09, FX-10.
  *
@@ -36,75 +41,35 @@
  * `null` without one, and says "nothing measured" rather than 0.
  */
 
-import { Engine, D, iso, addDays, days, startOfWeek, monthKey, sum } from "./engine.js";
-import { clock } from "./schedule.js";
+import { Engine, D, iso, addDays, days, startOfWeek, monthKey, sum } from "../../../shared/engine.js";
 
 /* ── durations: ONE helper ───────────────────────────────────────────
-   An activity occupies the calendar days it always did: [start, start +
-   max(1, end − start)), as the CPM of 5.28.0 counted them. FX-08 bis:
-   when its project has a working calendar — resolved as the CPM resolves
-   it, `Engine.calendarFor` (project, else site, else group default) —
-   only the WORKING days among them carry work; a person-day never lands
-   on a weekend or a holiday. They are counted by the `clock` of
-   shared/schedule.js (the one `workdaysBetween` wraps), never by a second
-   calendar. Without a calendar every day carries work and every figure is
-   the one 5.36.0 computed (D-41.01; server/test/resources-calendar.test.js
-   runs the frozen 5.36.0 module beside this one). */
-const clocks = new WeakMap();
-const clockOf = (cal) => { let c = clocks.get(cal); if (!c) clocks.set(cal, c = clock(0, cal)); return c; };
-const span = (cal) => clockOf(cal).span;
-/** Days that carry work in [from, from + n): n of them without a calendar. */
-const workIn = (from, n, cal) => (cal ? span(cal)(D(from), addDays(from, n)) : n);
-export function workingDuration(start, end, calendar = null) {
-  return workIn(start, Math.max(1, days(start, end)), calendar);
+   Calendar days, exactly as the CPM counts them today (engine.js
+   criticalPath: `Math.max(1, days(a.start, a.end))`). When the working
+   calendars of wave A1 (FX-02) land, this is the one place that learns
+   about them: every duration, work and cost figure below reads it. */
+export function workingDuration(start, end /* , calendar — FX-02 */) {
+  return Math.max(1, days(start, end));
 }
-/** The working calendar an activity's work lands on — its project's, as
-    the CPM reads it — or null (calendar days). */
-export function calendarOf(db, a) {
-  return db.calendars?.length ? Engine.calendarFor(db, Engine.project(db, a.project)) : null;
-}
-/** The days an activity occupies: [start, start + n), n in calendar days. */
-const spanOf = (a) => ({ from: D(a.start), n: Math.max(1, days(a.start, a.end)) });
-/** The days of [fromA, +nA) ∩ [fromB, +nB) that carry work. */
-const overlap = (fromA, nA, fromB, nB, cal) => {
+/** The days an activity occupies: [start, start + duration). */
+const spanOf = (a) => ({ from: D(a.start), n: workingDuration(a.start, a.end) });
+const overlap = (fromA, nA, fromB, nB) => {
   const a0 = D(fromA).getTime(), a1 = a0 + nA * 86400000;
   const b0 = D(fromB).getTime(), b1 = b0 + nB * 86400000;
-  if (cal) return Math.max(a0, b0) < Math.min(a1, b1) ? span(cal)(new Date(Math.max(a0, b0)), new Date(Math.min(a1, b1))) : 0;
   return Math.max(0, Math.round((Math.min(a1, b1) - Math.max(a0, b0)) / 86400000));
 };
-/** The days of a week that carry work: 7 without a calendar, so a week's
-    FTE is the share of its working days spent — 100 % on each of five
-    working days is 1.0, not 5/7. */
-const weekDays = (week, cal) => workIn(week, 7, cal);
 
 /** Work = duration × units, unless a work was typed, which then wins.
     `perDay` is the share of a person-day spent on each day of the span
-    that carries work — an FTE. `calendar` is the activity's working
-    calendar (`calendarOf`); omitted, every day counts, as in 5.36.0.
-
-    An activity lying wholly on non-working days (a Saturday–Sunday span on
-    a Monday–Friday calendar) has a working duration of 0: nothing is
-    divided by it. Its computed work is 0, a typed work is kept but lands
-    on no day (`perDay` 0), and it carries `offCalendar: true` — the flag
-    the load, the cost and the screens read. The CPM gives the same
-    activity one working day (schedule.js `Math.max(1, …)`) and places it
-    on the next working day; the resource side does not invent that day
-    on the activity's behalf, it says the dates need fixing. */
-export function assignmentWork(asg, activity, calendar = null) {
-  const duration = workingDuration(activity.start, activity.end, calendar);
+    — an FTE. */
+export function assignmentWork(asg, activity) {
+  const duration = workingDuration(activity.start, activity.end);
   const units = Number(asg.units ?? 100);
   const computed = duration * units / 100;
   const overridden = asg.work !== null && asg.work !== undefined && asg.work !== "";
   const work = overridden ? Number(asg.work) : computed;
-  if (!duration) return { duration, units, computed, work, overridden, perDay: 0, offCalendar: true };
   return { duration, units, computed, work, overridden, perDay: work / duration };
 }
-/* One calendar lookup per project for a whole computation. */
-const calendarsOf = (db) => {
-  if (!db.calendars?.length) return () => null;
-  const m = new Map();
-  return (a) => (m.has(a.project) ? m.get(a.project) : m.set(a.project, calendarOf(db, a)).get(a.project));
-};
 
 /* ── FX-08 · availability, week by week ──────────────────────────────
    `availability` (012) is an annual average that ALREADY includes rotation
@@ -147,12 +112,11 @@ export function resourceLoad(db, { weeks = 10, from } = {}) {
   const cols = Array.from({ length: weeks }, (_, i) => iso(addDays(start, i * 7)));
   const acts = new Map((db.activities ?? []).map((a) => [a.id, a]));
   const asgs = (db.assignments ?? []).filter((x) => acts.has(x.activity));
-  const calOf = calendarsOf(db);
 
   const rows = (db.people ?? []).map((person) => {
     const mine = asgs.filter((x) => x.person === person.id).map((x) => {
-      const a = acts.get(x.activity), cal = calOf(a);
-      return { asg: x, activity: a, cal, ...assignmentWork(x, a, cal), span: spanOf(a) };
+      const a = acts.get(x.activity);
+      return { asg: x, activity: a, ...assignmentWork(x, a), span: spanOf(a) };
     });
     const assigned = new Set(mine.map((m) => m.activity.project));
     const allocs = (db.allocations ?? []).filter((a) => a.person === person.id && !assigned.has(a.project));
@@ -161,10 +125,10 @@ export function resourceLoad(db, { weeks = 10, from } = {}) {
       const wEnd = addDays(week, 7);
       const sources = [];
       for (const m of mine) {
-        const n = overlap(m.span.from, m.span.n, week, 7, m.cal);
+        const n = overlap(m.span.from, m.span.n, week, 7);
         if (!n) continue;
         sources.push({ kind: "assignment", id: m.asg.id, activity: m.activity.id,
-          project: m.activity.project, units: m.units, fte: m.perDay * n / weekDays(week, m.cal) });
+          project: m.activity.project, units: m.units, fte: m.perDay * n / 7 });
       }
       for (const a of allocs) {
         if (!(D(a.from) < wEnd && D(a.to) >= D(week))) continue;
@@ -187,23 +151,15 @@ export function resourceLoad(db, { weeks = 10, from } = {}) {
      named for yet, shown as such. */
   const roleDemand = new Map();
   for (const x of asgs.filter((y) => !y.person && y.role)) {
-    const a = acts.get(x.activity), cal = calOf(a);
-    const w = assignmentWork(x, a, cal), s = spanOf(a);
+    const a = acts.get(x.activity);
+    const w = assignmentWork(x, a), s = spanOf(a);
     if (!roleDemand.has(x.role)) roleDemand.set(x.role, cols.map((week) => ({ week, demand: 0 })));
-    roleDemand.get(x.role).forEach((c) => {
-      const n = overlap(s.from, s.n, c.week, 7, cal);
-      if (n) c.demand += w.perDay * n / weekDays(c.week, cal);
-    });
+    roleDemand.get(x.role).forEach((c) => { c.demand += w.perDay * overlap(s.from, s.n, c.week, 7) / 7; });
   }
   const roles = [...roleDemand.entries()].sort((a, b) => a[0].localeCompare(b[0]))
     .map(([role, cells]) => ({ role, cells }));
 
-  /* FX-08 bis — work that lands on no working day is in no week: named,
-     not dropped in silence. The key exists only when something is off
-     the calendar, so a book without one returns what 5.36.0 returned. */
-  const off = asgs.filter((x) => { const a = acts.get(x.activity), cal = calOf(a); return cal && !workingDuration(a.start, a.end, cal); })
-    .map((x) => ({ id: x.id, activity: x.activity, person: x.person ?? null, role: x.role ?? null }));
-  return off.length ? { cols, rows, roles, offCalendar: off } : { cols, rows, roles };
+  return { cols, rows, roles };
 }
 
 /** Every (person, week) above 100 % of effective availability. */
@@ -269,15 +225,12 @@ const M = 1_000_000;
  * missing part of its input says so rather than passing for the whole.
  */
 export function plannedCost(db, activity) {
-  const cal = calendarOf(db, activity);
-  const n = spanOf(activity).n;
   const lines = (db.assignments ?? []).filter((x) => x.activity === activity.id).map((x) => {
-    const w = assignmentWork(x, activity, cal);
+    const w = assignmentWork(x, activity);
     let cost = 0, uncostedDays = 0;
     const byMonth = {};
-    for (let i = 0; i < n; i++) {
+    for (let i = 0; i < w.duration; i++) {
       const d = addDays(activity.start, i);
-      if (cal && !workIn(d, 1, cal)) continue;   // FX-08 bis — no work, no cost, on a day off
       const r = rateFor(db, { person: x.person, role: x.role }, d);
       if (!r) { uncostedDays++; continue; }
       const c = w.perDay * r.dayRate * r.fx / M;
@@ -285,14 +238,11 @@ export function plannedCost(db, activity) {
       const k = monthKey(d);
       byMonth[k] = (byMonth[k] ?? 0) + c;
     }
-    /* Off the calendar: no day to price, so the line is not complete —
-       a cost of 0 would pass for a price. */
-    return w.offCalendar ? { assignment: x, work: w.work, cost, uncostedDays, byMonth, offCalendar: true }
-      : { assignment: x, work: w.work, cost, uncostedDays, byMonth };
+    return { assignment: x, work: w.work, cost, uncostedDays, byMonth };
   });
   return {
     activity: activity.id, cost: sum(lines, (l) => l.cost), lines, assigned: lines.length > 0,
-    complete: lines.length > 0 && lines.every((l) => l.uncostedDays === 0 && !l.offCalendar),
+    complete: lines.length > 0 && lines.every((l) => l.uncostedDays === 0),
   };
 }
 
@@ -365,8 +315,7 @@ export function forecasts(db, projectId) {
   const costs = all.filter((c) => c.pc.assigned);
   const gap = !costs.length ? "none"
     : all.some((c) => c.a.pct < 100 && !c.pc.assigned) ? "partial"
-    : costs.every((c) => c.pc.complete) ? ""
-    : costs.some((c) => c.pc.lines.some((l) => l.offCalendar)) ? "calendar" : "rate";
+    : costs.every((c) => c.pc.complete) ? "" : "rate";
   const planned = costs.length ? sum(costs, (c) => c.pc.cost) : null;
   const etc = gap ? null : sum(costs, (c) => c.pc.cost * (1 - c.a.pct / 100));
 
@@ -383,7 +332,6 @@ const BOTTOM_UP_GAP = {
   none: "No costed assignment on this project",
   partial: "An activity with work left has no assignment",
   rate: "An assignment has no rate on some days",
-  calendar: "An assignment lies wholly on non-working days of its calendar",
 };
 const METHODS = [
   ["cpi", "EAC = BAC / CPI"],
@@ -428,24 +376,6 @@ export function proposeLeveling(db, { weeks = 12, from, movable = () => true, ma
   const successors = (id) => [...acts.values()].filter((x) => (x.deps ?? []).includes(id));
   const shifted = (id) => days(original.get(id).start, acts.get(id).start);
 
-  /* FX-08 bis — where an activity lands when its start is pushed k
-     calendar days. Without a calendar: both dates by k (5.36.0). With its
-     project's working calendar: the start on the first working day at or
-     after the pushed date, and the end after the SAME number of working
-     days it had — so a move never changes its work, and never starts it on
-     a weekend or a holiday. Each is counted in working days (`clock`). */
-  const calOf = calendarsOf(db);
-  const moved = (a, k) => {
-    const cal = calOf(a);
-    const wd = cal && workingDuration(original.get(a.id).start, original.get(a.id).end, cal);
-    if (!wd) return { start: iso(addDays(a.start, k)), end: iso(addDays(a.end, k)) };
-    const c = clockOf(cal), s = c.idx(addDays(a.start, k));
-    return { start: c.startOf(s), end: c.finishOf(s + wd) };
-  };
-  /* The float an activity has used, and would use, in the unit the CPM
-     counts it in: working days on a calendar, calendar days without. */
-  const wShift = (a, from, to) => { const cal = calOf(a); return cal ? span(cal)(D(from), D(to)) : days(from, to); };
-
   /* The plan of a shift: the activity by k days, and each finish-to-start
      successor by what the gap before it cannot absorb. Null when some
      activity it would have to move may not move. */
@@ -454,21 +384,20 @@ export function proposeLeveling(db, { weeks = 12, from, movable = () => true, ma
     if (!may(a)) return null;
     if (k <= (plan.get(id) ?? 0)) return plan;   // reached twice (a diamond): the larger push holds
     plan.set(id, k);
-    const kEnd = days(a.end, moved(a, k).end);   // = k without a calendar
     for (const s of successors(id)) {
       const gap = Math.max(0, days(a.end, s.start));
-      const push = kEnd - gap;
+      const push = k - gap;
       if (push > 0 && !planShift(s.id, push, plan)) return null;
     }
     return plan;
   };
-  /* Returns what it overwrote, so a trial move is undone exactly. */
-  const apply = (plan) => [...plan].map(([id, k]) => {
-    const a = acts.get(id), was = [a, a.start, a.end];
-    Object.assign(a, moved(a, k));
-    return was;
-  });
-  const undo = (was) => was.forEach(([a, start, end]) => { a.start = start; a.end = end; });
+  const apply = (plan, sign = 1) => {
+    for (const [id, k] of plan) {
+      const a = acts.get(id);
+      a.start = iso(addDays(a.start, sign * k));
+      a.end = iso(addDays(a.end, sign * k));
+    }
+  };
   /* A move is judged by EXCESS — the FTE above what each person is
      available for, summed over the weeks and over everybody who works on
      what the move shifts, so relieving one person by overloading another
@@ -508,18 +437,17 @@ export function proposeLeveling(db, { weeks = 12, from, movable = () => true, ma
     let done = null;
     for (const phase of ["float", "delay"]) {
       for (const a of cands) {
-        const float = phase === "float";
-        const left = float ? (floatOf[a.id] ?? 0) - wShift(a, original.get(a.id).start, a.start) : maxShiftDays - shifted(a.id);
+        const left = phase === "float" ? (floatOf[a.id] ?? 0) - shifted(a.id) : maxShiftDays - shifted(a.id);
         const clear = Math.max(1, days(a.start, addDays(conflict.week, 7)));
-        for (let k = clear; (float ? wShift(a, a.start, moved(a, k).start) : k) <= left; k += 7) {
+        for (let k = clear; k <= left; k += 7) {
           const plan = planShift(a.id, k);
           if (!plan) break;
           const pids = workers([...plan.keys()]);
           pids.add(conflict.person.id);
           const was = excess(pids);
-          const prior = apply(plan);
+          apply(plan);
           if (excess(pids) < was - EPS) { done = { a, plan, phase, k }; break; }
-          undo(prior);
+          apply(plan, -1);
         }
         if (done) break;
       }

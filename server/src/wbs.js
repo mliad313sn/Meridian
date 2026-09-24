@@ -10,7 +10,7 @@
 
 import { WBS, SLOTS } from "./seed-data.js";
 import { insertMany, allocateId, updateVersioned } from "./db.js";
-import { GATES, days, addDays, iso, by, D, normaliseGateModel } from "../../shared/engine.js";
+import { GATES, days, addDays, iso, by, D, normaliseGateModel, Engine } from "../../shared/engine.js";
 import { fromM } from "./portfolio.js";
 
 /** Expand a project's template into dated, dependency-linked activities. */
@@ -105,6 +105,25 @@ export function reschedule(project, existing) {
  * time, which is exactly how a create endpoint starts showing up in the
  * slow query log. It is now five multi-row inserts.
  */
+/**
+ * The ladder a new project is scaffolded on: its programme's, if the
+ * programme declares one (I-3); else the portfolio model the engine
+ * governs it by (NEW-26); else the default four. Pure, so the MS Project
+ * import dialog shows the same ladder the create will write.
+ */
+export function resolveLadder(programmeModel, portfolioGates) {
+  try {
+    const m = typeof programmeModel === "string" ? JSON.parse(programmeModel) : programmeModel;
+    const own = normaliseGateModel(m);
+    if (own) return own;
+  } catch { /* an unreadable programme ladder reads as none, as before */ }
+  let g = portfolioGates;
+  try { if (typeof g === "string") g = JSON.parse(g); } catch { g = null; }
+  if (!Array.isArray(g) || !g.length) return GATES;
+  const model = Engine.gateModel({ settings: { gates: g } });
+  return model.length ? model : GATES;
+}
+
 export async function scaffoldProject(t, project, { template = true } = {}) {
   /* FX-13 — a plan imported from MS Project brings its own stages: the
      gates, their evidence and the PM's allocation come with the project
@@ -115,12 +134,15 @@ export async function scaffoldProject(t, project, { template = true } = {}) {
   const prog = project.programme
     ? (await t.query(`SELECT gate_model FROM programme WHERE id = $1`, [project.programme])).rows[0]
     : null;
-  let ladder = GATES;
-  try {
-    const m = prog?.gate_model;
-    const parsed = typeof m === "string" ? JSON.parse(m) : m;
-    ladder = normaliseGateModel(parsed) ?? GATES;
-  } catch { ladder = GATES; }
+  /* NEW-26 — a programme with no ladder of its own falls back to the
+     portfolio's model (`settings.gates`, MER-01) before the default four,
+     exactly as Engine.gateModel does when it governs the project. Before
+     this, a KODO project created in the app got G1–G4 while the portfolio
+     it lives in reviews G0–G6: the milestones and the ladder disagreed on
+     day one. */
+  const portfolio = prog?.gate_model ? null
+    : (await t.query(`SELECT value FROM app_setting WHERE key = 'gates'`)).rows[0];
+  const ladder = resolveLadder(prog?.gate_model, portfolio?.value);
 
   /* E-1 — sous quelle échelle ce projet a été dressé. La 036 pose, à
      juste titre, qu'une échelle modifiée ne réécrit pas les projets
