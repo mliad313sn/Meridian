@@ -58,6 +58,8 @@ export const App = {
     project: null,
     boardProject: null,
     boardAssignee: "",
+    /* FX-14 — "" all work, "backlog", or a sprint id. */
+    boardSprint: "",
     raidFilter: "All", raidCell: null,
     cr: null,
     ganttZoom: "month", ganttProject: "all",
@@ -184,7 +186,12 @@ export const App = {
     "Milestone added": ["milestones"], "Milestone updated": ["milestones"], "Milestone removed": ["milestones"],
     "RAID item raised": ["raid"], "RAID item updated": ["raid"], "RAID item deleted": ["raid"],
     "Item closed": ["raid"], "Item reopened": ["raid"],
-    "Item moved": ["items"], "Work item added": ["items"], "Work item updated": ["items"], "Work item deleted": ["items"],
+    /* FX-14 — a stage measured from its items moves with them, so an
+       item write re-reads the stages too; a sprint write re-reads both. */
+    "Item moved": ["items", "activities"], "Work item added": ["items", "activities"],
+    "Work item updated": ["items", "activities"], "Work item deleted": ["items", "activities"],
+    "Work item planned": ["items"], "Sprint added": ["iterations"], "Sprint updated": ["iterations"],
+    "Sprint started": ["iterations"], "Sprint closed": ["iterations", "items"], "Sprint removed": ["iterations", "items"],
     "Document added": ["docs"], "Document updated": ["docs"], "Document deleted": ["docs"],
     "Document approved": ["docs"], "Document in review": ["docs"],
     "Absence declared": ["absences"], "Absence withdrawn": ["absences"],

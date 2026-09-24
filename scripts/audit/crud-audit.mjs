@@ -87,6 +87,10 @@ const ENTITIES = {
   timesheet: { c: /post\("\/timesheets"/, u: /post\("\/timesheets"/, d: /delete\("\/timesheets\/:id"/ },
   rollout_wave: { c: /post\("\/waves"/, u: /patch\("\/waves\/:id"/, d: /delete\("\/waves\/:id"/ },
   work_item: { c: /post\("\/workitems"/, u: /patch\("\/workitems\/:id"/, d: /delete\("\/workitems\/:id"/ },
+  /* FX-14 — a sprint. Closing is its own verb (it moves the unfinished
+     items and records what was delivered); a closed sprint is a record
+     and the delete route refuses it, like a closed period. */
+  iteration: { c: /post\("\/iterations"/, u: /patch\("\/iterations\/:id"/, d: /delete\("\/iterations\/:id"/ },
   board_column: { c: NA("Fixed by the delivery method"), u: /patch\("\/columns\/:id"/,
     d: NA("Fixed by the delivery method") },
   report_narrative: { c: /put\("\/narrative\/:key"/, u: /put\("\/narrative\/:key"/, d: /put\("\/narrative\/:key"/ },

@@ -3002,6 +3002,107 @@ export const ES = {
     "ninguna decisión del registro nombra este escenario — propóngalo a decisión y haga ratificar esa decisión antes de que pueda llegar al libro real",
   "the scenario's author ratified the decision that promotes it — someone independent of the scenario ratifies it":
     "el autor del escenario ratificó la decisión que lo promueve — la ratifica una persona independiente del escenario",
+  /* FX-14 (docs/41) — sprints, velocity, burndown, burnup, the hybrid stage. */
+  "Sprints":
+    "Sprints",
+  "Velocity":
+    "Velocidad",
+  "Active sprint":
+    "Sprint activo",
+  "Remaining":
+    "Pendiente",
+  "Not estimated":
+    "Sin estimar",
+  "Sprint":
+    "Sprint",
+  "Active":
+    "Activo",
+  "End":
+    "Fin",
+  "Burndown":
+    "Burndown",
+  "Burnup":
+    "Burnup",
+  "Sprint added":
+    "Sprint añadido",
+  "Sprint updated":
+    "Sprint actualizado",
+  "Sprint started":
+    "Sprint iniciado",
+  "Sprint closed":
+    "Sprint cerrado",
+  "Sprint removed":
+    "Sprint eliminado",
+  "Work item planned":
+    "Elemento planificado",
+  "All work":
+    "Todo el trabajo",
+  "Backlog":
+    "Backlog",
+  "Backlog — in no sprint":
+    "Backlog — en ningún sprint",
+  "Empty is the backlog. A closed sprint takes no new item.":
+    "Vacío: el backlog. Un sprint cerrado no admite elementos nuevos.",
+  "Delivers stage":
+    "Entrega la etapa",
+  "The stage this item delivers. A stage measured from its items reads its progress from their points.":
+    "La etapa que entrega este elemento. Una etapa medida por sus elementos lee su avance en sus puntos.",
+  "Measure progress from the board":
+    "Medir el avance desde el tablero",
+  "Now {pct}%: {done} of {total} points done. The typed {reported}% returns if you turn this off.":
+    "Ahora {pct} %: {done} de {total} puntos hechos. El {reported} % introducido vuelve si lo desactiva.",
+  "On: done points ÷ total points of the work items linked to this stage, instead of the typed %.":
+    "Activado: puntos hechos ÷ puntos totales de los elementos vinculados a esta etapa, en lugar del % introducido.",
+  "Choose one project":
+    "Elija un proyecto",
+  "Sprints belong to a project: pick one in the Board selector.":
+    "Los sprints pertenecen a un proyecto: elija uno en el selector Tablero.",
+  "New sprint":
+    "Nuevo sprint",
+  "points per sprint, last {n} closed":
+    "puntos por sprint, últimos {n} cerrados",
+  "no sprint closed yet":
+    "ningún sprint cerrado aún",
+  "items with no points are in no chart":
+    "sin puntos, un elemento no está en ningún gráfico",
+  "{n} delivered":
+    "{n} entregados",
+  "No sprint yet":
+    "Ningún sprint aún",
+  "A project without sprints works exactly as before.":
+    "Un proyecto sin sprints funciona exactamente como antes.",
+  "Ideal":
+    "Ideal",
+  "Delivered":
+    "Entregados",
+  "Average of the last three":
+    "Media de los tres últimos",
+  "Its items go back to the backlog.":
+    "Sus elementos vuelven al backlog.",
+  "Edit sprint":
+    "Editar el sprint",
+  "A sprint cannot end before it starts":
+    "Un sprint no puede terminar antes de empezar",
+  "Sprint goal":
+    "Objetivo del sprint",
+  "What the team commits to — read at the review by people who were not there.":
+    "Lo que el equipo se compromete a lograr — lo leen en la revisión personas que no estuvieron.",
+  "Save sprint":
+    "Guardar el sprint",
+  "Unfinished items go to":
+    "Los elementos sin terminar van a",
+  "{n} items not Done ({points} points). Closing records the points delivered, which velocity reads.":
+    "{n} elementos sin terminar ({points} puntos). Cerrar registra los puntos entregados, que lee la velocidad.",
+  "Close sprint":
+    "Cerrar el sprint",
+  "Sprint planning":
+    "Planificación del sprint",
+  "Days after today have no data yet.":
+    "Los días posteriores a hoy aún no tienen datos.",
+  "{n} points were done on a day nobody recorded: they count on the last day, not before.":
+    "{n} puntos se hicieron un día que nadie registró: cuentan el último día, no antes.",
+  "Empty means nobody has estimated it — it then counts in no sprint chart.":
+    "Vacío: nadie lo ha estimado — entonces no cuenta en ningún gráfico de sprint.",
 };
 
 /* ── fragments composés autour de nombres vivants (R-15) ────────────── */

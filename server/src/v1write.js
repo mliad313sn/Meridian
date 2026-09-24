@@ -40,6 +40,7 @@
 import crypto from "node:crypto";
 import { one, many, query, allocateId, updateVersioned, assertIdentifiers } from "./db.js";
 import { audited } from "./audit.js";
+import { iterationPatch, itemLinks, pointsValue, doneStamp, closeIteration } from "./iterations.js";
 import { HttpError } from "./auth.js";
 import { fromM, loadSettings } from "./portfolio.js";
 import { scaffoldProject, reschedule, phaseFor } from "./wbs.js";
@@ -1006,6 +1007,12 @@ export async function upsertActivity(user, externalId, b) {
       throw new HttpError(409, `Stage ${a.id} is already bound to another external id`);
     }
     if (a.origin === "sdp") throw new HttpError(403, "This stage is synchronised from the SDP roadmap — it is edited there");
+    /* FX-14 — refused BEFORE the binding is written: a refused call
+       leaves nothing behind. */
+    if (b.pct !== undefined && a.progress_from_items === true) {
+      throw new HttpError(409, `Stage ${a.id}'s progress is measured from the points of its work items — ` +
+        "push the items' points and columns instead, or have the project turn that option off");
+    }
     await audited(user,
       { action: "Stage linked", entity: "activity", entityId: a.id,
         detail: `${a.name} ↔ ${user.displayName} (${externalId})` },
@@ -1019,6 +1026,12 @@ export async function upsertActivity(user, externalId, b) {
   /* FX-05 — a summary's progress is computed from its children. */
   if (b.pct !== undefined && await one(`SELECT 1 AS x FROM activity WHERE parent_id = $1 LIMIT 1`, [existing.id])) {
     throw new HttpError(409, `Stage ${existing.id} is a summary — its progress is computed from the stages under it; report theirs`);
+  }
+  /* FX-14 — a stage measured from its items' points has no typed % to
+     receive: a second answer would be a silent one. */
+  if (b.pct !== undefined && existing.progress_from_items === true) {
+    throw new HttpError(409, `Stage ${existing.id}'s progress is measured from the points of its work items — ` +
+      "push the items' points and columns instead, or have the project turn that option off");
   }
   if (b.pct !== undefined) {
     const n = Math.round(Number(b.pct));
@@ -1087,12 +1100,20 @@ export async function upsertWorkItem(user, externalId, b) {
     if (!c) bad(`No such board column: ${b.column}`);
     column = c.id;
   }
-  const points = b.points === undefined ? undefined : Math.max(0, Math.round(Number(b.points) || 0));
+  /* 065 — null says "not estimated"; a number is a whole number >= 0.
+     A negative or unreadable one was floored to 0 before; it is refused
+     now, the same answer the screen gives. */
+  const points = pointsValue(b.points, undefined);
   const priority = b.priority === undefined ? undefined : text(b.priority, 4, "priority");
+  /* FX-14 — the sprint and the stage, in Meridian ids or the ids this
+     integration gave them. */
+  const lookup = async (table, ref) => (await one(
+    `SELECT id FROM ${table} WHERE id = $1 OR (external_source = $2 AND external_id = $1)`, [ref, source]))?.id;
 
   if (!existing) {
     const p = await resolveProject(source, b.project);
     if (!p) bad("A work item needs a project");
+    const links = await itemLinks({ iteration: b.iteration, activity: b.activity }, p.id, lookup);
     let id = null;
     await audited(user,
       () => ({ action: "Work item added", entity: "work_item", entityId: id,
@@ -1100,9 +1121,13 @@ export async function upsertWorkItem(user, externalId, b) {
       async (t) => {
         id = await allocateId(t, "WI");
         await t.query(
-          `INSERT INTO work_item (id, project_id, column_id, title, assignee_id, points, priority, created_on, external_source, external_id)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,CURRENT_DATE,$8,$9)`,
-          [id, p.id, column ?? "backlog", title, assignee ?? null, points ?? 1, priority ?? "P3", source, externalId]);
+          `INSERT INTO work_item (id, project_id, column_id, title, assignee_id, points, priority, created_on, external_source, external_id,
+                                  iteration_id, activity_id, done_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,CURRENT_DATE,$8,$9,$10,$11,$12)`,
+          [id, p.id, column ?? "backlog", title, assignee ?? null, points === undefined ? 1 : points,
+           priority ?? "P3", source, externalId,
+           links.iteration_id ?? null, links.activity_id ?? null,
+           doneStamp(null, column ?? "backlog").done_at ?? null]);
       });
     return stamp(true, id, externalId, 1);
   }
@@ -1112,6 +1137,9 @@ export async function upsertWorkItem(user, externalId, b) {
   if (assignee !== undefined) patch.assignee_id = assignee;
   if (points !== undefined) patch.points = points;
   if (priority !== undefined) patch.priority = priority;
+  Object.assign(patch, await itemLinks({ iteration: b.iteration, activity: b.activity }, existing.project_id, lookup));
+  patch = changedOnly(patch, existing);
+  Object.assign(patch, doneStamp(existing.column_id, patch.column_id));
   if (!Object.keys(patch).length) return stamp(false, existing.id, externalId, existing.row_version);
   const version = sentVersion(b);
   const out = await audited(user,
@@ -1120,6 +1148,87 @@ export async function upsertWorkItem(user, externalId, b) {
       detail: `${patch.title ?? existing.title} — from ${user.displayName} (${externalId})` },
     async (t) => {
       return writeRow(t, "work_item", existing.id, version, patch, "work item");
+    });
+  return stamp(false, existing.id, externalId, out.version);
+}
+
+/* ── sprints (FX-14, docs/41) ──────────────────────────────────────────
+   A CI or a Jira-like tracker keeps its sprints in step. The rules are
+   the screen's (server/src/iterations.js): one active sprint per project,
+   a closed sprint is a record, and a close says where the unfinished
+   items go — `unfinished: "backlog"` or a planned sprint (a Meridian id
+   or yours). */
+export async function upsertIteration(user, externalId, b) {
+  const source = user.id;
+  let existing = await one(
+    `SELECT * FROM iteration WHERE external_source = $1 AND external_id = $2`, [source, externalId]);
+  let binding = {};
+  if (!existing && b.adopt) {
+    const plan = await planAdoption(user, "iteration", externalId, b.adopt, "sprint");
+    existing = plan.row; binding = plan.binding;
+  }
+  const lookup = async (ref) => (await one(
+    `SELECT id FROM iteration WHERE id = $1 OR (external_source = $2 AND external_id = $1)`, [ref, source]))?.id;
+  const closing = b.state === "closed" && existing?.state !== "closed";
+  const sent = Object.fromEntries(Object.entries({ name: b.name, start: b.start, end: b.end, goal: b.goal,
+    state: b.state === "closed" ? undefined : b.state }).filter(([, v]) => v !== undefined));
+
+  if (!existing) {
+    const p = await resolveProject(source, b.project);
+    if (!p) bad("A sprint needs a project");
+    if (b.state === "closed") bad("A sprint is created planned or active; close it once it has run");
+    if (!b.start || !b.end) bad("A sprint needs a start and an end date");
+    const patch = await iterationPatch({ ...sent, name: b.name ?? externalId }, null, p.id);
+    let id = null;
+    await audited(user,
+      () => ({ action: "Sprint added", entity: "iteration", entityId: id,
+        detail: `${patch.name} (${patch.starts_on} → ${patch.ends_on}) — from ${user.displayName} (${externalId})` }),
+      async (t) => {
+        id = await allocateId(t, "IT");
+        await t.query(
+          `INSERT INTO iteration (id, project_id, name, starts_on, ends_on, goal, state, external_source, external_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+          [id, p.id, patch.name, patch.starts_on, patch.ends_on, patch.goal ?? "", patch.state ?? "planned",
+           source, externalId]);
+      });
+    return stamp(true, id, externalId, 1);
+  }
+  /* A closed sprint is a record. The same close sent again (a sync that
+     runs twice) is the record already held: nothing is written. */
+  const wanted = changedOnly(Object.fromEntries(Object.entries({
+    name: sent.name, starts_on: sent.start, ends_on: sent.end, goal: sent.goal, state: sent.state,
+  }).filter(([, v]) => v !== undefined)), existing);
+  if (existing.state === "closed" && !Object.keys(wanted).length && !Object.keys(binding).length) {
+    return stamp(false, existing.id, externalId, existing.row_version);
+  }
+  const patch = { ...changedOnly(await iterationPatch(sent, existing, existing.project_id), existing), ...binding };
+  if (!Object.keys(patch).length && !closing) return stamp(false, existing.id, externalId, existing.row_version);
+  const version = sentVersion(b);
+  let to = null;
+  if (closing) {
+    if (b.unfinished === undefined || b.unfinished === null || b.unfinished === "") {
+      bad('Closing a sprint says where its unfinished items go: unfinished = "backlog" or a planned sprint');
+    }
+    to = b.unfinished === "backlog" ? "backlog" : (await lookup(String(b.unfinished))) ?? String(b.unfinished);
+  }
+  let out = null;
+  await audited(user,
+    () => ({ action: closing ? "Sprint closed" : patch.state === "active" ? "Sprint started" : "Sprint updated",
+      entity: "iteration", entityId: existing.id,
+      detail: `${patch.name ?? existing.name}` + (closing
+        ? ` — ${out.donePoints} points delivered; ${out.carried.length} unfinished to ${out.to}` : "") +
+        ` — from ${user.displayName} (${externalId})`,
+      after: closing ? { state: "closed", donePoints: out.donePoints, carried: out.carried, to: out.to } : { ...patch } }),
+    async (t) => {
+      let v = version ?? existing.row_version;
+      if (Object.keys(patch).length) {
+        out = await writeRow(t, "iteration", existing.id, version, patch, "sprint");
+        v = out.version;
+      } else if (version !== undefined && version !== existing.row_version) {
+        throw new HttpError(409, "The version you sent is stale — read the sprint again");
+      }
+      if (closing) out = await closeIteration(t, { ...existing, row_version: v }, to, iso(new Date()));
+      return out;
     });
   return stamp(false, existing.id, externalId, out.version);
 }
@@ -1407,8 +1516,14 @@ export const WRITE_BODIES = {
   activities: { activity: "string", pct: "integer", source: "string", measuredAt: "date-time", name: "string",
     actualStart: "date", actualFinish: "date", remaining: "integer", constraintType: "string",
     constraintDate: "date", deadline: "date", links: "object[]", version: "integer" },
+  /* FX-14 — `iteration` (a sprint: Meridian id or yours, "" for the
+     backlog) and `activity` (the stage it delivers); `points` may be null. */
   workitems: { project: "string", title: "string", column: "string", assignee: "string", points: "integer",
-    priority: "string", version: "integer" },
+    priority: "string", iteration: "string", activity: "string", version: "integer" },
+  /* FX-14 — a sprint. `unfinished` is read only when `state` becomes
+     "closed": where the items not Done go ("backlog" or a planned sprint). */
+  iterations: { adopt: "string", project: "string", name: "string", start: "date", end: "date", goal: "string",
+    state: "string", unfinished: "string", version: "integer" },
   /* REQ-20 (V-1) — la valeur, aux mêmes règles que la livraison. */
   benefits: { adopt: "string", project: "string", kind: "string", title: "string", detail: "string",
     measure: "string", unit: "string", baseline: "number", target: "number", actual: "number",

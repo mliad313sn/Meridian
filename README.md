@@ -232,7 +232,7 @@ server/          src/env.js        .env, the data directory, the one version num
                  src/portfolio.js  rows → the shape the engine reads
                  src/routes/       auth · portfolio · meetings · admin · import ·
                                    ladder · signals · valuepage · federation · v1
-                 migrations/       ordered SQL (001–064, 71 tables, applied at boot)
+                 migrations/       ordered SQL (001–065, 72 tables, applied at boot)
                  test/             the suites — count in CHANGELOG.md
 
 web/             src/ui/kit.js     h() builder, dialogs, tables, charts (from v4)
@@ -292,7 +292,7 @@ writer gets a 409, never a silent overwrite.
 | [`docs/34-exploitation.md`](docs/34-exploitation.md) | Operating it for real — PostgreSQL, backup and the restore drill that proves it, second instance, proxy, upgrade tenant by tenant, fleet template |
 | [`docs/35-field-return-loop.md`](docs/35-field-return-loop.md) | **The field-return loop as a pattern** (EN) — how a programme files a request register, how every branch of it is reviewed, the three acceptance states, and how a second field repository joins; the shape is published in [`docs/requests/register.schema.json`](docs/requests/register.schema.json) |
 | [`docs/36-convergence.md`](docs/36-convergence.md) | Convergence — one main, every field return closed: the campaign, the measured state, and the decisions D-36.xx |
-| [`docs/37-technical-reference.md`](docs/37-technical-reference.md) | **Technical reference** (EN) — project description, the module map, the 71-table database schema, every functionality, the API surface, the 21 screens, deployment, and the known limits, each with its `docs/36` line |
+| [`docs/37-technical-reference.md`](docs/37-technical-reference.md) | **Technical reference** (EN) — project description, the module map, the 72-table database schema, every functionality, the API surface, the 21 screens, deployment, and the known limits, each with its `docs/36` line |
 | [`docs/38-user-manual.md`](docs/38-user-manual.md) | **User manual** (EN) — role by role, workflow by workflow, walked against 5.18.0, with the product description in five languages |
 | [`docs/39-manuel-utilisateur.md`](docs/39-manuel-utilisateur.md) | **Manuel utilisateur** (FR) — rôle par rôle, processus par processus, avec les libellés que l'écran affiche |
 | [`docs/40-comite-revue-documentation.md`](docs/40-comite-revue-documentation.md) | Documentation review committee of 31/08 (FR) — four seats, 71 findings on the 5.3.0 text; kept as the record, renumbered from 29–32 |

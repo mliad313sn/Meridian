@@ -35,6 +35,7 @@ import valuePageRoutes from "./routes/valuepage.js";
 import registerRoutes from "./routes/registers.js";
 import referenceRoutes from "./routes/references.js";
 import resourceRoutes from "./routes/resources.js";
+import iterationRoutes from "./routes/iterations.js";
 import federationServiceRoutes from "./routes/federationService.js";
 /* docs/41 A2 — the work breakdown and the named baselines. */
 import planRoutes from "./routes/plan.js";
@@ -237,6 +238,8 @@ export function buildApp() {
   app.use("/api", resourceRoutes);
   /* FX-12 (docs/41) — portfolio scenarios: what-if copies that never write the book. */
   app.use("/api", scenarioRoutes);
+  /* FX-14 (docs/41) — sprints: plan, start, close. */
+  app.use("/api", iterationRoutes);
   app.use("/api/import", importRoutes);
   app.use("/api/meetings", meetingRoutes);
   app.use("/api/admin", adminRoutes);

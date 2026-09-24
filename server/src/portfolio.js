@@ -18,6 +18,31 @@
 import { many, one } from "./db.js";
 import { can, canSeeProject, projectScopeSql } from "../../shared/rbac.js";
 import { rollupWbs } from "../../shared/engine.js";
+import { itemProgress } from "../../shared/agile.js";
+
+/**
+ * FX-14 — a stage's progress. `pct` is the one field the engine's
+ * physical-progress path reads (5.9.1: percent complete falls back to the
+ * weighted physical progress), so the hybrid option feeds THAT field and
+ * adds no second rule. Off (the default, and every stage before 065):
+ * `pct` is the stored figure, exactly as before (D-41.01). On: done
+ * points / total points of the linked items; when they measure nothing
+ * the reported figure stands, and `progressWhy` says why.
+ * `reportedPct` is always the stored figure — what the export carries
+ * and the import writes back.
+ */
+function stageProgress(a, items) {
+  const reported = a.pct;
+  if (a.progress_from_items !== true) {
+    return { pct: reported, reportedPct: reported, progressFromItems: false };
+  }
+  const m = itemProgress(items, a.id);
+  return {
+    pct: m.pct ?? reported, reportedPct: reported, progressFromItems: true,
+    progressItems: { done: m.done, total: m.total, items: m.items },
+    ...(m.why ? { progressWhy: m.why } : {}),
+  };
+}
 
 export const M = 1_000_000;
 /** Exact whole units (what the ledger holds) → millions (what is read). */
@@ -169,6 +194,7 @@ export async function loadPortfolio(user, { inactive = false } = {}) {
     stakeholderRows, commsRows, reconfirmRows,
     evidenceRows, findingRows, seatRows, seatConflicts, objectionRows,
     assignmentRows,
+    iterationRows,
   ] = await Promise.all([
     inScope(`SELECT * FROM activity WHERE project_id = ANY($1) ORDER BY project_id, stage, id`),
     inScope(`SELECT d.* FROM activity_dep d JOIN activity a ON a.id = d.activity_id
@@ -263,7 +289,32 @@ export async function loadPortfolio(user, { inactive = false } = {}) {
        project like the activity itself. */
     inScope(`SELECT s.* FROM assignment s JOIN activity a ON a.id = s.activity_id
               WHERE a.project_id = ANY($1) ORDER BY s.id`),
+    /* FX-14 (065) — the sprints of the projects in scope. */
+    inScope(`SELECT * FROM iteration WHERE project_id = ANY($1) ORDER BY project_id, starts_on, id`),
   ]);
+
+  /* FX-14 — the items in engine shape, once: the board reads them, and
+     the hybrid option below reads them to measure a stage. */
+  const itemsOut = items.map((i) => ({
+    id: i.id, project: i.project_id, column: i.column_id, title: i.title,
+    /* 065 — `null` is an item nobody has estimated, not a one-point item. */
+    assignee: i.assignee_id, points: i.points === null || i.points === undefined ? null : Number(i.points),
+    priority: i.priority,
+    /* MER-05 — d'où vient cet élément, ce qu'il vaut, et par quelle
+       méthode. Une lettre de priorité perdait les trois : un arriéré
+       d'améliorations noté par RICE et arrivé d'un panel d'enfants
+       devenait « P2 », et la note comme la source disparaissaient. */
+    source: i.source ?? "", score: i.score === null || i.score === undefined ? null : Number(i.score),
+    scoreMethod: i.score_method ?? "",
+    created: i.created_on,
+    /* FX-14 — the sprint it is planned in (null: the backlog), the stage
+       it delivers, and when it reached Done (null: not done, or done on a
+       day nobody recorded). */
+    iteration: i.iteration_id ?? null, activity: i.activity_id ?? null,
+    doneAt: i.done_at ? new Date(i.done_at).toISOString() : null,
+    externalSource: i.external_source ?? null, externalId: i.external_id ?? null,
+    version: i.row_version,
+  }));
 
   /* La longueur d'échelle déclarée par chaque programme, lue une fois :
      cent projets ne doivent pas coûter cent lectures. */
@@ -473,7 +524,7 @@ export async function loadPortfolio(user, { inactive = false } = {}) {
       id: a.id, project: a.project_id, name: a.name, stage: a.stage,
       parentId: a.parent_id ?? null,
       start: a.start_date, end: a.end_date, baseStart: a.base_start, baseEnd: a.base_end,
-      weight: Number(a.weight), pct: a.pct, owner: a.owner_id,
+      weight: Number(a.weight), ...stageProgress(a, itemsOut), owner: a.owner_id,
       deps: depsByActivity.get(a.id) ?? [],
       /* FX-01 / FX-03 / FX-04 (061) — typed links, the date constraint
          (null for ASAP), the deadline, the actuals and what remains. */
@@ -801,18 +852,17 @@ export async function loadPortfolio(user, { inactive = false } = {}) {
 
     columns: columns.map((c) => ({ id: c.id, name: c.name, wip: c.wip })),
 
-    items: items.map((i) => ({
-      id: i.id, project: i.project_id, column: i.column_id, title: i.title,
-      assignee: i.assignee_id, points: i.points, priority: i.priority,
-      /* MER-05 — d'où vient cet élément, ce qu'il vaut, et par quelle
-         méthode. Une lettre de priorité perdait les trois : un arriéré
-         d'améliorations noté par RICE et arrivé d'un panel d'enfants
-         devenait « P2 », et la note comme la source disparaissaient. */
-      source: i.source ?? "", score: i.score === null || i.score === undefined ? null : Number(i.score),
-      scoreMethod: i.score_method ?? "",
-      created: i.created_on,
-      externalSource: i.external_source ?? null, externalId: i.external_id ?? null,
-      version: i.row_version,
+    items: itemsOut,
+
+    /* FX-14 (065) — sprints. `donePoints` is what the sprint delivered,
+       measured when it closed (null until then): velocity reads it. */
+    iterations: iterationRows.map((x) => ({
+      id: x.id, project: x.project_id, name: x.name, start: x.starts_on, end: x.ends_on,
+      goal: x.goal ?? "", state: x.state,
+      donePoints: x.done_points === null || x.done_points === undefined ? null : Number(x.done_points),
+      closedOn: x.closed_on ?? null,
+      externalSource: x.external_source ?? null, externalId: x.external_id ?? null,
+      version: x.row_version,
     })),
 
     crossDeps: crossDeps.map((c) => ({

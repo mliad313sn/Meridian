@@ -31,7 +31,7 @@ import { openApiDocument, scopedEndpoints } from "../openapi.js";
 import { packageVersion } from "../env.js";
 import {
   idempotent, assertKnownBody, upsertProject, upsertMilestone, upsertRaid, upsertRaidReview, upsertDecision,
-  upsertAction, upsertActivity, upsertWorkItem, upsertCriterion, upsertBenefit, upsertBusinessCase,
+  upsertAction, upsertActivity, upsertWorkItem, upsertIteration, upsertCriterion, upsertBenefit, upsertBusinessCase,
   upsertReferenceV1, upsertAssignment,
 } from "../v1write.js";
 
@@ -228,6 +228,8 @@ r.put("/milestones/:externalId", requireIntegration("write:portfolio"), known(),
 r.put("/raid/:externalId", requireIntegration("write:portfolio"), known(), idempotent(), write(upsertRaid));
 r.put("/activities/:externalId", requireIntegration("write:portfolio"), known(), idempotent(), write(upsertActivity));
 r.put("/workitems/:externalId", requireIntegration("write:portfolio"), known(), idempotent(), write(upsertWorkItem));
+/* FX-14 (docs/41) — sprints, from a CI or a Jira-like tracker. */
+r.put("/iterations/:externalId", requireIntegration("write:portfolio"), known(), idempotent(), write(upsertIteration));
 r.put("/criteria/:externalId", requireIntegration("write:portfolio"), known(), idempotent(), write(upsertCriterion));
 /* REQ-20 (V-1) — la valeur est du portefeuille : ce qu'un projet promet
    et ce qu'il rend se synchronisent comme ce qu'il livre. */

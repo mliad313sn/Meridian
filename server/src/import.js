@@ -48,7 +48,10 @@ const PORTFOLIO_TABLES = [
   "raid_review",
   "seat_conflict", "seat",
   "finding", "evidence",
-  "report_narrative", "work_item", "document", "allocation",
+  "report_narrative", "work_item",
+  /* FX-14 (065) — a sprint after the items planned in it. */
+  "iteration",
+  "document", "allocation",
   "change_step", "change_request", "raid_item", "cost_line", "milestone",
   "requirement",
   /* FX-07 — a snapshot's rows before the snapshot, both before the project. */
@@ -69,7 +72,7 @@ export const BOOK_TABLES = {
   sites: "site", people: "person", programmes: "programme", projects: "project",
   activities: "activity", crossDeps: "cross_dep", milestones: "milestone",
   requirements: "requirement", crs: "change_request", raid: "raid_item", ledger: "cost_line",
-  docs: "document", items: "work_item", allocations: "allocation",
+  docs: "document", items: "work_item", iterations: "iteration", allocations: "allocation",
   evidence: "evidence", findings: "finding", seats: "seat", objections: "decision_objection",
   windows: "site_window", absences: "person_absence", benefits: "benefit", waves: "rollout_wave",
   commitments: "commitment", timesheets: "timesheet", tolerances: "project_tolerance",
@@ -419,13 +422,18 @@ export async function importBook(book, user, opts = {}) {
                                base_start, base_end, weight, pct, owner_id,
                                progress_source, progress_at, origin, external_source, external_id,
                                constraint_type, constraint_date, deadline,
-                               actual_start, actual_finish, remaining_days)
+                               actual_start, actual_finish, remaining_days,
+                               progress_from_items)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,${INTEGRATION(15)},$16,
-                 $17,$18,$19,$20,$21,$22)`,
+                 $17,$18,$19,$20,$21,$22,$23)`,
         [a.id, a.project, a.name, int(a.stage), a.start, a.end,
          a.baseStart ?? a.start, a.baseEnd ?? a.end,
+         /* FX-14 — `pct` in the book is what the engine reads, which for
+            a stage measured from its items is the derived figure; the
+            stored one travels as `reportedPct` and is what comes back. A
+            file older than 065 has only `pct`. */
          wbsParents.has(a.id) ? 0 : Number(a.weight ?? 0),
-         wbsParents.has(a.id) ? 0 : Math.max(0, Math.min(100, int(a.pct))), clean(a.owner),
+         wbsParents.has(a.id) ? 0 : Math.max(0, Math.min(100, int(a.reportedPct ?? a.pct))), clean(a.owner),
          /* NEW-05 — who measured this progress, and when (I-5): without
             it a figure pushed by the site's scheduler reads as typed here. */
          a.progressSource ?? "", clean(a.progressAt), origin(a.origin),
@@ -433,7 +441,9 @@ export async function importBook(book, user, opts = {}) {
          /* FX-03 / FX-04 (061) — a constraint is { type, date }; none is ASAP */
          a.constraint?.type && a.constraint.type !== "ASAP" ? a.constraint.type : "ASAP",
          a.constraint?.type && a.constraint.type !== "ASAP" ? clean(a.constraint.date) : null,
-         clean(a.deadline), clean(a.actualStart), clean(a.actualFinish), intOrNull(a.remaining)]);
+         clean(a.deadline), clean(a.actualStart), clean(a.actualFinish), intOrNull(a.remaining),
+         // FX-14 — the hybrid option, off unless the book says on
+         a.progressFromItems === true]);
     }
     // dependencies second, so both ends exist
     for (const a of book.activities ?? []) {
@@ -731,24 +741,44 @@ export async function importBook(book, user, opts = {}) {
                         WHERE id = $1`, [d.id, d.supersedes]);
       }
     }
+    /* FX-14 (065) — the sprints, before the items planned in them. A
+       closed sprint comes back with what it delivered: velocity is a
+       record, not a recomputation. */
+    for (const x of book.iterations ?? []) {
+      const state = ["planned", "active", "closed"].includes(x.state) ? x.state : "planned";
+      await t.query(
+        `INSERT INTO iteration (id, project_id, name, starts_on, ends_on, goal, state,
+                                done_points, closed_on, external_source, external_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,${INTEGRATION(10)},$11)`,
+        [x.id, x.project, x.name ?? x.id, x.start, x.end ?? x.start, x.goal ?? "", state,
+         state === "closed" ? Math.max(0, int(x.donePoints)) : null,
+         state === "closed" ? (clean(x.closedOn) ?? x.end ?? x.start) : null,
+         clean(x.externalSource), clean(x.externalId)]);
+    }
     for (const i of book.items ?? []) {
       await t.query(
         `INSERT INTO work_item (id, project_id, column_id, title, assignee_id, points, priority,
                                 created_on, source, score, score_method,
-                                external_source, external_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,${INTEGRATION(12)},$13)`,
+                                external_source, external_id,
+                                iteration_id, activity_id, done_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,${INTEGRATION(12)},$13,$14,$15,$16)`,
         /* MER-05 — d'où vient cet élément et combien il vaut. Un
            arriéré d'améliorations arrive d'une revue de jalon, d'un
            panel d'enfants ou de la télémétrie, et il est noté par une
            méthode déclarée. L'import n'en gardait qu'une lettre de
            priorité, ce qui perdait les trois. */
         [i.id, i.project, i.column, i.title, clean(i.assignee),
-         int(i.points, 1), i.priority ?? "P3", i.created ?? new Date().toISOString().slice(0, 10),
+         /* 065 — unestimated (null) stays unestimated; absent is the old
+            default of one point. */
+         i.points === null ? null : Math.max(0, int(i.points, 1)),
+         i.priority ?? "P3", i.created ?? new Date().toISOString().slice(0, 10),
          i.source ?? "",
          Number.isFinite(Number(i.score)) && i.score !== null && i.score !== "" ? Number(i.score) : null,
          i.scoreMethod ?? "",
          // NEW-05 — the system that pushed it, and its name there (I-2)
-         clean(i.externalSource), clean(i.externalId)]);
+         clean(i.externalSource), clean(i.externalId),
+         // FX-14 — its sprint, its stage, and when it reached Done
+         clean(i.iteration), clean(i.activity), i.column === "done" ? clean(i.doneAt) : null]);
     }
     /* ── la gouvernance (MER-05, MER-06, MER-07, MER-11) ───────────
        L'ordre compte : une pièce de preuve avant le constat qui la
@@ -1446,7 +1476,8 @@ export async function importBook(book, user, opts = {}) {
          ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`, [JSON.stringify(book.statusDate)]);
     }
 
-    for (const k of ["projects", "activities", "milestones", "requirements", "ledger", "raid", "crs", "docs", "items", "allocations",
+    for (const k of ["projects", "activities", "milestones", "requirements", "ledger", "raid", "crs", "docs", "items",
+                     "iterations", "allocations",
                      "evidence", "findings", "seats", "objections",
                      // NEW-05 — the fifteen registers the import now reads
                      "windows", "absences", "benefits", "waves", "commitments", "timesheets",
@@ -1500,6 +1531,8 @@ export async function importBook(book, user, opts = {}) {
       ["ASG","assignment","id ~ '^ASG-[0-9]+$'"],["RATE","rate","id ~ '^RATE-[0-9]+$'"],
       // FX-12 (064) — a scenario and its changes
       ["SCN","scenario","id ~ '^SCN-[0-9]+$'"],["SCC","scenario_change","id ~ '^SCC-[0-9]+$'"],
+      // FX-14 — a sprint mints its id from this one
+      ["IT","iteration","id ~ '^IT-[0-9]+$'"],
     ]) {
       await t.query(
         `INSERT INTO id_counter (prefix, next_value)

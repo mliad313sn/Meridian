@@ -33,6 +33,9 @@ export const ACTIONS = [
   "project.create", "project.write", "project.baseline", "project.gate",
   "project.close", "schedule.write", "raid.write", "document.write",
   "workitem.write", "allocation.write",
+  /* FX-14 (docs/41, S3) : planifier, démarrer et clore un sprint. Voir le
+     `case` plus bas pour le niveau et sa raison. */
+  "iteration.write",
   // governance (2026-08-28 committee): approving gate evidence is a
   // separate power from editing documents, and a site may formally raise
   // a concern on a group programme landing on it.
@@ -900,6 +903,20 @@ export function can(user, action, resource = {}) {
        names who took it and why. Project write authority, therefore,
        and nothing less: a reader cannot fill a project's eleven slots. */
     case "baseline.snapshot":
+      return canWriteProject(user, resource.project)
+        ? allow()
+        : outsideProject(user, resource.project);
+
+    /* FX-14 — a sprint is the delivery team's own cadence: who writes the
+       project plans its sprints, starts them and closes them. It is NOT
+       group-only: closing a sprint measures what the team delivered and
+       moves its unfinished items, it releases no money and clears no
+       gate. It is its own action rather than `workitem.write` because a
+       close writes a RECORD — the points delivered, which velocity reads
+       — and the trail should say which power did that. Same scope as any
+       project write: a site-governed project at the site, a group project
+       inside a granted programme. */
+    case "iteration.write":
       return canWriteProject(user, resource.project)
         ? allow()
         : outsideProject(user, resource.project);

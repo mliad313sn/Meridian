@@ -26,6 +26,7 @@ import { isEvidenceLocator, EVIDENCE_REFUSAL, humanActRefusal } from "../evidenc
 import { assertCaseReconfirmed, deltaAgainst, reconfirmationsFor } from "../value.js";
 import { prioritise, INPUTS } from "../../../shared/prioritise.js";
 import { linksFor, linkLabel, trackingPatch, bumpVersion, calendarRef } from "../schedwrite.js";
+import { itemLinks, pointsValue, doneStamp } from "../iterations.js";
 
 
 const r = Router();
@@ -524,7 +525,15 @@ r.patch("/activities/:id", async (req, res, next) => {
     if (b.name !== undefined) patch.name = b.name;
     if (b.start !== undefined) patch.start_date = b.start;
     if (b.end !== undefined) patch.end_date = b.end;
-    if (b.pct !== undefined) patch.pct = Math.max(0, Math.min(100, Math.round(num(b.pct))));
+    /* FX-14 — the hybrid option. On, the stage's physical % is measured
+       from its items' points and a typed % would be a second, silent
+       answer: it is refused, and says how to type one again. */
+    if (b.progressFromItems !== undefined) patch.progress_from_items = b.progressFromItems === true;
+    const fromItems = patch.progress_from_items ?? a.progress_from_items === true;
+    if (b.pct !== undefined && fromItems && Number(b.pct) !== Number(a.pct)) {
+      throw new HttpError(409, "This stage's progress is measured from the points of its work items — turn that off to type a percentage");
+    }
+    if (b.pct !== undefined && !fromItems) patch.pct = Math.max(0, Math.min(100, Math.round(num(b.pct))));
     if (b.owner !== undefined) patch.owner_id = b.owner || null;
     /* FX-03 / FX-04 (061) — the constraint, the deadline, the actuals. */
     Object.assign(patch, trackingPatch(b, a));
@@ -3298,16 +3307,26 @@ r.post("/workitems", async (req, res, next) => {
     const p = await project(b.project, req.user);
     gate(req.user, "workitem.write", { project: p });
     if (!b.title) bad("A work item needs a title");
+    /* FX-14 — planning it into a sprint is a sprint act as well. */
+    if (b.iteration) gate(req.user, "iteration.write", { project: p });
+    const links = await itemLinks({ iteration: b.iteration, activity: b.activity }, p.id);
+    const column = b.column ?? "backlog";
     let id = null;
     await audited(req.user,
       () => ({ action: "Work item added", entity: "work_item", entityId: id, detail: b.title }),
       async (t) => {
         id = await allocateId(t, "WI");
         return t.query(
-          `INSERT INTO work_item (id, project_id, column_id, title, assignee_id, points, priority, created_on)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,CURRENT_DATE)`,
-          [id, p.id, b.column ?? "backlog", b.title, b.assignee ?? null,
-           num(b.points, 1), b.priority ?? "P3"]);
+          `INSERT INTO work_item (id, project_id, column_id, title, assignee_id, points, priority, created_on,
+                                  iteration_id, activity_id, done_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,CURRENT_DATE,$8,$9,$10)`,
+          [id, p.id, column, b.title, b.assignee ?? null,
+           /* 065 — absent keeps the old default of one point; null or
+              empty is "not estimated". */
+           pointsValue(b.points, 1),
+           b.priority ?? "P3",
+           links.iteration_id ?? null, links.activity_id ?? null,
+           doneStamp(null, column).done_at ?? null]);
       });
     res.status(201).json({ id });
   } catch (e) { next(e); }
@@ -3324,12 +3343,25 @@ r.patch("/workitems/:id", async (req, res, next) => {
     if (b.title !== undefined) patch.title = b.title;
     if (b.column !== undefined) patch.column_id = b.column;
     if (b.assignee !== undefined) patch.assignee_id = b.assignee || null;
-    if (b.points !== undefined) patch.points = num(b.points, 1);
+    /* 065 — null (or empty) is "not estimated"; a number is ≥ 0. */
+    if (b.points !== undefined) patch.points = pointsValue(b.points);
     if (b.priority !== undefined) patch.priority = b.priority;
+    /* FX-14 — the sprint it is planned in and the stage it delivers,
+       both of this project; planning is a sprint act. And `done_at`
+       follows the column. */
+    if (b.iteration !== undefined && (b.iteration || null) !== (w.iteration_id ?? null)) {
+      gate(req.user, "iteration.write", { project: p });
+    }
+    Object.assign(patch, await itemLinks({ iteration: b.iteration, activity: b.activity }, w.project_id));
+    Object.assign(patch, doneStamp(w.column_id, b.column));
+    const planned = patch.iteration_id !== undefined && patch.iteration_id !== (w.iteration_id ?? null);
 
     const out = await audited(req.user,
-      { action: b.column ? "Work item moved" : "Work item updated",
-        entity: "work_item", entityId: w.id, detail: b.title ?? w.title },
+      { action: b.column ? "Work item moved" : planned ? "Work item planned" : "Work item updated",
+        entity: "work_item", entityId: w.id, detail: (b.title ?? w.title) +
+          (planned ? ` → ${patch.iteration_id ?? "backlog"}` : ""),
+        before: planned ? { iteration: w.iteration_id ?? null } : undefined,
+        after: planned ? { iteration: patch.iteration_id } : undefined },
       async (t) => conflict(await updateVersioned(t, "work_item", w.id, requiredVersion(b, "work item"), patch)));
     res.json({ version: out.version });
   } catch (e) { next(e); }
