@@ -22,6 +22,44 @@ Nothing yet.
 
 ---
 
+## [5.32.0] — 2026-09-24
+
+**What if — portfolio scenarios that never write the book** (FX-12;
+docs/41 wave C1, migration 064).
+
+### Added
+
+- **A scenario is a named what-if copy of the portfolio:** defer or
+  accelerate a project, cancel it, change its budget, the capex envelope
+  or a ranking weight. It is compared side by side with the live book —
+  money totals, envelope line and ranking, capacity by month, value and
+  benefit dates, finish dates — by the engine's own functions run on a
+  copy (`shared/scenario.js`). It never writes the live book (D-41.02):
+  a test compares every live table's rows and content before and after.
+- **It reaches the book only through a decision** of the register that
+  names it, ratified by someone independent of the decider, the recorder
+  and the scenario's author (REQ-49/50). Proposing freezes the scenario,
+  so what is ratified is what is applied. Applying writes each change as
+  its own audited mutation under `row_version`, and refuses by name any
+  row that moved since the change was written. Each change is also held
+  to its own authority (an envelope change needs `settings.write`).
+- Rules in `shared/rbac.js`: `scenario.read`, `scenario.write`,
+  `scenario.apply` (group level) and `canApplyScenario`. A Scenarios
+  screen for group and admin, FR and ES. Scenarios travel with the book
+  export and import (F13).
+- A cancel leaves the project record open: closing stays with the
+  closure gate and its three signatures.
+
+### Measure
+
+`scenarios.test.js`: hand-worked shifts (not started moves whole, under
+way keeps its start, never before the status date), an envelope of 10
+against 11 demanded, a cancel that frees 5, capacity by month. Browser:
+defer PRJ-101 by 13 weeks, compare, apply refused without a decision,
+the live project unchanged. Bundle 278.60 kB gzip. `npm run verify`: 1101/1101.
+
+---
+
 ## [5.31.0] — 2026-09-24
 
 **Who does the work, and what it costs: assignments, leveling, EAC**

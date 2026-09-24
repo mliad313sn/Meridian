@@ -128,6 +128,16 @@ const FR = {
   "Something went wrong on the server": "Une erreur est survenue sur le serveur",
   "Entra sign-on is not configured on this instance":
     "L'authentification Entra n'est pas configurée sur cette instance",
+  /* FX-12 (docs/41) — portfolio scenarios. */
+  "scenarios are the group's working copies of the portfolio — ask your programme office for the one you need":
+    "les scénarios sont les copies de travail du portefeuille au niveau groupe — demandez à votre bureau de programme celui dont vous avez besoin",
+  "no decision in the register names this scenario — propose it for decision, and have the decision ratified, before it can reach the live book":
+    "aucune décision du registre ne nomme ce scénario — proposez-le à la décision et faites ratifier cette décision avant qu'il puisse atteindre le livre réel",
+  "the scenario's author ratified the decision that promotes it — someone independent of the scenario ratifies it":
+    "l'auteur du scénario a ratifié la décision qui le promeut — une personne indépendante du scénario la ratifie",
+  "A scenario needs a name — the question it asks, in a few words":
+    "Un scénario a besoin d'un nom — la question qu'il pose, en quelques mots",
+  "No such scenario": "Scénario introuvable",
 };
 
 /** Prefix matches, for messages that carry data after a fixed opening. */

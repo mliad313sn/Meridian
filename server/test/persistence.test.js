@@ -138,7 +138,12 @@ describe("schema and migrations (R2.2, R2.7)", () => {
           rate table (a person or a role, a day rate in a currency, its
           effective dates). 061, 062, 064 and 065 are reserved for the
           other waves of the functional committee. */
-       "063_who_does_the_work_and_what_it_costs.sql"]);
+       "063_who_does_the_work_and_what_it_costs.sql",
+       /* 064 - docs/41 FX-12: portfolio scenarios. A named, isolated set
+          of what-if changes (scenario, scenario_change) that never writes
+          the live book; a decision of the register may name the scenario
+          it promotes (meeting_decision.scenario_id). */
+       "064_what_if_is_not_what_is.sql"]);
     const again = await migrate({ silent: true });
     assert.deepEqual(again, [], "a second run applies nothing");
   });

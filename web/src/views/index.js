@@ -55,6 +55,8 @@ import {
 import { meetingsView, invalidateMeetings } from "./meetings.js";
 /* docs/41 A2 — the breakdown (FX-05), the Gantt (FX-06), named baselines (FX-07). */
 import { ganttFold, planTree, wbsName, moveStage, baselinesFold, keptFold } from "./gantt.js";
+/* FX-12 — portfolio scenarios: what-if copies, compared, never written. */
+import { scenariosView } from "./scenarios.js";
 /* NEW-04 — KODO's registers: requirements, evidence, findings, seats,
    objections, and what a decision costs to reverse. */
 import { assuranceFolds, objectionsFor, decisionFields, decisionFacts } from "./registers.js";
@@ -6948,6 +6950,7 @@ function resetAll() {
 
 /* ── Meetings (D-04) ──────────────────────────────────────────────── */
 Views.meetings = (db) => meetingsView(db);
+Views.scenarios = (db) => scenariosView(db);
 
 /* ── header actions ───────────────────────────────────────────────────
    R7.3 — a control the account has no authority for is absent, not

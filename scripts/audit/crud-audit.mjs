@@ -207,6 +207,13 @@ const ENTITIES = {
      PUT /api/v1/decisions/:externalId, sous `row_version` depuis la 041. */
   meeting_decision: { c: /occurrences\/:id\/decisions/, u: /put\("\/decisions\/:externalId"/,
     d: NA("A decision is superseded by a new one, never deleted (I-7)") },
+  /* FX-12 (064) — a what-if copy of the portfolio and its changes. A
+     Draft is corrected and removed freely; once a decision names it, it
+     is withdrawn, not deleted (routes/scenarios.js). */
+  scenario: { c: /post\("\/scenarios"/, u: /patch\("\/scenarios\/:id"/,
+    d: /delete\("\/scenarios\/:id"|scenarios\/:id\/withdraw/ },
+  scenario_change: { c: /post\("\/scenarios\/:id\/changes"/, u: /patch\("\/scenario-changes\/:id"/,
+    d: /delete\("\/scenario-changes\/:id"/ },
   meeting_action: { c: /occurrences\/:id\/actions/, u: /patch\("\/actions\/:id"/,
     d: NA("Cancelled via status, so it stays in the minutes that raised it") },
 

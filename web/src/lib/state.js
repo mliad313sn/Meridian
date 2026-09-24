@@ -373,6 +373,7 @@ export const NAV = [
     ["portfolio", "Portfolio"],
     ["roadmap", "Roadmap"],
     ["pipeline", "Pipeline"],
+    ["scenarios", "Scenarios"],
     ["programmes", "Programmes"],
     ["mysite", "My site"],
     ["project", "Project overview"],
@@ -393,6 +394,7 @@ export const TITLES = {
   portfolio: ["Portfolio", "Executive portfolio view"],
   roadmap: ["Deliver", "Portfolio roadmap"],
   pipeline: ["Deliver", "Demand & prioritisation"],
+  scenarios: ["Deliver", "Portfolio scenarios"],
   programmes: ["Deliver", "Programme governance"],
   mysite: ["Deliver", "My site"],
   project: ["Project", null],
@@ -424,6 +426,8 @@ export const ROUTES = NAV.flatMap((g) => g.items.map(([key]) => key));
    server refuses the data either way; this keeps the screen honest. */
 export const ROUTE_ROLES = {
   programmes: ["admin", "group"],
+  /* FX-12 — a scenario is the group's what-if copy (rbac scenario.read). */
+  scenarios: ["admin", "group"],
   /* A-08 — la mesure de l'adoption est une lecture de gouvernance :
      même autorité que le registre des décisions. */
   adoption: ["admin", "group"],

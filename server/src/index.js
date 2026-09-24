@@ -38,6 +38,7 @@ import resourceRoutes from "./routes/resources.js";
 import federationServiceRoutes from "./routes/federationService.js";
 /* docs/41 A2 — the work breakdown and the named baselines. */
 import planRoutes from "./routes/plan.js";
+import scenarioRoutes from "./routes/scenarios.js";
 import { translate } from "./pgerror.js";
 import { say, localeOf } from "./i18n.js";
 import { liveDemoAccounts, demoRefusal } from "./posture.js";
@@ -234,6 +235,8 @@ export function buildApp() {
   app.use("/api", referenceRoutes);
   /* docs/41 wave B — assignments, rates, leveling (FX-08/09/10). */
   app.use("/api", resourceRoutes);
+  /* FX-12 (docs/41) — portfolio scenarios: what-if copies that never write the book. */
+  app.use("/api", scenarioRoutes);
   app.use("/api/import", importRoutes);
   app.use("/api/meetings", meetingRoutes);
   app.use("/api/admin", adminRoutes);

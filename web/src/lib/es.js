@@ -2917,6 +2917,91 @@ export const ES = {
   "a rate is missing": "falta una tarifa",
   "not every activity is costed": "no todas las actividades tienen coste",
   "Pushed by a predecessor": "Empujada por una predecesora",
+  /* FX-12 (docs/41) — escenarios de cartera. */
+  "Scenarios":
+    "Escenarios",
+  "Portfolio scenarios":
+    "Escenarios de cartera",
+  "Scenarios are the group's what-if copies of the portfolio; they never change the live book.":
+    "Los escenarios son las copias « y si » de la cartera, a nivel de grupo; nunca modifican el libro real.",
+  "what-if copies of the portfolio, never written to the live book":
+    "copias « y si » de la cartera, nunca escritas en el libro real",
+  "New scenario":
+    "Nuevo escenario",
+  "Scenario":
+    "Escenario",
+  "Created":
+    "Creado",
+  "No scenario yet — draft one to ask what if, without touching the live book.":
+    "Ningún escenario — redacte uno para preguntar « y si », sin tocar el libro real.",
+  "Propose for decision":
+    "Proponer a decisión",
+  "Apply to the live book":
+    "Aplicar al libro real",
+  "Change":
+    "Cambio",
+  "No change yet.":
+    "Ningún cambio.",
+  "The question it asks, in a few words.":
+    "La pregunta que plantea, en pocas palabras.",
+  "Why it is asked — for whoever reads the comparison.":
+    "Por qué se plantea — para quien lea la comparación.",
+  "Scenario saved":
+    "Escenario guardado",
+  "If the project changes before the scenario is applied, applying it is refused.":
+    "Si el proyecto cambia antes de aplicar el escenario, la aplicación se rechaza.",
+  "Weeks":
+    "Semanas",
+  "+ defers, − accelerates. Only work after the status date moves; the baseline never does.":
+    "+ aplaza, − acelera. Solo se mueve el trabajo posterior a la fecha de estado; la línea base nunca.",
+  "In millions — the new total, not an increment.":
+    "En millones — el nuevo total, no un incremento.",
+  "Weight":
+    "Peso",
+  "Spend stops at what is spent; future allocations and benefits are released.":
+    "El gasto se detiene en lo gastado; las asignaciones y los beneficios futuros se liberan.",
+  "What this change assumes.":
+    "Lo que supone este cambio.",
+  "Recorded in the decision register; the scenario is frozen as decided.":
+    "Se consigna en el registro de decisiones; el escenario queda congelado tal como se decide.",
+  "Someone else ratifies it: not the decider, not the recorder, not the scenario's author.":
+    "La ratifica otra persona: ni quien decide, ni quien la registra, ni el autor del escenario.",
+  "Each change becomes its own audited write, under the version it was drafted against.":
+    "Cada cambio se convierte en una escritura auditada propia, frente a la versión sobre la que se redactó.",
+  "Scenario applied":
+    "Escenario aplicado",
+  "Live and scenario, side by side":
+    "Real y escenario, lado a lado",
+  "Show all":
+    "Mostrar todo",
+  "Above the line":
+    "Por encima de la línea",
+  "Capacity":
+    "Capacidad",
+  "Defer or accelerate":
+    "Aplazar o acelerar",
+  "BAC":
+    "BAC",
+  "EAC":
+    "EAC",
+  "Expected benefit":
+    "Beneficio esperado",
+  "Peak FTE":
+    "Pico de ETC",
+  "Last finish":
+    "Último fin",
+  "Pool":
+    "Disponible",
+  "Room in the envelope":
+    "Margen en la envolvente",
+  "Applied":
+    "Aplicado",
+  "scenarios are the group's working copies of the portfolio — ask your programme office for the one you need":
+    "los escenarios son copias de trabajo de la cartera a nivel de grupo — pida a su oficina de programa el que necesite",
+  "no decision in the register names this scenario — propose it for decision, and have the decision ratified, before it can reach the live book":
+    "ninguna decisión del registro nombra este escenario — propóngalo a decisión y haga ratificar esa decisión antes de que pueda llegar al libro real",
+  "the scenario's author ratified the decision that promotes it — someone independent of the scenario ratifies it":
+    "el autor del escenario ratificó la decisión que lo promueve — la ratifica una persona independiente del escenario",
 };
 
 /* ── fragments composés autour de nombres vivants (R-15) ────────────── */
