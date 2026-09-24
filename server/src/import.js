@@ -470,14 +470,19 @@ export async function importBook(book, user, opts = {}) {
          edge's identity is its two ends: the label is updated in place,
          and the edge is inserted only where it is not already drawn. In
          replace mode the table is empty and this is a plain insert. */
-      const edge = [c.from, int(c.fromStage), c.to, int(c.toStage), c.label ?? ""];
+      /* FX-15 (067) — the type and the lag travel too; a book written
+         before 067 has neither and reads FS/0. A merge that changes one
+         moves the row's version (NEW-16). */
+      const edge = [c.from, int(c.fromStage), c.to, int(c.toStage), c.label ?? "",
+        ["FS", "SS", "FF", "SF"].includes(c.type) ? c.type : "FS", int(c.lag)];
       await t.query(
-        `UPDATE cross_dep SET label = $5
+        `UPDATE cross_dep SET label = $5, type = $6, lag_days = $7,
+                row_version = row_version + CASE WHEN (label, type, lag_days) IS DISTINCT FROM ($5::text, $6::text, $7::int) THEN 1 ELSE 0 END
           WHERE from_project = $1 AND from_stage = $2 AND to_project = $3 AND to_stage = $4`,
         edge);
       await t.query(
-        `INSERT INTO cross_dep (from_project, from_stage, to_project, to_stage, label)
-         SELECT $1::text, $2::int, $3::text, $4::int, $5::text
+        `INSERT INTO cross_dep (from_project, from_stage, to_project, to_stage, label, type, lag_days)
+         SELECT $1::text, $2::int, $3::text, $4::int, $5::text, $6::text, $7::int
           WHERE NOT EXISTS (SELECT 1 FROM cross_dep
                              WHERE from_project = $1 AND from_stage = $2
                                AND to_project = $3 AND to_stage = $4)`,

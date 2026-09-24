@@ -67,7 +67,7 @@ const ENTITIES = {
   work_calendar: { c: /post\("\/calendars"/, u: /patch\("\/calendars\/:id"/, d: /delete\("\/calendars\/:id"/ },
   work_calendar_exception: { c: /patch\("\/calendars\/:id"/, u: NA("Edited by replacing the calendar's list of non-working days"),
     d: NA("Removed from the calendar's list, or with its calendar") },
-  cross_dep: { c: /post\("\/crossdeps"/, u: NA("A link has no attributes to change — remove and re-create"),
+  cross_dep: { c: /post\("\/crossdeps"/, u: /patch\("\/crossdeps\/:id"/,
     d: /delete\("\/crossdeps\/:id"/ },
   milestone: { c: /post\("\/milestones"/, u: /patch\("\/milestones\/:id"/, d: /delete\("\/milestones\/:id"/ },
   cost_line: { c: /post\("\/cost"/, u: NA("Append-only ledger (A5) — corrected by a reversing entry"),

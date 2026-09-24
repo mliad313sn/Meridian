@@ -390,8 +390,22 @@ car elle lit les types, calendriers et hiérarchies des vagues A.
 | FX-12 | **construite** | 5.32.0 | `scenarios.test.js` ; copie isolée, comparaison par le moteur, application par décision ratifiée ; aucune écriture prouvée |
 | FX-13 | **construite** | 5.35.0 | `mspdi.test.js` (27) ; export/import MSPDI, rapport des pertes, aller-retour F13 (pertes nommées seulement) |
 | FX-14 | **construite** | 5.33.0 | `agile.test.js` (24) ; sprints, vélocité, burndown/burnup, avancement hybride sur le même chemin |
-| FX-15 | ouverte | | |
+| FX-15 | **construite** | 5.36.0 | `programme-schedule.test.js` (22) ; liens typés entre projets, autorité des deux côtés, planning maître, chaîne critique de programme |
 | FX-16 | **construite** | 5.34.0 | SVG autonome et pack imprimable (EN/FR/ES, pied INTERNE) ; chargé à la demande |
+
+**Clôture de la campagne (24/09).** Les seize lignes sont construites, de
+5.29.0 à 5.36.0, une demande de fusion par version, chacune vérifiée
+(`npm run verify` vert, test « avant / après » contre le moteur 5.28.0
+figé) et exercée dans un navigateur. Restent ouvertes :
+
+- **FX-08 bis** — le travail et la charge des ressources comptent encore
+  des jours calendaires, pas les calendriers ouvrés de FX-02.
+- **NEW-25** (docs/36) — le paquet principal est à son plafond
+  (289,69 / 289,70 ko gzip) : toute addition doit d'abord déplacer un
+  écran vers un morceau chargé à l'usage.
+- **R2 n'est pas prononcée, et aucune étiquette n'existe au-delà de
+  v5.9.0.** Ces fonctions sont construites, pas autorisées à porter du
+  réel (D-41.00).
 
 ## 6 · Décisions
 

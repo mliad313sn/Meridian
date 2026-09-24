@@ -22,6 +22,73 @@ Nothing yet.
 
 ---
 
+## [5.36.0] — 2026-09-24
+
+**A programme has one schedule** (FX-15; docs/41 wave D, migration 067).
+With it, the sixteen lines of the functional committee are built.
+
+### Added
+
+- **Typed cross-project links.** A link between two projects is FS, SS,
+  FF or SF with a lag in the successor's working days, edited under its
+  version (`PATCH /api/crossdeps/:id`, 409 stale, 428 missing). Writing
+  one needs planning authority over **both** projects
+  (`crossdep.write`); the refusal names the side that is not the
+  caller's, so a site lead of one project cannot bind the other.
+- **Programme master schedule.** `programmeSchedule` (`shared/programme.js`)
+  runs one pass over every leaf of a programme's projects, each on its
+  own calendar and status date, joined by their links, through the same
+  scheduler (which now accepts a calendar per activity, additively). It
+  reports the programme finish, the cross-project critical chain, how far
+  the links push each project and how much float they consume. A Master
+  schedule view (Schedule picker, `#/schedule/prog:<id>`, Programmes)
+  draws it with the one Gantt renderer: projects as foldable summary
+  bars, dashed arrows by type between projects, the chain highlighted.
+- Export, import and F13 carry type and lag; a link without a type reads
+  FS/0.
+
+### Changed
+
+- **One Gantt renderer.** The project Gantt, the master schedule and the
+  standalone SVG / printed report are specs of one `renderGantt` — the
+  print mode (fixed colours, nothing interactive) and the programme mode
+  were built in parallel and are now the same function.
+- **The master schedule loads on first use** (D-41.03). F8 preloads it.
+- `crossDepBreaches` skips non-FS links, the rule `depBreaches` already
+  follows.
+
+### Fixed
+
+- The cross-project dialog removed its backdrop by hand, so the screen
+  never redrew after a link was written; it now closes through the
+  dialog's own `close`. The bootstrap now carries each link's id, which
+  the dialog's Remove sent as undefined.
+
+### Known limit
+
+The main bundle is at its cap: 289.69 kB gzip against 289.70 kB (+15 %
+of 5.28.0, D-41.03). Anything added to the main chunk must first move
+something to a chunk loaded on use (NEW-25, docs/36).
+
+### Engine (D-41.01)
+
+Every link FS/0: `crossDepBreaches`, `metrics` and the seven 5.28.0 keys
+of the critical path equal 5.28.0's; a one-project programme reproduces
+that project's schedule; a calendar map equal everywhere equals the
+single calendar on every key.
+
+### Measure
+
+`programme-schedule.test.js`: 22 tests (A.last → B.first SS+3 by hand:
+programme finish 29 Jan, B pushed 4 days, 5 days of float consumed;
+mixed calendars; the both-sides refusal through the routes). Browser: the
+project Gantt drags; the SVG has `xmlns` and no CSS variable; the report
+chunk and the master chunk are fetched on first use; the CBP master
+schedule draws 29 bars and 2 cross-project arrows; no page error.
+`npm run verify`: 1193/1193.
+
+---
+
 ## [5.35.0] — 2026-09-24
 
 **MS Project in and out** (FX-13; docs/41 wave D; no schema change).

@@ -919,14 +919,35 @@ r.delete("/milestones/:id", async (req, res, next) => {
    writable by the caller: a link is a commitment between two projects,
    and one side cannot commit the other. */
 
+/* FX-15 — the type and the lag of a link, as the caller stated them.
+   Absent means the default (FS, 0), which is what every link was before
+   067; anything else stated wrongly is refused, never coerced. */
+function crossDepShape(b, { creating }) {
+  const out = {};
+  if (b.type !== undefined || creating) {
+    const type = b.type === undefined || b.type === null || b.type === "" ? "FS" : String(b.type).toUpperCase();
+    if (!["FS", "SS", "FF", "SF"].includes(type)) bad("A cross-project link is FS, SS, FF or SF");
+    out.type = type;
+  }
+  if (b.lag !== undefined || creating) {
+    const lag = b.lag === undefined || b.lag === null || b.lag === "" ? 0 : Number(b.lag);
+    if (!Number.isInteger(lag) || lag < -3650 || lag > 3650) bad("A cross-project lag is a whole number of days between -3650 and 3650");
+    out.lag_days = lag;
+  }
+  if (b.label !== undefined) out.label = String(b.label ?? "").slice(0, 120);
+  return out;
+}
+const linkWords = (type, lag) => type + (lag ? (lag > 0 ? "+" : "") + lag + "d" : "");
+
 r.post("/crossdeps", async (req, res, next) => {
   try {
     const b = req.body ?? {};
     const from = await project(b.from, req.user);
     const to = await project(b.to, req.user);
     if (from.id === to.id) bad("A project cannot depend on itself");
-    gate(req.user, "schedule.write", { project: from });
-    gate(req.user, "schedule.write", { project: to });
+    /* FX-15 — both sides, in rbac, with the side that refuses named. */
+    gate(req.user, "crossdep.write", { from, to });
+    const shape = crossDepShape(b, { creating: true });
 
     const stages = async (id) => (await many(
       `SELECT stage FROM activity WHERE project_id = $1 ORDER BY stage`, [id])).map((x) => x.stage);
@@ -941,13 +962,38 @@ r.post("/crossdeps", async (req, res, next) => {
       [from.id, fs, to.id, ts]);
     if (clash) throw new HttpError(409, "That link already exists");
 
-    await audited(req.user,
+    const made = await audited(req.user,
       { action: "Cross-project dependency added", entity: "project", entityId: to.id,
-        detail: `${from.id} stage ${fs} → ${to.id} stage ${ts}${b.label ? " · " + b.label : ""}` },
-      async (t) => t.query(
-        `INSERT INTO cross_dep (from_project, from_stage, to_project, to_stage, label)
-         VALUES ($1,$2,$3,$4,$5)`, [from.id, fs, to.id, ts, String(b.label ?? "").slice(0, 120)]));
-    res.status(201).json({ ok: true });
+        detail: `${from.id} stage ${fs} → ${to.id} stage ${ts} · ${linkWords(shape.type, shape.lag_days)}${b.label ? " · " + b.label : ""}` },
+      async (t) => (await t.query(
+        `INSERT INTO cross_dep (from_project, from_stage, to_project, to_stage, label, type, lag_days)
+         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id, row_version`,
+        [from.id, fs, to.id, ts, String(b.label ?? "").slice(0, 120), shape.type, shape.lag_days])).rows[0]);
+    res.status(201).json({ ok: true, id: Number(made.id), version: made.row_version });
+  } catch (e) { next(e); }
+});
+
+/* FX-15 — a link has attributes now: its type, its lag, its wording. The
+   ends are its identity and are not edited (remove and re-create). Both
+   sides' authority, and the version the caller read (AD-6). */
+r.patch("/crossdeps/:id", async (req, res, next) => {
+  try {
+    const b = req.body ?? {};
+    const d = await one(`SELECT * FROM cross_dep WHERE id = $1`, [Number(req.params.id)]);
+    if (!d) throw new HttpError(404, "No such dependency");
+    const from = await project(d.from_project, req.user);
+    const to = await project(d.to_project, req.user);
+    gate(req.user, "crossdep.write", { from, to });
+    const version = requiredVersion(b, "cross-project dependency");
+    const patch = crossDepShape(b, { creating: false });
+    const type = patch.type ?? d.type, lag = patch.lag_days ?? d.lag_days;
+    const out = await audited(req.user,
+      { action: "Cross-project dependency updated", entity: "project", entityId: to.id,
+        detail: `${d.from_project} stage ${d.from_stage} → ${d.to_project} stage ${d.to_stage} · ` +
+          `${linkWords(d.type, d.lag_days)} → ${linkWords(type, lag)}${(patch.label ?? d.label) ? " · " + (patch.label ?? d.label) : ""}`,
+        before: { type: d.type, lag: d.lag_days, label: d.label }, after: { type, lag, label: patch.label ?? d.label } },
+      async (t) => conflict(await updateVersioned(t, "cross_dep", d.id, version, patch)));
+    res.json({ ok: true, version: out.version });
   } catch (e) { next(e); }
 });
 
@@ -957,8 +1003,7 @@ r.delete("/crossdeps/:id", async (req, res, next) => {
     if (!d) throw new HttpError(404, "No such dependency");
     const from = await project(d.from_project, req.user);
     const to = await project(d.to_project, req.user);
-    gate(req.user, "schedule.write", { project: from });
-    gate(req.user, "schedule.write", { project: to });
+    gate(req.user, "crossdep.write", { from, to });
     await audited(req.user,
       { action: "Cross-project dependency removed", entity: "project", entityId: to.id,
         detail: `${d.from_project} → ${d.to_project}${d.label ? " · " + d.label : ""}` },

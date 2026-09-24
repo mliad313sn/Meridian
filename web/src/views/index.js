@@ -54,7 +54,7 @@ import {
 
 import { meetingsView, invalidateMeetings } from "./meetings.js";
 /* docs/41 A2 — the breakdown (FX-05), the Gantt (FX-06), named baselines (FX-07). */
-import { ganttFold, planTree, wbsName, moveStage, baselinesFold, keptFold } from "./gantt.js";
+import { ganttFold, planTree, wbsName, moveStage, baselinesFold, keptFold, masterBlock, preloadMaster } from "./gantt.js";
 /* FX-14 — the board's sprints: filter, planning, charts, velocity. */
 import {
   sprintSelect, inSprint, sprintPanel, itemPlanningFields, itemPlanningBody, stageProgressField, stageProgressBody,
@@ -866,7 +866,11 @@ Views.programmes = (db) => {
       sectionHead(pr.name,
         (manager ? "managed by " + manager.name : "no programme manager named") +
         " · sponsor " + (pr.sponsor || "—"),
-        h("button", { class: "btn btn-sm", onClick: () => { App.set({ scope: pr.id }); go("#/portfolio"); } }, "Open in portfolio")),
+        h("div", { style: "display:flex;gap:8px;flex-wrap:wrap" },
+          /* FX-15 — the programme's one schedule, across its projects. */
+          h("button", { class: "btn btn-sm", onClick: () => { App.set({ ganttProject: "prog:" + pr.id }); go("#/schedule"); } },
+            t("Master schedule")),
+          h("button", { class: "btn btn-sm", onClick: () => { App.set({ scope: pr.id }); go("#/portfolio"); } }, "Open in portfolio"))),
       kpiStrip([
         { label: "Projects", value: String(projects.length),
           note: funded + " funded" + (projects.length - funded ? " · " + (projects.length - funded) + " strategy" : "") },
@@ -2157,14 +2161,15 @@ function reverseCost(db, line) {
 function manageCrossDeps(db) {
   const links = db.crossDeps ?? [];
   const writable = db.projects.filter((p) => may("schedule.write", p));
-  const close = () => { const b = $(".backdrop"); if (b) b.remove(); };
+  /* FX-15 — the dialog's own close: removing the backdrop by hand left the
+     dialog counted open, so the screen never redrew after the write. */
 
   const stageOptions = (projectId) =>
     Engine.activities(db, projectId).map((a) => ({ value: String(a.stage), label: a.name }));
 
   dialog({
     title: "Cross-project dependencies", kicker: "Integrated master schedule", wide: true,
-    body: h("div", null,
+    body: (close) => h("div", null,
       h("p", { class: "small muted", style: "margin:0 0 14px;max-width:66ch" },
         "A link is a commitment between two projects, so it needs write authority over both ends. " +
         "Links you can see but not change are listed without a control."),
@@ -2177,16 +2182,21 @@ function manageCrossDeps(db) {
               { key: "t", label: "Successor", get: (d) => h("div", null,
                   h("div", { class: "small strong" }, (Engine.project(db, d.to) || {}).name ?? d.to),
                   h("div", { class: "xs muted" }, "stage " + (d.toStage + 1))) },
+              /* FX-15 — the link's type and lag, as a planner writes them. */
+              { key: "k", label: t("Link"), get: (d) => h("span", { class: "mono small" },
+                  linkText(d)) },
               { key: "l", label: "What passes", get: (d) => h("span", { class: "small" }, d.label || "—") },
               { key: "x", label: "", align: "r", get: (d) => {
-                  const both = may("schedule.write", Engine.project(db, d.from)) &&
-                               may("schedule.write", Engine.project(db, d.to));
+                  /* FX-15 — both sides, asked of rbac (crossdep.write). */
+                  const both = mayLink(db, d.from, d.to);
                   return both
-                    ? h("button", { class: "btn btn-xs btn-danger", onClick: () => {
-                        close();
-                        App.write("Dependency removed", (a) => a.del("/crossdeps/" + d.id),
-                          { detail: d.from + " → " + d.to });
-                      } }, "Remove")
+                    ? h("div", { style: "display:flex;gap:6px;justify-content:flex-end" },
+                        h("button", { class: "btn btn-xs", onClick: () => { close(); editCrossDep(db, d); } }, t("Edit")),
+                        h("button", { class: "btn btn-xs btn-danger", onClick: () => {
+                          close();
+                          App.write("Dependency removed", (a) => a.del("/crossdeps/" + d.id),
+                            { detail: d.from + " → " + d.to });
+                        } }, "Remove"))
                     : h("span", { class: "xs muted" }, "not yours");
                 } },
             ],
@@ -2219,6 +2229,7 @@ function newCrossDep(db, writable, stageOptions) {
         options: writable.map((p) => ({ value: p.id, label: p.id + " · " + p.name })) },
       { key: "toStage", label: "Needed by stage", type: "select", value: "0",
         options: stageOptions(second.id) },
+      ...crossDepTypeFields({ type: "FS", lag: 0 }),
       { hint: t("What the second project is waiting for, in the words the two teams would use."),
         key: "label", label: "What passes between them", span: 2,
         placeholder: "e.g. Fraud scoring API" },
@@ -2229,8 +2240,41 @@ function newCrossDep(db, writable, stageOptions) {
       return App.write("Dependency added", (a) => a.post("/crossdeps", {
         from: v.from, fromStage: Number(v.fromStage),
         to: v.to, toStage: Number(v.toStage), label: v.label,
+        type: v.type, lag: Number(v.lag) || 0,
       }), { detail: v.from + " → " + v.to });
     },
+  });
+}
+
+/* ── FX-15 · typed cross-project links ─────────────────────────────── */
+
+const linkText = (d) => (d.type ?? "FS") + (d.lag ? (d.lag > 0 ? "+" : "") + d.lag + t("d") : "");
+/** Both ends, one rbac question: a link binds two plans. */
+const mayLink = (db, from, to) => App.can("crossdep.write",
+  { from: asRow(Engine.project(db, from)), to: asRow(Engine.project(db, to)) });
+
+function crossDepTypeFields(d) {
+  return [
+    { key: "type", label: t("Link type"), type: "select", value: d.type ?? "FS",
+      options: ["FS", "SS", "FF", "SF"].map((v) => ({ value: v, label: v })),
+      hint: t("Which ends of the two stages are tied: finish or start, then finish or start. FS by default.") },
+    { key: "lag", label: t("Lag (days)"), type: "number", step: 1, min: -3650, max: 3650, value: d.lag ?? 0,
+      hint: t("In the successor's working days; negative is a lead.") },
+  ];
+}
+
+function editCrossDep(db, d) {
+  formDialog({
+    title: t("Edit the link"), kicker: d.from + " → " + d.to, wide: true,
+    fields: [
+      ...crossDepTypeFields(d),
+      { hint: t("What the second project is waiting for, in the words the two teams would use."),
+        key: "label", label: "What passes between them", span: 2, value: d.label ?? "" },
+    ],
+    saveLabel: t("Save"),
+    onSave: (v) => App.write("Dependency updated", (a) => a.patch("/crossdeps/" + d.id, {
+      type: v.type, lag: Number(v.lag) || 0, label: v.label, version: d.version,
+    }), { detail: d.from + " → " + d.to + " · " + linkText({ type: v.type, lag: Number(v.lag) || 0 }) }),
   });
 }
 
@@ -2275,9 +2319,45 @@ App.ui.ganttOpen = {};
 App.ui.ganttBaseline = true;
 App.ui.ganttCritical = false;
 
+/* FX-15 — the schedule picker offers each programme's master schedule
+   beside the projects: the programmes the reader can see a project of. */
+function scheduleChoices(db, scoped) {
+  const progs = uniq(db.projects.map(p => p.programme)).map(id => Engine.programme(db, id)).filter(Boolean);
+  return [{ value: "all", label: "All projects in scope" }]
+    .concat(progs.map(pr => ({ value: "prog:" + pr.id, label: t("Master schedule") + " · " + pr.name })))
+    .concat(scoped.map(p => ({ value: p.id, label: p.id + " · " + p.name })));
+}
+
+/**
+ * FX-15 — a programme's master schedule. What it reads is the programme's
+ * projects as this account's book holds them — the read scope the server
+ * already applied — never the health or site filter of the other views:
+ * a filtered-out feeder would silently shorten the programme.
+ */
+function masterView(db, scoped) {
+  const pr = Engine.programme(db, String(App.ui.ganttProject).slice(5));
+  const controls = h("div", { class: "sec-tight band", style: "display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap" },
+    selectField("Schedule", App.ui.ganttProject, scheduleChoices(db, scoped),
+      v => App.set({ ganttProject: v }), "260px"),
+    h("div", { style: "flex:1" }),
+    h("button", { class: "btn btn-sm", onClick: () => manageCrossDeps(db) },
+      icon("arrowRight", 12), "Cross-project links"));
+  if (!pr) return h("div", null, controls, h("div", { class: "sec" }, emptyState(t("Nothing in this scope"), "")));
+  const mine = db.projects.filter(p => p.programme === pr.id);
+  return h("div", null, controls,
+    h("section", { class: "sec" },
+      sectionHead(t("Master schedule") + " · " + pr.name, mine.length + " " + t("projects")),
+      mine.length ? masterBlock(db, pr, db.projects)
+        : emptyState(t("Nothing in this scope"), "")));
+}
+
 Views.schedule = (db) => {
   if (App.ui.param && Engine.project(db, App.ui.param)) App.ui.ganttProject = App.ui.param;
+  /* FX-15 — #/schedule/prog:<id> opens a programme's master schedule. */
+  if (App.ui.param && String(App.ui.param).startsWith("prog:") &&
+      Engine.programme(db, String(App.ui.param).slice(5))) App.ui.ganttProject = App.ui.param;
   const scoped = App.scopedProjects();
+  if (String(App.ui.ganttProject).startsWith("prog:")) return masterView(db, scoped);
   const shown = App.ui.ganttProject === "all" ? scoped : scoped.filter(p => p.id === App.ui.ganttProject);
   if (!shown.length) return h("div", { class: "sec" },
     emptyState(t("Nothing in this scope"), "No project matches the current programme, site or health filter."));
@@ -2502,8 +2582,7 @@ Views.schedule = (db) => {
       ...rowEls));
 
   const controls = h("div", { class: "sec-tight band", style: "display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap" },
-    selectField("Schedule", App.ui.ganttProject,
-      [{ value: "all", label: "All projects in scope" }].concat(scoped.map(p => ({ value: p.id, label: p.id + " · " + p.name }))),
+    selectField("Schedule", App.ui.ganttProject, scheduleChoices(db, scoped),
       v => App.set({ ganttProject: v }), "260px"),
     h("div", { class: "field" }, h("label", null, "Zoom"),
       h("div", { class: "seg" }, ...["quarter", "month", "week"].map(z =>
@@ -6975,9 +7054,13 @@ Views.meetings = (db) => meetingsView(db);
 /* FX-12 — portfolio scenarios: what-if copies, compared, never written.
    Group and admin only, so loaded on first visit (D-41.03: the bundle
    every site downloads stays under its cap). The gate that draws every
-   view (F8) preloads it, so it is still drawn for every role. */
+   view (F8) preloads it, so it is still drawn for every role. The FX-15
+   master schedule (master.js, behind the Schedule view's programme
+   choice) is loaded the same way, and preloaded here with it. */
 let scenariosModule = null;
-export async function preloadViews() { scenariosModule = await import("./scenarios.js"); }
+export async function preloadViews() {
+  [scenariosModule] = await Promise.all([import("./scenarios.js"), preloadMaster()]);
+}
 Views.scenarios = (db) => {
   if (scenariosModule) return scenariosModule.scenariosView(db);
   const host = h("div", { class: "small muted" }, "…");

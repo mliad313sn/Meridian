@@ -869,9 +869,15 @@ export async function loadPortfolio(user, { inactive = false } = {}) {
       version: x.row_version,
     })),
 
+    /* FX-15 (067) — typed, with lag, and versioned: a screen edits one
+       under the version it read. `id` is how a screen names the row it
+       edits or removes; it is a serial, not book data, so the export
+       (`loadBook`) leaves it out — a link's identity is its two ends. */
     crossDeps: crossDeps.map((c) => ({
+      id: Number(c.id),
       from: c.from_project, fromStage: c.from_stage,
       to: c.to_project, toStage: c.to_stage, label: c.label,
+      type: c.type ?? "FS", lag: c.lag_days ?? 0, version: c.row_version ?? 1,
     })),
 
     /* SDP-linked items (ext_link, 005). Read-only display caches — the
@@ -1074,6 +1080,8 @@ export async function loadBook(user) {
     ...db,
     ...meetings,
     objections: db.objections.filter((o) => decisions.has(o.decision)),
+    /* FX-15 — a link travels by its two ends; its serial stays home. */
+    crossDeps: db.crossDeps.map(({ id: _serial, ...c }) => c),
     /* FX-07 — the named baselines travel with the book. They are not in
        the bootstrap (a screen asks for one project's when it opens them:
        eleven copies of a plan are no weight for a satellite link). */
