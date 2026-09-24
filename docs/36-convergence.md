@@ -502,8 +502,44 @@ inference. They come from `docs/23` §6, which the campaign file calls §7:
 
 | Decision | Dated record that it was taken | Status |
 |---|---|---|
-| 1–10 | none found on 23/09 | open |
-| R2 | not pronounced | open |
+| 1–10 | none found on 23/09; D-36.S0 on 24/09, below | see the table below |
+| R2 | not pronounced (D-36.S11) | open |
+
+**Sponsor delegation (24/09).** The owner wrote, in this session:
+"i delegate all my power of sponsor to PO". From 24/09 the Product
+Owner signs the sponsor's decisions, and each one below is recorded as
+**"PO, by delegation of the sponsor"**. A delegation transfers the
+power to *choose*. It does not create the facts some decisions are
+about: real people, real domains, a secret on a real server. Those
+decisions are split in two. The choice is taken here. The fact is owed
+by whoever operates the instance, and the decision stays open until
+that fact exists.
+
+**Residual risk, stated once.** The sponsor and the Product Owner are
+now the same seat. Decision 1 exists because independence cannot be
+simulated (docs/23 §1.3). The GRC committee should therefore read every
+D-36.S line as signed by the delegate, not by an independent mandator.
+The owner can take any of them back by saying so.
+
+| Id | # | Decision taken by delegation | What still has to exist | Status |
+|---|--:|---|---|---|
+| D-36.S0 | — | The owner's delegation is recorded verbatim above. Sponsor decisions from 24/09 are signed "PO, by delegation of the sponsor". | — | taken |
+| D-36.S1 | 1 | **Rule:** nobody governs from the administration account on a real instance. Each real role (sponsor, PMO, site lead, reviewer) gets a named account tied to a person, and the demo accounts stay refused in production (`MERIDIAN_ALLOW_DEMO_ACCOUNTS` unset, docs/34). | The accounts themselves, created for real people at installation. The PO does not know who they are and does not invent them. | choice taken; **open** until the accounts exist |
+| D-36.S2 | 2 | **Rule:** `documentHosts` names only the organisation's document-management (GED) domains, and nothing that is not one. | The domains. None has been given. | **open**: needs the real domain names |
+| D-36.S3 | 3 | **Rule:** a unique generated password for a dedicated `meridian` role, not a superuser. It lives only in the service's environment file, never in the repository. It is rotated at every change of operator. | The password, set on the real PostgreSQL server by its operator. | choice taken; **open** until set |
+| D-36.S4 | 4 | **RPO 24 h, RTO 4 h, signed.** Daily backup at 02:15 and a monthly drill (docs/34). A drill older than 45 days is an incident. No second instance: this is an accepted risk, signed here. | G-01's closing measure: one dated, timed restore drill on a machine other than production, from a backup less than 24 h old, ending on health `ok` and an identical `audit_event` count. | **taken**; G-01 closes on the drill |
+| D-36.S5 | 5 | The four policies will be approved by the PO once written against `docs/security-policy-template.md`. | The four texts. Only a template with ⟨placeholders⟩ exists, and nothing unwritten can be approved. | **open** |
+| D-36.S6 | 6 | **Audit trail retained 7 years**, then purged by the scheduled purge (carnet line 20). The legal basis is proposed as the organisation's duty to keep governance evidence. | Confirmation of the legal basis by counsel, together with decision 7. | retention **taken**; legal basis open |
+| D-36.S7 | 7 | No site activates individual time tracking before a written legal and social opinion for its country. This is the default already. | The per-country opinions. | **open**, by nature |
+| D-36.S8 | 8 | SMTP and Entra ID are not connected before their two-page third-party sheets exist. | The sheets. | **open** |
+| D-36.S9 | 9 | Follows S8. | The relay. | **open** |
+| D-36.S10 | 10 | **Code-signing certificate: not bought for now.** The binary stays unsigned while it is distributed only internally, and this is accepted in writing here. Buying becomes due before the first distribution outside the organisation. Entra ID follows S8. | The tenant. | certificate **taken**; Entra open |
+| D-36.S11 | R2 | **R2 is not pronounced.** Its four conditions are decisions 1–4 (docs/23 §4.1). The choices behind 1, 3 and 4 are now taken. The facts behind them (named accounts, a set password, the G-01 drill) and all of decision 2 do not exist yet. Pronouncing R2 on choices alone would be the "decision marked taken on inference" this section forbids. Wave 3 therefore stays held (D-36.16). | The four facts above. The GRC committee then pronounces "on finding, without a new session" (docs/23 §4.1). | open |
+
+**What the delegation does not change.** A delegation of sponsor power
+is not a permission of this session. The session still cannot create
+or push a tag. The tags below remain the owner's (or any maintainer's)
+to push.
 
 **Tags owed.** Each release below is on `main` and no tag carries it.
 Every register line stays `released: false` until its tag exists
